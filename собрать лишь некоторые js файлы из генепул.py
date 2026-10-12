@@ -16,13 +16,13 @@ from datetime import datetime
 # КРИТИЧНЫЕ ФАЙЛЫ для хищности (в порядке чтения)
 # ─────────────────────────────────────────────────────────────
 CRITICAL_FILES = [
-    "simulation/Parameters.js",           # константы (SWIMBOT_MOUTH_LENGTH, INITIAL_NUM_SWIMBOTS и т.д.)
-    "simulation/Genotype.js",             # структура генов
-    "simulation/Embryology.js",           # ген 51 → predatorLevel
-    "simulation/Brain.js",                # состояния LOOKING_FOR_PREY, PURSUING_PREY
-    "simulation/FoodBit.js",              # типы еды (0, 1, 2), цвета
-    "simulation/Swimbot.js",              # поведение, huntEatChosenPrey, die()
-    "simulation/GenePool.js",             # главный цикл, поиск добычи, спаун мяса
+    "src/simulation/Parameters.ts",           # константы (SWIMBOT_MOUTH_LENGTH, INITIAL_NUM_SWIMBOTS и т.д.)
+    "src/simulation/Genotype.ts",             # структура генов
+    "src/simulation/Embryology.ts",           # ген 51 → predatorLevel
+    "src/simulation/Brain.ts",                # состояния LOOKING_FOR_PREY, PURSUING_PREY
+    "src/simulation/FoodBit.ts",              # типы еды (0, 1, 2), цвета
+    "src/simulation/Swimbot.ts",              # поведение, huntEatChosenPrey, die()
+    "src/simulation/GenePool.ts",             # главный цикл, поиск добычи, спаун мяса
 ]
 
 # ─────────────────────────────────────────────────────────────
@@ -39,7 +39,7 @@ EXCLUDE_PATTERNS = [
     
     # UI и интерфейс (для отладки, но не для хищности)
     "UI",
-    "ui.js",
+    "ui.ts",
     "HUD",
     "Menu",
     
@@ -68,9 +68,9 @@ EXCLUDE_PATTERNS = [
 # Вспомогательные файлы, которые МОЖНО включить если нужны
 # ─────────────────────────────────────────────────────────────
 OPTIONAL_FILES = [
-    "simulation/Vector2D.js",             # математика, может быть нужна
-    "simulation/SpatialGrid.js",          # поиск соседей (для оптимизации)
-    "simulation/Genotype.js",             # структура генов
+    "src/simulation/Vector2D.ts",             # математика, может быть нужна
+    "src/simulation/SpatialGrid.ts",          # поиск соседей (для оптимизации)
+    "src/simulation/Genotype.ts",             # структура генов
 ]
 
 def should_exclude(filepath):

@@ -12,33 +12,34 @@ from datetime import datetime
 
 # Папки для обхода (в порядке важности для чтения)
 DIRS_TO_SCAN = [
-    ".",
-    "css",
-    "js",
-    "simulation"
+    "."
 ]
 
+# Папки, которые НЕ обходим (служебные, чужой код, старые копии, результаты прогонов)
+SKIP_DIRS = {"node_modules", "dist", ".git", ".claude", "GenePool Original", "results", "prof"}
+
 # Расширения файлов, которые собираем
-EXTENSIONS = [".js", ".css", ".html"]
+EXTENSIONS = [".ts", ".js", ".cjs", ".css", ".html"]
 
 # Файлы, которые исключаем (бинарные, временные)
 EXCLUDE_FILES = [
     "collect_code.py",
     "merge_for_ai.bat",
+    "package-lock.json",
     "иерархия папок.bat",
     "структура.txt"
 ]
 
 # Файлы, которые нужно показать в первую очередь (ключевые для хищности)
 PRIORITY_FILES = [
-    "simulation/Genotype.js",
-    "simulation/Embryology.js",
-    "simulation/Brain.js",
-    "simulation/Swimbot.js",
-    "simulation/SwimbotRenderer.js",
-    "simulation/GenePool.js",
-    "simulation/Parameters.js",
-    "simulation/SwimbotTypes.js"
+    "src/simulation/Genotype.ts",
+    "src/simulation/Embryology.ts",
+    "src/simulation/Brain.ts",
+    "src/simulation/Swimbot.ts",
+    "src/simulation/SwimbotRenderer.ts",
+    "src/simulation/GenePool.ts",
+    "src/simulation/Parameters.ts",
+    "src/simulation/SwimbotTypes.ts"
 ]
 
 def collect_all_files():
@@ -51,6 +52,7 @@ def collect_all_files():
             continue
             
         for root, dirs, files in os.walk(dir_name):
+            dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
             for file in files:
                 # Проверяем расширение
                 ext = os.path.splitext(file)[1].lower()

@@ -3,3 +3,5 @@ __pycache__/
 *.pyc
 tools/prof/
 tools/results/
+node_modules/
+dist/

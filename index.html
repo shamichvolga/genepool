@@ -9,51 +9,11 @@
         <meta property = "og:description"   content = "Gene Pool is an artificial life simulation invented by Jeffrey Ventrella">
         <meta property = "og:url"           content = "http://www.swimbots.com/genepool/"/>
 	</head>
-	<body 
-		onload = 
-		    "genePool = new GenePool(); 
-		     genePool.initialize(); 
-		     genePool.setCanvas( canvas ); 
-		     genePool.setCanvasDimensions( canvasID.width, canvasID.height );
-		     genePool.setShowingViewTrackingMode( true );"  
-		     
-		onresize = "resize();"		
-	>
+	<body>
 	
-		       <canvas id = "Canvas"></canvas>
+		       <canvas id = "Canvas"></canvas>        
 
-		<script>
 		
-            var canvasID = document.getElementById( 'Canvas' );
-            var canvas = canvasID.getContext( '2d' );
-		</script>        
-
-		<script type = "text/javascript" src = "simulation/MathConstants.js?v=4"    ></script>
-		<script type = "text/javascript" src = "simulation/Parameters.js?v=4"       ></script>
-		<script type = "text/javascript" src = "simulation/Utility.js?v=4"          ></script>
-		<script type = "text/javascript" src = "simulation/Vector2D.js?v=4" 	    ></script>
-		<script type = "text/javascript" src = "simulation/Pool.js?v=4"             ></script>
-		<script type = "text/javascript" src = "simulation/Camera.js?v=4"           ></script>
-		<script type = "text/javascript" src = "simulation/FoodBit.js?v=4"          ></script>
-		<script type = "text/javascript" src = "simulation/SwimbotTypes.js?v=4"  	></script>
-		<script type = "text/javascript" src = "simulation/Genotype.js?v=4"  	    ></script>
-		<script type = "text/javascript" src = "simulation/Embryology.js?v=4"       ></script>
-		<script type = "text/javascript" src = "simulation/Brain.js?v=4"            ></script>
-		<script type = "text/javascript" src = "simulation/SwimbotRenderer.js?v=4"  ></script>
-<script type = "text/javascript" src = "simulation/Swimbot.js?v=4"  	  	></script>
-		<script type = "text/javascript" src = "simulation/Touch.js?v=4"		    ></script>		
-		<script type = "text/javascript" src = "simulation/ViewTracking.js?v=4"     ></script>		
-		<script type = "text/javascript" src = "simulation/FamilyTree.js?v=4"       ></script>		
-		<script type = "text/javascript" src = "simulation/PhyloTree.js?v=4"        ></script>		
-		<script type = "text/javascript" src = "simulation/Obstacle.js?v=4"         ></script>		
-		<script type = "text/javascript" src = "simulation/SpatialGrid.js?v=4"      ></script>		
-		<script type = "text/javascript" src = "simulation/GenePool.js?v=4"         ></script> 
-		
-		<script type = "text/javascript" src = "js/logger.js?v=4" ></script>
-		<script type = "text/javascript" src = "js/saveLoad.js?v=4" ></script>
-		<script type = "text/javascript" src = "js/graph.js?v=4"    ></script>
-		<script type = "text/javascript" src = "js/info.js?v=4"     ></script>
-		<script type = "text/javascript" src = "js/ui.js?v=4"       ></script>
         
 		       <div id = "masterPanel">
             <div id = "mainTitle">
@@ -568,14 +528,14 @@
                 <div id="infoPanel"  class = "menuPanel" >
                     <div id="infoText"></div>
                     <font size = 3 color = '#335500' face='arial'>
-                        <button id = "prevInfoButton" class = "basicButton"onClick = "advanceInfoPage(-1);" >previous</button>  
+                        <button id = "prevInfoButton" class = "basicButton" onClick = "advanceInfoPage(-1);" >previous</button>  
                         <div    id = "pageNumberLabel">page 1 of 28</div>                        
                         <button id = "nextInfoButton" class = "basicButton" onClick = "advanceInfoPage( 1);" >next    </button>  
                     </font>     	
                     	
                 </div> 	<!-- info Panel -->            
                 <div id = "contactPanel" >
-                   &copy 2021 Jeffrey Ventrella
+                   &copy; 2021 Jeffrey Ventrella
                    <br>
                    <a href = 'http://www.ventrella.com' target = "_blank" style = 'color: #004444'>Ventrella.com</a>
                </div> <!-- contact Panel -->
@@ -635,50 +595,7 @@
             Rendering is currently turned off. It makes the simulation run faster.
         </div>                  
         
-		<!-- ------------------------------------------------------------ -->
-		<!-- prepare the UI...                                            -->
-		<!-- turn on the info panel and set it to the first page...       -->
-		<!-- also, show that autotracking is on...                        -->
-		<!-- ------------------------------------------------------------ -->
-		<script type = "text/javascript"> 	
-            resize();
-		    openInfoPanel();
-		    setInfoPage(2);
-		    initializeUI();
-        </script>
-        <script>
-    document.getElementById('loadSwimbotFile').addEventListener('change', function(e) {
-        let file = e.target.files[0];
-        if (!file) return;
-
-        let reader = new FileReader();
-        reader.onload = function(e) {
-            try {
-                let data = JSON.parse(e.target.result);
-                let hasValidGenes = false;
-                if (data.genes && Array.isArray(data.genes) && data.genes.length === NUM_GENES) {
-                    hasValidGenes = true;
-                    for (let i = 0; i < data.genes.length; i++) {
-                        let gene = data.genes[i];
-                        let isInteger = (typeof gene === "number") && isFinite(gene) && (Math.floor(gene) === gene);
-                        if (!isInteger || gene < 0 || gene >= BYTE_SIZE) {
-                            hasValidGenes = false;
-                            break;
-                        }
-                    }
-                }
-                if (hasValidGenes) {
-                    genePool.createNewSwimbotWithGenes(data.genes);
-                    alert("Swimbot загружен успешно!");
-                } else {
-                    alert("Ошибка: файл не содержит валидных генов.");
-                }
-            } catch (err) {
-                alert("Ошибка чтения файла: " + err.message);
-            }
-        };
-        reader.readAsText(file);
-    });
-</script>
+		<!-- everything starts in src/main.ts -->
+		<script type="module" src="/src/main.ts"></script>
 	</body>
 </html>

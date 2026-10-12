@@ -1,0 +1,19 @@
+{
+  "name": "genepool",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Gene Pool swimbots — evolution simulation (mod of Jeffrey Ventrella's Gene Pool)",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "acorn": "8.14.1",
+    "esbuild": "0.25.5",
+    "typescript": "5.8.3",
+    "vite": "6.3.5"
+  }
+}
