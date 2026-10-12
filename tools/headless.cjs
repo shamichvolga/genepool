@@ -96,7 +96,10 @@ function bundleTypeScript( root )
         stdin: { contents: entry, resolveDir: dir, sourcefile: "headless-entry.ts", loader: "ts" },
         bundle: true, write: false, format: "iife", target: "es2022", minify: false,
     });
-    return result.outputFiles[0].text;
+    // Global names inside a Node "vm" sandbox go through a slow lookup on every
+    // use; passing the hot ones in as parameters makes them plain local names,
+    // as fast as in a browser.
+    return "(function( Math, Number, Infinity ) {\n" + result.outputFiles[0].text + "\n})( Math, Number, Infinity );\n";
 }
 
 function concatenateScripts( root )
@@ -116,14 +119,11 @@ function concatenateScripts( root )
 function createSimulation( seed, overrides = {}, root = ROOT )
 {
 const random = makeRandom( seed );
-const seededMath = Object.create( Math );
-seededMath.random = random;
 
 const alerts = [];
 const sandbox =
 {
     console,
-    Math        : seededMath,
     performance : { now: () => 0 },          // deterministic timing inside the sim
     Date        : Date,
     setTimeout  : () => 0,                   // the sim schedules itself; we drive it by hand
@@ -135,6 +135,12 @@ const sandbox =
 };
 sandbox.window = sandbox;
 vm.createContext( sandbox );
+
+// seeded Math.random() inside the sandbox. The sandbox keeps its own built-in
+// Math object (replacing the whole object would stop the JavaScript engine from
+// treating Math.sin, Math.sqrt... as fast built-ins and slow everything down).
+sandbox.__seededRandom = random;
+vm.runInContext( "Math.random = __seededRandom;", sandbox );
 
 let source = isTypeScriptProject( root ) ? bundleTypeScript( root ) : concatenateScripts( root );
 

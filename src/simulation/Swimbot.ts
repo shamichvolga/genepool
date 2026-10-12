@@ -1,15 +1,15 @@
 //--------------------------------------------------------------------------
-//                                                                        
-//    This file is part of GenePool Swimbots.                             
-//    Copyright (c) 2021 by Jeffrey Ventrella - All Rights Reserved.      
-//                                                                        
-//    See the README file or go to swimbots.com for full license details.           
-//    You may use, distribute, and modify this code only under the terms  
-//    of the "Commons Clause" license (commonsclause.com).                
-//                                                                        
-//    This software is intended for education, game design, and research. 
-//                                                                        
-// -------------------------------------------------------------------------- 
+//
+//    This file is part of GenePool Swimbots.
+//    Copyright (c) 2021 by Jeffrey Ventrella - All Rights Reserved.
+//
+//    See the README file or go to swimbots.com for full license details.
+//    You may use, distribute, and modify this code only under the terms
+//    of the "Commons Clause" license (commonsclause.com).
+//
+//    This software is intended for education, game design, and research.
+//
+// --------------------------------------------------------------------------
 import { BRAIN_FOCUS_TARGET_SHIFT_STRENGTH, BRAIN_FOCUS_TARGET_SHIFT_THRESHOLD, BRAIN_SENSORY_UPDATE_PERIOD, BRAIN_STATE_FLEEING_PREDATOR, BRAIN_STATE_LOOKING_FOR_FOOD, BRAIN_STATE_LOOKING_FOR_MATE, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_FOOD, BRAIN_STATE_PURSUING_MATE, BRAIN_STATE_PURSUING_PREY, BRAIN_STATE_RESTING, BRAIN_WANDER_AMOUNT, Brain } from "./Brain";
 import { GREATEST_POSSIBLE_SWIMBOT_LENGTH, GREATEST_POSSIBLE_SWIMBOT_MASS } from "./Embryology";
 import { DEFAULT_FOOD_BIT_ENERGY, FoodBit } from "./FoodBit";
@@ -34,30 +34,30 @@ var    flopperYV = 0;
 
 
     //---------------------------------
-    //  attraction 
+    //  attraction
     //---------------------------------
     const TOO_UGLY_TO_CHOOSE = ZERO;
-    
+
     //---------------------------------
-    //  colors 
+    //  colors
     //---------------------------------
-    
+
     // I believe all of these have been moved over to swimbot renderer...
     /*
     const COLOR_WHITENESS   = 0.4; // 0.0 = normal-saturated color; 0.5 = white-washed; 1.0 = pure white
     const DEAD_COLOR_RED    = 0.2;
     const DEAD_COLOR_GREEN  = 0.25;
     const DEAD_COLOR_BLUE   = 0.3;
-    const ROLLOVER_COLOR    = "rgba( 180, 190, 200, 0.7 )";	
-    const SELECT_COLOR      = "rgba( 255, 255, 255, 0.8 )";	
-    const OUTLINE_COLOR     = "rgba( 0, 0, 0, 0.4 )";	
+    const ROLLOVER_COLOR    = "rgba( 180, 190, 200, 0.7 )";
+    const SELECT_COLOR      = "rgba( 255, 255, 255, 0.8 )";
+    const OUTLINE_COLOR     = "rgba( 0, 0, 0, 0.4 )";
     */
-    
+
 	//-----------------------------------------
 	// variables
 	//-----------------------------------------
-	let _genotype		    = new Genotype(); 
-	let _phenotype		    = new Phenotype(); 
+	let _genotype		    = new Genotype();
+	let _phenotype		    = new Phenotype();
 	let _brain  		    = new Brain();
 	let _position 		    = new Vector2D();
 	let _velocity 		    = new Vector2D();
@@ -68,7 +68,7 @@ var    flopperYV = 0;
 	let _centerOfMass	    = new Vector2D();
 	let _vectorUtility      = new Vector2D();
 	let _chosenFoodBit      = new FoodBit();
-	let _swimbotRenderer  	= new SwimbotRenderer(); 
+	let _swimbotRenderer  	= new SwimbotRenderer();
 	let _chosenMate         = null; // must start as null!
 	let _age 	  		    = 0;
 	let _numOffspring       = 0;
@@ -92,7 +92,7 @@ var    flopperYV = 0;
 	let _energyEfficiency   = ZERO;
 	let _selectRadius       = ZERO;
 	let _species            = NULL_INDEX;
-	
+
 	let _lastPositionForEfficiencyMeasurement = new Vector2D();
     let _lastEnergyForEfficiencyMeasurement = ZERO;
 	let _readyforSensoryInputToBrain = false;
@@ -108,8 +108,48 @@ var    flopperYV = 0;
 	let _scanRadius         = SWIMBOT_VIEW_RADIUS;
 	let _scanCooldown       = 0;
 	let _eternal            = false;
-	let _basalMetabolism    = ZERO;
-	let _huntCooldown       = 0;     // steps until the predator can bite again  // energy per step just to stay alive (grows with body mass)
+	let _basalMetabolism    = ZERO;  // energy per step just to stay alive (grows with body mass)
+
+	//-----------------------------------------------------------------------
+	// Body part state lives in flat number arrays, which is much faster than
+	// the Part objects. Physics reads and writes only these arrays; the Part
+	// objects in _phenotype are refreshed from them just before drawing.
+	//
+	// _pd holds PS numbers per part (see the P_X... offsets below).
+	//-----------------------------------------------------------------------
+	const PS  = 14;
+	const P_X = 0,  P_Y = 1;    // end position of the part
+	const M_X = 2,  M_Y = 3;    // middle of the part
+	const Q_X = 4,  Q_Y = 5;    // previous middle
+	const A_X = 6,  A_Y = 7;    // axis (parent end -> this end)
+	const N_X = 8,  N_Y = 9;    // perpendicular of the axis
+	const V_X = 10, V_Y = 11;   // velocity of the middle
+	const C_A = 12;             // current angle
+	const B_A = 13;             // bending angle
+
+	// copies of phenotype values used every step (reading them from the
+	// phenotype object each time is slow: phenotype objects differ in shape)
+	let _numParts       = 0;
+	let _frequency      = ZERO;
+	let _sumPartLengths = ZERO;
+	let _bodyMass       = ZERO;
+
+	let _pd          = new Float64Array( MAX_PARTS * PS );
+	let _pLength     = new Float64Array( MAX_PARTS );
+	let _pWidth      = new Float64Array( MAX_PARTS );
+	let _pMass       = new Float64Array( MAX_PARTS );
+	let _pAngle      = new Float64Array( MAX_PARTS );
+	let _pAmp        = new Float64Array( MAX_PARTS );
+	let _pPhase      = new Float64Array( MAX_PARTS );
+	let _pTurnAmp    = new Float64Array( MAX_PARTS );
+	let _pTurnPhase  = new Float64Array( MAX_PARTS );
+	let _pMoment     = new Float64Array( MAX_PARTS );
+	let _pParent     = new Int32Array  ( MAX_PARTS );
+	let _unitAxisX   = new Float64Array( MAX_PARTS );   // scratch for getCurrentBodyStraightness
+	let _unitAxisY   = new Float64Array( MAX_PARTS );
+	let _mouthPosition   = new Vector2D();               // kept up to date from _pd
+	let _genitalPosition = new Vector2D();
+	let _huntCooldown       = 0;     // steps until the predator can bite again
 
 
 let _parent = null;
@@ -119,7 +159,7 @@ this.setParent = function( parent )
 {
     _parent = parent;
 }
-    
+
     //------------------------------------
     this.computeMomentFactors = function()
     {
@@ -153,7 +193,7 @@ this.setParent = function( parent )
         // (eternal swimbots never get old)
         //----------------------------------
         if (( _age < oldAgeThreshold ) || _eternal )
-        {	
+        {
             if ( _age < YOUNG_AGE_DURATION )
             {
                 //----------------------------------
@@ -167,32 +207,32 @@ this.setParent = function( parent )
             }
 
             assert( _growthScale >= 0.0, "assert swimbot.js:updateBodyParts: _growthScale >= 0.0" )
-            assert( _growthScale <= 1.0, "assert swimbot.js:updateBodyParts: _growthScale <= 1.0" )    
-    
+            assert( _growthScale <= 1.0, "assert swimbot.js:updateBodyParts: _growthScale <= 1.0" )
+
             //---------------------------------------
-            // slowing down because starving, 
+            // slowing down because starving,
             // but not slowing down to a full stop.
             //---------------------------------------
             if  ( _energy < STARVING )
-            {      
+            {
                 _timerDelta = _energy / STARVING;
-        
+
                 if ( _timerDelta < STARVING_TIMER_DELTA )
                 {
                     _timerDelta = STARVING_TIMER_DELTA;
-                }                
+                }
             }
             else
             {
                 _timerDelta += TIMER_DELTA_INCREASE_RATE;
-       
+
                 if ( _timerDelta > ONE )
                 {
-                    _timerDelta = ONE; 
+                    _timerDelta = ONE;
                 }
             }
         }
-        else 
+        else
         //----------------------------------
         // swimmer is past old age threshold
         //----------------------------------
@@ -200,39 +240,39 @@ this.setParent = function( parent )
             //----------------------------------
             // dying of old age
             //----------------------------------
-            if ( _age > globalTweakers.maximumLifeSpan ) 
+            if ( _age > globalTweakers.maximumLifeSpan )
             {
                 this.die();
             }
-            else 
-            {     
+            else
+            {
                 //----------------------------------
                 // slowing down because dying
                 //----------------------------------
                 //let earlyDeath = 200;
                 //earlyDeath = 0;
                 //let inc = ( _age - OLD_AGE ) / ( oldAgeDuration - earlyDeath );
-                
+
                 //let inc = ( _age - OLD_AGE ) / oldAgeDuration;
-                
+
                 /*
                 if ( inc > ONE )
                 {
                     inc = ONE;
                 }
                 */
-                
-                _timerDelta = ONE - ( _age - oldAgeThreshold ) / OLD_AGE_DURATION;     
-                
+
+                _timerDelta = ONE - ( _age - oldAgeThreshold ) / OLD_AGE_DURATION;
+
                 assert( _timerDelta >= 0.0, "assert swimbot.js:updateBodyParts: _timerDelta >= 0.0" )
-                assert( _timerDelta <= 1.0, "assert swimbot.js:updateBodyParts: _timerDelta <= 1.0" )    
+                assert( _timerDelta <= 1.0, "assert swimbot.js:updateBodyParts: _timerDelta <= 1.0" )
             }
         }
 
         _timer += _timerDelta;
-	
+
 		//---------------------------------------------------------------
-		// calculate the modulators as a function of the dot between the 
+		// calculate the modulators as a function of the dot between the
 		// heading and the perpendicular of the direction to the goal
 		//---------------------------------------------------------------
 		let radian = _angle * PI_OVER_180;
@@ -242,7 +282,7 @@ this.setParent = function( parent )
 
 		let perpX =  _heading.y;
 		let perpY = -_heading.x;
-				
+
         let directionDot = _focusDirection.x * perpX + _focusDirection.y * perpY;
 
 //test
@@ -251,83 +291,90 @@ this.setParent = function( parent )
 		//-----------------------------------------------------------------
 		// set root position and angle
 		//-----------------------------------------------------------------
-		_phenotype.parts[ ROOT_PART ].position.set( _position );
-		_phenotype.parts[ ROOT_PART ].currentAngle = _angle - this.getMomentAdjustment();
+		//-----------------------------------------------------------------
+		// set root position and angle
+		//-----------------------------------------------------------------
+		const pd = _pd;
+		pd[ ROOT_PART * PS + P_X ] = _position.x;
+		pd[ ROOT_PART * PS + P_Y ] = _position.y;
+		pd[ ROOT_PART * PS + C_A ] = _angle - this.getMomentAdjustment();
 
 		//-----------------------------------------------------------------
 		// loop through parts to determine angle and position
 		//-----------------------------------------------------------------
-		for (let p=1; p<_phenotype.numParts; p++)
+		for (let p=1; p<_numParts; p++)
 		{
-			_phenotype.parts[p].position.set( this.getPartParentPosition(p) );
+			const i      = p * PS;
+			const parent = _pParent[p];
+			const j      = parent * PS;
+
+			// start at the parent's end (or at the body position)
+			if ( parent == NULL_PART )
+			{
+				pd[ i + P_X ] = _position.x;
+				pd[ i + P_Y ] = _position.y;
+			}
+			else
+			{
+				pd[ i + P_X ] = pd[ j + P_X ];
+				pd[ i + P_Y ] = pd[ j + P_Y ];
+			}
 
 			//-----------------------------------
 			// determine current angle
 			//-----------------------------------
-			_phenotype.parts[p].currentAngle = 
-			_phenotype.parts[ _phenotype.parts[p].parent ].currentAngle + 
-			_phenotype.parts[p].angle;
-			
+			pd[ i + C_A ] = pd[ j + C_A ] + _pAngle[p];
+
 			//-----------------------------------
 			// add motion
 			//-----------------------------------
-			if ( p > 1 ) // because part 1 has nothing to 'bend' off of 
+			if ( p > 1 ) // because part 1 has nothing to 'bend' off of
 			{
-				let ampModulator   = _phenotype.parts[p].turnAmp    * directionDot;
-				let phaseModulator = _phenotype.parts[p].turnPhase  * directionDot;	
-			
-/*			
-//reversable stroke version
-let perpAmpModulator   = _phenotype.parts[p].amp    * perpDot;
-let perpPhaseModulator = _phenotype.parts[p].phase  * perpDot;	
-            
-let radian = _timer * _phenotype.frequency + ( perpPhaseModulator + phaseModulator );	
-_phenotype.parts[p].bendingAngle = ( perpAmpModulator + ampModulator ) * Math.sin( radian );
-*/
+				let ampModulator   = _pTurnAmp  [p] * directionDot;
+				let phaseModulator = _pTurnPhase[p] * directionDot;
 
-				let radian = _timer * _phenotype.frequency + ( _phenotype.parts[p].phase + phaseModulator );	
-				_phenotype.parts[p].bendingAngle = ( _phenotype.parts[p].amp + ampModulator ) * Math.sin( radian );
+				let radian = _timer * _frequency + ( _pPhase[p] + phaseModulator );
+				pd[ i + B_A ] = ( _pAmp[p] + ampModulator ) * Math.sin( radian );
 
-				_phenotype.parts[p].currentAngle += _phenotype.parts[p].bendingAngle;
+				pd[ i + C_A ] += pd[ i + B_A ];
 			}
 
 			//-----------------------------------
 			// determine position
 			//-----------------------------------
-			let radian = _phenotype.parts[p].currentAngle * PI_OVER_180;
-			let length = _phenotype.parts[p].length;
-			
-			if ( _age < YOUNG_AGE_DURATION ) 
+			let radian = pd[ i + C_A ] * PI_OVER_180;
+			let length = _pLength[p];
+
+			if ( _age < YOUNG_AGE_DURATION )
 			{
                 length *= _growthScale;
 			}
-						
+
 			let x = length * Math.sin( radian );
 			let y = length * Math.cos( radian );
-			_phenotype.parts[p].previousMid.setXY( _phenotype.parts[p].midPosition.x, _phenotype.parts[p].midPosition.y );
-			_phenotype.parts[p].midPosition.setXY( _phenotype.parts[p].position.x, _phenotype.parts[p].position.y );
-			_phenotype.parts[p].position.addXY( x, y );
-			_phenotype.parts[p].midPosition.addXY( x * ONE_HALF, y * ONE_HALF );
-			
+			pd[ i + Q_X ] = pd[ i + M_X ];
+			pd[ i + Q_Y ] = pd[ i + M_Y ];
+			pd[ i + M_X ] = pd[ i + P_X ];
+			pd[ i + M_Y ] = pd[ i + P_Y ];
+			pd[ i + P_X ] += x;
+			pd[ i + P_Y ] += y;
+			pd[ i + M_X ] += x * ONE_HALF;
+			pd[ i + M_Y ] += y * ONE_HALF;
+
 		    //---------------------------------------------------------
-		    // get part axis
+		    // part axis, and its perpendicular
 		    //---------------------------------------------------------
-            _phenotype.parts[p].axis.x = _phenotype.parts[p].position.x - _phenotype.parts[ _phenotype.parts[p].parent ].position.x;
-            _phenotype.parts[p].axis.y = _phenotype.parts[p].position.y - _phenotype.parts[ _phenotype.parts[p].parent ].position.y;
-            
-		    //---------------------------------------------------------
-		    // get perpendicular of part axis
-		    //---------------------------------------------------------
-            _phenotype.parts[p].perpendicular.setXY( _phenotype.parts[p].axis.y / length, -_phenotype.parts[p].axis.x / length );
-			
-			//-------------------------------------------------------------------------------------------------------
-			// calculate part velocity now
-			//-------------------------------------------------------------------------------------------------------
-            _phenotype.parts[p].velocity.setToDifference( _phenotype.parts[p].midPosition, _phenotype.parts[p].previousMid );
-            
-            //console.log( _phenotype.parts[p].velocity.x + ", " + _phenotype.parts[p].velocity.y );
+            pd[ i + A_X ] = pd[ i + P_X ] - pd[ j + P_X ];
+            pd[ i + A_Y ] = pd[ i + P_Y ] - pd[ j + P_Y ];
+            pd[ i + N_X ] =  pd[ i + A_Y ] / length;
+            pd[ i + N_Y ] = -pd[ i + A_X ] / length;
+
+			//-----------------------------------------------------------
+			// part velocity
+			//-----------------------------------------------------------
+            pd[ i + V_X ] = pd[ i + M_X ] - pd[ i + Q_X ];
+            pd[ i + V_Y ] = pd[ i + M_Y ] - pd[ i + Q_Y ];
 		}
-	
 
 		//-----------------------------
 		// calculate center of mass
@@ -341,40 +388,97 @@ _phenotype.parts[p].bendingAngle = ( perpAmpModulator + ampModulator ) * Math.si
         this.adjustToCenterOfMass();
 
 		//------------------------------------
-		// I need to do this again because I 
+		// I need to do this again because I
 		// just did an adjustToCenterOfMass
 		//------------------------------------
 		this.calculateCenterOfMass();
-		
+
 		//----------------------------------------
 		// calculate select radius
-		// 
+		//
 		// (this is a weird hacky solution)
 		//----------------------------------------
 		if ( _age % 20 === 0 )
 		{
-            for (let p=1; p<_phenotype.numParts; p++)
+            for (let p=1; p<_numParts; p++)
             {
-                for (let o=1; o<_phenotype.numParts; o++)
+                for (let o=1; o<_numParts; o++)
                 {
                     if ( o != p )
-                    {	    	    
-                        let distance = _phenotype.parts[p].position.getDistanceTo( _phenotype.parts[o].position );
-                        
+                    {
+                        let xx = pd[ p * PS + P_X ] - pd[ o * PS + P_X ];
+                        let yy = pd[ p * PS + P_Y ] - pd[ o * PS + P_Y ];
+                        let distance = Math.sqrt( xx * xx + yy * yy );
+
                         distance = SWIMBOT_SELECT_RADIUS_SCALAR * Math.sqrt( distance );
-                        
+
                         if ( distance > _selectRadius )
                         {
                             _selectRadius = distance;
                         }
                     }
-                }	
-            }	
+                }
+            }
 		}
 	}
 
 
 
+
+	//------------------------------------------------------------------
+	// copy the Part objects (fresh from embryology) into the arrays
+	//------------------------------------------------------------------
+	this.loadPartArrays = function()
+	{
+		_numParts       = _phenotype.numParts;
+		_frequency      = _phenotype.frequency;
+		_sumPartLengths = _phenotype.sumPartLengths;
+		_bodyMass       = _phenotype.mass;
+
+		for (let p=0; p<_phenotype.numParts; p++)
+		{
+			const part = _phenotype.parts[p];
+			const i = p * PS;
+			_pLength   [p] = part.length;
+			_pWidth    [p] = part.width;
+			_pMass     [p] = part.mass;
+			_pAngle    [p] = part.angle;
+			_pAmp      [p] = part.amp;
+			_pPhase    [p] = part.phase;
+			_pTurnAmp  [p] = part.turnAmp;
+			_pTurnPhase[p] = part.turnPhase;
+			_pMoment   [p] = part.momentFactor;
+			_pParent   [p] = part.parent;
+			_pd[ i + P_X ] = part.position.x;       _pd[ i + P_Y ] = part.position.y;
+			_pd[ i + M_X ] = part.midPosition.x;    _pd[ i + M_Y ] = part.midPosition.y;
+			_pd[ i + Q_X ] = part.previousMid.x;    _pd[ i + Q_Y ] = part.previousMid.y;
+			_pd[ i + A_X ] = part.axis.x;           _pd[ i + A_Y ] = part.axis.y;
+			_pd[ i + N_X ] = part.perpendicular.x;  _pd[ i + N_Y ] = part.perpendicular.y;
+			_pd[ i + V_X ] = part.velocity.x;       _pd[ i + V_Y ] = part.velocity.y;
+			_pd[ i + C_A ] = part.currentAngle;
+			_pd[ i + B_A ] = part.bendingAngle;
+		}
+	}
+
+	//------------------------------------------------------------------
+	// copy the arrays back into the Part objects (for drawing)
+	//------------------------------------------------------------------
+	this.syncPartObjects = function()
+	{
+		for (let p=0; p<_numParts; p++)
+		{
+			const part = _phenotype.parts[p];
+			const i = p * PS;
+			part.position     .setXY( _pd[ i + P_X ], _pd[ i + P_Y ] );
+			part.midPosition  .setXY( _pd[ i + M_X ], _pd[ i + M_Y ] );
+			part.previousMid  .setXY( _pd[ i + Q_X ], _pd[ i + Q_Y ] );
+			part.axis         .setXY( _pd[ i + A_X ], _pd[ i + A_Y ] );
+			part.perpendicular.setXY( _pd[ i + N_X ], _pd[ i + N_Y ] );
+			part.velocity     .setXY( _pd[ i + V_X ], _pd[ i + V_Y ] );
+			part.currentAngle = _pd[ i + C_A ];
+			part.bendingAngle = _pd[ i + B_A ];
+		}
+	}
 
     //------------------------------------
     this.getMomentAdjustment = function()
@@ -382,11 +486,11 @@ _phenotype.parts[p].bendingAngle = ( perpAmpModulator + ampModulator ) * Math.si
         let momentAdjustment = ZERO;
 
         //--------------------------------
-        // part 1 is not involved here.. 
+        // part 1 is not involved here..
         //--------------------------------
-        for (let p=2; p<_phenotype.numParts; p++)
+        for (let p=2; p<_numParts; p++)
         {
-            momentAdjustment += _phenotype.parts[p].bendingAngle * _phenotype.parts[p].momentFactor;
+            momentAdjustment += _pd[ p * PS + B_A ] * _pMoment[p];
         }
 
         return momentAdjustment;
@@ -399,13 +503,14 @@ _phenotype.parts[p].bendingAngle = ( perpAmpModulator + ampModulator ) * Math.si
 	this.calculateCenterOfMass = function()
 	{
 		_centerOfMass.clear();
-		 
-		for (let p=1; p<_phenotype.numParts; p++ )
+
+		for (let p=1; p<_numParts; p++ )
 		{
-			_centerOfMass.addScaled( _phenotype.parts[p].midPosition, _phenotype.parts[p].mass );
+			_centerOfMass.x += _pd[ p * PS + M_X ] * _pMass[p];
+			_centerOfMass.y += _pd[ p * PS + M_Y ] * _pMass[p];
 		}
-	  
-		_centerOfMass.scale( ONE / _phenotype.mass );
+
+		_centerOfMass.scale( ONE / _bodyMass );
 	}
 
 	//--------------------------------
@@ -415,12 +520,19 @@ _phenotype.parts[p].bendingAngle = ( perpAmpModulator + ampModulator ) * Math.si
 	{
 		let offsetX = _position.x - _centerOfMass.x;
 		let offsetY = _position.y - _centerOfMass.y;
-	 
-		for (let  p=0; p<_phenotype.numParts; p++ )
+
+		for (let  p=0; p<_numParts; p++ )
 		{
-		   _phenotype.parts[p].position.addXY	( offsetX, offsetY );
-		   _phenotype.parts[p].midPosition.addXY( offsetX, offsetY );
+		   const i = p * PS;
+		   _pd[ i + P_X ] += offsetX;
+		   _pd[ i + P_Y ] += offsetY;
+		   _pd[ i + M_X ] += offsetX;
+		   _pd[ i + M_Y ] += offsetY;
 		}
+
+		// the mouth and genital positions are read by other swimbots
+		_mouthPosition  .setXY( _pd[ MOUTH_INDEX   * PS + P_X ], _pd[ MOUTH_INDEX   * PS + P_Y ] );
+		_genitalPosition.setXY( _pd[ GENITAL_INDEX * PS + P_X ], _pd[ GENITAL_INDEX * PS + P_Y ] );
 	}
 
 
@@ -431,8 +543,8 @@ _phenotype.parts[p].bendingAngle = ( perpAmpModulator + ampModulator ) * Math.si
 	this.determinePartDecendents = function()
 	{
 		//-----------------------------------------------------------
-		// The purpose of this function is to determine all 
-		// the "child" parts that descend from each part....   
+		// The purpose of this function is to determine all
+		// the "child" parts that descend from each part....
 		//-----------------------------------------------------------
 		for (let p=1; p<_phenotype.numParts; p++)
 		{
@@ -441,22 +553,22 @@ _phenotype.parts[p].bendingAngle = ( perpAmpModulator + ampModulator ) * Math.si
 			//-----------------------------------------------------------
 			// loop through all parts as potential decendents...
 			//-----------------------------------------------------------
-			for (let potentialDecendent  = 1; 
-					 potentialDecendent < _phenotype.numParts; 
+			for (let potentialDecendent  = 1;
+					 potentialDecendent < _phenotype.numParts;
 					 potentialDecendent ++)
 			{
 				let testing = true;
 				let root = potentialDecendent;
 
 				//-----------------------------------------------------------------------------
-				// for each potential_decendent, see if it traces back to the part in question 
+				// for each potential_decendent, see if it traces back to the part in question
 				//-----------------------------------------------------------------------------
 				while ( testing )
 				{
 					root = _phenotype.parts[ root ].parent; //trickle the root down the ancestral tree...
 
 					//------------------------------------------
-					// we have traced a decendent 
+					// we have traced a decendent
 					//------------------------------------------
 					if ( root == p )
 					{
@@ -466,15 +578,15 @@ _phenotype.parts[p].bendingAngle = ( perpAmpModulator + ampModulator ) * Math.si
 					}
 
 					//--------------------------------------------------------------
-					// quit if you have if traced all the way back to ROOT_PART 
+					// quit if you have if traced all the way back to ROOT_PART
 					//--------------------------------------------------------------
 					if ( root == ROOT_PART )
 					{
 						testing = false;
 					}
-				} 
-			}   
-		} 
+				}
+			}
+		}
 	}
 
 
@@ -489,12 +601,12 @@ _phenotype.parts[p].bendingAngle = ( perpAmpModulator + ampModulator ) * Math.si
 	    // clear out everything for starters...
 	    //---------------------------------------
 	    this.clear();
-	    
-	    
+
+
         ///contents of clear...
-	    
+
 	    /*
-        _genotype.clear(); 
+        _genotype.clear();
 
         _lastPositionForEfficiencyMeasurement.clear();
         _position.clear();
@@ -506,8 +618,8 @@ _phenotype.parts[p].bendingAngle = ( perpAmpModulator + ampModulator ) * Math.si
         _centerOfMass.clear();
         _vectorUtility.clear();
 
-        _chosenFoodBit      = null; 
-        _chosenMate         = null; 
+        _chosenFoodBit      = null;
+        _chosenMate         = null;
         _age 	  		    = 0;
         _numOffspring       = 0;
         _numFoodBitsEaten   = 0;
@@ -525,13 +637,13 @@ _phenotype.parts[p].bendingAngle = ( perpAmpModulator + ampModulator ) * Math.si
         _timer              = ZERO;
         _timerDelta         = ZERO;
         _energyEfficiency   = ZERO;
-        _selectRadius       = ZERO;	
+        _selectRadius       = ZERO;
         _lastEnergyForEfficiencyMeasurement = ZERO;
         _readyforSensoryInputToBrain = false;
         */
-	
-/// if the clear routine above takes care of it, I can delete the assignments below...	
-	
+
+/// if the clear routine above takes care of it, I can delete the assignments below...
+
 		//----------------------------
 		// set some basic properties
 		//----------------------------
@@ -546,18 +658,18 @@ _position.copyFrom( position );
 		_alive		        = true;
 		_growthScale        = ONE;
 		//_maximumLifeSpan    = DEFAULT_MAXIMUM_LIFESPAN;
-		
+
 		//_spin		        = ZERO;
         //_numOffspring       = 0;
 		//_numFoodBitsEaten   = 0;
 		//_torque             = ZERO;
         //_selectRadius       = ZERO;
 		//_acceleration.clear();
-		
-		
-		
+
+
+
 //make sure all variables are initialized!!! (to be safe and stuff)
-		
+
 	/*
 	let _heading		    = new Vector2D();
 	let _directionToGoal    = new Vector2D();
@@ -574,31 +686,31 @@ _position.copyFrom( position );
 	let _timer              = ZERO;
 	let _timerDelta         = ZERO;
 	let _readyforSensoryInputToBrain = false;
-	*/		
-		
-		
-		
-		
-		
-		
+	*/
+
+
+
+
+
+
         //-----------------------------------------
 		// copy genotype values to this swimbot...
 		//-----------------------------------------
-        _genotype.copyFromGenotype( genotype );        
+        _genotype.copyFromGenotype( genotype );
 		assert( _genotype != null, "_genotype != null" );
 
  		//--------------------------------
 		// generate phenotype
 		//--------------------------------
 		_phenotype = embryology.generatePhenotypeFromGenotype( _genotype );
-		
+
  		//--------------------------------
 		// important
 		//--------------------------------
 		this.processPhenotype();
-		
+
 		//------------------------------------------------
-		// initialize energy efficiency-related stuff 
+		// initialize energy efficiency-related stuff
 		//------------------------------------------------
 	    _lastPositionForEfficiencyMeasurement.set( _position );
 	    _lastEnergyForEfficiencyMeasurement = _energy;
@@ -606,7 +718,7 @@ _position.copyFrom( position );
 	    //console.log( "_lastPositionForEfficiencyMeasurement = " + _lastPositionForEfficiencyMeasurement );
 	    //console.log( "_lastEnergyForEfficiencyMeasurement = " + _lastEnergyForEfficiencyMeasurement );
 	    //console.log( "_energyEfficiency = " + _energyEfficiency );
-        
+
     	//--------------------------------
 	    // initialize brain
 	    //--------------------------------
@@ -637,7 +749,7 @@ _position.copyFrom( position );
 		//-----------------------------------------------------
         _phenotype.mass = ZERO;
 		assert( _phenotype.numParts > 0, "_phenotype.numParts > 0" );
-		
+
 		_phenotype.sumPartLengths = ZERO;
 
 		for (let p=1; p<_phenotype.numParts; p++)
@@ -652,57 +764,62 @@ _position.copyFrom( position );
 			assert( _phenotype.parts[p].mass > ZERO, "_phenotype.parts[p].mass > ZERO" );
 
 			_phenotype.mass += _phenotype.parts[p].mass;
-		}	
+		}
 
         assert( _phenotype.mass > ZERO, "_phenotype.mass > ZERO" );
-		
+
 		//--------------------------------
-		// compute moment factors 
+		// compute moment factors
 		//--------------------------------
 		this.computeMomentFactors();
-	    
+
+		//--------------------------------
+		// copy the parts into the arrays
+		//--------------------------------
+		this.loadPartArrays();
+
     	//--------------------------------
 	    // create that body...now
 	    //--------------------------------
         this.updateBodyParts();
-        
+
 /*
 		//----------------------------
 		// calculate select radius
 		//----------------------------
-		
-//fix!  doesn't work on infants!		
-		
+
+//fix!  doesn't work on infants!
+
 		_selectRadius = ZERO;
-		
+
 		for (let p=1; p<_phenotype.numParts; p++)
 		{
 		    for (let o=1; o<_phenotype.numParts; o++)
 	    	{
 	    	    if ( o != p )
-	    	    {	    	    
+	    	    {
 	    	        let distance = _phenotype.parts[p].position.getDistanceTo( _phenotype.parts[o].position );
 	    	        if ( distance > _selectRadius )
 	    	        {
 	    	            _selectRadius = distance;
 	    	        }
 	    	    }
-    		}	
-		}	
-		
+    		}
+		}
+
 		//-------------------------------------------------------------------------
 		// HACK...
 		// I don't know why - but this makes is come out basically okay...
 		//-------------------------------------------------------------------------
 		//_selectRadius = SWIMBOT_SELECT_RADIUS_SCALAR * Math.sqrt( _selectRadius );
-		
+
 		if ( _selectRadius < MIN_SELECT_RADIUS )
 		{
 		    _selectRadius = MIN_SELECT_RADIUS;
 		}
-*/				
+*/
 		//--------------------------------
-		// do this 
+		// do this
 		//--------------------------------
         _timerDelta = ZERO;
 
@@ -744,7 +861,7 @@ _position.copyFrom( position );
 	{
 	    _genotype.zap( amount );
 		assert( _genotype != null, "_genotype != null" );
-		
+
  		//--------------------------------
 		// generate phenotype
 		//--------------------------------
@@ -756,7 +873,7 @@ _position.copyFrom( position );
         this.processPhenotype();
      }
 
-	
+
 	//---------------------------------------------------------------
 	this.setGeneValue = function( geneIndex, geneValue, embryology )
 	{
@@ -771,7 +888,7 @@ _position.copyFrom( position );
 		// generate phenotype
 		//--------------------------------
 		_phenotype = embryology.generatePhenotypeFromGenotype( _genotype );
-		
+
  		//--------------------------------
 		// important
 		//--------------------------------
@@ -793,18 +910,18 @@ _position.copyFrom( position );
         {
             _huntCooldown --;
         }
-		
-        if ( _age % BRAIN_SENSORY_UPDATE_PERIOD == 0 ) 
+
+        if ( _age % BRAIN_SENSORY_UPDATE_PERIOD == 0 )
         {
             _readyforSensoryInputToBrain = true;
         }
-		
+
         //-----------------------------
         // update brain
         //-----------------------------
         _brain.setEnergyLevel( _energy );
         _brain.update();
-        
+
         //-------------------------------------
         // I wanna eat my chosen food bit...
         //-------------------------------------
@@ -820,9 +937,9 @@ _position.copyFrom( position );
                 let yy = _chosenFoodBit.getPosition().y - this.getMouthPosition().y;
                 let distance = Math.sqrt( xx*xx + yy*yy );
 
-                if ( distance < SWIMBOT_MOUTH_LENGTH )                
+                if ( distance < SWIMBOT_MOUTH_LENGTH )
                 {
-                    _tryingToEat = true;                    
+                    _tryingToEat = true;
                     //console.log( "I'm trying to eat!" );
                 }
             }
@@ -893,7 +1010,7 @@ _position.copyFrom( position );
             if ( this.getChosenMeatIsValid() )
             {
                 _directionToGoal.set( _chosenFoodBit.getPosition() );
-                _directionToGoal.subtract( _phenotype.parts[ MOUTH_INDEX ].position );
+                _directionToGoal.subtract( _mouthPosition );
                 _directionToGoal.normalize();
             }
             else
@@ -906,7 +1023,7 @@ _position.copyFrom( position );
             if ( this.getChosenPreyIsValid() )
             {
                 _directionToGoal.set( _chosenPrey.getPosition() );
-                _directionToGoal.subtract( _phenotype.parts[ MOUTH_INDEX ].position );
+                _directionToGoal.subtract( _mouthPosition );
                 _directionToGoal.normalize();
             }
         }
@@ -930,8 +1047,8 @@ _position.copyFrom( position );
             //console.log( "BRAIN_STATE_PURSUING_MATE");
             if ( _chosenMate != null )
             {
-                _directionToGoal.set( _chosenMate.getGenitalPosition() );	
-                _directionToGoal.subtract( _phenotype.parts[ GENITAL_INDEX ].position );
+                _directionToGoal.set( _chosenMate.getGenitalPosition() );
+                _directionToGoal.subtract( _genitalPosition );
                 _directionToGoal.normalize();
             }
         }
@@ -940,12 +1057,12 @@ _position.copyFrom( position );
             //console.log( "BRAIN_STATE_PURSUING_FOOD");
             if ( _chosenFoodBit != null )
             {
-                _directionToGoal.set( _chosenFoodBit.getPosition() );	
-                _directionToGoal.subtract( _phenotype.parts[ MOUTH_INDEX ].position );
+                _directionToGoal.set( _chosenFoodBit.getPosition() );
+                _directionToGoal.subtract( _mouthPosition );
                 _directionToGoal.normalize();
             }
         }
-        
+
 
         //----------------------------------------------------------------------
         // continually push the focus direction towards the goal
@@ -958,17 +1075,17 @@ _position.copyFrom( position );
         _vectorUtility.setToDifference( _focusDirection, previousFocusDirection );
 
         if ( _vectorUtility.getMagnitudeSquared() > BRAIN_FOCUS_TARGET_SHIFT_THRESHOLD * BRAIN_FOCUS_TARGET_SHIFT_THRESHOLD )
-        { 
+        {
             _focusDirection.set( previousFocusDirection );
             _focusDirection.addScaled( _directionToGoal, BRAIN_FOCUS_TARGET_SHIFT_THRESHOLD );
         }
-        
+
         _focusDirection.normalize();
 
         //old version
         //_focusDirection.addScaled( _directionToGoal, BRAIN_FOCUS_TARGET_SHIFT_STRENGTH );
         //_focusDirection.normalize();
-        
+
 		//---------------------------
 		// update body parts
 		//---------------------------
@@ -988,7 +1105,7 @@ _position.copyFrom( position );
 	this.wanderFocus = function()
 	{
 	    let length = _directionToGoal.getMagnitude();
-	    
+
 	    if ( length === ZERO )
 	    {
 	        //console.log( "ZERO!!!" );
@@ -996,16 +1113,16 @@ _position.copyFrom( position );
 	        _directionToGoal.y = -ONE_HALF + gpRandom();
 	        length = _directionToGoal.getMagnitude();
 	    }
-	
+
         _directionToGoal.x += ( -BRAIN_WANDER_AMOUNT * ONE_HALF + gpRandom() * BRAIN_WANDER_AMOUNT );
         _directionToGoal.y += ( -BRAIN_WANDER_AMOUNT * ONE_HALF + gpRandom() * BRAIN_WANDER_AMOUNT );
-        
+
         _directionToGoal.x /= length;
         _directionToGoal.y /= length;
 
         //console.log( _directionToGoal.x + ", " + _directionToGoal.y );
     }
-    
+
 
 
 
@@ -1018,19 +1135,19 @@ _position.copyFrom( position );
         // a swimbot creates its own linear and angular forces via moving parts
         //---------------------------------------------------------------------------
         this.calculateFluidForces();
- 	    
+
         if ( _age % ENERGY_EFFICIENCY_MEASUREMENT_PERIOD === 0 )
         {
-            this.calculateEnergyEfficiency();		
+            this.calculateEnergyEfficiency();
         }
-    
+
         //---------------------------------------------
-        // energy is always slowly draining 
+        // energy is always slowly draining
         //---------------------------------------------
         _energy -= CONTINUAL_ENERGY_DRAIN + _basalMetabolism;
-        
+
         //---------------------------------------------
-        // when energy hits zero, that means death 
+        // when energy hits zero, that means death
         //---------------------------------------------
         if ( _energy <= ZERO )
         {
@@ -1046,10 +1163,10 @@ _position.copyFrom( position );
 		//---------------------------
 		// wall collisions
 		//---------------------------
-		this.updateWallCollisions();        	
+		this.updateWallCollisions();
 	}
 
-    
+
     //---------------------------------------------------------------------------
     // swimbot creates its own linear and angular forces via moving parts
     //---------------------------------------------------------------------------
@@ -1060,53 +1177,55 @@ _position.copyFrom( position );
         //-----------------------------------------------------
 	    _acceleration.clear();
 	    _torque = ZERO;
-	    
+
         //----------------------------------------
         // loop through parts...
         //----------------------------------------
-        assert( _phenotype.numParts > 0, "_phenotype.numParts > 0" );  
-        
-		for (let p=1; p<_phenotype.numParts; p++)
+        assert( _numParts > 0, "_numParts > 0" );
+
+		for (let p=1; p<_numParts; p++)
 		{
 		    //---------------------------------------------------------
 		    // calculate this part's fraction of the total length
 		    //---------------------------------------------------------
-            let fractionOfWhole = _phenotype.parts[p].length / _phenotype.sumPartLengths;
-		
+            const i = p * PS;
+            let fractionOfWhole = _pLength[p] / _sumPartLengths;
+
 		    //---------------------------------------------------------
 		    // calculate velocity
 		    //---------------------------------------------------------
-            _phenotype.parts[p].velocity.setToDifference( _phenotype.parts[p].midPosition, _phenotype.parts[p].previousMid );
-            
+            _pd[ i + V_X ] = _pd[ i + M_X ] - _pd[ i + Q_X ];
+            _pd[ i + V_Y ] = _pd[ i + M_Y ] - _pd[ i + Q_Y ];
+
             /*
 		    //---------------------------------------------------------
 		    // get part axis
 		    //---------------------------------------------------------
             _phenotype.parts[p].axis.x = _phenotype.parts[p].position.x - _phenotype.parts[ _phenotype.parts[p].parent ].position.x;
             _phenotype.parts[p].axis.y = _phenotype.parts[p].position.y - _phenotype.parts[ _phenotype.parts[p].parent ].position.y;
-            
+
 		    //---------------------------------------------------------
 		    // get perpendicular of part axis
 		    //---------------------------------------------------------
             _phenotype.parts[p].perpendicular.setXY( _phenotype.parts[p].axis.y / _phenotype.parts[p].length, -_phenotype.parts[p].axis.x / _phenotype.parts[p].length );
             */
-            
+
 		    //---------------------------------------------------------
-		    // get stroke amplitude 
+		    // get stroke amplitude
 		    //---------------------------------------------------------
-            let strokeAmplitude = _phenotype.parts[p].velocity.dotWith( _phenotype.parts[p].perpendicular ) * fractionOfWhole;
-            
-            let strokeForceX = _phenotype.parts[p].perpendicular.x * strokeAmplitude;
-            let strokeForceY = _phenotype.parts[p].perpendicular.y * strokeAmplitude;
+            let strokeAmplitude = ( _pd[ i + V_X ] * _pd[ i + N_X ] + _pd[ i + V_Y ] * _pd[ i + N_Y ] ) * fractionOfWhole;
+
+            let strokeForceX = _pd[ i + N_X ] * strokeAmplitude;
+            let strokeForceY = _pd[ i + N_Y ] * strokeAmplitude;
 
             //-------------------------------------------------
             // calcualte energy lost from stroke
 		    //
-		    // hey: this might be more accurate to nature if 
+		    // hey: this might be more accurate to nature if
 		    // it were something like angle bend times mass.
             //--------------------------------------------------
             _energy -= Math.abs( strokeAmplitude ) * ENERGY_USED_UP_SWIMMING;
-            
+
             if ( _energy < ZERO )
             {
                 _energy = ZERO;
@@ -1115,16 +1234,16 @@ _position.copyFrom( position );
             //-------------------------------------------------
             // calculate part vector from center
             //-------------------------------------------------
-            let partVectorFromCenterX = _phenotype.parts[p].midPosition.x - _position.x;
-            let partVectorFromCenterY = _phenotype.parts[p].midPosition.y - _position.y;
+            let partVectorFromCenterX = _pd[ i + M_X ] - _position.x;
+            let partVectorFromCenterY = _pd[ i + M_Y ] - _position.y;
 
             //-------------------------------------------------
             // calculate part distance from center
             //-------------------------------------------------
             let xx = partVectorFromCenterX * partVectorFromCenterX;
-            let yy = partVectorFromCenterY * partVectorFromCenterY;            
+            let yy = partVectorFromCenterY * partVectorFromCenterY;
             let distance = Math.sqrt( xx*xx + yy*yy );
-            
+
             if ( distance > ZERO )
             {
                 //-------------------------------------------------
@@ -1144,7 +1263,7 @@ let dot = strokeForceX * partDirectionFromCenterX + strokeForceY * partDirection
 //let dot = -ONE;
 
 //--------------------------------------------------------
-// set part acceleration 
+// set part acceleration
 //--------------------------------------------------------
 let partAccelerationX = partDirectionFromCenterX * dot;
 let partAccelerationY = partDirectionFromCenterY * dot;
@@ -1152,39 +1271,39 @@ let partAccelerationY = partDirectionFromCenterY * dot;
 
 let partAccelerationX = -strokeForceX;
 let partAccelerationY = -strokeForceY;
-                
+
                 //-------------------------------
-                // accumulate acceleration 
+                // accumulate acceleration
                 //-------------------------------
                 _acceleration.x += partAccelerationX;
                 _acceleration.y += partAccelerationY;
-            
+
                 //------------------------------------------------
-                // calculate perpendicular 
+                // calculate perpendicular
                 //------------------------------------------------
                 let partPerpendicularX =  partVectorFromCenterY;
-                let partPerpendicularY = -partVectorFromCenterX;   
-            
+                let partPerpendicularY = -partVectorFromCenterX;
+
                 //let partPerpendicularX =  partDirectionFromCenterY;
                 //let partPerpendicularY = -partDirectionFromCenterX;
-                
+
                 //---------------------------------------------------------------
                 // get dot of strokeForce with partPerpendicular
                 //---------------------------------------------------------------
-                let perpDot = ( strokeForceX * partPerpendicularX + strokeForceY * partPerpendicularY ) / _phenotype.sumPartLengths;
+                let perpDot = ( strokeForceX * partPerpendicularX + strokeForceY * partPerpendicularY ) / _sumPartLengths;
 
                 //-------------------------------
-                // accumulate torque 
+                // accumulate torque
                 //-------------------------------
                 let previousTorque = _torque;
-                _torque -= perpDot;                
-                
+                _torque -= perpDot;
+
                 /*
                 //------------------------------------------------------------------
                 // contradictory torque (cancelling-out) goes into acceleration...
                 //------------------------------------------------------------------
                 let torqueBecameSmaller = false;
-                
+
                 if ( Math.abs( _torque ) < Math.abs( previousTorque ) )
                 {
                     partAccelerationX += 0.0;
@@ -1192,8 +1311,8 @@ let partAccelerationY = -strokeForceY;
                 }
                 */
             }
-        }	    
-        
+        }
+
         //-----------------------------------------------------------------
         // apply linear and angular forces to velocity and spin
         //-----------------------------------------------------------------
@@ -1205,9 +1324,9 @@ let partAccelerationY = -strokeForceY;
 		// update position by velocity, and angle by spin
 		//--------------------------------------------------
         _position.add( _velocity );
-        _angle += _spin;  
+        _angle += _spin;
     }
-    
+
 
 
 
@@ -1219,135 +1338,135 @@ let partAccelerationY = -strokeForceY;
 	{
 	    //-----------------------------------------------
         // measure distance traveled and energy lost
-	    //-----------------------------------------------        
+	    //-----------------------------------------------
         let distanceTraveled = _position.getDistanceTo( _lastPositionForEfficiencyMeasurement );
         //console.log( distanceTraveled );
-        
-        let averageSpeed = distanceTraveled / ENERGY_EFFICIENCY_MEASUREMENT_PERIOD;		
+
+        let averageSpeed = distanceTraveled / ENERGY_EFFICIENCY_MEASUREMENT_PERIOD;
         let energyLost   = _lastEnergyForEfficiencyMeasurement - _energy;
-        
+
         //----------------------------------------------------------
         //if swimbot ate food, energy went up, so cancel that....
         //----------------------------------------------------------
-        if ( energyLost < ZERO ) 
+        if ( energyLost < ZERO )
         {
             energyLost = ZERO;
         }
-        
+
         //------------------------------
         // calculate efficiency
         //------------------------------
         _energyEfficiency = averageSpeed / ( ONE + energyLost );
-        
+
         // reset these values for the next go-round...
         _lastPositionForEfficiencyMeasurement.set( _position );
         _lastEnergyForEfficiencyMeasurement = _energy;
     }
-    
+
 
 	//----------------------------------------
 	// update wall collisions
 	//----------------------------------------
 	this.updateWallCollisions = function()
-	{	
+	{
         //--------------------------------------------------------------------
         // left wall
         //--------------------------------------------------------------------
-        if ( _position.x < POOL_LEFT + _phenotype.sumPartLengths * ONE_HALF ) 
+        if ( _position.x < POOL_LEFT + _sumPartLengths * ONE_HALF )
         {
-            //console.log( "left " );            
-            for (let p=1; p<_phenotype.numParts; p++)
+            //console.log( "left " );
+            for (let p=1; p<_numParts; p++)
             {
-                let radius = _phenotype.parts[p].length + _phenotype.parts[p].width;
+                let radius = _pLength[p] + _pWidth[p];
                 let limit = POOL_LEFT + radius;
 
-                if ( _phenotype.parts[p].position.x < limit )
+                if ( _pd[ p * PS + P_X ] < limit )
                 {
-                    let penetration = limit - _phenotype.parts[p].position.x;
-                    
+                    let penetration = limit - _pd[ p * PS + P_X ];
+
                     _position.x         += penetration * WALL_BOUNCE;
-                    _velocity.x         += penetration * WALL_BOUNCE; 
-                    _directionToGoal.x  += penetration * WALL_BOUNCE;                    
+                    _velocity.x         += penetration * WALL_BOUNCE;
+                    _directionToGoal.x  += penetration * WALL_BOUNCE;
                     _directionToGoal.normalize();
                 }
-            } 
-        }  
+            }
+        }
         //-------------------------------------------------------------------------
         // right wall
         //-------------------------------------------------------------------------
-        else if ( _position.x > POOL_RIGHT - _phenotype.sumPartLengths * ONE_HALF ) 
+        else if ( _position.x > POOL_RIGHT - _sumPartLengths * ONE_HALF )
         {
             //console.log( "right " );
-            for (let p=1; p<_phenotype.numParts; p++)
+            for (let p=1; p<_numParts; p++)
             {
-                let radius = _phenotype.parts[p].length + _phenotype.parts[p].width;
+                let radius = _pLength[p] + _pWidth[p];
                 let limit = POOL_RIGHT - radius;
 
-                if ( _phenotype.parts[p].position.x > limit )
+                if ( _pd[ p * PS + P_X ] > limit )
                 {
-                    let penetration = limit - _phenotype.parts[p].position.x;
+                    let penetration = limit - _pd[ p * PS + P_X ];
 
                     _position.x         += penetration * WALL_BOUNCE;
-                    _velocity.x         += penetration * WALL_BOUNCE; 
-                    _directionToGoal.x  += penetration * WALL_BOUNCE;                    
+                    _velocity.x         += penetration * WALL_BOUNCE;
+                    _directionToGoal.x  += penetration * WALL_BOUNCE;
                     _directionToGoal.normalize();
                 }
-            }   
+            }
         }
-        
+
         //------------------------------------------------------------------------------
         // top wall
         //------------------------------------------------------------------------------
-        if ( _position.y < POOL_TOP + _phenotype.sumPartLengths * ONE_HALF ) 
+        if ( _position.y < POOL_TOP + _sumPartLengths * ONE_HALF )
         {
             //console.log( "top" );
-            
-            for (let p=1; p<_phenotype.numParts; p++)
+
+            for (let p=1; p<_numParts; p++)
             {
-                let radius = _phenotype.parts[p].length + _phenotype.parts[p].width;
+                let radius = _pLength[p] + _pWidth[p];
                 let limit = POOL_TOP + radius;
 
-                if ( _phenotype.parts[p].position.y < limit )
+                if ( _pd[ p * PS + P_Y ] < limit )
                 {
-                    let penetration = limit - _phenotype.parts[p].position.y;
+                    let penetration = limit - _pd[ p * PS + P_Y ];
 
                     _position.y         += penetration * WALL_BOUNCE;
-                    _velocity.y         += penetration * WALL_BOUNCE; 
-                    _directionToGoal.y  += penetration * WALL_BOUNCE;                    
+                    _velocity.y         += penetration * WALL_BOUNCE;
+                    _directionToGoal.y  += penetration * WALL_BOUNCE;
                     _directionToGoal.normalize();
                 }
-            }   
+            }
         }
         //------------------------------------------------------------------------------
         // bottom wall
         //------------------------------------------------------------------------------
-        else if ( _position.y > POOL_BOTTOM - _phenotype.sumPartLengths * ONE_HALF ) 
+        else if ( _position.y > POOL_BOTTOM - _sumPartLengths * ONE_HALF )
         {
-            for (let p=1; p<_phenotype.numParts; p++)
+            for (let p=1; p<_numParts; p++)
             {
-                let radius = _phenotype.parts[p].length + _phenotype.parts[p].width;
+                let radius = _pLength[p] + _pWidth[p];
                 let limit = POOL_BOTTOM - radius;
 
-                if ( _phenotype.parts[p].position.y > limit )
+                if ( _pd[ p * PS + P_Y ] > limit )
                 {
-                    let penetration = limit - _phenotype.parts[p].position.y;
+                    let penetration = limit - _pd[ p * PS + P_Y ];
 
                     _position.y         += penetration * WALL_BOUNCE;
-                    _velocity.y         += penetration * WALL_BOUNCE; 
-                    _directionToGoal.y  += penetration * WALL_BOUNCE;                    
+                    _velocity.y         += penetration * WALL_BOUNCE;
+                    _directionToGoal.y  += penetration * WALL_BOUNCE;
                     _directionToGoal.normalize();
                 }
-            }   
+            }
         }
     }
-    
+
 	//---------------------------
 	// set position
 	//---------------------------
 	this.setPosition = function(p)
 	{
         _position.set(p);
-        
+
 		//-----------------------------------------
 		// here is where I shift all my body nodes
 		// to keep my center of mass in place...
@@ -1355,10 +1474,10 @@ let partAccelerationY = -strokeForceY;
         this.adjustToCenterOfMass();
 
 		//------------------------------------
-		// I need to do this again because I 
+		// I need to do this again because I
 		// just did an adjustToCenterOfMass
 		//------------------------------------
-		this.calculateCenterOfMass();        
+		this.calculateCenterOfMass();
     }
 
 
@@ -1371,7 +1490,7 @@ let partAccelerationY = -strokeForceY;
     }
 
 	//---------------------------------
-	// add to velocity 
+	// add to velocity
 	//---------------------------------
 	this.addForce = function( force )
 	{
@@ -1411,8 +1530,8 @@ let partAccelerationY = -strokeForceY;
 	this.getBoundingRadius              = function() { return _phenotype.sumPartLengths;                    }
 	this.getNumParts                    = function() { return _phenotype.numParts;                          }
 	this.getIsLookingForSensoryInput    = function() { return _readyforSensoryInputToBrain;                 }
-	this.getGenitalPosition             = function() { return _phenotype.parts[ GENITAL_INDEX ].position;   }
-	this.getMouthPosition               = function() { return _phenotype.parts[ MOUTH_INDEX   ].position;   }
+	this.getGenitalPosition             = function() { return _genitalPosition;                             }
+	this.getMouthPosition               = function() { return _mouthPosition;                               }
 	this.getChosenMateIndex             = function() { return _chosenMateIndex;                             }
 	this.getChosenFoodBitIndex          = function() { return _chosenFoodBitIndex;                          }
 	this.getNumOffspring                = function() { return _numOffspring;                                }
@@ -1500,10 +1619,10 @@ let partAccelerationY = -strokeForceY;
 
 
 	//---------------------------------------
-    this.getGoalDescription = function() 
-    { 
+    this.getGoalDescription = function()
+    {
         let brainState = _brain.getState();
-        
+
              if ( brainState ===  BRAIN_STATE_RESTING            ) { return "resting";              }
         else if ( brainState ===  BRAIN_STATE_LOOKING_FOR_MATE   ) { return "looking for mate";     }
         else if ( brainState ===  BRAIN_STATE_PURSUING_MATE      ) { return "pursuing mate";        }
@@ -1515,13 +1634,13 @@ let partAccelerationY = -strokeForceY;
 
         return "(no goal identified)";
     }
-    
+
 
 	//---------------------------------------
-    this.getAttractionDescription = function() 
-    { 
+    this.getAttractionDescription = function()
+    {
         let a = _brain.getAttractionCriterion();
-        
+
              if ( a === ATTRACTION_COLORFUL         ) { return "colorful";          }
         else if ( a === ATTRACTION_BIG              ) { return "big";               }
         else if ( a === ATTRACTION_HYPER            ) { return "hyper";             }
@@ -1539,22 +1658,24 @@ let partAccelerationY = -strokeForceY;
         else if ( a === ATTRACTION_SIMILAR_STRAIGHT ) { return "similar straight";  }
         else if ( a === ATTRACTION_RANDOM           ) { return "random";            }
         else if ( a === ATTRACTION_CLOSEST          ) { return "closest";           }
-        
+
         return "(no attraction identified)";
     }
-    
- 
+
+
 	//---------------------------
 	// get part parent position
 	//---------------------------
 	this.getPartParentPosition = function(p)
 	{
-		if ( _phenotype.parts[p].parent == NULL_PART )
+		const parent = _pParent[p];
+		if ( parent == NULL_PART )
 		{
 			return _position;
 		}
 
-		return _phenotype.parts[ _phenotype.parts[p].parent ].position;
+		_vectorUtility.setXY( _pd[ parent * PS + P_X ], _pd[ parent * PS + P_Y ] );
+		return _vectorUtility;
 	}
 
 
@@ -1565,15 +1686,15 @@ let partAccelerationY = -strokeForceY;
 	this.eatChosenFoodBit = function()
 	{
     	//let foodBitIndex = NULL_INDEX;
-    	
+
     	//console.log( "let's eat this" );
-    
+
         assert( _chosenFoodBit != null, "Swimbot:eatChosenFoodBit: _chosenFoodBit != null" );
         assert( _chosenFoodBit.getAlive(), "Swimbot:eatChosenFoodBit: _chosenFoodBit.getAlive()" );
-        
+
         if (( _chosenFoodBit != null )
         &&  ( _chosenFoodBit.getAlive() ))
-        {	
+        {
             let energyFromFoodBit = _chosenFoodBit.getEnergy();
 
             if ( globalTweakers.numFoodTypes > 1 )
@@ -1586,9 +1707,9 @@ let partAccelerationY = -strokeForceY;
                 console.log( " " );
                 console.log( "-------------------------------" );
                 */
-                
+
                 //----------------------------------------------------------------------
-                // If the type of the chosen food bit is not compatible with the 
+                // If the type of the chosen food bit is not compatible with the
                 // digestible type of the swimbot, then it gets less energy...
                 //----------------------------------------------------------------------
                 // (meat, type 2, is always fully digestible for predators)
@@ -1601,17 +1722,17 @@ let partAccelerationY = -strokeForceY;
             }
 
             _energy += energyFromFoodBit;
-            
+
             _numFoodBitsEaten ++;
-            
-            assert( _chosenFoodBit.getEnergy() >= ZERO, "Swimbot:eatChosenFoodBit: _chosenFoodBit.getEnergy() >= ZERO" );	
-            	
+
+            assert( _chosenFoodBit.getEnergy() >= ZERO, "Swimbot:eatChosenFoodBit: _chosenFoodBit.getEnergy() >= ZERO" );
+
             _tryingToEat = false;
-             
+
             _timerDelta = ZERO;
 
             //foodBitIndex = _chosenFoodBit.getIndex();
-            
+
             assert( _chosenFoodBitIndex != NULL_INDEX, "Swimbot:eatChosenFoodBit: _chosenFoodBitIndex != NULL_INDEX" );
 
             _chosenFoodBit.kill();
@@ -1679,7 +1800,7 @@ let partAccelerationY = -strokeForceY;
 	    _brain.setFoundPrey( false );
 	}
 
-    
+
 
 	//--------------------------------------------
 	// setEnvironmentalStimuli
@@ -1739,10 +1860,10 @@ let partAccelerationY = -strokeForceY;
         ||  ( _brain.getState() == BRAIN_STATE_PURSUING_FOOD ))
         {
             _brain.setFoundFoodBit( foodBitWasFound );
-    
+
             if ( foodBitWasFound )
             {
-                //console.log( "foodBitWasFound" );            
+                //console.log( "foodBitWasFound" );
                 assert( theFoodBit != null, "swimbot.js: setEnvironmentalStimuli: theFoodBit != null" );
                 _chosenFoodBit = theFoodBit;
                 _chosenFoodBitIndex = _chosenFoodBit.getIndex();
@@ -1757,17 +1878,17 @@ let partAccelerationY = -strokeForceY;
 
         //------------------------------------------------------------------------------------------------
         // if looking for mate, scan the nearby swimbots and choose the most attractive...
-        //------------------------------------------------------------------------------------------------	
+        //------------------------------------------------------------------------------------------------
         if ( _brain.getState() === BRAIN_STATE_LOOKING_FOR_MATE )
-        {			
+        {
             //console.log( "horny" );
-            
+
             let mostAttractiveFound = null;
             let atLeastOneBabeIsVisible = false;
             let highestBabeFactor = -100.0;
 
             for (let o=0; o<numNearbySwimbots; o++)
-            {	                
+            {
                 let babeFactor = nearbySwimbotArray[o].getAttractiveness( this );
 
                 if (( babeFactor > highestBabeFactor )
@@ -1782,7 +1903,7 @@ let partAccelerationY = -strokeForceY;
                     atLeastOneBabeIsVisible = true;
                 }
             }
-            
+
             if ( atLeastOneBabeIsVisible )
             {
                 _chosenMate = mostAttractiveFound;
@@ -1790,7 +1911,7 @@ let partAccelerationY = -strokeForceY;
 
                 _chosenMateIndex = mostAttractiveFound.getIndex();
                 assert( _chosenMateIndex != NULL_INDEX, "_chosenMateIndex != NULL_INDEX" );
-                
+
                 _brain.setFoundSwimbot( true );
             }
             else
@@ -1801,11 +1922,11 @@ let partAccelerationY = -strokeForceY;
         else if ( _brain.getState() == BRAIN_STATE_PURSUING_MATE )
         {
             //console.log( "pursuing mate" );
-            
+
             let ICanStillSeeYou = false;
 
             for (let o=0; o<numNearbySwimbots; o++)
-            {	
+            {
                 let index = nearbySwimbotArray[o].getIndex();
                 if ( index === _chosenMateIndex )
                 {
@@ -1839,11 +1960,11 @@ let partAccelerationY = -strokeForceY;
     	// reset this to false for next time around
     	//--------------------------------------------
     	_readyforSensoryInputToBrain = false;
-    	
+
     } //setEnvironmentalStimuli
 
-    
-    
+
+
 	//-----------------------------------------------------------------
 	// abortMating: the mating attempt failed (incompatible, pool full,
 	// mate gone) - give up on this mate and look for another one
@@ -1863,45 +1984,45 @@ let partAccelerationY = -strokeForceY;
 	this.setAttraction = function( attraction )
 	{
 	    _brain.setAttraction( attraction );
-	    
-//here I need to tell the brain to stop pursuing its current chosen mate (if it is)...	    
-	    
+
+//here I need to tell the brain to stop pursuing its current chosen mate (if it is)...
+
 	}
 
-    
-    
+
+
 	//-----------------------------------------
 	// get attractiveness
 	//-----------------------------------------
 	this.getAttractiveness = function( judge )
 	{
         let attractiveness = gpRandom();
-        
+
         let attractionCriterion = _brain.getAttractionCriterion();
-        
+
         //console.log( "attractionCriterion = " + attractionCriterion );
-        
+
         if ( attractionCriterion === ATTRACTION_COLORFUL        ) { attractiveness =        this.getColorSaturation         (); }
         if ( attractionCriterion === ATTRACTION_BIG             ) { attractiveness =        this.getCurrentBodyBigness      (); }
         if ( attractionCriterion === ATTRACTION_HYPER           ) { attractiveness =        this.getCurrentBodyHyperness    (); }
         if ( attractionCriterion === ATTRACTION_LONG            ) { attractiveness =        this.getCurrentBodyLongness     (); }
         if ( attractionCriterion === ATTRACTION_STRAIGHT        ) { attractiveness =        this.getCurrentBodyStraightness (); }
-        
+
         if ( attractionCriterion === ATTRACTION_NO_COLOR        ) { attractiveness = ONE -  this.getColorSaturation         (); }
         if ( attractionCriterion === ATTRACTION_SMALL           ) { attractiveness = ONE -  this.getCurrentBodyBigness      (); }
         if ( attractionCriterion === ATTRACTION_STILL           ) { attractiveness = ONE -  this.getCurrentBodyHyperness    (); }
         if ( attractionCriterion === ATTRACTION_SHORT           ) { attractiveness = ONE -  this.getCurrentBodyLongness     (); }
         if ( attractionCriterion === ATTRACTION_CROOKED         ) { attractiveness = ONE -  this.getCurrentBodyStraightness (); }
-        
+
         if ( attractionCriterion === ATTRACTION_SIMILAR_COLOR   ) { attractiveness =        this.getColorSimilarity         ( judge ); }
         if ( attractionCriterion === ATTRACTION_SIMILAR_SIZE    ) { attractiveness =        this.getBignessSimilarity       ( judge ); }
         if ( attractionCriterion === ATTRACTION_SIMILAR_HYPER   ) { attractiveness =        this.getHypernessSimilarity     ( judge ); }
         if ( attractionCriterion === ATTRACTION_SIMILAR_LENGTH  ) { attractiveness =        this.getLengthSimilarity        ( judge ); }
         if ( attractionCriterion === ATTRACTION_SIMILAR_STRAIGHT) { attractiveness =        this.getStraightessSimilarity   ( judge ); }
-        
+
         if ( attractionCriterion === ATTRACTION_CLOSEST         ) { attractiveness =        this.getCloseness               ( judge ); }
         if ( attractionCriterion === ATTRACTION_RANDOM          ) { attractiveness =        gpRandom(); }
-    
+
         return attractiveness;
     }
 
@@ -1911,43 +2032,43 @@ let partAccelerationY = -strokeForceY;
 	//-------------------------------------
 	this.getColorSaturation = function()
 	{
-        //console.log( "getColorSaturation" );	
+        //console.log( "getColorSaturation" );
 
         let saturation = ZERO;
-        
+
         let accumulatedMass = ZERO;
-        
+
         for (let p=1; p<_phenotype.numParts; p++)
         {
             //console.log( _phenotype.parts[p].red + ", " + _phenotype.parts[p].green + ", " + _phenotype.parts[p].blue );
-            
+
             accumulatedMass += _phenotype.parts[p].mass;
-            
+
             let rgDiff = Math.abs( _phenotype.parts[p].red     - _phenotype.parts[p].green  );
             let rbDiff = Math.abs( _phenotype.parts[p].red     - _phenotype.parts[p].blue   );
             let gbDiff = Math.abs( _phenotype.parts[p].green   - _phenotype.parts[p].blue   );
 
             //console.log( rgDiff + ", " + rbDiff + ", " + gbDiff );
-            
+
             let thisPartSaturation = ( rgDiff + rbDiff + gbDiff ) / 3;
 
             assert( thisPartSaturation <= ONE, "thisPartSaturation <= ONE" );
 
             thisPartSaturation *= _phenotype.parts[p].mass
-            
+
             saturation += thisPartSaturation;
         }
-        
+
         assert( accumulatedMass > ZERO, "getColorSaturation: accumulatedMass > ZERO" );
-        
+
         saturation /= accumulatedMass;
 
         assert( saturation <= ONE, "getColorSaturation: saturation <= ONE" );
-            
+
         return saturation;
     }
 
-    
+
 
 	//-----------------------------------------
 	// get closeness
@@ -1955,29 +2076,29 @@ let partAccelerationY = -strokeForceY;
 	this.getCloseness = function( judge )
 	{
 	    //console.log( "getCloseness" );
-	    
+
         let closest = SWIMBOT_VIEW_RADIUS; //maximum
-        
+
         let distance = _position.getDistanceTo( judge.getPosition() );
-            
-        /*    
+
+        /*
         if ( distance > SWIMBOT_VIEW_RADIUS )
         {
             console.log( distance + ", " + SWIMBOT_VIEW_RADIUS );
         }
-        
+
         //assert( distance <= SWIMBOT_VIEW_RADIUS, "swimbot.js: getCloseness: distance <= SWIMBOT_VIEW_RADIUS" );
         */
-        
+
         if ( distance < closest )
         {
             closest = distance;
         }
-        
+
         return ONE - ( closest / SWIMBOT_VIEW_RADIUS );
     }
-    
-    
+
+
 
 
 	//-----------------------------------------
@@ -1991,12 +2112,12 @@ let partAccelerationY = -strokeForceY;
 	    + this.getHypernessSimilarity   ( judge )
 	    + this.getLengthSimilarity      ( judge )
 	    + this.getStraightessSimilarity ( judge );
-	    
-	    amount /= 5; 
-	    	    	    
+
+	    amount /= 5;
+
 	    return amount;
     }
-    
+
 
 	//-----------------------------------------
 	// get color similarity
@@ -2004,22 +2125,22 @@ let partAccelerationY = -strokeForceY;
 	this.getColorSimilarity = function( judge )
 	{
 	    let amount = ZERO;
-	    
+
 	    let c1 = judge.getAverageColor();
 	    let c2 = this.getAverageColor();
-	    
+
 	    //console.log( "judge color = " + c1.red + ", " + c1.green + ", " + c1.blue );
 	    //console.log( "my color    = " + c2.red + ", " + c2.green + ", " + c2.blue );
-            
+
         let rDiff = Math.abs( c2.red    - c1.red    );
         let gDiff = Math.abs( c2.green  - c1.green  );
         let bDiff = Math.abs( c2.blue   - c1.blue   );
 
         amount = ONE - ( ( rDiff + gDiff + bDiff ) * ONE_THIRD );
-	    	    
+
 	    return amount;
     }
-    
+
 
 	//--------------------------------------------
 	// get bigness similarity
@@ -2027,145 +2148,144 @@ let partAccelerationY = -strokeForceY;
 	this.getBignessSimilarity = function( judge )
 	{
 	    let amount = ZERO;
-	    
+
 	    let b1 = judge.getCurrentBodyBigness();
 	    let b2 = this.getCurrentBodyBigness();
 
         amount = ONE - Math.abs( b1 - b2 );
-	    
+
         //console.log( "bigness similarity = " + amount );
-	    	    
+
 	    return amount;
     }
-    
-        
+
+
 	//--------------------------------------------
 	// get hyperness similarity
 	//--------------------------------------------
 	this.getHypernessSimilarity = function( judge )
 	{
 	    let amount = ZERO;
-	    
+
 	    let b1 = judge.getCurrentBodyHyperness();
 	    let b2 = this.getCurrentBodyHyperness();
 
         amount = ONE - Math.abs( b1 - b2 );
-	    	    	    
+
 	    return amount;
     }
-    
-        
+
+
 	//--------------------------------------------
 	// get length similarity
 	//--------------------------------------------
 	this.getLengthSimilarity = function( judge )
 	{
 	    let amount = ZERO;
-	    
+
 	    let b1 = judge.getCurrentBodyLongness();
 	    let b2 = this.getCurrentBodyLongness();
 
         amount = ONE - Math.abs( b1 - b2 );
-	    	    	    
+
 	    return amount;
     }
-    
-        
+
+
 	//--------------------------------------------
 	// get straightness similarity
 	//--------------------------------------------
 	this.getStraightessSimilarity = function( judge )
 	{
 	    let amount = ZERO;
-	    
+
 	    let b1 = judge.getCurrentBodyStraightness();
 	    let b2 = this.getCurrentBodyStraightness();
 
         amount = ONE - Math.abs( b1 - b2 );
-	    	    	    
+
 	    return amount;
     }
-    
-        
-    
+
+
+
 
     //---------------------------------------
     this.getCurrentBodyBigness = function()
     {
         let amount = _phenotype.mass / GREATEST_POSSIBLE_SWIMBOT_MASS;
-      
+
         return amount;
     }
-    
+
 
     //---------------------------------------
     this.getCurrentBodyLongness = function()
     {
         let amount = ZERO;
-    
-        for (let p=1; p<_phenotype.numParts; p++)
-        {    
-            for (let pp=1; pp<_phenotype.numParts; pp++)
+
+        for (let p=1; p<_numParts; p++)
+        {
+            for (let pp=1; pp<_numParts; pp++)
             {
                 if ( pp != p )
                 {
-                    let d = _phenotype.parts[p].midPosition.getDistanceTo( _phenotype.parts[pp].midPosition );
-                    
+                    let xx = _pd[ p * PS + M_X ] - _pd[ pp * PS + M_X ];
+                    let yy = _pd[ p * PS + M_Y ] - _pd[ pp * PS + M_Y ];
+                    let d = Math.sqrt( xx * xx + yy * yy );
+
                     if ( d > amount )
                     {
                         amount = d;
                     }
                 }
             }
-        } 
+        }
 
-        amount /= GREATEST_POSSIBLE_SWIMBOT_LENGTH;    
-    
+        amount /= GREATEST_POSSIBLE_SWIMBOT_LENGTH;
+
         return amount;
     }
-    
-    
-    
+
+
+
 
 
     //-------------------------------------------
     this.getCurrentBodyStraightness = function()
     {
         let amount = ZERO;
-         
+
         //-------------------------------------------------------------------
         // normalized vectors for each part axis
         //-------------------------------------------------------------------
-        let v = new Array();
-        for (let p=1; p<_phenotype.numParts; p++)
+        for (let p=1; p<_numParts; p++)
         {
-            v[p] = new Vector2D();
-v[p].setXY( _phenotype.parts[p].axis.x / _phenotype.parts[p].length, _phenotype.parts[p].axis.y / _phenotype.parts[p].length );
-            
-//v[p].setToDifference( _phenotype.parts[ _phenotype.parts[p].parent ].position, _phenotype.parts[p].position );
-//v[p].normalize();
+            _unitAxisX[p] = _pd[ p * PS + A_X ] / _pLength[p];
+            _unitAxisY[p] = _pd[ p * PS + A_Y ] / _pLength[p];
+
         }
-        
+
         //---------------------------------------------------------------------------
         // finding the dot products between each pair of these vectors...
         //---------------------------------------------------------------------------
-        if ( _phenotype.numParts < 3 ) 
+        if ( _numParts < 3 )
         {
             amount = ONE;
         }
         else
         {
             let numTests = 0;
-            for (let p=1; p<_phenotype.numParts; p++)
+            for (let p=1; p<_numParts; p++)
             {
-                for (let pp=p+1; pp<_phenotype.numParts; pp++)
+                for (let pp=p+1; pp<_numParts; pp++)
                 {
                     numTests ++;
                     assert ( p != pp, "Swimbot:getCurrentBodyStraightness: p != pp" );
-                    amount += Math.abs( v[p].dotWith( v[pp] ) );                    
+                    amount += Math.abs( _unitAxisX[p] * _unitAxisX[pp] + _unitAxisY[p] * _unitAxisY[pp] );
                 }
             }
-        
+
             amount /= numTests;
         }
 
@@ -2173,13 +2293,13 @@ v[p].setXY( _phenotype.parts[p].axis.x / _phenotype.parts[p].length, _phenotype.
         // let's favor swimbots with more parts....
         //-----------------------------------------------
         amount *= 0.7;
-        amount += ( _phenotype.numParts / MAX_PARTS ) * 0.3;    
-    
+        amount += ( _numParts / MAX_PARTS ) * 0.3;
+
         if ( amount > ONE )
         {
             amount = ONE;
         }
-                
+
         return amount;
     }
 
@@ -2190,26 +2310,26 @@ v[p].setXY( _phenotype.parts[p].axis.x / _phenotype.parts[p].length, _phenotype.
     this.getCurrentBodyHyperness = function()
     {
         let amount = ZERO;
-    
-        for (let p=1; p<_phenotype.numParts; p++)
+
+        for (let p=1; p<_numParts; p++)
         {
-            amount += _phenotype.parts[p].velocity.getMagnitude();
+            amount += Math.sqrt( _pd[ p * PS + V_X ] * _pd[ p * PS + V_X ] + _pd[ p * PS + V_Y ] * _pd[ p * PS + V_Y ] );
         }
 
         let FugdeFactorToScaleHyperAttraction = 0.4;
-          
+
         amount *= FugdeFactorToScaleHyperAttraction;
-        
+
         if ( amount > ONE )
         {
             amount = ONE;
         }
-         
+
         return amount;
     }
 
 
-    
+
 	//---------------------------------
 	// get average color
 	//---------------------------------
@@ -2219,45 +2339,45 @@ v[p].setXY( _phenotype.parts[p].axis.x / _phenotype.parts[p].length, _phenotype.
         let g = ZERO;
         let b = ZERO;
         let accumulatedMass = ZERO;
-        
+
         for (let p=1; p<_phenotype.numParts; p++)
         {
             accumulatedMass += _phenotype.parts[p].mass;
-        
+
             r += _phenotype.parts[p].red    * _phenotype.parts[p].mass;
             g += _phenotype.parts[p].green  * _phenotype.parts[p].mass;
             b += _phenotype.parts[p].blue   * _phenotype.parts[p].mass;
         }
-        
+
         assert( accumulatedMass > ZERO, "getAverageColor: accumulatedMass > ZERO" );
-        
+
         r /= accumulatedMass;
         g /= accumulatedMass;
         b /= accumulatedMass;
-    
+
         assert( r <= ONE, "getAverageColor: r <= ONE" );
         assert( g <= ONE, "getAverageColor: g <= ONE" );
         assert( b <= ONE, "getAverageColor: b <= ONE" );
-    
+
         let c = new Color();
         c.red   = r;
         c.green = g;
         c.blue  = b;
-        
+
         return c;
     }
 
 
-    
+
 	//-----------------------
 	// die
 	//----------------------
 	this.die = function()
 	{
         _alive = false;
-        
+
         simCounters.numDeadSwimbots ++;
-	    
+
 	    //assert( _index != NULL_INDEX, "Swimbot.js: this.die: _index != NULL_INDEX" )
 	    if ( _index != NULL_INDEX )
 	    {
@@ -2265,15 +2385,15 @@ v[p].setXY( _phenotype.parts[p].axis.x / _phenotype.parts[p].length, _phenotype.
             _parent.notifySwimbotDeathTime( _index );
         }
     }
-    
-    
+
+
 //-----------------------
 	// clear all data
 	//----------------------
 	this.clear = function()
 	{
         _lastPositionForEfficiencyMeasurement.clear();
-        _genotype.clear(); 
+        _genotype.clear();
         _position.clear();
         _velocity.clear();
         _acceleration.clear();
@@ -2283,8 +2403,8 @@ v[p].setXY( _phenotype.parts[p].axis.x / _phenotype.parts[p].length, _phenotype.
         _centerOfMass.clear();
         _vectorUtility.clear();
 
-        _chosenFoodBit      = null; 
-        _chosenMate         = null; 
+        _chosenFoodBit      = null;
+        _chosenMate         = null;
         _age 	  		    = 0;
         _numOffspring       = 0;
         _numFoodBitsEaten   = 0;
@@ -2302,7 +2422,7 @@ v[p].setXY( _phenotype.parts[p].axis.x / _phenotype.parts[p].length, _phenotype.
         _timer              = ZERO;
         _timerDelta         = ZERO;
         _energyEfficiency   = ZERO;
-        _selectRadius       = ZERO;	
+        _selectRadius       = ZERO;
         _lastEnergyForEfficiencyMeasurement = ZERO;
         _readyforSensoryInputToBrain = false;
 
@@ -2329,10 +2449,10 @@ v[p].setXY( _phenotype.parts[p].axis.x / _phenotype.parts[p].length, _phenotype.
 /*
         assert( _childEnergyRatio >= ZERO, "_childEnergyRatio >= ZERO" );
         assert( _childEnergyRatio <= ONE, "_childEnergyRatio <= ONE"  );
-        
+
 console.log( "contributeToOffspring: _childEnergyRatio = " + _childEnergyRatio );
 */
-        
+
 //let energyToContribute = _energy * _childEnergyRatio;
         let energyToContribute = _energy * globalTweakers.childEnergyRatio;
 
@@ -2343,20 +2463,20 @@ console.log( "contributeToOffspring: _childEnergyRatio = " + _childEnergyRatio )
 
 /*
         //----------------------------------------------------------------------
-        // I think I did this to keep babies hungry as soon as born... 
+        // I think I did this to keep babies hungry as soon as born...
         //----------------------------------------------------------------------
 	    if ( energyToContribute > DEFAULT_SWIMBOT_HUNGER_THRESHOLD * ONE_HALF )
 	    {
 	        energyToContribute = DEFAULT_SWIMBOT_HUNGER_THRESHOLD * ONE_HALF;
 	    }
-*/	    
-	    
+*/
+
 	    _energy -= energyToContribute;
 
         assert( _energy >= ZERO, "Swimbot: contributeToOffspring: _energy >= ZERO" );
-   
+
 	    _numOffspring ++;
-   
+
         _timerDelta         = ZERO;
         _tryingToMate       = false;
         _chosenMate         = null;
@@ -2365,11 +2485,11 @@ console.log( "contributeToOffspring: _childEnergyRatio = " + _childEnergyRatio )
 
 	    return energyToContribute;
 
-	
+
 	    //previous version that uses half of the swimbot's energy
-        /*	
+        /*
 	    _numOffspring ++;
-	
+
         let energyBeforeContribution = _energy;
 
         if (( _childEnergyRatio < ZERO )
@@ -2381,23 +2501,23 @@ console.log( "contributeToOffspring: _childEnergyRatio = " + _childEnergyRatio )
 
         //console.log( _childEnergyRatio );
 
-        _energy *= ( ONE - _childEnergyRatio ); 
+        _energy *= ( ONE - _childEnergyRatio );
 
         _timerDelta = ZERO;
 
         let energyToContribute = energyBeforeContribution - _energy;
-    
-        //cancel out all mate-related data so it doesn't get in the way next time..	
+
+        //cancel out all mate-related data so it doesn't get in the way next time..
         _tryingToMate = false;
         _chosenMate = null;
         _chosenMateIndex = NULL_INDEX
         _brain.setFoundSwimbot( false );
 
         //printf( "swimbot %d just gave %f to %d, leaving it with %f\n", index, energyToContribute, energy );
-        
+
 	    return energyToContribute;
 	    */
-	    
+
     }
 
 
@@ -2406,67 +2526,69 @@ console.log( "contributeToOffspring: _childEnergyRatio = " + _childEnergyRatio )
 	// set rendering goals
 	//-------------------------------------------
 	this.setRenderingGoals = function(r)
-	{	
+	{
 	    _swimbotRenderer.setRenderingGoals(r);
     }
-    
+
 	//-------------------------------------
 	// render
 	//-------------------------------------
 	this.render = function( levelOfDetail )
 	{
+	    this.syncPartObjects();
+
 	    _swimbotRenderer.render
-	    ( 
-	        _phenotype, 
-	        _brain, 
+	    (
+	        _phenotype,
+	        _brain,
 	        _age,
 	        _energy,
-	        _growthScale, 
+	        _growthScale,
 	        _focusDirection,
 	        levelOfDetail,
 	        this
 	    );
 
-              
 
 
-/// debug test!!!!! 
-// I'm adding these colored circles to visualize food preferences...  
-/*       
+
+/// debug test!!!!!
+// I'm adding these colored circles to visualize food preferences...
+/*
 canvas.lineWidth = 2;
 
 if ( _phenotype.preferredFoodType == 0 )
 {
-    canvas.strokeStyle = "rgb( 100, 255, 100 )";	
+    canvas.strokeStyle = "rgb( 100, 255, 100 )";
     canvas.beginPath();
     canvas.arc( _position.x, _position.y, 60, 0, PI2, false );
     canvas.stroke();
-    canvas.closePath();	
+    canvas.closePath();
 }
 else
 {
-    canvas.strokeStyle = "rgb( 100, 150, 255 )";	
+    canvas.strokeStyle = "rgb( 100, 150, 255 )";
     canvas.beginPath();
     canvas.arc( _position.x, _position.y, 60, 0, PI2, false );
     canvas.stroke();
-    canvas.closePath();	
+    canvas.closePath();
 }
 
 if (_phenotype.digestibleFoodType == 0 )
 {
-    canvas.strokeStyle = "rgb( 100, 255, 100 )";	
+    canvas.strokeStyle = "rgb( 100, 255, 100 )";
     canvas.beginPath();
     canvas.arc( _position.x, _position.y, 45, 0, PI2, false );
     canvas.stroke();
-    canvas.closePath();	
+    canvas.closePath();
 }
 else
 {
-    canvas.strokeStyle = "rgb( 100, 150, 255 )";	
+    canvas.strokeStyle = "rgb( 100, 150, 255 )";
     canvas.beginPath();
     canvas.arc( _position.x, _position.y, 45, 0, PI2, false );
     canvas.stroke();
-    canvas.closePath();	
+    canvas.closePath();
 }
 */
 
@@ -2475,26 +2597,26 @@ else
 		//-------------------------------------
 		// show position
 		//-------------------------------------
-		canvas.fillStyle = "rgb( 244, 244, 244 )";	
+		canvas.fillStyle = "rgb( 244, 244, 244 )";
 		canvas.beginPath();
 		canvas.arc( _position.x, _position.y, 2.0, 0, PI2, false );
 		canvas.fill();
-		canvas.closePath();	
-        
+		canvas.closePath();
+
 		//-----------------------------------------
 		// show heading
 		//-----------------------------------------
-        canvas.strokeStyle = "rgb( 233, 233, 233 )";	
+        canvas.strokeStyle = "rgb( 233, 233, 233 )";
 
-        canvas.lineWidth = 1; 
+        canvas.lineWidth = 1;
         canvas.beginPath();
         canvas.moveTo( _position.x, _position.y );
         canvas.lineTo( _position.x + _heading.x * 40.0, _position.y + _heading.y * 40.0 );
         canvas.closePath();
         canvas.stroke();
-	    */	    
+	    */
 	}
-    
+
 
 }//end of entire Swimbots function -------------------------
 
