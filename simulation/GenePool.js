@@ -234,6 +234,31 @@ function GenePool()
         _batchObjectPool.push(obj);
     }
 
+    //------------------------------------------------------------
+    // scratch arrays for picking the nearest perceived swimbots
+    //------------------------------------------------------------
+    let _candidateSwimbots  = new Array(MAX_SWIMBOTS);
+    let _candidateDistances = new Float64Array(MAX_SWIMBOTS);
+
+    function sortCandidatesByDistance(count)
+    {
+        // insertion sort: lists are short (tens of swimbots)
+        for (let i = 1; i < count; i++)
+        {
+            const bot = _candidateSwimbots[i];
+            const d   = _candidateDistances[i];
+            let j = i - 1;
+            while (j >= 0 && _candidateDistances[j] > d)
+            {
+                _candidateSwimbots [j + 1] = _candidateSwimbots [j];
+                _candidateDistances[j + 1] = _candidateDistances[j];
+                j--;
+            }
+            _candidateSwimbots [j + 1] = bot;
+            _candidateDistances[j + 1] = d;
+        }
+    }
+
     function rebuildAliveIndexCaches()
     {
         _aliveSwimbotIndices.length = 0;
@@ -1156,11 +1181,11 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
                 this.updateFood();
             }
         }
-
-        rebuildAliveIndexCaches();
                 
         if ( _rendering )
-        {		
+        {
+            rebuildAliveIndexCaches();
+		
             if ( _fastMode )
             {
                 _fastRenderCounter++;
@@ -1573,26 +1598,42 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
         const nearbySwimbots = _spatialGrid.getNearbyObjects(me, (predatorLevel > PREDATOR_LEVEL_THRESHOLD) ? preyViewRadius : viewRadius);
 
 
-        for (let i = 0; i < nearbySwimbots.length && _numNearbySwimbots < BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS; i++)
+        //------------------------------------------------------------------
+        // the brain perceives the NEAREST swimbots within normal view
+        // (the grid returns them in cell order, so sort by distance first)
+        //------------------------------------------------------------------
+        let numCandidates = 0;
+
+        for (let i = 0; i < nearbySwimbots.length; i++)
         {
-            const nearbySwimbot = nearbySwimbots[i];
-            const o = nearbySwimbot.getIndex();
+            const other = nearbySwimbots[i];
 
-            if ((s != o) && _swimbots[o].getAlive())
+            if ((other.getIndex() != s) && other.getAlive())
             {
-                const otherGenitalPosition = _swimbots[o].getGenitalPosition();
-                let distanceSquared = myGenitalPosition.getDistanceSquaredTo(otherGenitalPosition);
+                const distanceSquared = myGenitalPosition.getDistanceSquaredTo(other.getGenitalPosition());
 
-                const matchRadiusSquared = (predatorLevel > PREDATOR_LEVEL_THRESHOLD) ? preyViewRadiusSquared : viewRadiusSquared;
-                if (distanceSquared < matchRadiusSquared)
-
+                if (distanceSquared < viewRadiusSquared)
                 {
-                    if (!_obstacle.getObstruction(myGenitalPosition, otherGenitalPosition))
-                    {
-                        _nearbySwimbotsArray[_numNearbySwimbots] = _swimbots[o];
-                        _numNearbySwimbots++;
-                    }
+                    _candidateSwimbots [numCandidates] = other;
+                    _candidateDistances[numCandidates] = distanceSquared;
+                    numCandidates++;
                 }
+            }
+        }
+
+        if (numCandidates > BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS)
+        {
+            sortCandidatesByDistance(numCandidates);
+        }
+
+        for (let i = 0; i < numCandidates && _numNearbySwimbots < BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS; i++)
+        {
+            const other = _candidateSwimbots[i];
+
+            if (!_obstacle.getObstruction(myGenitalPosition, other.getGenitalPosition()))
+            {
+                _nearbySwimbotsArray[_numNearbySwimbots] = other;
+                _numNearbySwimbots++;
             }
         }
 

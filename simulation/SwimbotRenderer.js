@@ -34,10 +34,10 @@ var    flopperYV = 0;
 	// variables
 	//--------------------------------
 	let _colorUtility       = new Color();
-	let _phenotype          = new Phenotype();
+	let _phenotype          = null; // set by render()
 	let _growthScale        = ZERO;
 	let _focusDirection     = new Vector2D();
-	let _brain              = new Brain();
+	let _brain              = null; // set by render()
 	let _age                = 1000;
 	let _energy             = ZERO;
 	let _splineFactor       = ZERO;
@@ -45,11 +45,7 @@ var    flopperYV = 0;
 	let _swimbot            = null;
 	let _mouthColor         = null;
 
-	// Color cache for performance optimization
-	let _colorCache = {};
-	let _lastCacheClear = performance.now();
-	let _cacheHitCount = 0;
-	let _cacheMissCount = 0;
+
 
 	//----------------------------------------------------
 	// get part parent position
@@ -111,8 +107,13 @@ var    flopperYV = 0;
             let green = Math.floor( _colorUtility.green * 255 );
             let blue  = Math.floor( _colorUtility.blue  * 255 );
 
-			canvas.fillStyle = "rgb( " + red + ", " + green + ", " + blue + " )";	
-		    
+			canvas.fillStyle = "rgb( " + red + ", " + green + ", " + blue + " )";
+
+			let center = _phenotype.parts[ ROOT_PART ].position;
+			canvas.beginPath();
+			canvas.arc( center.x, center.y, SWIMBOT_DOT_RENDER_RADIUS, 0, PI2, false );
+			canvas.fill();
+
               
         }
 		else if ( levelOfDetail == SWIMBOT_LEVEL_OF_DETAIL_LOW )
@@ -516,21 +517,10 @@ var    flopperYV = 0;
 
 
 	//------------------------------------------------------
-	// calculate part color with caching
+	// calculate part color
 	//------------------------------------------------------
 	this.calculatePartColor = function(p)
 	{
-	    // Create a unique cache key based on part properties and swimbot state
-	    const cacheKey = `${p}_${Math.floor(_age / 10)}_${Math.floor(_energy / 5)}_${_growthScale.toFixed(2)}`;
-
-	    // Check if we have a cached color for this part in this state
-	    if (_colorCache[cacheKey]) {
-	        _cacheHitCount++;
-	        return _colorCache[cacheKey];
-	    }
-
-	    _cacheMissCount++;
-
 	    // Calculate the color if not cached
 	    _colorUtility.red   = _phenotype.parts[p].red;
 	    _colorUtility.green = _phenotype.parts[p].green;
@@ -593,15 +583,6 @@ var    flopperYV = 0;
 
         assert( _colorUtility.blue  >= ZERO, "_colorUtility.blue  >= ZERO" );
         assert( _colorUtility.blue  <= ONE,  "_colorUtility.blue  <= ONE"  );
-
-        // Cache the result
-        _colorCache[cacheKey] = {red: _colorUtility.red, green: _colorUtility.green, blue: _colorUtility.blue};
-
-        // Очищаем кэш раз в секунду независимо от миссов/хитов
-        if (performance.now() - _lastCacheClear > 1000) {
-            _colorCache = {};
-            _lastCacheClear = performance.now();
-        }
 
 	    return _colorUtility;
 	}

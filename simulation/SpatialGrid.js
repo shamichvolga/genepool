@@ -1,17 +1,19 @@
 "use strict";
 
 /**
- * Spatial Grid for efficient collision detection and object lookup
+ * Uniform spatial grid for fast "who is near this point" queries.
+ *
+ * Each object lives in exactly one cell (the one containing its position),
+ * cells are addressed by an integer key, and removal is O(1) (swap-remove).
+ * Queries scan the cells overlapping the search circle and test real distances.
+ *
  * @param {number} cellSize - Size of each grid cell
  */
 function SpatialGrid(cellSize) {
     this.cellSize = cellSize || 100;
-    this.grid = {};
-    this.objects = [];
-    this.cellIndices = new WeakMap(); // Track cells per object
-    // Neighbor cache: { cellKey: [neighborKeys...] }
-    this.neighborCache = new Map();
-    // Profile statistics
+    this.cells    = new Map();      // integer key -> array of objects
+    this.records  = new Map();      // object -> { key, index }
+    this.objects  = [];
     this.stats = {
         addCount: 0,
         queryCount: 0,
@@ -20,13 +22,31 @@ function SpatialGrid(cellSize) {
     };
 }
 
+// cell coordinates are packed into one 32-bit integer (range ±32767 cells)
+SpatialGrid.prototype.cellKey = function(cx, cy) {
+    return ((cx & 0xFFFF) << 16) | (cy & 0xFFFF);
+};
+
 /**
  * Clear the grid
  */
 SpatialGrid.prototype.clear = function() {
-    this.grid = {};
-    this.objects = [];
-    this.cellIndices = new WeakMap();
+    this.cells.clear();
+    this.records.clear();
+    this.objects.length = 0;
+};
+
+/**
+ * Take an object out of its current cell (swap-remove)
+ * @private
+ */
+SpatialGrid.prototype.detach = function(record, obj) {
+    const cell = this.cells.get(record.key);
+    const last = cell.pop();
+    if (last !== obj) {
+        cell[record.index] = last;
+        this.records.get(last).index = record.index;
+    }
 };
 
 /**
@@ -34,153 +54,93 @@ SpatialGrid.prototype.clear = function() {
  * @param {Object} obj - Object to remove
  */
 SpatialGrid.prototype.removeObject = function(obj) {
-    if (!obj || !this.cellIndices.has(obj)) {
+    const record = this.records.get(obj);
+    if (record === undefined) {
         return;
     }
 
-    const oldCells = this.cellIndices.get(obj);
-    for (let i = 0; i < oldCells.length; i++) {
-        const cellKey = oldCells[i];
-        const cell = this.grid[cellKey];
-        if (!cell) continue;
-
-        const index = cell.indexOf(obj);
-        if (index !== -1) {
-            cell.splice(index, 1);
-        }
-
-        if (cell.length === 0) {
-            delete this.grid[cellKey];
-        }
-    }
+    this.detach(record, obj);
+    this.records.delete(obj);
 
     const objIndex = this.objects.indexOf(obj);
     if (objIndex !== -1) {
-        this.objects.splice(objIndex, 1);
+        this.objects[objIndex] = this.objects[this.objects.length - 1];
+        this.objects.pop();
     }
 };
 
 /**
- * Add an object to the grid
- * @param {Object} obj - Object to add (must have getPosition() and getBoundingRadius() methods)
+ * Add an object to the grid, or move it if it is already there
+ * @param {Object} obj - Object to add (must have a getPosition() method)
  */
 SpatialGrid.prototype.addObject = function(obj) {
-    if (!obj || !obj.getPosition || !obj.getBoundingRadius) {
-        console.warn("SpatialGrid: Object missing required methods");
-        return;
-    }
-
-    const existed = this.cellIndices.has(obj);
     const pos = obj.getPosition();
-    const radius = obj.getBoundingRadius();
-    // Remove object from previous cells
-    if (existed) {
-        const oldCells = this.cellIndices.get(obj);
-        for (const cellKey of oldCells) {
-            const cell = this.grid[cellKey];
-            if (cell) {
-                const index = cell.indexOf(obj);
-                if (index !== -1) cell.splice(index, 1);
-            }
+    const key = this.cellKey(Math.floor(pos.x / this.cellSize), Math.floor(pos.y / this.cellSize));
+    let record = this.records.get(obj);
+
+    if (record !== undefined) {
+        if (record.key === key) {
+            return;     // still in the same cell - nothing to do
         }
-    }
-
-    const minX = Math.floor((pos.x - radius) / this.cellSize);
-    const minY = Math.floor((pos.y - radius) / this.cellSize);
-    const maxX = Math.floor((pos.x + radius) / this.cellSize);
-    const maxY = Math.floor((pos.y + radius) / this.cellSize);
-
-    const occupiedCells = [];
-    for (let x = minX; x <= maxX; x++) {
-        for (let y = minY; y <= maxY; y++) {
-            const cellKey = x + ',' + y;
-            if (!this.grid[cellKey]) {
-                this.grid[cellKey] = [];
-            }
-            this.grid[cellKey].push(obj);
-            occupiedCells.push(cellKey);
-        }
-    }
-    
-    this.cellIndices.set(obj, occupiedCells);
-    this.stats.addCount++;
-
-    if (!existed) {
+        this.detach(record, obj);
+    } else {
+        record = { key: 0, index: 0 };
+        this.records.set(obj, record);
         this.objects.push(obj);
     }
+
+    let cell = this.cells.get(key);
+    if (cell === undefined) {
+        cell = [];
+        this.cells.set(key, cell);
+    }
+
+    record.key   = key;
+    record.index = cell.length;
+    cell.push(obj);
+    this.stats.addCount++;
 };
 
 /**
  * Get nearby objects within a certain radius
  * @param {Object} obj - Reference object (must have getPosition() method)
  * @param {number} radius - Search radius
- * @returns {Array} Array of nearby objects
+ * @returns {Array} Array of nearby objects (excluding obj itself)
  */
 SpatialGrid.prototype.getNearbyObjects = function(obj, radius) {
     const pos = obj.getPosition();
-    const centerX = Math.floor(pos.x / this.cellSize);
-    const centerY = Math.floor(pos.y / this.cellSize);
-    const radiusInCells = Math.ceil(radius / this.cellSize) + 1;
-
-    // Generate cell keys using neighbor cache
-    const cellKeys = this.getCellsInRadius(centerX, centerY, radiusInCells);
-    
+    const size = this.cellSize;
+    const minX = Math.floor((pos.x - radius) / size);
+    const maxX = Math.floor((pos.x + radius) / size);
+    const minY = Math.floor((pos.y - radius) / size);
+    const maxY = Math.floor((pos.y + radius) / size);
+    const radiusSquared = radius * radius;
     const nearbyObjects = [];
-    const checkedObjects = new Set();
-    this.stats.queryCount++;
-    this.stats.cellLookups += cellKeys.length;
 
-    // Check all cells that could contain nearby objects
-    for (let i = 0; i < cellKeys.length; i++) {
-        const cellKey = cellKeys[i];
-        if (this.grid[cellKey]) {
-            for (let j = 0; j < this.grid[cellKey].length; j++) {
-                const candidate = this.grid[cellKey][j];
-                if (candidate !== obj && !checkedObjects.has(candidate)) {
-                    checkedObjects.add(candidate);
-                    const distanceSquared = pos.getDistanceSquaredTo(candidate.getPosition());
-                    if (distanceSquared < radius * radius) {
-                        nearbyObjects.push(candidate);
-                    }
+    this.stats.queryCount++;
+
+    for (let cx = minX; cx <= maxX; cx++) {
+        for (let cy = minY; cy <= maxY; cy++) {
+            const cell = this.cells.get(this.cellKey(cx, cy));
+            if (cell === undefined) continue;
+
+            this.stats.cellLookups++;
+
+            for (let j = 0; j < cell.length; j++) {
+                const candidate = cell[j];
+                if (candidate === obj) continue;
+
+                const p = candidate.getPosition();
+                const dx = p.x - pos.x;
+                const dy = p.y - pos.y;
+                if (dx * dx + dy * dy < radiusSquared) {
+                    nearbyObjects.push(candidate);
                 }
             }
         }
     }
 
     return nearbyObjects;
-};
-
-/**
- * Get cells in radius (using neighbor cache)
- * @private
- */
-SpatialGrid.prototype.getCellsInRadius = function(centerX, centerY, radius) {
-    const cacheKey = `${centerX},${centerY},${radius}`;
-    
-    // Check cache
-    if (this.neighborCache.has(cacheKey)) {
-        this.stats.cacheHits++;
-        return this.neighborCache.get(cacheKey);
-    }
-    
-    // Compute neighbors
-    const keys = [];
-    for (let dx = -radius; dx <= radius; dx++) {
-        for (let dy = -radius; dy <= radius; dy++) {
-            if (dx*dx + dy*dy <= radius*radius) {
-                const x = centerX + dx;
-                const y = centerY + dy;
-                keys.push(x + ',' + y);
-            }
-        }
-    }
-    
-    // Update cache (limit size)
-    if (this.neighborCache.size > 1000) {
-        this.neighborCache.clear();
-    }
-    this.neighborCache.set(cacheKey, keys);
-    return keys;
 };
 
 /**

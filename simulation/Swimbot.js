@@ -77,6 +77,7 @@ var    flopperYV = 0;
 	let _timer              = ZERO;
 	let _timerDelta         = ZERO;
 	let _colorUtility       = new Color();
+	let _previousFocusDirection = new Vector2D(); // scratch, reused every update
 	let _energyEfficiency   = ZERO;
 	let _selectRadius       = ZERO;
 	let _species            = NULL_INDEX;
@@ -925,7 +926,7 @@ _position.copyFrom( position );
         //----------------------------------------------------------------------
         // continually push the focus direction towards the goal
         //----------------------------------------------------------------------
-        let previousFocusDirection = new Vector2D();
+        let previousFocusDirection = _previousFocusDirection;
         previousFocusDirection.set( _focusDirection );
 
         _focusDirection.addScaled( _directionToGoal, BRAIN_FOCUS_TARGET_SHIFT_STRENGTH );
@@ -1717,7 +1718,7 @@ let partAccelerationY = -strokeForceY;
         {			
             //console.log( "horny" );
             
-            let mostAttractiveFound = new Swimbot;
+            let mostAttractiveFound = null;
             let atLeastOneBabeIsVisible = false;
             let highestBabeFactor = -100.0;
 

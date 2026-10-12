@@ -4,10 +4,13 @@ function Vector2D()
 {	
 	this.x = 0.0;
 	this.y = 0.0;
+}
+
+// methods live on the prototype so each vector stays small
 
 
 	//----------------------------------
-	this.setXY = function( x_, y_ )
+	Vector2D.prototype.setXY = function( x_, y_ )
 	{	
 		this.x = x_;
 		this.y = y_;
@@ -15,21 +18,21 @@ function Vector2D()
 
 
 	//--------------------------
-	this.copyFrom = function(v)
+	Vector2D.prototype.copyFrom = function(v)
 	{	
 		this.x = v.x;
 		this.y = v.y;
 	}
 
 	//--------------------------
-	this.equals = function(v)
+	Vector2D.prototype.equals = function(v)
 	{
 		return (this.x === v.x) && (this.y === v.y);
 	}
 
 
 	//--------------------------------------
-	this.addXY  = function( x_, y_ )
+	Vector2D.prototype.addXY  = function( x_, y_ )
 	{
 		this.x += x_;
 		this.y += y_;	
@@ -37,7 +40,7 @@ function Vector2D()
 	
 	
 	//-----------------------
-	this.set = function( p_ )
+	Vector2D.prototype.set = function( p_ )
 	{
 		this.x = p_.x;
 		this.y = p_.y;
@@ -46,7 +49,7 @@ function Vector2D()
 	
 	
 	//----------------------------------------
-	this.setToDifference = function( v1, v2 )
+	Vector2D.prototype.setToDifference = function( v1, v2 )
 	{
 		this.x = v1.x - v2.x;
 		this.y = v1.y - v2.y;		
@@ -56,7 +59,7 @@ function Vector2D()
 
 
 	//-------------------------------------------------------------------------------------------
-	this.normalize = function()
+	Vector2D.prototype.normalize = function()
 	{
 		let m = Math.sqrt( this.x * this.x + this.y * this.y );
 		
@@ -75,7 +78,7 @@ function Vector2D()
 
 	
 	//------------------------
-	this.add = function( v )
+	Vector2D.prototype.add = function( v )
 	{
 		this.x += v.x;
 		this.y += v.y;
@@ -84,33 +87,33 @@ function Vector2D()
 
 	
 	//---------------------------- 
-	this.subtract = function( v )
+	Vector2D.prototype.subtract = function( v )
 	{
 		this.x -= v.x;
 		this.y -= v.y;	
 	}
 	
 	//-----------------------------------
-	this.getMagnitude = function()
+	Vector2D.prototype.getMagnitude = function()
 	{
 		return Math.sqrt( this.x * this.x + this.y * this.y );
 	}
 
 	//-----------------------------------
-	this.getMagnitudeSquared = function()
+	Vector2D.prototype.getMagnitudeSquared = function()
 	{
 		return this.x * this.x + this.y * this.y;
 	}
 
 	//-----------------------
-	this.clear = function()
+	Vector2D.prototype.clear = function()
 	{
 		this.x = 0.0;
 		this.y = 0.0;
 	}
 	
 	//-------------------------
-	this.scale = function( s )
+	Vector2D.prototype.scale = function( s )
 	{
 		this.x *= s;
 		this.y *= s;
@@ -118,14 +121,14 @@ function Vector2D()
 	
 	
 	//----------------------------------------------
-	this.addScaled = function( vectorToAdd, scale ) 
+	Vector2D.prototype.addScaled = function( vectorToAdd, scale ) 
 	{ 
 		this.x += vectorToAdd.x * scale; 
 		this.y += vectorToAdd.y * scale; 
 	}
 	
 	//----------------------------------------------------------
-	this.subtractScaled = function( vectorToSubtract, scale ) 
+	Vector2D.prototype.subtractScaled = function( vectorToSubtract, scale ) 
 	{ 
 		this.x -= vectorToSubtract.x * scale; 
 		this.y -= vectorToSubtract.y * scale; 
@@ -133,7 +136,7 @@ function Vector2D()
 
 
 	//--------------------------
-	this.dotWith = function( v )
+	Vector2D.prototype.dotWith = function( v )
 	{
 		return this.x * v.x + this.y * v.y;		
 	} 
@@ -141,7 +144,7 @@ function Vector2D()
 	
 
 	//-----------------------------------------------------------
-	this.setToRandomLocationInDisk = function( position, radius )
+	Vector2D.prototype.setToRandomLocationInDisk = function( position, radius )
 	{
 		let radian = PI2 * gpRandom();
 		let magnitude = radius * Math.sqrt( gpRandom() );
@@ -151,7 +154,7 @@ function Vector2D()
 	}
 	
 	//-----------------------------------------------
-    this.getDistanceSquaredTo = function( position )
+    Vector2D.prototype.getDistanceSquaredTo = function( position )
     {
         let xx = this.x - position.x;
         let yy = this.y - position.y;
@@ -160,7 +163,7 @@ function Vector2D()
 
 
 	//-----------------------------------------
-    this.getDistanceTo = function( position )
+    Vector2D.prototype.getDistanceTo = function( position )
     {
         let xx = this.x - position.x;
         let yy = this.y - position.y;
@@ -169,7 +172,7 @@ function Vector2D()
 
 
 	//------------------------------------
-    this.setToPerpendicular = function()
+    Vector2D.prototype.setToPerpendicular = function()
     {
         let px =  this.y;
         let py = -this.x;
@@ -183,7 +186,7 @@ function Vector2D()
 	//----------------------------------------------------
 	// check to see if segment a crosses segment b
 	//----------------------------------------------------
-    this.getSegmentsCrossing = function( a0, a1, b0, b1 )
+    Vector2D.prototype.getSegmentsCrossing = function( a0, a1, b0, b1 )
     {
         //----------------------------
         // get the a and b vectors
@@ -258,7 +261,7 @@ function Vector2D()
 
 
 
-} //---------------------------------------------------------------------------------
+// //---------------------------------------------------------------------------------
  //---------------  END of class constructor ---------------------------------------
 //---------------------------------------------------------------------------------
 

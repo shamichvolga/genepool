@@ -29,16 +29,18 @@ function FamilyTree()
                 
         this.birthTime  = 0;
         this.deathTime  = 0;
-        this.genes      = new Array();
+        this.genes      = null; // Uint8Array - one byte per gene
     }
 
     let _nodes = new Array();  
     let _numNodes = 0;  
+    let _latestNodeForPoolIndex = new Map(); // pool index -> newest node with that pool index
     
     //-----------------------
     this.reset = function()
     {
         _numNodes = 0;
+        _latestNodeForPoolIndex.clear();
         _nodes = [];
         _nodes.length = 0;
     }
@@ -73,11 +75,9 @@ function FamilyTree()
         _nodes[ _numNodes ].birthTime           = birthTime;
         _nodes[ _numNodes ].deathTime           = 0;
         
-        for (let g=0; g<genes.length; g++)
-        {
-            _nodes[ _numNodes ].genes[g] = genes[g];
-        }
+        _nodes[ _numNodes ].genes = Uint8Array.from( genes );
 
+        _latestNodeForPoolIndex.set( poolIndex, _numNodes );
         _numNodes ++;
     }
     
@@ -85,18 +85,11 @@ function FamilyTree()
     function getIndexFromPoolIndex( poolIndex )
     {
         //----------------------------------------------------------
-        // important to loop backwards...because pool index values
-        // can reoccur as a result of pool swimbot reincarnation. 
+        // pool index values can reoccur as a result of pool swimbot
+        // reincarnation, so the newest node with that index wins.
         //----------------------------------------------------------
-        for (let n=_numNodes-1; n>=0; n--)
-        {
-            if ( poolIndex === _nodes[n].poolIndex )
-            {
-                return n;
-            }
-        }
-        
-        return NULL_INDEX;
+        let n = _latestNodeForPoolIndex.get( poolIndex );
+        return ( n === undefined ) ? NULL_INDEX : n;
     }
     
                

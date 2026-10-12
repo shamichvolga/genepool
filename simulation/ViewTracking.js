@@ -597,9 +597,9 @@ _trackingScale += ( ( loverDistance * 2 ) - _trackingScale ) * 0.1;
                         
 //console.log( "lover " + s + " is going after " + chosenMate );    
                         
-                        for (let o=0; o<MAX_SWIMBOTS; o++)
+                        let o = chosenMate; // (no need to search for it)
                         {
-                            if ( o === chosenMate )
+                            if ( o !== NULL_INDEX )
                             {
 //console.log( "here's " + o );    
                                 if ( _swimbots[o].getAlive() )
