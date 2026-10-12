@@ -64,7 +64,7 @@ function resizeAll()
 }
 
 resizeAll();
-ui.openInfoPanel();
+ui.openPanel( "menuInfoButton" );
 ui.setInfoPage( 2 );
 ui.initializeUI();
 

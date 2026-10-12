@@ -3,7 +3,8 @@
 		<title>
 			Gene Pool
 		</title>		
-        <link rel="stylesheet" type="text/css" href="css/genepool.css">                        
+        <link rel="stylesheet" type="text/css" href="css/genepool.css">
+        <link rel="stylesheet" type="text/css" href="css/panel.css">                        
         <meta charset  = "utf-8"/>
         <meta property = "og:title"         content = "Gene Pool Swimbots">
         <meta property = "og:description"   content = "Gene Pool is an artificial life simulation invented by Jeffrey Ventrella">
@@ -16,533 +17,228 @@
 
 		
         
-		       <div id = "masterPanel">
-            <div id = "mainTitle">
-                Gene Pool
-            </div> 
+		<!-- ------------------------------------------------------------------ -->
+		<!-- the panel on the right: everything flows top to bottom             -->
+		<!-- (layout in css/panel.css; tabs switched in src/ui/ui.ts)           -->
+		<!-- ------------------------------------------------------------------ -->
+		<div id = "masterPanel">
 
+            <header id = "panelHeader">
+                <span id = "mainTitle">Gene Pool</span>
+                <a id = "swimbots_url" href = "http://www.swimbots.com" target = "_blank">swimbots.com</a>
+            </header>
 
-            <div id = "swimbots_url">
-                <a href = 'http://www.swimbots.com' target = "_blank" style = 'color: #224400'>swimbots.com</a>
-            </div> 
+            <!-- camera and view -->
+            <section id = "viewPanel" class = "gpBox">
+                <div class = "gpRow">
+                    <div id = "viewNavPanel">
+                        <button id = "upNav"    class = "navigationButton" title = "move up (W)"
+                            onmousedown  = "genePool.startCameraNavigation( CameraNavigationAction.UP    ); clearViewModeButtons();"
+                            onmouseup    = "genePool.stopCameraNavigation ( CameraNavigationAction.UP    );"
+                            onmouseleave = "genePool.stopCameraNavigation ( CameraNavigationAction.UP    );" ></button>
+                        <button id = "leftNav"  class = "navigationButton" title = "move left (A)"
+                            onmousedown  = "genePool.startCameraNavigation( CameraNavigationAction.LEFT  ); clearViewModeButtons();"
+                            onmouseup    = "genePool.stopCameraNavigation ( CameraNavigationAction.LEFT  );"
+                            onmouseleave = "genePool.stopCameraNavigation ( CameraNavigationAction.LEFT  );" ></button>
+                        <button id = "rightNav" class = "navigationButton" title = "move right (D)"
+                            onmousedown  = "genePool.startCameraNavigation( CameraNavigationAction.RIGHT ); clearViewModeButtons();"
+                            onmouseup    = "genePool.stopCameraNavigation ( CameraNavigationAction.RIGHT );"
+                            onmouseleave = "genePool.stopCameraNavigation ( CameraNavigationAction.RIGHT );" ></button>
+                        <button id = "downNav"  class = "navigationButton" title = "move down (S)"
+                            onmousedown  = "genePool.startCameraNavigation( CameraNavigationAction.DOWN  ); clearViewModeButtons();"
+                            onmouseup    = "genePool.stopCameraNavigation ( CameraNavigationAction.DOWN  );"
+                            onmouseleave = "genePool.stopCameraNavigation ( CameraNavigationAction.DOWN  );" ></button>
+                        <button id = "inNav"    class = "navigationButton" title = "zoom in (E, mouse wheel)"
+                            onmousedown  = "genePool.startCameraNavigation( CameraNavigationAction.IN    ); clearViewModeButtons();"
+                            onmouseup    = "genePool.stopCameraNavigation ( CameraNavigationAction.IN    );"
+                            onmouseleave = "genePool.stopCameraNavigation ( CameraNavigationAction.IN    );" ></button>
+                        <button id = "outNav"   class = "navigationButton" title = "zoom out (Q, mouse wheel)"
+                            onmousedown  = "genePool.startCameraNavigation( CameraNavigationAction.OUT   ); clearViewModeButtons();"
+                            onmouseup    = "genePool.stopCameraNavigation ( CameraNavigationAction.OUT   );"
+                            onmouseleave = "genePool.stopCameraNavigation ( CameraNavigationAction.OUT   );" ></button>
+                    </div>
 
-            <div id="viewPanel"  class = "basicPanel" >
-                <div id="viewNavPanel" >
-                    <button
-                        id           = "leftNav" 
-                        class        = "navigationButton"
-                        onmousedown  = "genePool.startCameraNavigation( CameraNavigationAction.LEFT  ); clearViewModeButtons();"
-                        onmouseup    = "genePool.stopCameraNavigation ( CameraNavigationAction.LEFT  );"
-                        onmouseleave = "genePool.stopCameraNavigation ( CameraNavigationAction.LEFT  );" >                
-                    </button>    
-                    <button 
-                        id           = "rightNav" 
-                        class        = "navigationButton"
-                        onmousedown  = "genePool.startCameraNavigation( CameraNavigationAction.RIGHT ); clearViewModeButtons();"
-                        onmouseup    = "genePool.stopCameraNavigation ( CameraNavigationAction.RIGHT );"
-                        onmouseleave = "genePool.stopCameraNavigation ( CameraNavigationAction.RIGHT );" >
-                    </button>
-                    <button 
-                        id           = "downNav" 
-                        class        = "navigationButton"
-                        onmousedown  = "genePool.startCameraNavigation( CameraNavigationAction.DOWN ); clearViewModeButtons();"
-                        onmouseup    = "genePool.stopCameraNavigation ( CameraNavigationAction.DOWN );"
-                        onmouseleave = "genePool.stopCameraNavigation ( CameraNavigationAction.DOWN );" >
-                    </button>
-                    <button 
-                        id           = "upNav" 
-                        class        = "navigationButton"
-                        onmousedown  = "genePool.startCameraNavigation( CameraNavigationAction.UP ); clearViewModeButtons();"
-                        onmouseup    = "genePool.stopCameraNavigation ( CameraNavigationAction.UP );"
-                        onmouseleave = "genePool.stopCameraNavigation ( CameraNavigationAction.UP );" >
-                    </button>
-                    <button 
-                        id           = "inNav" 
-                        class        = "navigationButton"
-                        onmousedown  = "genePool.startCameraNavigation( CameraNavigationAction.IN ); clearViewModeButtons(); "
-                        onmouseup    = "genePool.stopCameraNavigation ( CameraNavigationAction.IN );"
-                        onmouseleave = "genePool.stopCameraNavigation ( CameraNavigationAction.IN );" >
-                    </button>
-                    <button 
-                        id           = "outNav" 
-                        class        = "navigationButton"
-                        onmousedown  = "genePool.startCameraNavigation( CameraNavigationAction.OUT );  clearViewModeButtons();"
-                        onmouseup    = "genePool.stopCameraNavigation ( CameraNavigationAction.OUT );"
-                        onmouseleave = "genePool.stopCameraNavigation ( CameraNavigationAction.OUT );" >
-                    </button>
-                </div> <!-- view navigation-->
-                <div id="viewTrackingPanel" >
-                    <button id="viewWholePoolButton"    class = "basicButton" onmousedown = "setViewMode( id, ViewTrackingMode.WHOLE_POOL ); " >whole pool        </button>
-                    <button id="viewAutoTrackButton"    class = "basicButton" onmousedown = "setViewMode( id, ViewTrackingMode.AUTOTRACK  );"  >autotracking      </button>            
-                    <button id="viewSelectedButton"     class = "basicButton" onmousedown = "setViewMode( id, ViewTrackingMode.SELECTED   );"  >selected          </button>            
-                    <button id="viewMutualButton"       class = "basicButton" onmousedown = "setViewMode( id, ViewTrackingMode.MUTUAL     );"  >mutual love       </button>            
-                    <button id="viewProlificButton"     class = "basicButton" onmousedown = "setViewMode( id, ViewTrackingMode.PROLIFIC   );"  >most prolific     </button>            
-                    <button id="viewEfficientButton"    class = "basicButton" onmousedown = "setViewMode( id, ViewTrackingMode.EFFICIENT  );"  >most efficient    </button>            
-                    <button id="viewVirginButton"       class = "basicButton" onmousedown = "setViewMode( id, ViewTrackingMode.VIRGIN     );"  >oldest virgin     </button>            
-                    <button id="viewGluttonButton"      class = "basicButton" onmousedown = "setViewMode( id, ViewTrackingMode.HUNGRY     );"  >glutton           </button>   
-                </div>                    
-                <div id="viewOptionsPanel" >
-                    <button id = "viewGoalButton" class = "basicButton" onClick = "toggleGoalOverlay();"        >mouth/genital  </button>
-                    <button id = "freezeButton"   class = "basicButton" onClick = "toggleSimulationRunning();"  >freeze         </button>
-                    <button id = "noRenderButton" class = "basicButton" onClick = "toggleRendering();"          >rendering OFF  </button>
-                    <button id = "fastButton"     class = "basicButton" onClick = "toggleFastRendering();"      >fastest        </button>
+                    <div id = "viewTrackingPanel" class = "gpGrid2">
+                        <button id = "viewWholePoolButton" class = "basicButton" onmousedown = "setViewMode( id, ViewTrackingMode.WHOLE_POOL );" >whole pool</button>
+                        <button id = "viewAutoTrackButton" class = "basicButton" onmousedown = "setViewMode( id, ViewTrackingMode.AUTOTRACK  );" >autotracking</button>
+                        <button id = "viewSelectedButton"  class = "basicButton" onmousedown = "setViewMode( id, ViewTrackingMode.SELECTED   );" >selected</button>
+                        <button id = "viewMutualButton"    class = "basicButton" onmousedown = "setViewMode( id, ViewTrackingMode.MUTUAL     );" >mutual love</button>
+                        <button id = "viewProlificButton"  class = "basicButton" onmousedown = "setViewMode( id, ViewTrackingMode.PROLIFIC   );" >most prolific</button>
+                        <button id = "viewEfficientButton" class = "basicButton" onmousedown = "setViewMode( id, ViewTrackingMode.EFFICIENT  );" >most efficient</button>
+                        <button id = "viewVirginButton"    class = "basicButton" onmousedown = "setViewMode( id, ViewTrackingMode.VIRGIN     );" >oldest virgin</button>
+                        <button id = "viewGluttonButton"   class = "basicButton" onmousedown = "setViewMode( id, ViewTrackingMode.HUNGRY     );" >glutton</button>
+                    </div>
                 </div>
-            </div> <!--viewPanel-->
-            
-            
-            
-            <div id = "menuButtonPanel">
-                <button id = "menuPoolButton"     class = "basicButton" onmousedown = "openPanel( 'menuPoolButton'    );" >pool      </button>                
-                <button id = "menuSwimbotButton"  class = "basicButton" onmousedown = "openPanel( 'menuSwimbotButton' );" >swimbot   </button>
-                <button id = "menuTweakButton"    class = "basicButton" onmousedown = "openPanel( 'menuTweakButton'   );" >tweak     </button>
-                <button id = "menuGraphButton"    class = "basicButton" onmousedown = "openPanel( 'menuGraphButton'   );" >graph     </button>
-                <button id = "menuInfoButton"     class = "basicButton" onmousedown = "openPanel( 'menuInfoButton'    );" >info      </button>
-            </div>       
-            <div id = "mainPanel" class = "basicPanel" >
-        
-                <div id="tweakPanel" class = "menuPanel">
-                        <input 
-                            type            = "range" 
-                            id              = "foodGrowthDelaySlider"    
-                            class           = "EcoSlider"
-                            name            = "foodGrowthDelay"      
-                            step            = 1
-                            autocomplete    = "off" 
-                            oninput         = "setEcosystemValue( id )"
-                        >
-                        <div   id = "foodGrowthDelayValue" class = "EcoSliderValueDisplay"   >(unknown value)</div>
-                        <label id = "foodGrowthDelayLabel" class = "EcoSliderLabelDisplay" for = "foodGrowthDelay" >food growth delay</label>
-                        <input 
-                            type            = "range" 
-                            id              = "foodSpreadSlider"         
-                            class           = "EcoSlider"
-                            name            = "foodSpread"           
-                            step            = 1
-                            autocomplete    = "off" 
-                            oninput        = "setEcosystemValue( id )"
-                        >
-                        <div   id = "foodSpreadValue" class = "EcoSliderValueDisplay"   >(unknown value)</div>
-                        <label id = "foodSpreadLabel" class = "EcoSliderLabelDisplay" for = "foodSpread" >food spread</label>
-                        <input 
-                            type            = "range" 
-                            id              = "foodBitEnergySlider"      
-                            class           = "EcoSlider"
-                            name            = "foodBitEnergy"        
-                            step            = 10
-                            autocomplete    = "off" 
-                            oninput        = "setEcosystemValue( id )"
-                        >
-                        <div   id = "foodBitEnergyValue" class = "EcoSliderValueDisplay"   >(unknown value)</div>
-                        <label id = "foodBitEnergyLabel" class = "EcoSliderLabelDisplay" for = "foodBitEnergy" >food bit energy</label>
-                        <input 
-                            type            = "range" 
-                            id              = "hungerThresholdSlider"    
-                            class           = "EcoSlider"
-                            name            = "hungerThreshold"      
-                            step            = 1
-                            autocomplete    = "off" 
-                            oninput        = "setEcosystemValue( id )"
-                        >
-                        <div   id = "hungerThresholdValue" class = "EcoSliderValueDisplay"   >(unknown value)</div>
-                        <label id = "hungerThresholdLabel" class = "EcoSliderLabelDisplay" for = "hungerThreshold" >hunger threshold</label>
-                        <input 
-                            type            = "range" 
-                            id              = "energyToOffspringSlider"  
-                            class           = "EcoSlider"
-                            name            = "energyToOffspring"    
-                            step            = 0.1
-                            autocomplete    = "off" 
-                            oninput        = "setEcosystemValue( id )"
-                        >
-                        <div   id = "energyToOffspringValue" class = "EcoSliderValueDisplay"  >(unknown value)</div>
-                        <label id = "energyToOffspringLabel" class = "EcoSliderLabelDisplay" for = "energyToOffspring" > offspring energy ratio</label>
-                        <input 
-                            type            = "range" 
-                            id              = "maxAgeSlider"  
-                            class           = "EcoSlider"
-                            name            = "maximumAge"    
-                            step            = 0.1
-                            autocomplete    = "off" 
-                            oninput        = "setEcosystemValue( id )"
-                        >
-                        <div   id = "maxAgeValue" class = "EcoSliderValueDisplay"  >(unknown value)</div>
-                        <label id = "maxAgeLabel" class = "EcoSliderLabelDisplay" for = "maximumAge" > maximum age</label>
-                        <input 
-                            type            = "range" 
-                            id              = "mutationRateSlider"  
-                            class           = "EcoSlider"
-                            name            = "mutationRate"    
-                            step            = 0.1
-                            autocomplete    = "off" 
-                            oninput        = "setEcosystemValue( id )"
-                        >
-                        <div   id = "mutationRateValue" class = "EcoSliderValueDisplay"  >(unknown value)</div>
-                        <label id = "mutationRateLabel" class = "EcoSliderLabelDisplay" for = "mutationRate" > mutation rate</label>
-                
-                        <button 
-                            id      = "tweakDefaultButton"
-                            class   = "basicButton"  
-                            onClick = "setEcosystemToDefaults(); " >reset to defaults</button>   
-                    <div id ="attractionPanel">
-                        Swimbot mate preferences
 
-                        <input
-                            type        = "radio" 
-                            id          = "radioColorful"
-                            name        = "attractionRadioButton" 
-                            value       = "colorful"
-                            onchange    = "chooseAttraction()"
-                        >
-                        <label id = "colorfulLabel" for = "radioColorful" >colorful</label>
+                <div id = "viewOptionsPanel" class = "gpGrid4">
+                    <button id = "viewGoalButton" class = "basicButton" onClick = "toggleGoalOverlay();"       >mouth/genital</button>
+                    <button id = "freezeButton"   class = "basicButton" onClick = "toggleSimulationRunning();" >freeze</button>
+                    <button id = "noRenderButton" class = "basicButton" onClick = "toggleRendering();"         >rendering OFF</button>
+                    <button id = "fastButton"     class = "basicButton" onClick = "toggleFastRendering();"     >fastest</button>
+                </div>
+            </section>
 
-                        <input
-                            type        = "radio" 
-                            id          = "radioBig"           
-                            name        = "attractionRadioButton" 
-                            value       = "big"           
-                            onchange    = "chooseAttraction()"
-                        >
-                        <label id = "bigLabel" for = "radioBig" >big</label>
-                        
-                        <input
-                            type        = "radio" 
-                            id          = "radioHyper"         
-                            name        = "attractionRadioButton" 
-                            value       = "hyper"         
-                            onchange    = "chooseAttraction()"
-                        >
-                        <label id = "hyperLabel" for = "radioHyper" >hyper</label>
+            <!-- tabs -->
+            <nav id = "menuButtonPanel">
+                <button id = "menuPoolButton"    class = "tabButton" onmousedown = "openPanel( 'menuPoolButton'    );" >pool</button>
+                <button id = "menuSwimbotButton" class = "tabButton" onmousedown = "openPanel( 'menuSwimbotButton' );" >swimbot</button>
+                <button id = "menuTweakButton"   class = "tabButton" onmousedown = "openPanel( 'menuTweakButton'   );" >tweak</button>
+                <button id = "menuGraphButton"   class = "tabButton" onmousedown = "openPanel( 'menuGraphButton'   );" >graph</button>
+                <button id = "menuInfoButton"    class = "tabButton" onmousedown = "openPanel( 'menuInfoButton'    );" >info</button>
+            </nav>
 
-                        <input
-                            type        = "radio" 
-                            id          = "radioLong"          
-                            name        = "attractionRadioButton" 
-                            value       = "long"          
-                            onchange    = "chooseAttraction()"
-                        >
-                        <label id ="longLabel" for = "radioLong">long</label>
-                        
+            <section id = "mainPanel" class = "gpBox">
 
-                        <input
-                            type        = "radio" 
-                            id          = "radioStraight"      
-                            name        = "attractionRadioButton" 
-                            value       = "straight"      
-                            onchange    = "chooseAttraction()"
-                        >
-                        <label id ="straightLabel" for = "radioStraight" >straight</label>
-                
-                        <input
-                            type        = "radio" 
-                            id          = "radioNoColor"
-                            name        = "attractionRadioButton" 
-                            value       = "noColor"
-                            onchange    = "chooseAttraction()"
-                        >
-                        <label id = "noColorLabel" for = "radioNoColor" >not colorful</label>
-                        
-                        
-                        <input
-                            type        = "radio" 
-                            id          = "radioSmall"
-                            name        = "attractionRadioButton" 
-                            value       = "small"
-                            onchange    = "chooseAttraction()"
-                        >
-                        <label id = "smallLabel" for = "radioSmall" >small</label>
-                        
-                        <input
-                            type        = "radio" 
-                            id          = "radioStill"         
-                            name        = "attractionRadioButton" 
-                            value       = "still"         
-                            onchange    = "chooseAttraction()"
-                        >
-                        <label id ="stillLabel" for = "radioStill">still</label>
-
-
-                        <input
-                            type        = "radio" 
-                            id          = "radioShort"         
-                            name        = "attractionRadioButton" 
-                            value       = "short"         
-                            onchange    = "chooseAttraction()"
-                        >
-                        <label id ="shortLabel" for = "radioShort" >short</label>
-                
-                        <input
-                            type        = "radio" 
-                            id          = "radioCrooked"       
-                            name        = "attractionRadioButton" 
-                            value       = "crooked"       
-                            onchange    = "chooseAttraction()"
-                        >
-                        <label id = "crookedLabel" for = "radioCrooked" >crooked</label>
-
-             
-                        <input
-                            type        = "radio" 
-                            id          = "radioSimilarColor"           
-                            name        = "attractionRadioButton" 
-                            value       = "similarColor"           
-                            onchange    = "chooseAttraction()"
-                        >
-                        <label id = "similarColorLabel" for = "radioSimilarColor" >similar color</label>
-
-                        <input
-                            type        = "radio" 
-                            id          = "radioSimilarSize"           
-                            name        = "attractionRadioButton" 
-                            value       = "similarSize"           
-                            onchange    = "chooseAttraction()"
-                        >
-                        <label id = "similarSizeLabel" for = "radioSimilarSize" >similar size</label>
-
-                        <input
-                            type        = "radio" 
-                            id          = "radioSimilarHyper"           
-                            name        = "attractionRadioButton" 
-                            value       = "similarHyper"           
-                            onchange    = "chooseAttraction()"
-                        >
-                        <label id = "similarHyperLabel" for = "radioSimilarHyper" >similar hyper</label>
-
-                        <input
-                            type        = "radio" 
-                            id          = "radioSimilarLength"           
-                            name        = "attractionRadioButton" 
-                            value       = "similarLength"           
-                            onchange    = "chooseAttraction()"
-                        >
-                        <label id = "similarLengthLabel" for = "radioSimilarLength" >similar length</label>
-
-                        <input
-                            type        = "radio" 
-                            id          = "radioSimilarStraight"           
-                            name        = "attractionRadioButton" 
-                            value       = "similarStraight"           
-                            onchange    = "chooseAttraction()"
-                        >
-                        <label id = "similarStraightLabel" for = "radioSimilarStraight" >similar straight</label>
-
-                        <input
-                            type        = "radio" 
-                            id          = "radioClosest"       
-                            name        = "attractionRadioButton" 
-                            value       = "closest"       
-                            onchange    = "chooseAttraction()"
-                        >
-                        <label id = "closestLabel" for = "radioClosest" >closest</label>
-                        <input
-                            type        = "radio" 
-                            id          = "radioRandom"       
-                            name        = "attractionRadioButton" 
-                            value       = "random"       
-                            onchange    = "chooseAttraction()"
-                        >
-                        <label id = "randomLabel" for = "radioRandom" >random</label>                        
-                    </div> <!-- attractionPanel -->
-                </div> <!-- tweak Panel -->
-                 
-                 <div id="graphPanel" class = "menuPanel">
-                    <div id = "graphTitle" class = "basicTitle">
-                        population graph
-                    </div>
-                    <div id = "graphData">
-                        (no data)     
-                    </div>
-                    <button id="mutateAllButton" class="basicButton" onclick="genePool.mutateAll(0.5);">mutate all (50%)</button>
-<button id="mutateHalfButton" class="basicButton" onclick="genePool.mutateHalf();">mutate half</button>
-<button id="randomizeAllButton" class="basicButton" onclick="genePool.randomizeAll();">randomize all</button>
-<button id="randomizeHalfButton" class="basicButton" onclick="genePool.randomizeHalf();">randomize half</button>
-                </div> 	 <!-- graph Panel -->	
-
-            
-                <canvas id = "graphCanvas" width = "500" height = "500" ></canvas>
-                
+                <!-- ============================== pool ============================== -->
                 <div id = "poolPanel" class = "menuPanel">
-                    <div id = "startPoolTitle" >
-                        start a new pool with one of these presets...
-                    </div> 
-                    <button 
-                        id      = "pool1Button"
-                        class   = "basicButton" 
-                        onClick = "choosePoolToLoad( SimulationStartMode.RANDOM ); requestToLoadPoolFromPreset();" >random</button>    
-                    <button 
-                        id      = "pool2Button"   
-                        class   = "basicButton" 
-                        onClick = "choosePoolToLoad( SimulationStartMode.NEIGHBORHOOD ); requestToLoadPoolFromPreset();" >neighborhoods</button>     
-                    <button 
-                        id      = "pool3Button" 
-                        class   = "basicButton" 
-                        onClick = "choosePoolToLoad( SimulationStartMode.FROGGIES ); requestToLoadPoolFromPreset();" >froggies</button>    
-                    <button
-                        id      = "pool4Button" 
-                        class   = "basicButton" 
-                        onClick = "choosePoolToLoad( SimulationStartMode.SPECIES ); requestToLoadPoolFromPreset();" >**Speciation**</button>
-                    <button 
-                        id      = "pool5Button" 
-                        class   = "basicButton" 
-                        onClick = "choosePoolToLoad( SimulationStartMode.RACE ); requestToLoadPoolFromPreset();" >food race</button>            
-                    <button 
-                        id      = "pool6Button" 
-                        class   = "basicButton" 
-                        onClick = "choosePoolToLoad( SimulationStartMode.BIG_BANG ); requestToLoadPoolFromPreset();" >big bang</button>            
-                    <button 
-                        id      = "pool7Button" 
-                        class   = "basicButton" 
-                        onClick = "choosePoolToLoad( SimulationStartMode.BARRIER ); requestToLoadPoolFromPreset();" >genetic barrier</button>            
-                    <button 
-                        id      = "pool8Button" 
-                        class   = "basicButton" 
-                        onClick = "choosePoolToLoad( SimulationStartMode.EMPTY ); requestToLoadPoolFromPreset();" >empty</button>            
-
-                    <div id = "saveLoadPanel" >
-                        SORRY! At the moment, you cannot save or load pool files: the save/load feature of
-                        Gene Pool is under construction. I will try to get that done soon. I am
-                        switching over to a local file system, using the html file api.
-                        <br>
-                        <br>
-                        -Jeffrey
-                        <br>
-                        <br>
-                        After starting a pool from the **Speciation** preset and running it for tens of thousands of time steps, 
-                        select the button below to get data collected during the simulation. You can load it into 
-                        <a href = 'https://lnegoita.shinyapps.io/gene-pool-laboratory/' target = "_blank" style = 'text-decoration:none'>GenePool Lab</a>                        
-                        <br>
-                        ( <a href = 'https://lnegoita.shinyapps.io/gene-pool-laboratory/' target = "_blank" style = 'text-decoration:none'>https://lnegoita.shinyapps.io/gene-pool-laboratory/</a> )
-                        <br>
-                        (Contact jeffrey@ventrella.com for details).
-                    </div>                    
-                    <button id = "familyTreeButton" class = "basicButton" onClick = "printFamilyTree( false );" >print swimbot data</button> 
-                </div>  <!-- poolPanel -->
-                
-                <div id="swimbotPanel" class = "menuPanel" >
-                   <div id="noSelectedSwimbotPanel">
-                        No swimbot is selected. 
-                        <br>
-                        Please select one in the pool. Or...
-                        <br>
-                        <br>
-                        Create a new swimbot with randoized genes:
-                        <br>
-                        <br>
-                        <br>
-                        <br>
-                        Sorry, but currently you cannot load swimbot genes. The code for that is being rewritten.
-                        <br>
-                        <br>
-                        <br>
-                        Create a new swimbot with genes from one of these presets:
-                        <button 
-                            id      = "createRandomSwimbotButton" 
-                            class   = "basicButton" 
-                            onClick = "genePool.makeNewRandomSwimbot();" >create random</button>
-
-
-                        <button 
-                            id="loadSwimbotButton"
-                            class="basicButton" 
-                            onClick="document.getElementById('loadSwimbotFile').click();">load genes</button>
-
-                        <button 
-                            id      = "presetSwimbot1Button" 
-                            class   = "basicButton" 
-                            onClick = "loadSwimbotFromPreset(0); " >Darwin</button>   
-                        <button 
-                            id      = "presetSwimbot2Button" 
-                            class   = "basicButton" 
-                            onClick = "loadSwimbotFromPreset(1); " >Wallace</button>   
-                        <button 
-                            id      = "presetSwimbot3Button" 
-                            class   = "basicButton" 
-                            onClick = "loadSwimbotFromPreset(2); " >Mendel</button>   
-                        <button 
-                            id      = "presetSwimbot4Button" 
-                            class   = "basicButton" 
-                            onClick = "loadSwimbotFromPreset(3); " >Turing</button>   
-                        <button 
-                            id      = "presetSwimbot5Button" 
-                            class   = "basicButton" 
-                            onClick = "loadSwimbotFromPreset(4); " >Margulis</button>   
-                        <button 
-                            id      = "presetSwimbot6Button" 
-                            class   = "basicButton" 
-                            onClick = "loadSwimbotFromPreset(5); " >Wilson</button>   
-                        <button 
-                            id      = "presetSwimbot7Button" 
-                            class   = "basicButton" 
-                            onClick = "loadSwimbotFromPreset(6); " >Dawkins</button>   
-                        <button 
-                            id      = "presetSwimbot8Button" 
-                            class   = "basicButton" 
-                            onClick = "loadSwimbotFromPreset(7); " >Dennett</button>   
+                    <div class = "gpHeading">start a new pool</div>
+                    <div class = "gpGrid2">
+                        <button id = "pool1Button" class = "basicButton" onClick = "choosePoolToLoad( SimulationStartMode.RANDOM       ); requestToLoadPoolFromPreset();" >random</button>
+                        <button id = "pool2Button" class = "basicButton" onClick = "choosePoolToLoad( SimulationStartMode.NEIGHBORHOOD ); requestToLoadPoolFromPreset();" >neighborhoods</button>
+                        <button id = "pool3Button" class = "basicButton" onClick = "choosePoolToLoad( SimulationStartMode.FROGGIES     ); requestToLoadPoolFromPreset();" >froggies</button>
+                        <button id = "pool4Button" class = "basicButton" onClick = "choosePoolToLoad( SimulationStartMode.SPECIES      ); requestToLoadPoolFromPreset();" >speciation</button>
+                        <button id = "pool5Button" class = "basicButton" onClick = "choosePoolToLoad( SimulationStartMode.RACE         ); requestToLoadPoolFromPreset();" >food race</button>
+                        <button id = "pool6Button" class = "basicButton" onClick = "choosePoolToLoad( SimulationStartMode.BIG_BANG     ); requestToLoadPoolFromPreset();" >big bang</button>
+                        <button id = "pool7Button" class = "basicButton" onClick = "choosePoolToLoad( SimulationStartMode.BARRIER      ); requestToLoadPoolFromPreset();" >genetic barrier</button>
+                        <button id = "pool8Button" class = "basicButton" onClick = "choosePoolToLoad( SimulationStartMode.EMPTY        ); requestToLoadPoolFromPreset();" >empty</button>
                     </div>
 
-                    <div id="selectedSwimbotPanel" class = "basicPanel">
-                        <div id="swimbotDataPanel" ></div>
+                    <div class = "gpHeading">research data</div>
+                    <div id = "saveLoadPanel" class = "gpNote">
+                        Run a pool (for example "speciation") for tens of thousands of steps,
+                        then get the data collected during the simulation and load it into
+                        <a href = "https://lnegoita.shinyapps.io/gene-pool-laboratory/" target = "_blank">GenePool Lab</a>.
+                    </div>
+                    <button id = "familyTreeButton" class = "basicButton wide" onClick = "printFamilyTree( false );" >print swimbot data</button>
+                </div>
 
-                        <button
-                            id      = "eternalSwimbotButton"
-                            class   = "basicButton"
-                            onClick = "toggleEternalSwimbot( genePool.getSelectedSwimbotID() );" >👑</button>
-                        <button
-                            id      = "zapSwimbotButton"
-                            class   = "basicButton"
-                            onClick = "genePool.zapSwimbot( genePool.getSelectedSwimbotID(), 0.2  );" >mutate</button>
-                        <button 
-                            id      = "randomizeSwimbotButton" 
-                            class   = "basicButton" 
-                            onClick = "genePool.randomizeSwimbot( genePool.getSelectedSwimbotID() );" >randomize</button> 
-                        <button 
-                            id      = "cloneSwimbotButton" 
-                            class   = "basicButton" 
-                            onClick = "genePool.cloneSwimbot( genePool.getSelectedSwimbotID() );" >clone</button> 
-                        <button 
-                            id      = "killSwimbotButton" 
-                            class   = "basicButton" 
-                            onClick = "genePool.killSwimbot( genePool.getSelectedSwimbotID() );" >kill</button> 
+                <!-- ============================== swimbot ============================== -->
+                <div id = "swimbotPanel" class = "menuPanel">
 
-                        <button
-                            id      = "predatorToggleButton"
-                            class   = "basicButton"
-                            onClick = "genePool.toggleSwimbotPredator( genePool.getSelectedSwimbotID() );" >🔴 predator</button>
-
-
-                        
-                        <button
-                        id      = "saveGenesButton" 
-                        class   = "basicButton"
-                           onClick = "downloadSwimbotGenes( genePool.getSelectedSwimbotID() );">save genes</button>
-                           <input type="file" id="loadSwimbotFile" accept=".json" style="display:none;">
-<button id="loadGenesButton" class="basicButton" onClick="document.getElementById('loadSwimbotFile').click();">load genes</button>   
-                        <button 
-                            id      = "tweakGenesButton" 
-                            class   = "basicButton" 
-                            onClick = "openTweakGenesPanel( genePool.getSelectedSwimbotID() ); genePool.setViewMode( ViewTrackingMode.SELECTED );" >tweak genes!</button>  
-                        
+                    <div id = "noSelectedSwimbotPanel">
+                        <div class = "gpNote">No swimbot is selected: click one in the pool. Or create one:</div>
+                        <div class = "gpGrid2">
+                            <button id = "createRandomSwimbotButton" class = "basicButton" onClick = "genePool.makeNewRandomSwimbot();" >random genes</button>
+                            <button id = "loadSwimbotButton"         class = "basicButton" onClick = "document.getElementById('loadSwimbotFile').click();" >load genes…</button>
+                        </div>
+                        <div class = "gpHeading">from a preset</div>
+                        <div class = "gpGrid4">
+                            <button id = "presetSwimbot1Button" class = "basicButton" onClick = "loadSwimbotFromPreset(0);" >Darwin</button>
+                            <button id = "presetSwimbot2Button" class = "basicButton" onClick = "loadSwimbotFromPreset(1);" >Wallace</button>
+                            <button id = "presetSwimbot3Button" class = "basicButton" onClick = "loadSwimbotFromPreset(2);" >Mendel</button>
+                            <button id = "presetSwimbot4Button" class = "basicButton" onClick = "loadSwimbotFromPreset(3);" >Turing</button>
+                            <button id = "presetSwimbot5Button" class = "basicButton" onClick = "loadSwimbotFromPreset(4);" >Margulis</button>
+                            <button id = "presetSwimbot6Button" class = "basicButton" onClick = "loadSwimbotFromPreset(5);" >Wilson</button>
+                            <button id = "presetSwimbot7Button" class = "basicButton" onClick = "loadSwimbotFromPreset(6);" >Dawkins</button>
+                            <button id = "presetSwimbot8Button" class = "basicButton" onClick = "loadSwimbotFromPreset(7);" >Dennett</button>
+                        </div>
                     </div>
 
-                </div> <!-- swimbot Panel -->
- 		                                 
-                 
-                <div id="infoPanel"  class = "menuPanel" >
-                    <div id="infoText"></div>
-                    <font size = 3 color = '#335500' face='arial'>
-                        <button id = "prevInfoButton" class = "basicButton" onClick = "advanceInfoPage(-1);" >previous</button>  
-                        <div    id = "pageNumberLabel">page 1 of 28</div>                        
-                        <button id = "nextInfoButton" class = "basicButton" onClick = "advanceInfoPage( 1);" >next    </button>  
-                    </font>     	
-                    	
-                </div> 	<!-- info Panel -->            
-                <div id = "contactPanel" >
-                   &copy; 2021 Jeffrey Ventrella
-                   <br>
-                   <a href = 'http://www.ventrella.com' target = "_blank" style = 'color: #004444'>Ventrella.com</a>
-               </div> <!-- contact Panel -->
-                                
-            </div> <!--main Panel-->
+                    <div id = "selectedSwimbotPanel">
+                        <div id = "swimbotDataPanel"></div>
+                        <div class = "gpGrid3">
+                            <button id = "zapSwimbotButton"       class = "basicButton" onClick = "genePool.zapSwimbot( genePool.getSelectedSwimbotID(), 0.2 );" >mutate</button>
+                            <button id = "randomizeSwimbotButton" class = "basicButton" onClick = "genePool.randomizeSwimbot( genePool.getSelectedSwimbotID() );" >randomize</button>
+                            <button id = "cloneSwimbotButton"     class = "basicButton" onClick = "genePool.cloneSwimbot( genePool.getSelectedSwimbotID() );" >clone</button>
+                            <button id = "predatorToggleButton"   class = "basicButton" onClick = "genePool.toggleSwimbotPredator( genePool.getSelectedSwimbotID() );" title = "herbivore → predator → strong predator → herbivore" >predator ⟳</button>
+                            <button id = "eternalSwimbotButton"   class = "basicButton" onClick = "toggleEternalSwimbot( genePool.getSelectedSwimbotID() );" title = "never dies of age or hunger, cannot be eaten" >immortal ⟳</button>
+                            <button id = "killSwimbotButton"      class = "basicButton" onClick = "genePool.killSwimbot( genePool.getSelectedSwimbotID() );" >kill</button>
+                            <button id = "tweakGenesButton"       class = "basicButton" onClick = "openTweakGenesPanel( genePool.getSelectedSwimbotID() ); genePool.setViewMode( ViewTrackingMode.SELECTED );" >tweak genes</button>
+                            <button id = "saveGenesButton"        class = "basicButton" onClick = "downloadSwimbotGenes( genePool.getSelectedSwimbotID() );" >save genes</button>
+                            <button id = "loadGenesButton"        class = "basicButton" onClick = "document.getElementById('loadSwimbotFile').click();" >load genes…</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ============================== tweak ============================== -->
+                <div id = "tweakPanel" class = "menuPanel">
+                    <div class = "gpHeading">ecosystem</div>
+
+                    <div class = "ecoRow">
+                        <label id = "foodGrowthDelayLabel" for = "foodGrowthDelaySlider">food growth delay</label>
+                        <span  id = "foodGrowthDelayValue" class = "ecoValue">–</span>
+                        <input id = "foodGrowthDelaySlider" class = "EcoSlider" type = "range" step = "1" autocomplete = "off" oninput = "setEcosystemValue( id )">
+                    </div>
+                    <div class = "ecoRow">
+                        <label id = "foodSpreadLabel" for = "foodSpreadSlider">food spread</label>
+                        <span  id = "foodSpreadValue" class = "ecoValue">–</span>
+                        <input id = "foodSpreadSlider" class = "EcoSlider" type = "range" step = "1" autocomplete = "off" oninput = "setEcosystemValue( id )">
+                    </div>
+                    <div class = "ecoRow">
+                        <label id = "foodBitEnergyLabel" for = "foodBitEnergySlider">food bit energy</label>
+                        <span  id = "foodBitEnergyValue" class = "ecoValue">–</span>
+                        <input id = "foodBitEnergySlider" class = "EcoSlider" type = "range" step = "10" autocomplete = "off" oninput = "setEcosystemValue( id )">
+                    </div>
+                    <div class = "ecoRow">
+                        <label id = "hungerThresholdLabel" for = "hungerThresholdSlider">hunger threshold</label>
+                        <span  id = "hungerThresholdValue" class = "ecoValue">–</span>
+                        <input id = "hungerThresholdSlider" class = "EcoSlider" type = "range" step = "1" autocomplete = "off" oninput = "setEcosystemValue( id )">
+                    </div>
+                    <div class = "ecoRow">
+                        <label id = "energyToOffspringLabel" for = "energyToOffspringSlider">offspring energy ratio</label>
+                        <span  id = "energyToOffspringValue" class = "ecoValue">–</span>
+                        <input id = "energyToOffspringSlider" class = "EcoSlider" type = "range" step = "0.1" autocomplete = "off" oninput = "setEcosystemValue( id )">
+                    </div>
+                    <div class = "ecoRow">
+                        <label id = "maxAgeLabel" for = "maxAgeSlider">maximum age</label>
+                        <span  id = "maxAgeValue" class = "ecoValue">–</span>
+                        <input id = "maxAgeSlider" class = "EcoSlider" type = "range" step = "0.1" autocomplete = "off" oninput = "setEcosystemValue( id )">
+                    </div>
+                    <button id = "tweakDefaultButton" class = "basicButton wide" onClick = "setEcosystemToDefaults();" >reset to defaults</button>
+
+                    <div class = "gpHeading">swimbot mate preferences</div>
+                    <div id = "attractionPanel" class = "gpGrid2 radioGrid">
+                        <label><input type = "radio" id = "radioColorful"        name = "attractionRadioButton" value = "colorful"        onchange = "chooseAttraction()"> colorful</label>
+                        <label><input type = "radio" id = "radioNoColor"         name = "attractionRadioButton" value = "noColor"         onchange = "chooseAttraction()"> not colorful</label>
+                        <label><input type = "radio" id = "radioBig"             name = "attractionRadioButton" value = "big"             onchange = "chooseAttraction()"> big</label>
+                        <label><input type = "radio" id = "radioSmall"           name = "attractionRadioButton" value = "small"           onchange = "chooseAttraction()"> small</label>
+                        <label><input type = "radio" id = "radioHyper"           name = "attractionRadioButton" value = "hyper"           onchange = "chooseAttraction()"> hyper</label>
+                        <label><input type = "radio" id = "radioStill"           name = "attractionRadioButton" value = "still"           onchange = "chooseAttraction()"> still</label>
+                        <label><input type = "radio" id = "radioLong"            name = "attractionRadioButton" value = "long"            onchange = "chooseAttraction()"> long</label>
+                        <label><input type = "radio" id = "radioShort"           name = "attractionRadioButton" value = "short"           onchange = "chooseAttraction()"> short</label>
+                        <label><input type = "radio" id = "radioStraight"        name = "attractionRadioButton" value = "straight"        onchange = "chooseAttraction()"> straight</label>
+                        <label><input type = "radio" id = "radioCrooked"         name = "attractionRadioButton" value = "crooked"         onchange = "chooseAttraction()"> crooked</label>
+                        <label><input type = "radio" id = "radioSimilarColor"    name = "attractionRadioButton" value = "similarColor"    onchange = "chooseAttraction()"> similar color</label>
+                        <label><input type = "radio" id = "radioSimilarSize"     name = "attractionRadioButton" value = "similarSize"     onchange = "chooseAttraction()"> similar size</label>
+                        <label><input type = "radio" id = "radioSimilarHyper"    name = "attractionRadioButton" value = "similarHyper"    onchange = "chooseAttraction()"> similar hyper</label>
+                        <label><input type = "radio" id = "radioSimilarLength"   name = "attractionRadioButton" value = "similarLength"   onchange = "chooseAttraction()"> similar length</label>
+                        <label><input type = "radio" id = "radioSimilarStraight" name = "attractionRadioButton" value = "similarStraight" onchange = "chooseAttraction()"> similar straight</label>
+                        <label><input type = "radio" id = "radioClosest"         name = "attractionRadioButton" value = "closest"         onchange = "chooseAttraction()"> closest</label>
+                        <label><input type = "radio" id = "radioRandom"          name = "attractionRadioButton" value = "random"          onchange = "chooseAttraction()"> random</label>
+                    </div>
+                </div>
+
+                <!-- ============================== graph ============================== -->
+                <div id = "graphPanel" class = "menuPanel">
+                    <div id = "graphTitle" class = "gpHeading">population</div>
+                    <canvas id = "graphCanvas" width = "500" height = "500"></canvas>
+                    <div id = "graphData">(no data)</div>
+                    <div class = "gpHeading">whole population</div>
+                    <div class = "gpGrid2">
+                        <button id = "mutateAllButton"     class = "basicButton" onclick = "genePool.mutateAll(0.5);" >mutate all (50%)</button>
+                        <button id = "mutateHalfButton"    class = "basicButton" onclick = "genePool.mutateHalf();"   >mutate half</button>
+                        <button id = "randomizeAllButton"  class = "basicButton" onclick = "genePool.randomizeAll();" >randomize all</button>
+                        <button id = "randomizeHalfButton" class = "basicButton" onclick = "genePool.randomizeHalf();">randomize half</button>
+                    </div>
+                </div>
+
+                <!-- ============================== info ============================== -->
+                <div id = "infoPanel" class = "menuPanel">
+                    <div id = "infoText"></div>
+                    <div class = "infoNav">
+                        <button id = "prevInfoButton" class = "basicButton" onClick = "advanceInfoPage(-1);" >previous</button>
+                        <span   id = "pageNumberLabel">page 1 of 28</span>
+                        <button id = "nextInfoButton" class = "basicButton" onClick = "advanceInfoPage( 1);" >next</button>
+                    </div>
+                </div>
+            </section>
+
+            <footer id = "contactPanel">
+                &copy; 2021 Jeffrey Ventrella &nbsp;·&nbsp; <a href = "http://www.ventrella.com" target = "_blank">Ventrella.com</a>
+            </footer>
         </div>  <!--masterPanel-->
+
+        <input type = "file" id = "loadSwimbotFile" accept = ".json" style = "display:none;">
 
         <div id = "popUpPanel"  style="display:none;" >
             <div id = "PopupText" >

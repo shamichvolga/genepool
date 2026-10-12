@@ -1,0 +1,347 @@
+/* ------------------------------------------------------------------------- */
+/* The panel on the right (index.html: #masterPanel).                        */
+/* Everything flows top to bottom; nothing is placed at fixed coordinates,   */
+/* so adding a button never makes things overlap.                            */
+/* Loaded after genepool.css and overrides its old fixed positions.          */
+/* ------------------------------------------------------------------------- */
+
+#masterPanel
+{
+    --panel:        #caccc2;
+    --panel-edge:   #666659;
+    --button:       #dcdcd0;
+    --button-hover: #eeeedd;
+    --button-down:  #ffffee;
+    --button-edge:  #7f7f77;
+    --text:         #505050;
+    --text-strong:  #33402e;
+    --title:        #112211;
+    --link:         #224400;
+
+    position:       fixed;
+    top:            0;
+    right:          0;
+    bottom:         0;
+    width:          380px;
+    box-sizing:     border-box;
+    padding:        8px 10px 6px 10px;
+    display:        flex;
+    flex-direction: column;
+    gap:            8px;
+    overflow:       hidden;
+    font-family:    Arial, sans-serif;
+    font-size:      12px;
+    color:          var(--text);
+}
+
+/* the old stylesheet places every element at fixed coordinates: undo that */
+#masterPanel *
+{
+    position:   static !important;
+    left:       auto;
+    top:        auto;
+    box-sizing: border-box;
+}
+
+/* --------------------------------------------------------- header -------- */
+#panelHeader
+{
+    display:        flex;
+    align-items:    baseline;
+    gap:            12px;
+    flex:           0 0 auto;
+}
+
+#mainTitle
+{
+    font-family:    "Arial Black", Arial, sans-serif;
+    font-size:      18px;
+    color:          var(--title);
+    width:          auto !important;
+    height:         auto !important;
+}
+
+#swimbots_url
+{
+    color:          var(--link);
+    font-size:      12px;
+    width:          auto !important;
+}
+
+/* ---------------------------------------------------------- boxes -------- */
+.gpBox
+{
+    background-color:   var(--panel);
+    border:             1px solid var(--panel-edge);
+    border-bottom-width: 4px;
+    border-radius:      4px;
+    padding:            8px;
+    width:              auto !important;
+    height:             auto !important;
+}
+
+.gpRow
+{
+    display:        flex;
+    gap:            10px;
+    align-items:    center;
+}
+
+.gpGrid2, .gpGrid3, .gpGrid4
+{
+    display:        grid;
+    gap:            5px;
+    width:          100%;
+}
+.gpGrid2 { grid-template-columns: repeat( 2, 1fr ); }
+.gpGrid3 { grid-template-columns: repeat( 3, 1fr ); }
+.gpGrid4 { grid-template-columns: repeat( 4, 1fr ); }
+
+.gpHeading
+{
+    color:          var(--text-strong);
+    font-size:      12px;
+    font-weight:    bold;
+    margin:         10px 0 5px 0;
+    width:          auto !important;
+}
+.gpHeading:first-child { margin-top: 0; }
+
+.gpNote
+{
+    line-height:    1.45;
+    margin:         0 0 8px 0;
+    width:          auto !important;
+    height:         auto !important;
+}
+.gpNote a { color: var(--link); }
+
+/* -------------------------------------------------------- buttons -------- */
+#masterPanel .basicButton
+{
+    width:              100%;
+    height:             26px;
+    padding:            0 4px;
+    background-color:   var(--button);
+    border:             1px solid var(--button-edge);
+    border-bottom-width: 3px;
+    border-radius:      4px;
+    color:              #556050;
+    font-family:        Arial, sans-serif;
+    font-size:          11px;
+    font-weight:        bold;
+    white-space:        nowrap;
+    overflow:           hidden;
+    text-overflow:      ellipsis;
+    cursor:             pointer;
+    visibility:         visible;
+}
+#masterPanel .basicButton:hover  { background-color: var(--button-hover); }
+#masterPanel .basicButton:active { background-color: var(--button-down); }
+#masterPanel .basicButton.wide   { margin-top: 6px; }
+
+/* ----------------------------------------------- camera arrows (3 x 3) --- */
+#viewNavPanel
+{
+    display:                grid;
+    grid-template-columns:  repeat( 3, 28px );
+    grid-template-rows:     repeat( 3, 28px );
+    gap:                    2px;
+    flex:                   0 0 auto;
+    width:                  auto !important;
+    height:                 auto !important;
+}
+#masterPanel .navigationButton
+{
+    width:              28px;
+    height:             28px;
+    border:             0;
+    padding:            0;
+    background-color:   transparent;
+    background-size:    28px 28px;
+    cursor:             pointer;
+}
+#upNav    { grid-column: 2; grid-row: 1; }
+#leftNav  { grid-column: 1; grid-row: 2; }
+#rightNav { grid-column: 3; grid-row: 2; }
+#downNav  { grid-column: 2; grid-row: 3; }
+#inNav    { grid-column: 1; grid-row: 3; }
+#outNav   { grid-column: 3; grid-row: 3; }
+
+#viewTrackingPanel { flex: 1 1 auto; }
+#viewOptionsPanel  { margin-top: 8px; }
+
+/* ----------------------------------------------------------- tabs -------- */
+#menuButtonPanel
+{
+    display:        flex;
+    gap:            3px;
+    margin-bottom:  -9px;          /* the active tab joins the box below */
+    padding:        0 4px;
+    flex:           0 0 auto;
+    z-index:        1;
+    width:          auto !important;
+    height:         auto !important;
+}
+#masterPanel .tabButton
+{
+    flex:               1 1 0;
+    height:             26px;
+    background-color:   var(--button);
+    border:             1px solid var(--button-edge);
+    border-bottom-width: 3px;
+    border-radius:      4px;
+    color:              #556050;
+    font-family:        Arial, sans-serif;
+    font-size:          12px;
+    font-weight:        bold;
+    cursor:             pointer;
+}
+#masterPanel .tabButton:hover { background-color: var(--button-hover); }
+#masterPanel .tabButton.active
+{
+    background-color:   var(--panel);
+    border-color:       var(--panel-edge);
+    border-bottom:      0;
+    border-radius:      4px 4px 0 0;
+    height:             27px;
+}
+
+/* the box with the tab contents fills the rest and scrolls if needed */
+#mainPanel
+{
+    flex:           1 1 auto;
+    overflow-y:     auto;
+    min-height:     0;
+}
+
+/* only the open tab is shown (ui.ts adds / removes "active") */
+#masterPanel .menuPanel                 { display: none; visibility: visible !important; width: auto !important; height: auto !important; }
+#masterPanel .menuPanel.active          { display: block; }
+#masterPanel .hiddenPart                { display: none !important; }
+
+/* ------------------------------------------------------- swimbot tab ------ */
+#swimbotDataPanel
+{
+    line-height:    1.5;
+    margin-bottom:  8px;
+    width:          auto !important;
+    height:         auto !important;
+}
+#noSelectedSwimbotPanel, #selectedSwimbotPanel
+{
+    visibility: visible !important;
+    width:      auto !important;
+    height:     auto !important;
+    background: none;
+    border:     0;
+}
+
+/* -------------------------------------------------------- tweak tab ------- */
+.ecoRow
+{
+    display:                grid;
+    grid-template-columns:  1fr auto;
+    grid-template-rows:     auto auto;
+    align-items:            center;
+    margin-bottom:          6px;
+}
+.ecoRow label   { color: var(--text-strong); }
+.ecoRow .ecoValue
+{
+    font-weight:    bold;
+    color:          var(--text-strong);
+    width:          auto !important;
+}
+.ecoRow .EcoSlider
+{
+    grid-column:    1 / span 2;
+    width:          100% !important;
+    margin:         2px 0 0 0;
+}
+
+.radioGrid label
+{
+    display:        flex;
+    align-items:    center;
+    gap:            3px;
+    white-space:    nowrap;
+    width:          auto !important;
+}
+#attractionPanel
+{
+    width:      auto !important;
+    height:     auto !important;
+    background: none;
+    border:     0;
+    font-size:  12px;
+    color:      var(--text);
+}
+
+/* -------------------------------------------------------- graph tab ------- */
+#graphCanvas
+{
+    display:            block;
+    width:              100% !important;
+    height:             auto !important;
+    aspect-ratio:       1 / 1;
+    background-color:   #ffffff10;
+    border:             1px solid var(--button-edge);
+    border-radius:      3px;
+    margin-bottom:      6px;
+    visibility:         visible !important;
+}
+#graphData { line-height: 1.5; width: auto !important; height: auto !important; }
+
+/* --------------------------------------------------------- info tab ------- */
+#infoText
+{
+    line-height:    1.45;
+    width:          auto !important;
+    height:         auto !important;
+    visibility:     visible !important;
+}
+.infoNav
+{
+    display:                grid;
+    grid-template-columns:  90px 1fr 90px;
+    align-items:            center;
+    margin-top:             10px;
+}
+#pageNumberLabel { text-align: center; color: var(--text-strong); width: auto !important; }
+
+/* ----------------------------------------------------------- footer ------- */
+#contactPanel
+{
+    flex:           0 0 auto;
+    font-size:      11px;
+    color:          #445044;
+    width:          auto !important;
+    height:         auto !important;
+}
+#contactPanel a { color: #004444; }
+
+/* selected swimbot facts */
+.swimbotKind
+{
+    font-weight:    bold;
+    font-size:      13px;
+    margin-bottom:  6px;
+    color:          var(--text-strong);
+}
+.swimbotKind.predator  { color: #8a1c10; }
+.swimbotTable
+{
+    width:              100%;
+    border-collapse:    collapse;
+}
+.swimbotTable td
+{
+    padding:        1px 0;
+    border-bottom:  1px solid #b9bbb0;
+}
+.swimbotTable td:first-child { color: #6a6a60; width: 46%; }
+.swimbotTable td:last-child  { color: var(--text-strong); font-weight: bold; }
+
+/* sliders and radio buttons in the Gene Pool colors */
+#masterPanel input[type="range"], #masterPanel input[type="radio"] { accent-color: #6e7f5c; }

@@ -96,8 +96,8 @@ export function chooseAttraction()
                 else if ( value === "crooked"           ) { attraction = ATTRACTION_CROOKED;            }
                 else if ( value === "similarColor"      ) { attraction = ATTRACTION_SIMILAR_COLOR;      }
                 else if ( value === "similarSize"       ) { attraction = ATTRACTION_SIMILAR_SIZE;       }
-                else if ( value === "similatHyper"      ) { attraction = ATTRACTION_SIMILAR_HYPER;      }
-                else if ( value === "similatLength"     ) { attraction = ATTRACTION_SIMILAR_LENGTH;     }
+                else if ( value === "similarHyper"      ) { attraction = ATTRACTION_SIMILAR_HYPER;      }
+                else if ( value === "similarLength"     ) { attraction = ATTRACTION_SIMILAR_LENGTH;     }
                 else if ( value === "similarStraight"   ) { attraction = ATTRACTION_SIMILAR_STRAIGHT;   }
                 else if ( value === "random"            ) { attraction = ATTRACTION_RANDOM;             }
                 else if ( value === "closest"           ) { attraction = ATTRACTION_CLOSEST;            }
@@ -111,9 +111,39 @@ export function chooseAttraction()
 //-------------------------
 export function openTweakPanel()
 {
-    document.getElementById('tweakPanel' ).style.visibility = 'visible';                
-    document.getElementById( 'tweakDefaultButton' ).style.visibility = 'visible';
+    document.getElementById( 'tweakPanel' ).classList.add( 'active' );
     updateEcosystemUI();
+    showCurrentAttraction();
+}
+
+//------------------------------------------------------------
+// tick the radio button of the mate preference now in use
+//------------------------------------------------------------
+const RADIO_OF_ATTRACTION =
+{
+    [ ATTRACTION_COLORFUL         ]: "radioColorful",
+    [ ATTRACTION_BIG              ]: "radioBig",
+    [ ATTRACTION_HYPER            ]: "radioHyper",
+    [ ATTRACTION_LONG             ]: "radioLong",
+    [ ATTRACTION_STRAIGHT         ]: "radioStraight",
+    [ ATTRACTION_NO_COLOR         ]: "radioNoColor",
+    [ ATTRACTION_SMALL            ]: "radioSmall",
+    [ ATTRACTION_STILL            ]: "radioStill",
+    [ ATTRACTION_SHORT            ]: "radioShort",
+    [ ATTRACTION_CROOKED          ]: "radioCrooked",
+    [ ATTRACTION_SIMILAR_COLOR    ]: "radioSimilarColor",
+    [ ATTRACTION_SIMILAR_SIZE     ]: "radioSimilarSize",
+    [ ATTRACTION_SIMILAR_HYPER    ]: "radioSimilarHyper",
+    [ ATTRACTION_SIMILAR_LENGTH   ]: "radioSimilarLength",
+    [ ATTRACTION_SIMILAR_STRAIGHT ]: "radioSimilarStraight",
+    [ ATTRACTION_RANDOM           ]: "radioRandom",
+    [ ATTRACTION_CLOSEST          ]: "radioClosest",
+};
+
+function showCurrentAttraction()
+{
+    const id = RADIO_OF_ATTRACTION[ genePool.getAttraction() ];
+    if ( id !== undefined ) { ( document.getElementById( id ) as HTMLInputElement ).checked = true; }
 }
 
 //--------------------------------
@@ -198,71 +228,72 @@ export function updateEcosystemUI()
 //----------------------------
 export function closeAllPanels()
 {
-    document.getElementById('poolPanel'    ).style.visibility = 'hidden';
-    document.getElementById('swimbotPanel' ).style.visibility = 'hidden';
-    document.getElementById('graphPanel'   ).style.visibility = 'hidden';
-    document.getElementById('tweakPanel'   ).style.visibility = 'hidden';
-    document.getElementById('infoPanel'    ).style.visibility = 'hidden';
-    document.getElementById('infoText'     ).style.visibility = 'hidden';
-    document.getElementById('prevInfoButton' ).style.visibility = 'hidden';
-    document.getElementById('nextInfoButton' ).style.visibility = 'hidden';
-    document.getElementById('noSelectedSwimbotPanel' ).style.visibility = 'hidden';
-    document.getElementById('selectedSwimbotPanel'   ).style.visibility = 'hidden';
-    document.getElementById('menuPoolButton'    ).style.top = "0";
-    document.getElementById('menuSwimbotButton' ).style.top = "0";
-    document.getElementById('menuTweakButton'   ).style.top = "0";
-    document.getElementById('menuInfoButton'    ).style.top = "0";
-    document.getElementById('menuGraphButton'   ).style.top = "0";
-    document.getElementById( 'menuPoolButton'    ).style = "border-bottom-width: 3; border-bottom-left-radius: 4px; border-bottom-right-radius: 4px;"
-    document.getElementById( 'menuSwimbotButton' ).style = "border-bottom-width: 3; border-bottom-left-radius: 4px; border-bottom-right-radius: 4px;"
-    document.getElementById( 'menuTweakButton'   ).style = "border-bottom-width: 3; border-bottom-left-radius: 4px; border-bottom-right-radius: 4px;"
-    document.getElementById( 'menuInfoButton'    ).style = "border-bottom-width: 3; border-bottom-left-radius: 4px; border-bottom-right-radius: 4px;"
-    document.getElementById( 'menuGraphButton'   ).style = "border-bottom-width: 3; border-bottom-left-radius: 4px; border-bottom-right-radius: 4px;"
+    for ( const tab in PANEL_OF_TAB )
+    {
+        document.getElementById( tab                 ).classList.remove( 'active' );
+        document.getElementById( PANEL_OF_TAB[ tab ] ).classList.remove( 'active' );
+    }
+
     closePopupPanel();
     _graph.clear();
+}
+
+//------------------------------------------------------------
+// which tab button opens which panel
+//------------------------------------------------------------
+const PANEL_OF_TAB =
+{
+    menuPoolButton    : 'poolPanel',
+    menuSwimbotButton : 'swimbotPanel',
+    menuTweakButton   : 'tweakPanel',
+    menuGraphButton   : 'graphPanel',
+    menuInfoButton    : 'infoPanel',
+};
+
+// show or hide one part of a panel
+function showPart( id, show )
+{
+    document.getElementById( id ).classList.toggle( 'hiddenPart', !show );
+}
+
+// the panel tab currently open?
+function panelIsOpen( id )
+{
+    return document.getElementById( id ).classList.contains( 'active' );
 }
 
 //----------------------------
 export function openPanel( buttonID )
 {
     closeAllPanels();
-    let panelID = 'poolPanel';
-    if ( buttonID === 'menuPoolButton'      ) { panelID = 'poolPanel';      openPoolPanel();    }
-    if ( buttonID === 'menuSwimbotButton'   ) { panelID = 'swimbotPanel';   openSwimbotPanel(); }
-    if ( buttonID === 'menuTweakButton'     ) { panelID = 'tweakPanel';     openTweakPanel();   }
-    if ( buttonID === 'menuInfoButton'      ) { panelID = 'infoPanel';      openInfoPanel();    }
-    if ( buttonID === 'menuGraphButton'     ) { panelID = 'graphPanel';     openGraphPanel()    }
-    document.getElementById( buttonID ).style = "border-bottom-width: 0; border-bottom-left-radius: 0px; border-bottom-right-radius: 0px;"
-    document.getElementById( buttonID ).style.backgroundColor = DEFAULT_BASIC_PANEL_COLOR;
-    document.getElementById( buttonID ).style.top = "3";
+    document.getElementById( buttonID ).classList.add( 'active' );
+
+    if ( buttonID === 'menuPoolButton'      ) { openPoolPanel();    }
+    if ( buttonID === 'menuSwimbotButton'   ) { openSwimbotPanel(); }
+    if ( buttonID === 'menuTweakButton'     ) { openTweakPanel();   }
+    if ( buttonID === 'menuInfoButton'      ) { openInfoPanel();    }
+    if ( buttonID === 'menuGraphButton'     ) { openGraphPanel()    }
 }
 
 //--------------------------
 export function openPoolPanel()
 {
-    document.getElementById( 'poolPanel' ).style.visibility = 'visible';
+    document.getElementById( 'poolPanel' ).classList.add( 'active' );
 }
 
 //--------------------------
 export function openGraphPanel()
 {
-    document.getElementById( 'graphPanel' ).style.visibility = 'visible';
+    document.getElementById( 'graphPanel' ).classList.add( 'active' );
 }
 
 //--------------------------
 export function openSwimbotPanel()
 {
-    document.getElementById('swimbotPanel' ).style.visibility = 'visible';
-    if ( genePool.getASwimbotIsSelected() )
-    {
-        document.getElementById( 'selectedSwimbotPanel'   ).style.visibility = 'visible';
-        document.getElementById( 'noSelectedSwimbotPanel' ).style.visibility = 'hidden';
-    }
-    else
-    {
-        document.getElementById( 'selectedSwimbotPanel'   ).style.visibility = 'hidden';
-        document.getElementById( 'noSelectedSwimbotPanel' ).style.visibility = 'visible';
-    }
+    document.getElementById( 'swimbotPanel' ).classList.add( 'active' );
+    let selected = genePool.getASwimbotIsSelected();
+    showPart( 'selectedSwimbotPanel',   selected );
+    showPart( 'noSelectedSwimbotPanel', !selected );
 }
 
 //------------------------------------------------
@@ -372,7 +403,6 @@ export function closePopupPanel()
 {
     document.getElementById( 'popUpPanel'               ).style.visibility = 'hidden';
     document.getElementById( 'cancelPopUpPanelButton'   ).style.visibility = 'hidden';
-    document.getElementById( 'tweakDefaultButton'       ).style.visibility = 'hidden';
     document.getElementById( 'dataDisplayButton'        ).style.display = "none";
     document.getElementById( "Canvas" ).focus();
 }
@@ -614,8 +644,7 @@ export function tweakGene( swimbotIndex, sliderIndex )
 //----------------------------
 export function openInfoPanel()
 {
-    document.getElementById( 'infoPanel' ).style.visibility = 'visible';
-    document.getElementById( 'infoText'  ).style.visibility = 'visible';
+    document.getElementById( 'infoPanel' ).classList.add( 'active' );
     setInfoPage( _currentInfoPage );
 }
 
@@ -667,19 +696,19 @@ export function updateUI()
         {
             clearViewModeButtons();
         }
-        if ( document.getElementById( 'swimbotPanel' ).style.visibility === 'visible' )
+        if ( panelIsOpen( 'swimbotPanel' ) )
         {
             let selectedSwimbot = genePool.getSelectedSwimbotID();
             if ( selectedSwimbot === NULL_INDEX )
             {
-                document.getElementById( 'selectedSwimbotPanel'   ).style.visibility = 'hidden';
-                document.getElementById( 'noSelectedSwimbotPanel' ).style.visibility = 'visible';
+                showPart( 'selectedSwimbotPanel',   false );
+                showPart( 'noSelectedSwimbotPanel', true  );
                 _lastSwimbotPanelHTML = "";
             }
             else
             {
-                document.getElementById( 'selectedSwimbotPanel'   ).style.visibility = 'visible';
-                document.getElementById( 'noSelectedSwimbotPanel' ).style.visibility = 'hidden';
+                showPart( 'selectedSwimbotPanel',   true  );
+                showPart( 'noSelectedSwimbotPanel', false );
                 let brainState = genePool.getSwimbotBrainState( selectedSwimbot );
                 let mateString = genePool.getSwimbotChosenMate( selectedSwimbot ).toString();
                 let goalDescription = "";
@@ -700,25 +729,28 @@ export function updateUI()
                 let maxEnergy = swimbot.getMaxEnergy();
                 let ratioPercent = Math.round((threshold / maxEnergy) * 100);
 
-                let swimbotPanelHTML =
-                    "<b>Info about the selected swimbot:</b><br><br>" +
-                    "ID = " + genePool.getSwimbotIndex(selectedSwimbot) + "<br>" +
-                    "age = " + genePool.getSwimbotAge(selectedSwimbot) + "<br>" +
-                    "goal = " + goalDescription + "<br><br>" +
-                    "food type preference = " + foodPreferenceText + "<br>" +
-                    "best-digested food type = " + foodTypeText + "<br>" +
-                    "number of food bits eaten = " + Math.floor(genePool.getSwimbotNumFoodBitsEaten(selectedSwimbot)) + "<br>" +
-                    "segments = " + swimbot.getNumParts() + "<br>" +
-                    "energy = " + Math.floor(genePool.getSwimbotEnergy(selectedSwimbot)) +
-                    " / " + swimbot.getMaxEnergy() + "<br>" +
-                    "hunger threshold = " + threshold + " (" + ratioPercent + "% of max energy)<br><br>" +
-                    "sexual attraction = " + genePool.getSwimbotAttractionDescription(selectedSwimbot) + "<br>" +
-                    "number of offspring = " + Math.floor(genePool.getSwimbotNumOffspring(selectedSwimbot)) + "<br>" +
-                    "eternal status = " + (genePool.getSwimbotEternalStatus(selectedSwimbot) ? "Yes" : "No") + "<br>" +
-                    "prey eaten = " + swimbot.getNumPreyEaten() + "<br>" +
-                    "predator level = " + swimbot.getPredatorLevel().toFixed(2) +
-                    (swimbot.getPredatorLevel() > PREDATOR_LEVEL_THRESHOLD ? " 🔴 predator" : " 🌿 herbivore");
+                const isPredator = swimbot.getPredatorLevel() > PREDATOR_LEVEL_THRESHOLD;
+                const row = ( label, value ) => "<tr><td>" + label + "</td><td>" + value + "</td></tr>";
 
+                let swimbotPanelHTML =
+                    "<div class='swimbotKind " + ( isPredator ? "predator" : "herbivore" ) + "'>" +
+                        "swimbot " + genePool.getSwimbotIndex(selectedSwimbot) + " · " +
+                        ( isPredator ? "predator" : "herbivore" ) + " (" + swimbot.getPredatorLevel().toFixed(2) + ")" +
+                        ( genePool.getSwimbotEternalStatus(selectedSwimbot) ? " · immortal" : "" ) +
+                    "</div>" +
+                    "<table class='swimbotTable'>" +
+                    row( "goal",              goalDescription ) +
+                    row( "age",               genePool.getSwimbotAge(selectedSwimbot) ) +
+                    row( "energy",            Math.floor(genePool.getSwimbotEnergy(selectedSwimbot)) + " / " + maxEnergy ) +
+                    row( "hunger threshold",  threshold + " (" + ratioPercent + "%)" ) +
+                    row( "segments",          swimbot.getNumParts() ) +
+                    row( "food eaten",        Math.floor(genePool.getSwimbotNumFoodBitsEaten(selectedSwimbot)) ) +
+                    row( "prey eaten",        swimbot.getNumPreyEaten() ) +
+                    row( "offspring",         Math.floor(genePool.getSwimbotNumOffspring(selectedSwimbot)) ) +
+                    row( "food preferred",    foodPreferenceText ) +
+                    row( "food digested best",foodTypeText ) +
+                    row( "attracted to",      genePool.getSwimbotAttractionDescription(selectedSwimbot) ) +
+                    "</table>";
 
                 if (swimbotPanelHTML !== _lastSwimbotPanelHTML)
                 {
@@ -731,7 +763,7 @@ export function updateUI()
         {
             _graph.update( genePool.getTimeStep(), genePool.getNumSwimbots(), genePool.getNumFoodBits() , genePool.getNumFoodBits1() );
         }
-        if ( document.getElementById( 'graphPanel' ).style.visibility === 'visible' )
+        if ( panelIsOpen( 'graphPanel' ) )
         {
             let graphDataHTML =
                 "time step: " + genePool.getTimeStep()
