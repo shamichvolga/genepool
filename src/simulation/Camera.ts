@@ -10,7 +10,7 @@ export function Camera()
 	const DRAG_FORCE            =  0.03;
     const PAN_OVERSHOOT_PUSH 	=  0.7;
     const SCALE_OVERSHOOT_PUSH	=  0.7;
-    const MINIMUM_SCALE 		=  500.0;
+    const MINIMUM_SCALE 		=  250.0;   // closest zoom: height of the view in pool units
     
 	//------------------------------------------
 	// members
@@ -155,6 +155,51 @@ export function Camera()
 	//----------------------------------------------------------------------------------------
 	// controls
 	//----------------------------------------------------------------------------------------
+	//------------------------------------------------------------------
+	// Direct control (keys, mouse wheel, middle-button drag): the camera
+	// goes exactly where it is told, without drifting afterwards.
+	//------------------------------------------------------------------
+	this.moveBy = function( dx, dy )
+	{
+		_velocity.clear();
+		_scaleDelta = ZERO;
+		_position.x += dx;
+		_position.y += dy;
+		clampToPool();
+	}
+
+	// zoom by `factor` (<1 = closer) keeping the pool point (worldX, worldY) in place
+	this.zoomAt = function( factor, worldX, worldY )
+	{
+		_velocity.clear();
+		_scaleDelta = ZERO;
+
+		let newScale = _scale * factor;
+		if ( newScale < MINIMUM_SCALE           ) { newScale = MINIMUM_SCALE;           }
+		if ( newScale > POOL_RIGHT - POOL_LEFT  ) { newScale = POOL_RIGHT - POOL_LEFT;  }
+
+		let k = newScale / _scale;
+		_position.x = worldX + ( _position.x - worldX ) * k;
+		_position.y = worldY + ( _position.y - worldY ) * k;
+		_scale = newScale;
+		clampToPool();
+	}
+
+	// keep the view inside the pool (centered on an axis where it does not fit)
+	function clampToPool()
+	{
+		let halfWidth  = _scale * ONE_HALF * _aspectRatio;
+		let halfHeight = _scale * ONE_HALF;
+
+		if ( halfWidth * 2 >= POOL_RIGHT - POOL_LEFT ) { _position.x = ( POOL_LEFT + POOL_RIGHT ) * ONE_HALF; }
+		else { _position.x = Math.min( Math.max( _position.x, POOL_LEFT + halfWidth ), POOL_RIGHT - halfWidth ); }
+
+		if ( halfHeight * 2 >= POOL_BOTTOM - POOL_TOP ) { _position.y = ( POOL_TOP + POOL_BOTTOM ) * ONE_HALF; }
+		else { _position.y = Math.min( Math.max( _position.y, POOL_TOP + halfHeight ), POOL_BOTTOM - halfHeight ); }
+
+		calculateFrame();
+	}
+
 	this.panLeft    = function() { _velocity.x -= _scale * BUTTON_FORCE * _secondsDelta; }
 	this.panRight   = function() { _velocity.x += _scale * BUTTON_FORCE * _secondsDelta; }
 	this.panDown    = function() { _velocity.y += _scale * BUTTON_FORCE * _secondsDelta; }

@@ -122,6 +122,12 @@ export function GenePool()
     let _fastRenderCounter      = 0;
     let _savedRenderingGoals    = true;
 
+    // camera control speeds
+    const CAMERA_PAN_SPEED          = 0.9;      // view heights per second (keys)
+    const CAMERA_KEY_ZOOM_SPEED     = 1.6;      // zoom speed with keys (bigger = faster)
+    const CAMERA_WHEEL_ZOOM_SPEED   = 0.0015;   // zoom per unit of mouse wheel movement
+    let _lastCameraNavigationTime   = 0;
+
     //--------------------------------------------------------------------------
     // Fast neighbour search: swimbot positions are copied into plain number
     // arrays, and two grids (swimbots, food) are rebuilt from them every step.
@@ -2651,13 +2657,53 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
     
 	//----------------------------------------
 	this.updateCameraNavigation = function()
-	{		
-        if ( _panningLeft  ) {  _camera.panLeft (); }	
-        if ( _panningRight ) {  _camera.panRight(); }	
-        if ( _panningUp    ) {  _camera.panUp   (); }	
-        if ( _panningDown  ) {  _camera.panDown (); }	
-        if ( _zoomingIn    ) {  _camera.zoomIn  (); }	
-        if ( _zoomingOut   ) {  _camera.zoomOut (); }	
+	{
+        //--------------------------------------------------------------
+        // keys held down move / zoom the camera at a steady speed
+        // (per second, so it does not depend on the frame rate)
+        //--------------------------------------------------------------
+        const now = performance.now();
+        let seconds = ( _lastCameraNavigationTime === 0 ) ? 0 : ( now - _lastCameraNavigationTime ) / 1000;
+        _lastCameraNavigationTime = now;
+        if ( seconds > 0.1 ) { seconds = 0.1; }
+
+        const pan = _camera.getScale() * CAMERA_PAN_SPEED * seconds;
+        let dx = 0, dy = 0;
+        if ( _panningLeft  ) { dx -= pan; }
+        if ( _panningRight ) { dx += pan; }
+        if ( _panningUp    ) { dy -= pan; }
+        if ( _panningDown  ) { dy += pan; }
+        if (( dx !== 0 ) || ( dy !== 0 )) { _camera.moveBy( dx, dy ); }
+
+        let zoom = 0;
+        if ( _zoomingIn  ) { zoom -= CAMERA_KEY_ZOOM_SPEED * seconds; }
+        if ( _zoomingOut ) { zoom += CAMERA_KEY_ZOOM_SPEED * seconds; }
+        if ( zoom !== 0 )
+        {
+            const center = _camera.getPosition();
+            _camera.zoomAt( Math.exp( zoom ), center.x, center.y );
+        }
+	}
+
+	//--------------------------------------------------------------
+	// mouse wheel: zoom towards the point under the cursor
+	//--------------------------------------------------------------
+	this.zoomCameraAtScreenPoint = function( x, y, wheelDelta )
+	{
+        _viewTracking.stopTracking();
+        const point = this.convertScreenCoordinatesToPoolPosition( x, y );
+        const worldX = point.x, worldY = point.y;
+        _camera.zoomAt( Math.exp( wheelDelta * CAMERA_WHEEL_ZOOM_SPEED ), worldX, worldY );
+	}
+
+	//--------------------------------------------------------------
+	// middle-button drag: the pool follows the mouse
+	//--------------------------------------------------------------
+	this.panCameraByScreenPixels = function( dxPixels, dyPixels )
+	{
+        _viewTracking.stopTracking();
+        const unitsPerPixel = _camera.getXDimension() / _canvasWidth;
+        _camera.moveBy( -dxPixels * unitsPerPixel, -dyPixels * unitsPerPixel );
 	}
 
 	//-----------------------------------------
@@ -3318,10 +3364,20 @@ this.renderFoodBits = function()
 	//-----------------------------------------------
     this.stopCameraNavigation = function( action )
     {
-        _panningLeft    = false;	
+             if ( action === CameraNavigationAction.LEFT  ) { _panningLeft  = false; }
+        else if ( action === CameraNavigationAction.RIGHT ) { _panningRight = false; }
+        else if ( action === CameraNavigationAction.DOWN  ) { _panningDown  = false; }
+        else if ( action === CameraNavigationAction.UP    ) { _panningUp    = false; }
+        else if ( action === CameraNavigationAction.IN    ) { _zoomingIn    = false; }
+        else if ( action === CameraNavigationAction.OUT   ) { _zoomingOut   = false; }
+	}
+
+    this.stopAllCameraNavigation = function()
+    {
+        _panningLeft    = false;
         _panningRight   = false;
-        _panningUp      = false;	
-        _panningDown    = false;	
+        _panningUp      = false;
+        _panningDown    = false;
         _zoomingIn      = false;
         _zoomingOut     = false;
 	}

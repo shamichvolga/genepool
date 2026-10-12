@@ -787,16 +787,32 @@ export function resize()
 }
 
 //------------------------------------------------------------
+// mouse position relative to the pool canvas
+//------------------------------------------------------------
+function canvasX( e ) { return e.pageX - document.getElementById( 'Canvas' ).offsetLeft; }
+function canvasY( e ) { return e.pageY - document.getElementById( 'Canvas' ).offsetTop;  }
+
+// middle mouse button held down: drag the view around
+let _middleDragging = false;
+let _middleDragX    = 0;
+let _middleDragY    = 0;
+
+//------------------------------------------------------------
 document.getElementById( 'Canvas' ).onmousedown = function(e)
 {
-    if (e.button === 1) { // middle mouse button
+    if ( e.button === 1 ) // middle mouse button (the wheel)
+    {
         e.preventDefault();
+        _middleDragging = true;
+        _middleDragX = canvasX(e);
+        _middleDragY = canvasY(e);
+        if ( typeof genePool != "undefined" ) { clearViewMode(); }
         return;
     }
     clearViewMode();
     if ( typeof genePool != "undefined" )
     {
-        genePool.touchDown( e.pageX - document.getElementById( 'Canvas' ).offsetLeft, e.pageY - document.getElementById( 'Canvas' ).offsetTop );
+        genePool.touchDown( canvasX(e), canvasY(e) );
     }
     notifyGeneTweakPanelMouseDown();
 }
@@ -804,43 +820,78 @@ document.getElementById( 'Canvas' ).onmousedown = function(e)
 //------------------------------------------------------------
 document.getElementById( 'Canvas' ).onmousemove = function(e)
 {
-    if ( typeof genePool != "undefined" )
+    if ( typeof genePool == "undefined" ) return;
+
+    if ( _middleDragging )
     {
-        genePool.touchMove( e.pageX - document.getElementById( 'Canvas' ).offsetLeft, e.pageY - document.getElementById( 'Canvas' ).offsetTop );
+        genePool.panCameraByScreenPixels( canvasX(e) - _middleDragX, canvasY(e) - _middleDragY );
+        _middleDragX = canvasX(e);
+        _middleDragY = canvasY(e);
+        return;
     }
+    genePool.touchMove( canvasX(e), canvasY(e) );
 }
 
 //------------------------------------------------------------
 document.getElementById( 'Canvas' ).onmouseup = function(e)
 {
+    if ( e.button === 1 )
+    {
+        _middleDragging = false;
+        return;
+    }
     if ( typeof genePool != "undefined" )
     {
-        genePool.touchUp( e.pageX - document.getElementById( 'Canvas' ).offsetLeft, e.pageY - document.getElementById( 'Canvas' ).offsetTop );
+        genePool.touchUp( canvasX(e), canvasY(e) );
     }
 }
+
+// releasing the middle button outside the canvas also ends the drag
+window.addEventListener( "mouseup", function(e) { if ( e.button === 1 ) { _middleDragging = false; } } );
 
 //------------------------------------------------------------
 document.getElementById( 'Canvas' ).onmouseout = function(e)
 {
     if ( typeof genePool != "undefined" )
     {
-        genePool.touchOut( e.pageX - document.getElementById( 'Canvas' ).offsetLeft, e.pageY - document.getElementById( 'Canvas' ).offsetTop );
+        genePool.touchOut( canvasX(e), canvasY(e) );
     }
 }
 
 //------------------------------------------------------------
+// mouse wheel: zoom towards the point under the cursor
+//------------------------------------------------------------
 document.getElementById( 'Canvas' ).onwheel = function(e)
 {
-    e.preventDefault(); // prevent default scrolling
+    e.preventDefault(); // prevent page scrolling
     if ( typeof genePool != "undefined" )
     {
         clearViewMode();
-        let action = (e.deltaY > 0) ? CameraNavigationAction.OUT : CameraNavigationAction.IN;
-        genePool.startCameraNavigation( action );
-        setTimeout( function() {
-            genePool.stopCameraNavigation( action );
-        }, 1000 );
+        // deltaMode 1 = lines (some mice / Firefox), 0 = pixels
+        let delta = ( e.deltaMode === 1 ) ? e.deltaY * 33 : e.deltaY;
+        genePool.zoomCameraAtScreenPoint( canvasX(e), canvasY(e), delta );
     }
+}
+
+//------------------------------------------------------------
+// keyboard: WASD / arrows move, Q E / - + zoom.
+// e.code names the physical key, so it works with any keyboard
+// layout (Russian too).
+//------------------------------------------------------------
+const CAMERA_KEYS =
+{
+    KeyW: CameraNavigationAction.UP,    ArrowUp:    CameraNavigationAction.UP,
+    KeyS: CameraNavigationAction.DOWN,  ArrowDown:  CameraNavigationAction.DOWN,
+    KeyA: CameraNavigationAction.LEFT,  ArrowLeft:  CameraNavigationAction.LEFT,
+    KeyD: CameraNavigationAction.RIGHT, ArrowRight: CameraNavigationAction.RIGHT,
+    KeyE: CameraNavigationAction.IN,    Equal:      CameraNavigationAction.IN,   NumpadAdd:      CameraNavigationAction.IN,
+    KeyQ: CameraNavigationAction.OUT,   Minus:      CameraNavigationAction.OUT,  NumpadSubtract: CameraNavigationAction.OUT,
+};
+
+function isTypingInAField( e )
+{
+    const tag = e.target && e.target.tagName;
+    return ( tag === "INPUT" ) || ( tag === "TEXTAREA" ) || ( tag === "SELECT" );
 }
 
 //--------------------------------
@@ -848,44 +899,38 @@ document.getElementById( 'Canvas' ).onwheel = function(e)
 //--------------------------------
 document.onkeydown = function(e: any)
 {
-    e = e || window.event;
-    let cameraNavAction = -1;
-    // Arrow keys
-    if ( e.keyCode ===  37 ) { cameraNavAction = CameraNavigationAction.LEFT;  } // left arrow
-    if ( e.keyCode ===  39 ) { cameraNavAction = CameraNavigationAction.RIGHT; } // right arrow
-    if ( e.keyCode ===  38 ) { cameraNavAction = CameraNavigationAction.UP;    } // up arrow
-    if ( e.keyCode ===  40 ) { cameraNavAction = CameraNavigationAction.DOWN;  } // down arrow
-    // WASD keys
-    if ( e.keyCode ===  65 ) { cameraNavAction = CameraNavigationAction.LEFT;  } // A
-    if ( e.keyCode ===  68 ) { cameraNavAction = CameraNavigationAction.RIGHT; } // D
-    if ( e.keyCode ===  87 ) { cameraNavAction = CameraNavigationAction.UP;    } // W
-    if ( e.keyCode ===  83 ) { cameraNavAction = CameraNavigationAction.DOWN;  } // S
-    // Plus/Minus keys
-    if ( e.keyCode ===  61 ) { cameraNavAction = CameraNavigationAction.IN;    } // plus
-    if ( e.keyCode === 173 ) { cameraNavAction = CameraNavigationAction.OUT;   } // minus
-    if ( e.keyCode === 187 ) { cameraNavAction = CameraNavigationAction.IN;    } // plus
-    if ( e.keyCode === 189 ) { cameraNavAction = CameraNavigationAction.OUT;   } // minus
-    if ( cameraNavAction != -1 )
+    if ( typeof genePool == "undefined" ) return;
+    if ( isTypingInAField(e) || e.ctrlKey || e.metaKey || e.altKey ) return;
+
+    const action = CAMERA_KEYS[ e.code ];
+    if ( action === undefined ) return;
+
+    e.preventDefault(); // arrows would scroll the page
+    if ( ! genePool.getCameraNavigationActive( action ) )
     {
-        if ( ! genePool.getCameraNavigationActive( cameraNavAction ) )
-        {
-            genePool.startCameraNavigation( cameraNavAction );
-            clearViewMode();
-        }
+        genePool.startCameraNavigation( action );
+        clearViewMode();
     }
 }
 
 //------------------------------
 document.onkeyup = function(e: any)
 {
-    e = e || window.event;
-    if ( e.keyCode == 37 || e.keyCode == 65 ) { genePool.stopCameraNavigation( CameraNavigationAction.LEFT  ); }
-    if ( e.keyCode == 39 || e.keyCode == 68 ) { genePool.stopCameraNavigation( CameraNavigationAction.RIGHT ); }
-    if ( e.keyCode == 38 || e.keyCode == 87 ) { genePool.stopCameraNavigation( CameraNavigationAction.UP    ); }
-    if ( e.keyCode == 40 || e.keyCode == 83 ) { genePool.stopCameraNavigation( CameraNavigationAction.DOWN  ); }
-    if ( e.keyCode == 61 || e.keyCode == 187 ) { genePool.stopCameraNavigation( CameraNavigationAction.IN    ); }
-    if ( e.keyCode == 173 || e.keyCode == 189 ) { genePool.stopCameraNavigation( CameraNavigationAction.OUT   ); }
+    if ( typeof genePool == "undefined" ) return;
+
+    const action = CAMERA_KEYS[ e.code ];
+    if ( action !== undefined )
+    {
+        genePool.stopCameraNavigation( action );
+    }
 };
+
+// switching to another window while a key is held: stop moving
+window.addEventListener( "blur", function()
+{
+    if ( typeof genePool != "undefined" ) { genePool.stopAllCameraNavigation(); }
+    _middleDragging = false;
+});
 
 // Add the toggleEternalSwimbot function
 export function toggleEternalSwimbot( swimbotID )
