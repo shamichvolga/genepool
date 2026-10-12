@@ -14,7 +14,6 @@ const fs   = require( "fs" );
 const path = require( "path" );
 const vm   = require( "vm" );
 
-const ROOT = path.join( __dirname, ".." );
 
 //------------------------------------------------
 // command line
@@ -24,6 +23,9 @@ function arg( name, fallback )
     const i = process.argv.indexOf( "--" + name );
     return ( i >= 0 && i + 1 < process.argv.length ) ? process.argv[ i + 1 ] : fallback;
 }
+
+// the project to run: this one, or another copy given with --root
+const ROOT = arg( "root", path.join( __dirname, ".." ) );
 
 const STEPS = parseInt( arg( "steps", "20000" ), 10 );
 const SEED  = parseInt( arg( "seed",  "1"     ), 10 );
@@ -73,7 +75,9 @@ function getSimulationScripts()
 //------------------------------------------------
 // build the sandbox and load the simulation
 //------------------------------------------------
-const random = makeRandom( SEED );
+function createSimulation( seed, bots )
+{
+const random = makeRandom( seed );
 const seededMath = Object.create( Math );
 seededMath.random = random;
 
@@ -101,9 +105,9 @@ for ( const file of getSimulationScripts() )
 }
 
 // optional: change the number of starting swimbots
-if ( BOTS !== null )
+if ( bots !== null && bots !== undefined )
 {
-    source = source.replace( /const INITIAL_NUM_SWIMBOTS\s*=\s*\d+;/, "const INITIAL_NUM_SWIMBOTS = " + parseInt( BOTS, 10 ) + ";" );
+    source = source.replace( /const INITIAL_NUM_SWIMBOTS\s*=\s*\d+;/, "const INITIAL_NUM_SWIMBOTS = " + parseInt( bots, 10 ) + ";" );
 }
 
 // gpRandom() and Math.random() both use the seeded generator
@@ -129,6 +133,12 @@ const run = vm.runInContext( `
 
     function stats( genePool )
     {
+        if ( typeof genePool.getSwimbots !== 'function' )
+        {
+            // older versions of the code: only totals are available
+            const n = genePool.getNumSwimbots();
+            return { alive: n, predators: 0, food: genePool.getNumFoodBits(), meat: 0, meanEnergy: 0, species: 0, effSpecies: 0, topShare: 0 };
+        }
         const bots = genePool.getSwimbots();
         let alive = 0, predators = 0, energy = 0;
         const reps = [];   // { genes, count, predators }
@@ -139,7 +149,7 @@ const run = vm.runInContext( `
             if ( !b.getAlive() ) continue;
             alive ++;
             energy += b.getEnergy();
-            const isPredator = b.getPredatorLevel() > PREDATOR_LEVEL_THRESHOLD;
+            const isPredator = ( typeof b.getPredatorLevel === 'function' ) && ( b.getPredatorLevel() > PREDATOR_LEVEL_THRESHOLD );
             if ( isPredator ) predators ++;
 
             const genotype = b.getGenotype();
@@ -152,6 +162,7 @@ const run = vm.runInContext( `
             else { found.count ++; if ( isPredator ) found.predators ++; }
         }
 
+        const hasTypes = ( typeof genePool.getNumFoodBitsOfType === 'function' );
         const species = reps.filter( r => r.count >= MIN_SPECIES_SIZE ).sort( ( a, b ) => b.count - a.count );
         let shannon = 0;
         for ( const r of reps ) { const p = r.count / alive; shannon -= p * Math.log( p ); }
@@ -159,7 +170,8 @@ const run = vm.runInContext( `
         return {
             alive,
             predators,
-            food        : genePool.getNumFoodBits(),
+            food        : hasTypes ? genePool.getNumFoodBitsOfType(0) + genePool.getNumFoodBitsOfType(1) : genePool.getNumFoodBits(),
+            meat        : hasTypes ? genePool.getNumFoodBitsOfType(2) : 0,
             meanEnergy  : alive > 0 ? energy / alive : 0,
             species     : species.length,
             effSpecies  : alive > 0 ? Math.exp( shannon ) : 0,
@@ -176,11 +188,23 @@ const run = vm.runInContext( `
 })()
 `, sandbox );
 
+run.sandbox = sandbox;
+run.alerts  = alerts;
+return run;
+}
+
+module.exports = { createSimulation };
+
+if ( require.main === module )
+{
+const run = createSimulation( SEED, BOTS );
+const alerts = run.alerts;
+
 //------------------------------------------------
 // main loop
 //------------------------------------------------
 const rows = [];
-const header = "step,ms_per_step,alive,predators,food,mean_energy,species,eff_species,top_share,heap_mb";
+const header = "step,ms_per_step,alive,predators,plants,meat,mean_energy,species,eff_species,top_share,heap_mb";
 console.log( `seed=${SEED} steps=${STEPS} bots=${BOTS === null ? "default" : BOTS}` );
 console.log( header );
 
@@ -199,7 +223,7 @@ for ( let step = 1; step <= STEPS; step++ )
         const s = run.stats( run.genePool );
         const heap = process.memoryUsage().heapUsed / 1048576;
         const stepsInWindow = ( step % EVERY === 0 ) ? EVERY : ( step % EVERY );
-        const row = [ step, ( ms / stepsInWindow ).toFixed( 2 ), s.alive, s.predators, s.food,
+        const row = [ step, ( ms / stepsInWindow ).toFixed( 2 ), s.alive, s.predators, s.food, s.meat,
                       s.meanEnergy.toFixed( 1 ), s.species, s.effSpecies.toFixed( 1 ), s.topShare.toFixed( 2 ), heap.toFixed( 0 ) ].join( "," );
         rows.push( row );
         console.log( row );
@@ -216,4 +240,5 @@ if ( alerts.length > 0 )
 if ( CSV !== null )
 {
     fs.writeFileSync( CSV, header + "\n" + rows.join( "\n" ) + "\n" );
+}
 }

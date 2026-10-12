@@ -30,6 +30,7 @@ function FoodBit()
     let _blue           = ZERO;
     let _opacity        = ZERO;
     let _index          = NULL_INDEX;
+    let _age            = 0;
     let _maxSpawnRadius = DEFAULT_FOOD_BIT_MAX_SPAWN_RADIUS;
 
     //--------------------------------------------------------
@@ -38,6 +39,7 @@ function FoodBit()
 	this.initialize = function(f)
 	{
         _index      = f;
+        _age        = 0;
         _energy     = DEFAULT_FOOD_BIT_ENERGY;  
         _opacity    = ZERO;
         _position.x = POOL_LEFT + gpRandom() * POOL_WIDTH;
@@ -78,6 +80,7 @@ function FoodBit()
 	       assert( childIndex != NULL_INDEX, "foodbit.js: spawnNearParent: childIndex != NULL_INDEX" );
 
         _index      = childIndex;
+        _age        = 0;
         _opacity    = ZERO;
         _energy     = parentFoodBit.getEnergy();
         _type       = childType;
@@ -212,6 +215,7 @@ function FoodBit()
 	this.getEnergy      = function() { return _energy;      }
 	this.getType   = function() { return _type;   }
 	this.getIndex       = function() { return _index;       }
+	this.getAge         = function() { return _age;         }
     this.getAlive       = function() { return ( _index != NULL_INDEX ); }
 
     // Add method for spatial grid support
@@ -222,6 +226,8 @@ function FoodBit()
 	//----------------------------
 	this.update = function()
 	{
+	    _age ++;
+
 	    if ( _opacity < ONE )
 	    {
     	    _opacity += FOOD_OPACITY_INCREMENT;

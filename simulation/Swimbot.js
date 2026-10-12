@@ -97,6 +97,8 @@ var    flopperYV = 0;
 	let _scanRadius         = SWIMBOT_VIEW_RADIUS;
 	let _scanCooldown       = 0;
 	let _eternal            = false;
+	let _basalMetabolism    = ZERO;
+	let _huntCooldown       = 0;     // steps until the predator can bite again  // energy per step just to stay alive (grows with body mass)
 
 
 let _parent = null;
@@ -694,6 +696,11 @@ _position.copyFrom( position );
         _timerDelta = ZERO;
 
         //-----------------------------------------------------
+        // bigger bodies cost more to keep alive (Kleiber's law)
+        //-----------------------------------------------------
+        _basalMetabolism = BASAL_METABOLISM * Math.pow( _phenotype.mass, 0.75 );
+
+        //-----------------------------------------------------
         // the predator gene may have changed (zap, gene tweak)
         //-----------------------------------------------------
         _brain.setPredatorLevel( this.getPredatorLevel() );
@@ -770,6 +777,11 @@ _position.copyFrom( position );
 		// update age
 		//---------------------------
 		_age ++;
+
+        if ( _huntCooldown > 0 )
+        {
+            _huntCooldown --;
+        }
 		
         if ( _age % BRAIN_SENSORY_UPDATE_PERIOD == 0 ) 
         {
@@ -840,7 +852,8 @@ _position.copyFrom( position );
             {
                 let biteDistance = SWIMBOT_MOUTH_LENGTH + _chosenPrey.getBoundingRadius() * ONE_HALF;
 
-                if ( this.getMouthPosition().getDistanceTo( _chosenPrey.getPosition() ) < biteDistance )
+                if (( _huntCooldown === 0 )
+                &&  ( this.getMouthPosition().getDistanceTo( _chosenPrey.getPosition() ) < biteDistance ))
                 {
                     _tryingToHunt = true;
                 }
@@ -1003,7 +1016,7 @@ _position.copyFrom( position );
         //---------------------------------------------
         // energy is always slowly draining 
         //---------------------------------------------
-        _energy -= CONTINUAL_ENERGY_DRAIN;
+        _energy -= CONTINUAL_ENERGY_DRAIN + _basalMetabolism;
         
         //---------------------------------------------
         // when energy hits zero, that means death 
@@ -1459,6 +1472,15 @@ let partAccelerationY = -strokeForceY;
 	    }
 	}
 
+	//---------------------------------------------------------
+	// a predator just tried to bite me - flee from it now
+	//---------------------------------------------------------
+	this.notifyAttackedBy = function( predator )
+	{
+	    _nearestPredator = predator;
+	    _brain.setNearbyPredatorThreat( true );
+	}
+
 	//---------------------------------------
 	this.notifyTargetFound = function()
 	{
@@ -1603,6 +1625,17 @@ let partAccelerationY = -strokeForceY;
 	    if (( !this.getChosenPreyIsValid() )
 	    ||  ( _chosenPrey.isEternal() ))
 	    {
+	        return;
+	    }
+
+	    _huntCooldown = ATTACK_COOLDOWN;
+
+	    //-----------------------------------------------
+	    // missed! the prey gets away and starts fleeing
+	    //-----------------------------------------------
+	    if ( gpRandom() > ATTACK_SUCCESS_CHANCE )
+	    {
+	        _chosenPrey.notifyAttackedBy( this );
 	        return;
 	    }
 
@@ -1800,6 +1833,19 @@ let partAccelerationY = -strokeForceY;
 
     
     
+	//-----------------------------------------------------------------
+	// abortMating: the mating attempt failed (incompatible, pool full,
+	// mate gone) - give up on this mate and look for another one
+	//-----------------------------------------------------------------
+	this.abortMating = function()
+	{
+	    _tryingToMate    = false;
+	    _chosenMate      = null;
+	    _chosenMateIndex = NULL_INDEX;
+	    _brain.setFoundSwimbot( false );
+	}
+
+
 	//-----------------------------------------
 	// set attraction
 	//-----------------------------------------
@@ -2256,6 +2302,7 @@ v[p].setXY( _phenotype.parts[p].axis.x / _phenotype.parts[p].length, _phenotype.
         _scanRadius         = SWIMBOT_VIEW_RADIUS;
         _scanCooldown       = 0;
         _eternal            = false;
+        _huntCooldown       = 0;
     }
 
 
