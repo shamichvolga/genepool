@@ -177,13 +177,14 @@ export function GenePool()
 
     function sortCandidatesByDistance(count)
     {
-        // insertion sort: lists are short (tens of swimbots)
+        // insertion sort by distance, ties broken by swimbot index, so the
+        // order never depends on how the spatial grid happens to store them
         for (let i = 1; i < count; i++)
         {
             const bot = _candidateSwimbots[i];
             const d   = _candidateDistances[i];
             let j = i - 1;
-            while (j >= 0 && _candidateDistances[j] > d)
+            while (j >= 0 && (_candidateDistances[j] > d || (_candidateDistances[j] === d && _candidateSwimbots[j].getIndex() > bot.getIndex())))
             {
                 _candidateSwimbots [j + 1] = _candidateSwimbots [j];
                 _candidateDistances[j + 1] = _candidateDistances[j];
@@ -1557,8 +1558,8 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 
 
         //------------------------------------------------------------------
-        // the brain perceives the NEAREST swimbots within normal view
-        // (the grid returns them in cell order, so sort by distance first)
+        // the brain perceives the NEAREST swimbots within normal view,
+        // always in order of distance (the grid returns them in cell order)
         //------------------------------------------------------------------
         let numCandidates = 0;
 
@@ -1579,10 +1580,7 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
             }
         }
 
-        if (numCandidates > BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS)
-        {
-            sortCandidatesByDistance(numCandidates);
-        }
+        sortCandidatesByDistance(numCandidates);
 
         for (let i = 0; i < numCandidates && _numNearbySwimbots < BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS; i++)
         {
