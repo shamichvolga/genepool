@@ -19,13 +19,38 @@ import { Vector2D } from "./Vector2D";
 import { ViewTracking, ViewTrackingMode } from "./ViewTracking";
 
 //------------------
-export function GenePool() 
-{	
+export function GenePool()
+{
     let _this = this;
 
     function scheduleNextUpdate()
     {
+        // in a browser the screen refresh drives the loop (see animationFrame)
+        if ( _useAnimationFrames ) return;
+
         _this.timer = setTimeout(function() { _this.update(); }, _millisecondsPerUpdate);
+    }
+
+    //--------------------------------------------------------------------------
+    // Browser main loop. The screen refresh (usually 60 times a second) calls
+    // animationFrame. Each frame runs as many simulation steps as the chosen
+    // speed asks for - within a time budget, so drawing never stalls - and
+    // then draws once.
+    //--------------------------------------------------------------------------
+    const NORMAL_STEPS_PER_SECOND   = 50;   // normal speed (like the old 20 ms timer)
+    const NORMAL_FRAME_BUDGET_MS    = 12;   // at most this much simulation per frame
+    const FAST_FRAME_BUDGET_MS      = 40;   // fast mode: simulate more, draw less often
+    let _useAnimationFrames         = false;
+    let _lastFrameTime              = 0;
+    let _stepDebt                   = 0;    // simulation steps owed at normal speed
+    let _stepsThisSecond            = 0;
+    let _stepsPerSecond             = 0;    // measured, for display
+    let _stepsSecondStart           = 0;
+
+    function animationFrame( now )
+    {
+        _this.runFrame( now );
+        requestAnimationFrame( animationFrame );
     }
 
 	//-----------------------------------
@@ -33,12 +58,12 @@ export function GenePool()
 	//-----------------------------------
 //const MAX_FOODBITS          = 2000;
 //const INITIAL_NUM_SWIMBOTS  = 200;
-//const INITIAL_NUM_FOODBITS  = 800;    
+//const INITIAL_NUM_FOODBITS  = 800;
     const TRAIL_LENGTH = 100;
-    
+
     const NUM_NEIGHBORHOOD_SWIMBOTS = 14 * 14;
     const NUM_NEIGHBORHOOD_FOODBITS = 28 * 28;
-    
+
 	//---------------------------------------------
 	// rendering-related constants
 	//---------------------------------------------
@@ -59,13 +84,13 @@ export function GenePool()
     const CLONE_SEPARATION                  = 10.0;
     const FOOD_RACE_SIZE                    = 1000;
     const FOOD_BANG_SIZE                    = 1700;
-    
+
 	//----------------------------------------------------
 	// variables
 	//----------------------------------------------------
 	let _millisecondsPerUpdate  = 0;
-	let _touch                  = new Touch(); 
-	let _swimbots: any[]       = new Array( Swimbot ); 
+	let _touch                  = new Touch();
+	let _swimbots: any[]       = new Array( Swimbot );
 	let _foodBits		        = new Array( MAX_FOODBITS );
     let _nearbySwimbotsArray    = new Array( BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS );
 	let _viewTracking		    = new ViewTracking();
@@ -86,8 +111,8 @@ export function GenePool()
 	let _rendering              = false;
 	let _swimbotBeingDragged    = false;
 	let _foodBitBeingDragged    = false;
-	let _poolCenter             = new Vector2D();   
-	let _canvas                 = null;  
+	let _poolCenter             = new Vector2D();
+	let _canvas                 = null;
 	let _clock                  = 0;
 	let _numSwimbots 	        = 0;
     let _numNearbySwimbots      = 0;
@@ -104,7 +129,7 @@ export function GenePool()
 	let _levelOfDetail	        = SWIMBOT_LEVEL_OF_DETAIL_LOW;
 	let _previousTime           = ZERO;
 	let _frameRate              = ZERO;
-	let _debugTrail 		    = new Array( TRAIL_LENGTH ); 
+	let _debugTrail 		    = new Array( TRAIL_LENGTH );
 	let _familyTree             = new FamilyTree();
 	let _phyloTree              = new PhyloTree();
 	let _panningLeft            = false;
@@ -160,20 +185,20 @@ export function GenePool()
     let _seedSource = new FoodBit(); // scratch: a stand-in parent position for seeding
     let _genitalPositionUtility = new Vector2D(); // scratch: another swimbot's genital position
     _lastCameraPosition.setXY(0, 0);
-    
-    let hhh = 0;	
-	
+
+    let hhh = 0;
+
 	//-------------------------------------
 	// create fixed-sized swimbot array
 	//-------------------------------------
 	for (let s=0; s<MAX_SWIMBOTS; s++)
 	{
-		_swimbots[s] = new Swimbot(); 
+		_swimbots[s] = new Swimbot();
 		_swimbots[s].setParent(this);
         _lastSwimbotPositions[s] = new Vector2D();
         _distanceCache[s] = 0;
         _swimbotWasAlive[s] = false;
-	}	
+	}
 
     function getBatchObject()
     {
@@ -304,86 +329,94 @@ export function GenePool()
             }
         }
     }
-    
+
 	//---------------------------------------------------------
 	// create fixed-sized perceived nearby swimbot array
 	//---------------------------------------------------------
 	for (let s=0; s<BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS; s++)
 	{
-		_nearbySwimbotsArray[s] = new Swimbot(); 
-	}	
-    
+		_nearbySwimbotsArray[s] = new Swimbot();
+	}
+
 	//-------------------------------------
 	// create fixed-sized foodbit array
 	//-------------------------------------
 	for (let f=0; f<MAX_FOODBITS; f++)
 	{
-		_foodBits[f] = new FoodBit(); 
-	}	
-    
+		_foodBits[f] = new FoodBit();
+	}
+
 	//-------------------------------------
 	// create trail array
 	//-------------------------------------
 	for (let t=0; t<TRAIL_LENGTH; t++)
 	{
-		_debugTrail[t] = new Vector2D(); 
-	}	
-	
+		_debugTrail[t] = new Vector2D();
+	}
+
 	//-------------------------------
 	// This is an important call!
 	//-------------------------------
 	this.setCanvas = function(c)
     {
-        _canvas = c;        
+        _canvas = c;
         //console.log( canvas );
     }
-    
+
 	//-------------------------------------------
 	this.setCanvasDimensions = function( w, h )
     {
         //console.log( "setCanvasDimensions: " + w + ", " + h );
-        
+
         _canvasWidth  = w;
         _canvasHeight = h;
 
         _camera.setAspectRatio( _canvasWidth / _canvasHeight );
     }
-    
-    
+
+
 	//---------------------------
 	this.initialize = function()
-	{	
+	{
 		//----------------------------------
 		// get pool center
 		//----------------------------------
         _poolCenter.copyFrom( _pool.getCenter() );
-        
+
 		//------------------------------------
 		// start with a random simulation
 		//------------------------------------
         this.startSimulation( SimulationStartMode.RANDOM );
-        
+
         _millisecondsPerUpdate = DEFAULT_MILLISECONDS_PER_UPDATE;
-        
+
 		//------------------------------------------
 		// configure view tracking
 		//------------------------------------------
-//_viewTracking.setPoolCenter( _poolCenter );	        
-        _viewTracking.setSwimbots( _swimbots );	   
-        _viewTracking.setMode( ViewTrackingMode.AUTOTRACK, _camera.getPosition(), _camera.getScale(), 0 );   
-        
+//_viewTracking.setPoolCenter( _poolCenter );
+        _viewTracking.setSwimbots( _swimbots );
+        _viewTracking.setMode( ViewTrackingMode.AUTOTRACK, _camera.getPosition(), _camera.getScale(), 0 );
+
 		//------------------------------------------------------------
 		// start up the timer
 		//------------------------------------------------------------
-		scheduleNextUpdate();
+        if ( typeof requestAnimationFrame === "function" )
+        {
+            _useAnimationFrames = true;
+            requestAnimationFrame( animationFrame );
+        }
+        else
+        {
+            scheduleNextUpdate();   // no screen (e.g. the headless test tools)
+        }
 	}
-	
-	
+
+
 	//------------------------------------------
 	this.startSimulation = function( mode )
-	{	
+	{
 //looks like numOffspring didn't get reset. fix this! (and any other related side effects
-	
+
 		//----------------------------
 		// start time
 		//----------------------------
@@ -400,7 +433,7 @@ export function GenePool()
         //-------------------------
         _camera.setScale( INITIAL_VIEW_SCALE );
         _camera.setPosition( _poolCenter );
-        
+
         //-------------------------
         // reset view control
         //-------------------------
@@ -410,7 +443,7 @@ export function GenePool()
         // reset family tree
         //-------------------------
         _familyTree.reset();
-        
+
         //--------------------------------------
         // clear out all swimbots and food bits
         //--------------------------------------
@@ -418,21 +451,21 @@ export function GenePool()
         for (let s=0; s<MAX_SWIMBOTS; s++)
         {
             _swimbots[s].die();
-        }                    
+        }
 
-        _numFoodBits = 0            
+        _numFoodBits = 0
         for (let f=0; f<MAX_FOODBITS; f++)
         {
             _foodBits[f].kill();
-        }            
+        }
 
         for (let s=0; s<MAX_SWIMBOTS; s++)
         {
             _swimbotWasAlive[s] = false;
         }
-        
+
         //-------------------------------------------------------------------
-        // Here I set ecosystem tweak values to their defaults. Some of 
+        // Here I set ecosystem tweak values to their defaults. Some of
         // them may be changed afterwards depending on the simulation mode.
         //-------------------------------------------------------------------
         this.setFoodGrowthDelay     ( DEFAULT_FOOD_REGENERATION_PERIOD  );
@@ -443,7 +476,7 @@ export function GenePool()
         this.setGardenOfEdenRadius  ( DEFAULT_GARDEN_OF_EDEN_RADIUS     );
         this.setOffspringEnergyRatio( DEFAULT_CHILD_ENERGY_RATIO        );
         this.setMaximumSwimbotAge   ( DEFAULT_MAXIMUM_AGE               );
-        
+
         // do this stuff after doing the stuff above:
         _numSwimbots = INITIAL_NUM_SWIMBOTS;
         _numFoodBits = INITIAL_NUM_FOODBITS;
@@ -453,9 +486,9 @@ export function GenePool()
         //-----------------------------------
         globalTweakers.numFoodTypes = 1;
         this.randomizeFood();
-        
+
         //console.log( "startSimulation: setOffspringEnergyRatio to default: " + DEFAULT_CHILD_ENERGY_RATIO );
-        
+
         //---------------------------------------------------------------------
         // initialize various parameters according to simulation start mode
         //---------------------------------------------------------------------
@@ -469,7 +502,7 @@ export function GenePool()
             this.randomizeFood(); // Important: do this after setting numFoodTypes!
 
 //this.setGardenOfEdenRadius( 1500 ); /* again... */ this.randomizeFood();
-this.setFoodGrowthDelay( 15 );  
+this.setFoodGrowthDelay( 15 );
 //this.setMaximumSwimbotAge( 15000 );
 this.setMaximumSwimbotAge( 20000 );
 _numSwimbots = 1000;
@@ -493,33 +526,33 @@ _camera.setScale( POOL_WIDTH );
             _camera.setScale( RACE_VIEW_SCALE );
         }
         else if ( mode === SimulationStartMode.BIG_BANG )
-        {        
+        {
             _numSwimbots = 100;
             this.setFoodToBangConfiguration();
             _camera.setScale( BANG_VIEW_SCALE );
         }
         else if ( mode === SimulationStartMode.BAD_PARENTS )
-        {        
+        {
             _numSwimbots = 2;
             this.setFoodToBadParentsConfiguration();
-            
-            this.setFoodGrowthDelay     ( 200 );  
-            this.setFoodSpread          ( 20 );       
+
+            this.setFoodGrowthDelay     ( 200 );
+            this.setFoodSpread          ( 20 );
 	        this.setHungerThreshold     ( 150 );
             this.setFoodBitEnergy       ( 6 );
             this.setOffspringEnergyRatio( 0.0001 );
-	        
+
             //console.log( "if ( mode === SimulationStartMode.BAD_PARENTS ): setOffspringEnergyRatio to 0.001" );
-            
+
             _camera.setScale( PARENT_VIEW_SCALE );
         }
         else if ( mode === SimulationStartMode.BARRIER )
-        {        
+        {
             // the obstacle is initialized below to be in the middle of the pool!
-            
+
             //this.setFoodToBarrierConfiguration();
             //this.randomizeFood();
-            
+
             //_camera.setScale( PARENT_VIEW_SCALE );
         }
         else if ( mode === SimulationStartMode.NEIGHBORHOOD )
@@ -542,7 +575,7 @@ _camera.setScale( POOL_WIDTH );
         {
             let initialPosition = new Vector2D();
 
-            initialPosition.setToRandomLocationInDisk( _poolCenter, _gardenOfEdenRadius ); 
+            initialPosition.setToRandomLocationInDisk( _poolCenter, _gardenOfEdenRadius );
 
 
 if ( mode === SimulationStartMode.SPECIES )
@@ -551,12 +584,12 @@ if ( mode === SimulationStartMode.SPECIES )
 
     let x = gpRandom() * s;
     let y = POOL_HEIGHT * ONE_HALF - s * ONE_HALF + + gpRandom() * s;
-    
+
     if ( gpRandom() < ONE_HALF )
     {
         x = POOL_WIDTH - x;
     }
-    
+
     initialPosition.setXY( x, y )
 }
 
@@ -565,18 +598,18 @@ if ( mode === SimulationStartMode.SPECIES )
             // yo, initial age is distributed
             //-----------------------------------------
             let weightedRandomNormal = gpRandom();
-            
-            //I'm running various tests - to understand why there's a sharp die-off when maximumLifeSpan is 15000. 
+
+            //I'm running various tests - to understand why there's a sharp die-off when maximumLifeSpan is 15000.
             //let weightedRandomNormal = gpRandom() * gpRandom();
             //let weightedRandomNormal = gpRandom() * gpRandom() * gpRandom();
             //let weightedRandomNormal = Math.sqrt( gpRandom() );
-            
-            
+
+
             let initialAge = YOUNG_AGE_DURATION + Math.floor( ( globalTweakers.maximumLifeSpan - YOUNG_AGE_DURATION ) * weightedRandomNormal );
-                                    
-            assert( ( initialAge >= YOUNG_AGE_DURATION ), "Genepool.js: startSimulation: ( initialAge >= YOUNG_AGE_DURATION )" );                        
-            assert( ( initialAge <= globalTweakers.maximumLifeSpan ), "Genepool.js: startSimulation: ( initialAge <= globalTweakers.maximumLifeSpan )" );                        
-            
+
+            assert( ( initialAge >= YOUNG_AGE_DURATION ), "Genepool.js: startSimulation: ( initialAge >= YOUNG_AGE_DURATION )" );
+            assert( ( initialAge <= globalTweakers.maximumLifeSpan ), "Genepool.js: startSimulation: ( initialAge <= globalTweakers.maximumLifeSpan )" );
+
             let initialAngle    = getRandomAngleInDegrees(); //-180.0 + gpRandom() * 360.0;
             let initialEnergy   = DEFAULT_SWIMBOT_HUNGER_THRESHOLD;
 
@@ -592,33 +625,33 @@ if ( mode === SimulationStartMode.SPECIES )
                 let sqrt = Math.floor( Math.sqrt( _numSwimbots ) );
                 let xMod = i % sqrt;
                 let yMod = Math.floor( ( i / _numSwimbots ) * sqrt );
-                
+
                 let xFraction = xMod / sqrt;
                 let yFraction = yMod / sqrt;
-                
-                let x = _poolCenter.x - _gardenOfEdenRadius + xFraction * _gardenOfEdenRadius * 2; 
-                let y = _poolCenter.y - _gardenOfEdenRadius + yFraction * _gardenOfEdenRadius * 2; 
-                 
-                initialPosition.setXY( x, y ); 
-                                       
+
+                let x = _poolCenter.x - _gardenOfEdenRadius + xFraction * _gardenOfEdenRadius * 2;
+                let y = _poolCenter.y - _gardenOfEdenRadius + yFraction * _gardenOfEdenRadius * 2;
+
+                initialPosition.setXY( x, y );
+
                 for (let g=0; g<NUM_GENES; g++)
                 {
-                    let value = ZERO; 
-                    
+                    let value = ZERO;
+
                     if ( _neighborhoodAxis[g] )
                     {
-                        value = ONE_HALF + ONE_HALF * Math.sin( ( _neighborhoodX[g] + ( - ONE_HALF + xFraction ) ) * NEIGHBORHOOD_FREQ  ); 
+                        value = ONE_HALF + ONE_HALF * Math.sin( ( _neighborhoodX[g] + ( - ONE_HALF + xFraction ) ) * NEIGHBORHOOD_FREQ  );
                     }
                     else
                     {
-                        value = ONE_HALF + ONE_HALF * Math.sin( ( _neighborhoodY[g] + ( - ONE_HALF + yFraction ) ) * NEIGHBORHOOD_FREQ  ); 
+                        value = ONE_HALF + ONE_HALF * Math.sin( ( _neighborhoodY[g] + ( - ONE_HALF + yFraction ) ) * NEIGHBORHOOD_FREQ  );
                     }
-                       
+
                     if ( value < ZERO ) { value = ZERO; }
                     if ( value > ONE  ) { value = ONE;  }
-                    
+
                     let geneValue = Math.floor( ( BYTE_SIZE - 1 ) * value );
- 
+
                     _myGenotype.setGeneValue( g, geneValue );
                 }
             }
@@ -627,7 +660,7 @@ if ( mode === SimulationStartMode.SPECIES )
             //---------------------------------
             else if ( mode === SimulationStartMode.FROGGIES )
             {
-                _myGenotype.setToFroggy();      
+                _myGenotype.setToFroggy();
             }
             //---------------------------------
             // tango
@@ -636,7 +669,7 @@ if ( mode === SimulationStartMode.SPECIES )
             {
                 if ( i === 0 ) { _myGenotype.setToPreset( PRESET_GENOTYPE_DARWIN ); }
                 if ( i === 1 ) { _myGenotype.setToPreset( PRESET_GENOTYPE_MENDEL ); }
-                                                
+
                 if ( i === 0 ) { initialPosition.setXY( _poolCenter.x - 100 * ONE_HALF, _poolCenter.y ); }
                 if ( i === 1 ) { initialPosition.setXY( _poolCenter.x + 100 * ONE_HALF, _poolCenter.y ); }
             }
@@ -644,7 +677,7 @@ if ( mode === SimulationStartMode.SPECIES )
             // race
             //---------------------------------
             else if ( mode === SimulationStartMode.RACE )
-            {            
+            {
                 /*
                 if ( i === 0 ) { _myGenotype.setToPreset( PRESET_GENOTYPE_MARGULIS   ); }
                 if ( i === 1 ) { _myGenotype.setToPreset( PRESET_GENOTYPE_MARGULIS   ); }
@@ -666,35 +699,35 @@ if ( mode === SimulationStartMode.SPECIES )
             // big bang
             //-------------------------------------------------
             else if ( mode === SimulationStartMode.BIG_BANG )
-            {            
-                initialPosition.setXY( _poolCenter.x, _poolCenter.y );                
+            {
+                initialPosition.setXY( _poolCenter.x, _poolCenter.y );
                 _myGenotype.randomize();
             }
             //-------------------------------------------------
             // bad parents
             //-------------------------------------------------
             else if ( mode === SimulationStartMode.BAD_PARENTS )
-            {            
+            {
                 if ( i === 0 ) { _myGenotype.setToPreset( PRESET_GENOTYPE_TURING ); }
                 if ( i === 1 ) { _myGenotype.setToPreset( PRESET_GENOTYPE_TURING ); }
 
                 if ( i === 0 ) { initialPosition.setXY( _poolCenter.x - 200 * ONE_HALF, _poolCenter.y ); }
                 if ( i === 1 ) { initialPosition.setXY( _poolCenter.x + 200 * ONE_HALF, _poolCenter.y ); }
             }
-            
+
             /*
             //-------------------------------------------------
             // barrier
             //-------------------------------------------------
             else if ( mode === SimulationStartMode.BARRIER )
-            {            
+            {
                 if ( i === 0 ) { _myGenotype.setToPreset( PRESET_GENOTYPE_DAWKINS   ); }
                 if ( i === 1 ) { _myGenotype.setToPreset( PRESET_GENOTYPE_WALLACE   ); }
                 if ( i === 2 ) { _myGenotype.setToPreset( PRESET_GENOTYPE_MENDEL    ); }
                 if ( i === 3 ) { _myGenotype.setToPreset( PRESET_GENOTYPE_WILSON    ); }
                 if ( i === 4 ) { _myGenotype.setToPreset( PRESET_GENOTYPE_TURING    ); }
                 if ( i === 5 ) { _myGenotype.setToPreset( PRESET_GENOTYPE_MARGULIS  ); }
-                
+
                 let s = 150;
 
                 if ( i === 0 ) { initialPosition.setXY( _poolCenter.x + s * -1,  _poolCenter.y + s * -1 ); }
@@ -719,7 +752,7 @@ if ( mode === SimulationStartMode.SPECIES )
             for (let g=NUM_GENES_USED; g<NUM_GENES; g++)
             {
                 _myGenotype.setGeneValue( g, 0 );
-            }            
+            }
 
             //-------------------------------------------------------------------
             // start with mostly herbivores: predators are a small minority
@@ -736,7 +769,7 @@ if ( mode === SimulationStartMode.SPECIES )
 
             //-------------------------------------------------------------------------------
             // This is not the most elegant way to do this, but just to get it working.....
-            // For any simulation mode (pool preset) other than Species, the swimbot genes 
+            // For any simulation mode (pool preset) other than Species, the swimbot genes
             // for food type preferrence and food type digestion are set to 0 (green).
             //-------------------------------------------------------------------------------
             if ( mode != SimulationStartMode.SPECIES )
@@ -745,33 +778,33 @@ if ( mode === SimulationStartMode.SPECIES )
                 // This sets the food type gene to be the same as the preferredFoodColor gene
                 //-------------------------------------------------------------------------------------------------
                 //let foodColorGene = _embryology.getFoodColorGene();
-                //let foodTypeGene  = _embryology.getFoodNutritionGene();  
-                          
+                //let foodTypeGene  = _embryology.getFoodNutritionGene();
+
                 //console.log( "foodColorGene     = " + foodColorGene     );
                 //console.log( "foodNutritionGene = " + foodNutritionGene );
                 //let geneValue = _myGenotype.getGeneValue( foodColorGene );
                 //console.log( "geneValue = " + geneValue );
-                //_myGenotype.setGeneValue( foodNutritionGene, 0 );                
-                //_myGenotype.setGeneValue( foodNutritionGene, 0 );                
+                //_myGenotype.setGeneValue( foodNutritionGene, 0 );
+                //_myGenotype.setGeneValue( foodNutritionGene, 0 );
             }
-            
+
             //--------------------------------------------------
             // create the swimbot
             //--------------------------------------------------
-            _swimbots[i].create( i, initialAge, initialPosition, initialAngle, initialEnergy, _myGenotype, _embryology );	
-            
+            _swimbots[i].create( i, initialAge, initialPosition, initialAngle, initialEnergy, _myGenotype, _embryology );
+
             //------------------------------------------------------------------------------------
             // add the new swimbot to the family tree
             //------------------------------------------------------------------------------------
             _familyTree.addNode( i, NULL_INDEX, NULL_INDEX, _clock, this.getSwimbotGenes(i) );
-        }	
-        
+        }
+
         //--------------------------------------
-        // initilize obstacle       
-        //--------------------------------------  
+        // initilize obstacle
+        //--------------------------------------
 		let end1 = new Vector2D();
 		let end2 = new Vector2D();
-		
+
 		end1.setXY( POOL_LEFT + POOL_WIDTH * 0.005, POOL_TOP + POOL_HEIGHT * 0.005 );
 		end2.setXY( POOL_LEFT + POOL_WIDTH * 0.01,  POOL_TOP + POOL_HEIGHT * 0.005 );
 
@@ -789,24 +822,24 @@ if ( mode === SimulationStartMode.SPECIES )
 	    	end2.setXY( POOL_LEFT + POOL_WIDTH * 0.5, POOL_TOP + POOL_HEIGHT * 0.8 );
         }
         */
-        
+
 		_obstacle.setEndpointPositions( end1, end2 );
-        
+
         for (let m=0; m<10; m++)
         {
             moveFoodBitsFromObstacle();
         }
-        
+
 		//---------------------------------
 		// clear this!
 		//---------------------------------
         setSelectedSwimbot( NULL_INDEX );
-        
+
 		//---------------------------------
 		// set _simulationRunning to true
 		//---------------------------------
 		_simulationRunning = true;
-		
+
 		//---------------------------------
 		// set rendering to true
 		//---------------------------------
@@ -822,15 +855,15 @@ if ( mode === SimulationStartMode.SPECIES )
 		//---------------------------------
 		_clock = 0;
 	}
-	
-	
+
+
 
 	//----------------------------------------
 	this.setGardenOfEdenRadius = function(r)
 	{
 	    _gardenOfEdenRadius = r;
 	}
-		
+
 	//-------------------------------------
 	this.randomizeNeighborhood = function()
 	{
@@ -838,189 +871,189 @@ if ( mode === SimulationStartMode.SPECIES )
         {
             _neighborhoodX[g] = -ONE + gpRandom() * 2.0;
             _neighborhoodY[g] = -ONE + gpRandom() * 2.0;
-            
+
             if ( gpRandom() < ONE_HALF )
             {
                 _neighborhoodAxis[g] = false;
-            }		    		
+            }
             else
             {
                 _neighborhoodAxis[g] = true;
             }
 	    }
 	}
-	
+
 	//------------------------------
 	this.randomizeFood = function()
-	{	
+	{
         for (let f=0; f<_numFoodBits; f++)
         {
             _foodBits[f].initialize(f);
-            
+
             //-------------------------------------------------------------------
             // set food type...
             //-------------------------------------------------------------------
             let n = 0;
-                      
+
             if ( globalTweakers.numFoodTypes === 2 )
-            { 
-                n = Math.floor( gpRandom() * 2 ); 
+            {
+                n = Math.floor( gpRandom() * 2 );
 
                 /*
                 //first half is one type, the other half is the other type...
-                if ( f < _numFoodBits * ONE_HALF  ) 
+                if ( f < _numFoodBits * ONE_HALF  )
                 {
                     n = 0;
                 }
                 else
                 {
                     n = 1;
-                } 
+                }
                 */
             }
-            
+
             _foodBits[f].setType(n);
 
             //-------------------------------------------------------------------
             // place food bit randomly in a disk in the middle of the pool
             //-------------------------------------------------------------------
             let poolCenter = new Vector2D();
-            poolCenter.x = POOL_LEFT + POOL_WIDTH  * ONE_HALF; 
-            poolCenter.y = POOL_TOP  + POOL_HEIGHT * ONE_HALF; 
-            
-            let foodBitPosition = new Vector2D();        
-            foodBitPosition.setToRandomLocationInDisk( poolCenter, _gardenOfEdenRadius ); 
-            
+            poolCenter.x = POOL_LEFT + POOL_WIDTH  * ONE_HALF;
+            poolCenter.y = POOL_TOP  + POOL_HEIGHT * ONE_HALF;
+
+            let foodBitPosition = new Vector2D();
+            foodBitPosition.setToRandomLocationInDisk( poolCenter, _gardenOfEdenRadius );
+
 /*
 if ( mode === SimulationStartMode.SPECIES )
 {
     lfoodBitPosition.x = gpRandom() * POOL_WIDTH * 0.24;
     foodBitPosition.y = gpRandom() * POOL_HEIGHT;
-    
+
     if ( gpRandom() < ONE_HALF )
     {
         foodBitPosition.x = POOL_WIDTH - foodBitPosition.x;
     }
 }
             */
-            
+
             _foodBits[f].setPosition( foodBitPosition );
         }
 	}
-	
-	
+
+
 	//----------------------------------------------------------
 	this.setFoodToNeighborhood = function( position, size )
-	{		
+	{
         _numFoodBits = NUM_NEIGHBORHOOD_FOODBITS;
-    
+
         for (let f=0; f<_numFoodBits; f++)
         {
             let sqrt = Math.floor( Math.sqrt( _numFoodBits ) );
             let xMod = f % sqrt;
             let yMod = Math.floor( ( f / _numFoodBits ) * sqrt );
-            
+
             let xFraction = xMod / sqrt;
             let yFraction = yMod / sqrt;
-            
+
             let foodBitPosition = new Vector2D();
-            
+
             foodBitPosition.setXY
             (
                 position.x - size + xFraction * size * 2,
                 position.y - size + yFraction * size * 2
-            ); 
+            );
 
             _foodBits[f].initialize(f);
             _foodBits[f].setPosition( foodBitPosition );
         }
 	}
-	
-	
+
+
 
 	//--------------------------------------------------
 	this.setFoodToBarrierConfiguration = function()
-	{	
+	{
         _numFoodBits = 40;
         let spread = 500;
         let p = new Vector2D();
-        
+
         for (let f=0; f<_numFoodBits; f++)
         {
             _foodBits[f].initialize(f);
             p.setXY
-            ( 
-                _poolCenter.x + ( -spread * ONE_HALF + gpRandom() * spread ), 
-                _poolCenter.y + ( -spread * ONE_HALF + gpRandom() * spread ) 
+            (
+                _poolCenter.x + ( -spread * ONE_HALF + gpRandom() * spread ),
+                _poolCenter.y + ( -spread * ONE_HALF + gpRandom() * spread )
             );
-             
-            _foodBits[f].setPosition(p); 
+
+            _foodBits[f].setPosition(p);
         }
 
         this.setFoodSpread( MIN_FOOD_BIT_MAX_SPAWN_RADIUS + ( MAX_FOOD_BIT_MAX_SPAWN_RADIUS - MIN_FOOD_BIT_MAX_SPAWN_RADIUS ) * 0.2 );
 	}
-	
+
 
 
 	//-------------------------------------------
 	this.setFoodToBadParentsConfiguration = function()
-	{	
+	{
         _numFoodBits = 5;
 
         let spread = 100;
         let p = new Vector2D();
         let f = -1;
-    
-        f++; _foodBits[f].initialize(f); p.setXY( _poolCenter.x, _poolCenter.y + spread * -1.0 ); _foodBits[f].setPosition(p); 
+
+        f++; _foodBits[f].initialize(f); p.setXY( _poolCenter.x, _poolCenter.y + spread * -1.0 ); _foodBits[f].setPosition(p);
         f++; _foodBits[f].initialize(f); p.setXY( _poolCenter.x, _poolCenter.y + spread * -0.5 ); _foodBits[f].setPosition(p);
         f++; _foodBits[f].initialize(f); p.setXY( _poolCenter.x, _poolCenter.y + spread *  0.0 ); _foodBits[f].setPosition(p);
         f++; _foodBits[f].initialize(f); p.setXY( _poolCenter.x, _poolCenter.y + spread *  0.5 ); _foodBits[f].setPosition(p);
         f++; _foodBits[f].initialize(f); p.setXY( _poolCenter.x, _poolCenter.y + spread *  1.0 ); _foodBits[f].setPosition(p);
 
-        
+
         /*
         let range = 100;
         let spread = 40.0;
-    
+
         for (let f=0; f<_numFoodBits; f++)
         {
             let side = -range;
-            
+
             if ( gpRandom() > ONE_HALF ) { side = range; }
             let x = _poolCenter.x + side + gpRandom() * spread;
             let y = _poolCenter.y + gpRandom() * spread;
-            foodBitPosition.setXY( x, y ); 
-        
+            foodBitPosition.setXY( x, y );
+
             _foodBits[f].initialize(f);
-            _foodBits[f].setPosition( foodBitPosition );    
+            _foodBits[f].setPosition( foodBitPosition );
     	}
     	*/
-    	
-    	
+
+
         this.setFoodSpread( MIN_FOOD_BIT_MAX_SPAWN_RADIUS );
 	}
-	
-	
+
+
 	//-------------------------------------------
 	this.setFoodToBangConfiguration = function()
-	{	
+	{
         _numFoodBits = 500;
         let radius   = ONE;
         let fraction = ZERO;
         let thirdNum = _numFoodBits / 3.0;
-        
+
         let foodBitPosition = new Vector2D();
-    
+
         for (let f=0; f<_numFoodBits; f++)
-        {            
+        {
             if ( f > _numFoodBits * 0.66666 )
             {
-                fraction = ( f - ( _numFoodBits * 0.66666 ) ) / thirdNum;            
+                fraction = ( f - ( _numFoodBits * 0.66666 ) ) / thirdNum;
                 radius = 600;
             }
             else if ( f > _numFoodBits * 0.333333 )
             {
-                fraction = ( f - ( _numFoodBits * 0.333333 ) ) / thirdNum;            
+                fraction = ( f - ( _numFoodBits * 0.333333 ) ) / thirdNum;
                 radius = 900;
             }
             else
@@ -1030,72 +1063,72 @@ if ( mode === SimulationStartMode.SPECIES )
             }
 
             let radian = fraction * Math.PI * 2.0;
-            
-            
+
+
             // spiral
             /*
-            radius *= 1.016;          
+            radius *= 1.016;
             let radian = f * 0.2;
             */
-            
-            
+
+
             let x = _poolCenter.x + radius * Math.sin( radian );
             let y = _poolCenter.y + radius * Math.cos( radian );
-            
-            foodBitPosition.setXY( x, y ); 
+
+            foodBitPosition.setXY( x, y );
 
             _foodBits[f].initialize(f);
-            _foodBits[f].setPosition( foodBitPosition );    
-        }	
-        
+            _foodBits[f].setPosition( foodBitPosition );
+        }
+
         this.setFoodGrowthDelay( DEFAULT_FOOD_REGENERATION_PERIOD );
         this.setFoodSpread( 20 );
 	}
-	
+
 
 	//-------------------------------------------
 	this.setFoodToSpeciesConfiguration = function()
-	{	
+	{
     	let p = new Vector2D();
 
         for (let f=0; f<_numFoodBits; f++)
-        {            
+        {
             let s = POOL_WIDTH * 0.4;
             p.x = gpRandom() * s;
             p.y = POOL_HEIGHT * ONE_HALF - s * ONE_HALF + + gpRandom() * s;
 
             _foodBits[f].setType( Math.floor( gpRandom() * 2 ) );
-    
+
             if ( gpRandom() < ONE_HALF )
             {
                 p.x = POOL_WIDTH - p.x;
             }
-            
-            _foodBits[f].setPosition(p); 
+
+            _foodBits[f].setPosition(p);
     	}
 	}
-	
+
 	//-------------------------------------------
 	this.setFoodToRaceConfiguration = function()
-	{	
+	{
        	_numFoodBits = 0;
-       	
+
     	let p = new Vector2D();
     	let num = 200;
     	let xx = _poolCenter.x;
     	let yy = _poolCenter.y + FOOD_RACE_SIZE * 0.9;
-    	
+
     	for (let f=0; f<num; f++)
     	{
             let fraction = f / num;
 
-            p.x = xx + FOOD_RACE_SIZE * Math.cos( fraction * Math.PI ); 
-            p.y = yy - FOOD_RACE_SIZE * Math.sin( fraction * Math.PI ); 
+            p.x = xx + FOOD_RACE_SIZE * Math.cos( fraction * Math.PI );
+            p.y = yy - FOOD_RACE_SIZE * Math.sin( fraction * Math.PI );
 
-            _foodBits[ _numFoodBits ].initialize(f); 
-            _foodBits[ _numFoodBits ].setPosition(p); 
-            _numFoodBits ++;    	    
-        }	
+            _foodBits[ _numFoodBits ].initialize(f);
+            _foodBits[ _numFoodBits ].setPosition(p);
+            _numFoodBits ++;
+        }
 
         num = 140;
         let r = 0;
@@ -1105,28 +1138,28 @@ if ( mode === SimulationStartMode.SPECIES )
     	for (let f=0; f<num; f++)
     	{
             let ff = f * 0.1;
-            
+
             r += 2;
 
-            p.x = xx + r * Math.cos( ff ); 
-            p.y = yy + r * Math.sin( ff ); 
+            p.x = xx + r * Math.cos( ff );
+            p.y = yy + r * Math.sin( ff );
 
-            _foodBits[ _numFoodBits ].initialize(f); 
-            _foodBits[ _numFoodBits ].setPosition(p); 
-            _numFoodBits ++;    	    
-        }	
+            _foodBits[ _numFoodBits ].initialize(f);
+            _foodBits[ _numFoodBits ].setPosition(p);
+            _numFoodBits ++;
+        }
 
     	//set the delay of food growth
-        this.setFoodGrowthDelay( MAX_FOOD_REGENERATION_PERIOD );    	
+        this.setFoodGrowthDelay( MAX_FOOD_REGENERATION_PERIOD );
         this.setFoodSpread( MIN_FOOD_BIT_MAX_SPAWN_RADIUS );
 	}
-	
+
 
 	//--------------------------------
     this.setAttraction = function(a)
 	{
-	    //console.log( "GenePool.js: setAttraction: " + a );	
-	    
+	    //console.log( "GenePool.js: setAttraction: " + a );
+
 	    globalTweakers.attractionCriterion = a;
 
         assert( globalTweakers.attractionCriterion >= 0,                 "genepool: setAttraction: globalTweakers.attractionCriterion >= 0" )
@@ -1135,11 +1168,11 @@ if ( mode === SimulationStartMode.SPECIES )
         for (let s=0; s<MAX_SWIMBOTS; s++)
         {
             _swimbots[s].setAttraction( globalTweakers.attractionCriterion );
-        }	    
+        }
 	}
-	
-	
-	
+
+
+
 	//--------------------------------------------------------------
 this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 {
@@ -1180,15 +1213,15 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
             _foodType[foodIndex] = 2;
         }
     }
-			
+
 	//------------------------
 	this.update = function()
-	{	
+	{
 		//-------------------------------------
 		// get seconds since started...
 		//-------------------------------------
 		_seconds = ( (new Date).getTime() - _startTime ) / MILLISECONDS_PER_SECOND;
-		
+
 		//-------------------------------------
 		// calculate frame rate...
 		//-------------------------------------
@@ -1200,27 +1233,14 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
             let simulationStepsPerTick = _fastMode ? 4 : 1;
             for (let step = 0; step < simulationStepsPerTick; step++)
             {
-                //--------------------
-                // advance clock...
-                //--------------------
-                _clock ++;
-
-                //----------------------
-                // update swimbots...
-                //----------------------
-                this.updateSwimbots();
-
-                //------------------
-                // update food
-                //------------------
-                this.updateFood();
+                this.simulateStep();
             }
         }
-                
+
         if ( _rendering )
         {
             rebuildAliveIndexCaches();
-		
+
             if ( _fastMode )
             {
                 _fastRenderCounter++;
@@ -1233,58 +1253,16 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
                 _fastRenderCounter = 0;
             }
 
-            //---------------------------
-            // update camera...
-            //---------------------------
-            _camera.update( _seconds );
-            
-            if ( RENDER_SWIMBOT_AS_DOT )
-            {
-                _levelOfDetail = SWIMBOT_LEVEL_OF_DETAIL_DOT;
-            }
-            else
-            {
-                if ( _camera.getScale() > LEVEL_OF_DETAIL_THRESHOLD ) 
-                {
-                    _levelOfDetail = SWIMBOT_LEVEL_OF_DETAIL_LOW;
-                }
-                else 
-                {
-                    _levelOfDetail = SWIMBOT_LEVEL_OF_DETAIL_HIGH;
-                }
-            }
-            
-            //---------------------------
-            // update camera tracking...
-            //---------------------------
-            if ( _viewTracking.getIsTracking() )
-            {
-                //if ( _clock % CAMERA_TRACKING_UPDATE_PERIOD === 0 )
-                {
-                    _viewTracking.updateTracking( _camera.getPosition(), _camera.getScale(), _selectedSwimbot );
-                
-                    _camera.addForce( _viewTracking.getCameraForce(), _viewTracking.getCameraScaleForce() );
-                }
-            }
-        
-            //------------------------------
-            // update camera navigation
-            //------------------------------
-            this.updateCameraNavigation();
-
-            //---------------------------
-            // render everything...
-            //---------------------------		
-            this.render();
+            this.renderFrame();
         }
 
         //-------------------------------------------------------------
-        // update touch state 
+        // update touch state
         // (important for generating state for touch velocity, etc.)
         // also, important to call this after updateCameraNavigation
         //-------------------------------------------------------------
         _touch.update();
-        
+
 		//---------------------------
 		// trigger next update...
 		//---------------------------
@@ -1293,9 +1271,138 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 
 
 
+	//--------------------------------------------------------------
+	// one step of the simulation
+	//--------------------------------------------------------------
+	this.simulateStep = function()
+	{
+        //--------------------
+        // advance clock...
+        //--------------------
+        _clock ++;
+
+        //----------------------
+        // update swimbots...
+        //----------------------
+        this.updateSwimbots();
+
+        //------------------
+        // update food
+        //------------------
+        this.updateFood();
+
+        _stepsThisSecond ++;
+	}
+
+	//--------------------------------------------------------------
+	// camera, tracking and drawing for one frame
+	//--------------------------------------------------------------
+	this.renderFrame = function()
+	{
+            //---------------------------
+            // update camera...
+            //---------------------------
+            _camera.update( _seconds );
+
+            if ( RENDER_SWIMBOT_AS_DOT )
+            {
+                _levelOfDetail = SWIMBOT_LEVEL_OF_DETAIL_DOT;
+            }
+            else
+            {
+                if ( _camera.getScale() > LEVEL_OF_DETAIL_THRESHOLD )
+                {
+                    _levelOfDetail = SWIMBOT_LEVEL_OF_DETAIL_LOW;
+                }
+                else
+                {
+                    _levelOfDetail = SWIMBOT_LEVEL_OF_DETAIL_HIGH;
+                }
+            }
+
+            //---------------------------
+            // update camera tracking...
+            //---------------------------
+            if ( _viewTracking.getIsTracking() )
+            {
+                //if ( _clock % CAMERA_TRACKING_UPDATE_PERIOD === 0 )
+                {
+                    _viewTracking.updateTracking( _camera.getPosition(), _camera.getScale(), _selectedSwimbot );
+
+                    _camera.addForce( _viewTracking.getCameraForce(), _viewTracking.getCameraScaleForce() );
+                }
+            }
+
+            //------------------------------
+            // update camera navigation
+            //------------------------------
+            this.updateCameraNavigation();
+
+            //---------------------------
+            // render everything...
+            //---------------------------
+            this.render();
+	}
+
+	//--------------------------------------------------------------
+	// one browser frame: simulate (within the time budget), then draw
+	//--------------------------------------------------------------
+	this.runFrame = function( now )
+	{
+		_seconds = ( (new Date).getTime() - _startTime ) / MILLISECONDS_PER_SECOND;
+
+        let elapsedSeconds = ( _lastFrameTime === 0 ) ? 0 : ( now - _lastFrameTime ) / 1000;
+        _lastFrameTime = now;
+        if ( elapsedSeconds > 0.25 ) { elapsedSeconds = 0.25; }   // after a pause, don't race to catch up
+
+        if ( _simulationRunning )
+        {
+            const deadline = performance.now() + ( _fastMode ? FAST_FRAME_BUDGET_MS : NORMAL_FRAME_BUDGET_MS );
+
+            if ( _fastMode )
+            {
+                // as many steps as fit into the frame
+                do { this.simulateStep(); } while ( performance.now() < deadline );
+                _stepDebt = 0;
+            }
+            else
+            {
+                _stepDebt += elapsedSeconds * NORMAL_STEPS_PER_SECOND;
+                if ( _stepDebt > 3 ) { _stepDebt = 3; }
+
+                while (( _stepDebt >= 1 ) && ( performance.now() < deadline ))
+                {
+                    this.simulateStep();
+                    _stepDebt -= 1;
+                }
+            }
+        }
+
+        // measured simulation speed (steps per second)
+        if ( now - _stepsSecondStart >= 1000 )
+        {
+            _stepsPerSecond   = _stepsThisSecond * 1000 / ( now - _stepsSecondStart );
+            _stepsThisSecond  = 0;
+            _stepsSecondStart = now;
+        }
+
+        // nothing to draw while the page is hidden
+        const pageHidden = ( typeof document !== "undefined" ) && document.hidden;
+
+        if ( _rendering && !pageHidden )
+        {
+            rebuildAliveIndexCaches();
+            this.renderFrame();
+        }
+
+        _touch.update();
+	}
+
+	this.getStepsPerSecond = function() { return _stepsPerSecond; }
+
 	//--------------------------------
 	this.updateSwimbots = function()
-	{		
+	{
 	    // Swimbots that died last step: leave the grid, maybe leave meat
 	    for (let s = 0; s < MAX_SWIMBOTS; s++)
 	    {
@@ -1353,12 +1460,12 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
             let s = _aliveSwimbotIndices[i];
             if ( _swimbots[s].getAlive() )
             {
-                        
-            
-            
+
+
+
                 _swimbots[s].update();
                 syncSwimbotPosition(s);
-                
+
                 //-----------------------------------------------------------------
                 // provide aspects of the environment for the swimbot to perceive
                 //-----------------------------------------------------------------
@@ -1429,7 +1536,7 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
                             //------------------------------------------------------------------------------
                             _myGenotype = _swimbots[s].getGenotype();
                             _mateGenotype = _potentialMate.getGenotype();
-                             
+
                             //------------------------------------------------------------------------------
                             // if the junk dna of each swimbot are similar enough...
                             //------------------------------------------------------------------------------
@@ -1437,7 +1544,7 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
                             {
 
                                 //-----------------------------------
-                                // recombine genes for the child 
+                                // recombine genes for the child
                                 //-----------------------------------
                                 assert( _childGenotype != null, "_childGenotype != null" );
 
@@ -1448,17 +1555,17 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
                                 //------------------------------------------------
                                 let myEnergyContribution    = _swimbots[s].contributeToOffspring();
                                 let mateEnergyContribution  = _potentialMate.contributeToOffspring();
-                                let energyToOffspring       = myEnergyContribution + mateEnergyContribution;     
-                            
+                                let energyToOffspring       = myEnergyContribution + mateEnergyContribution;
+
                                 //console.log( "energyToOffspring = " + energyToOffspring );
-                                //assert( energyToOffspring <= DEFAULT_SWIMBOT_HUNGER_THRESHOLD, "energyToOffspring <= DEFAULT_SWIMBOT_HUNGER_THRESHOLD" );                       
+                                //assert( energyToOffspring <= DEFAULT_SWIMBOT_HUNGER_THRESHOLD, "energyToOffspring <= DEFAULT_SWIMBOT_HUNGER_THRESHOLD" );
 
                                 //----------------------------------------------------------------------------------------
                                 // set birth position
                                 //----------------------------------------------------------------------------------------
                                 let diffX = _potentialMate.getGenitalPosition().x - _swimbots[s].getGenitalPosition().x;
                                 let diffY = _potentialMate.getGenitalPosition().y - _swimbots[s].getGenitalPosition().y;
-                            
+
                                 _vectorUtility.x = _swimbots[s].getGenitalPosition().x + diffX * ONE_HALF;
                                 _vectorUtility.y = _swimbots[s].getGenitalPosition().y + diffY * ONE_HALF;
 
@@ -1466,25 +1573,25 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
                                 // pool effect
                                 //---------------------------------------------
                                 _pool.endTouch( _vectorUtility, _seconds );
-                                                        
+
                                 //--------------------------------------------
                                 // create the child swimbot
                                 //--------------------------------------------
-                                let initialAngle = getRandomAngleInDegrees();                                                        
+                                let initialAngle = getRandomAngleInDegrees();
                                 _swimbots[ newBornSwimbotIndex ].create( newBornSwimbotIndex, 0, _vectorUtility, initialAngle, energyToOffspring, _childGenotype, _embryology )
                                 syncSwimbot( newBornSwimbotIndex );
- 
+
                                 //--------------------------------------------------
                                 // add the new swimbot to the family tree
                                 //--------------------------------------------------
                                 _familyTree.addNode( newBornSwimbotIndex, s, chosenMateIndex, _clock, this.getSwimbotGenes( newBornSwimbotIndex ) );
 
                             }// if ( getJunkDnaDistance( _myGenotype, _mateGenotype ) > NON_REPRODUCING_JUNK_DNA_LIMIT )
-                            else 
+                            else
                             {
                                 //console.log( "reproduction not possible because junk dna is too dissimilar!" );
                             }
-                        }   //  if ( _potentialMate.getAlive() )                     
+                        }   //  if ( _potentialMate.getAlive() )
                     }      //   if (( newBornSwimbotIndex != -1 ) &&  ( swimbot[s].getChosenMateIndex() != -1 ))
 
                     //------------------------------------------------------------------
@@ -1506,10 +1613,10 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
                 if ( _selectedSwimbot === s )
                 {
                     setSelectedSwimbot( NULL_INDEX );
-                }                     
+                }
             }
         } // for (let s=0; s<MAX_SWIMBOTS; s++)
-        
+
         //-------------------------------------------------
         // if showing mutual love....
         //-------------------------------------------------
@@ -1517,10 +1624,10 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
         {
             let lover1 = _viewTracking.getLover1Index();
             let lover2 = _viewTracking.getLover2Index();
-            
+
             if (( lover1 != NULL_INDEX )
             &&  ( lover2 != NULL_INDEX ))
-            {                
+            {
                 //---------------------------------------------
                 // show the mouths and genitals
                 //---------------------------------------------
@@ -1537,59 +1644,59 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
                     //this.clearViewMode();
                     _viewTracking.stopTracking();
                 }
-            }	
+            }
             else
             {
                 _viewTracking.stopTracking();
             }
         }
-        
-        
-        //console.log( "num living swimbots = " + testNumLiving.toString() );            
+
+
+        //console.log( "num living swimbots = " + testNumLiving.toString() );
 
     }
-    
-    
-    
+
+
+
 
     //--------------------------------------------------------
 	this.getJunkDnaSimilarity = function( genotype1, genotype2 )
-	{		
+	{
 	    let diff = ZERO;
 	    let num = 0;
         for (let g=NUM_GENES_USED; g<NUM_GENES; g++)
         {
             diff += Math.abs( genotype1.getGeneValue(g) - genotype2.getGeneValue(g) ) / BYTE_SIZE;
             num ++;
-        }          
-        
-        let similarity = ONE - ( diff / num );  
-        
+        }
+
+        let similarity = ONE - ( diff / num );
+
         //console.log( similarity );
-        
+
 	    return similarity;
 	}
-    
-    
+
+
     //-----------------------------------
 	this.generatePhyloTree = function()
-	{		
+	{
 	    let numJunkGenes = NUM_GENES - NUM_GENES_USED;
 	    _phyloTree.initialize( numJunkGenes );
-	
+
         for (let s=0; s<MAX_SWIMBOTS; s++)
         {
             if ( _swimbots[s].getAlive() )
             {
-        	    _phyloTree.addJunkDNA( _swimbots[s].getGenotype() );	
+        	    _phyloTree.addJunkDNA( _swimbots[s].getGenotype() );
 	        }
         }
     }
-    
-    
+
+
     //---------------------------------------------
 	this.findLowestDeadSwimbotInArray = function()
-	{		
+	{
         let s = NULL_INDEX;
         let t = NULL_INDEX;
 
@@ -1617,7 +1724,7 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 
     //--------------------------------------------------------
 	this.giveSwimbotNearbyEnvironmentalStimuli = function(s)
-	{		
+	{
         const me = _swimbots[s];
         const viewRadius = SWIMBOT_VIEW_RADIUS;
         const viewRadiusSquared = viewRadius * viewRadius;
@@ -1906,14 +2013,14 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 
      }
 
-     
-    
+
+
 	//----------------------------
 	this.updateFood = function()
-	{		
+	{
         let numType0FoodBits = 0;
         let numType1FoodBits = 0;
-        
+
         //-------------------------------------------------
         // general update for all food bits; meat rots
         //-------------------------------------------------
@@ -2116,7 +2223,7 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 	this.setFoodSpread = function(s)
 	{
 	    //console.log( "setFoodSpread: " + s );
-	    
+
         assert( s >= MIN_FOOD_BIT_MAX_SPAWN_RADIUS, "GenePool: setFoodSpread: s >= MIN_FOOD_BIT_MAX_SPAWN_RADIUS" )
         assert( s <= MAX_FOOD_BIT_MAX_SPAWN_RADIUS, "GenePool: setFoodSpread: s <= MAX_FOOD_BIT_MAX_SPAWN_RADIUS" )
 
@@ -2127,11 +2234,11 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
             _foodBits[f].setMaxSpawnRadius( globalTweakers.foodSpread );
         }
     }
-    
+
 	//--------------------------------
 	this.setFoodBitEnergy = function(e)
 	{
-	    //console.log( "setFoodBitEnergy: " + e );	
+	    //console.log( "setFoodBitEnergy: " + e );
 
         assert( e >= MIN_FOOD_BIT_ENERGY, "GenePool: setFoodBitEnergy: e >= MIN_FOOD_BIT_ENERGY" );
         assert( e <= MAX_FOOD_BIT_ENERGY, "GenePool: setFoodBitEnergy: e <= MAX_FOOD_BIT_ENERGY" );
@@ -2143,40 +2250,40 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
             _foodBits[f].setEnergy( globalTweakers.foodBitEnergy );
         }
     }
-    
+
 	//--------------------------------
 	this.setHungerThreshold = function(h)
 	{
-	    //console.log( "setHungerThreshold: " + h );	
+	    //console.log( "setHungerThreshold: " + h );
 
         assert( h >= MIN_SWIMBOT_HUNGER_THRESHOLD, "GenePool: setHungerThreshold: h >= MIN_SWIMBOT_HUNGER_THRESHOLD" );
         assert( h <= MAX_SWIMBOT_HUNGER_THRESHOLD, "GenePool: setHungerThreshold: h <= MAX_SWIMBOT_HUNGER_THRESHOLD" );
 
 	    globalTweakers.hungerThreshold = h;
-	    
+
         for (let s=0; s<MAX_SWIMBOTS; s++)
         {
 			_swimbots[s].setHungerThreshold( globalTweakers.hungerThreshold );
-        }        	
+        }
     }
-    
+
 	//--------------------------------------
 	this.setOffspringEnergyRatio = function(e)
 	{
         //console.log( "setOffspringEnergyRatio: " + e );
-	    
+
         assert( e >= MIN_CHILD_ENERGY_RATIO, "GenePool: setOffspringEnergyRatio: e >= MIN_CHILD_ENERGY_RATIO" );
         assert( e <= MAX_CHILD_ENERGY_RATIO, "GenePool: setOffspringEnergyRatio: e <= MAX_CHILD_ENERGY_RATIO" );
-	    
+
         globalTweakers.childEnergyRatio = e;
     }
-    
-    
+
+
 	//----------------------------------
 	this.setFoodGrowthDelay = function(d)
 	{
 	    //console.log( "setFoodGrowthDelay: " + d );
-	
+
         assert( d >= MIN_FOOD_REGENERATION_PERIOD, "setFoodGrowthDelay: d >= MIN_FOOD_REGENERATION_PERIOD" )
         assert( d <= MAX_FOOD_REGENERATION_PERIOD, "setFoodGrowthDelay: d <= MAX_FOOD_REGENERATION_PERIOD" )
 
@@ -2189,14 +2296,14 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 	{
         assert( m >= MIN_MAXIMUM_AGE, "GenePool: setMaximumSwimbotAge: m >= MIN_MAXIMUM_AGE" );
         assert( m <= MAX_MAXIMUM_AGE, "GenePool: setMaximumSwimbotAge: m <= MAX_MAXIMUM_AGE" );
-	    
+
         globalTweakers.maximumLifeSpan = m;
     }
-    
-    	
+
+
 	//-------------------------------------------------------------
 	this.findRandomLivingFoodBit = function( foodType )
-	{		
+	{
         /*
 	    let randomShift = Math.floor( gpRandom() * MAX_FOODBITS );
 
@@ -2218,23 +2325,23 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 
         return NULL_INDEX;
 	    */
-	
-	
-	
-	
-	
+
+
+
+
+
 	    // original version
         let f = NULL_INDEX;
         let numTimesLooking = 200;
         let i = 0;
         let looking = true;
-        
+
         while ( looking )
         {
             let testIndex = Math.floor( gpRandom() * ( MAX_FOODBITS - 1 ) );
-            
+
             //assert( testIndex < MAX_FOODBITS, "Genepool.js: testIndex < MAX_FOODBITS" );
-            
+
             if ( _foodBits[ testIndex ].getAlive() )
             {
                 if ( _foodBits[ testIndex ].getType() === foodType )
@@ -2243,7 +2350,7 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
                     looking = false;
                 }
             }
-            
+
             i ++;
             if ( i > numTimesLooking )
             {
@@ -2256,17 +2363,17 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 
         return f;
     }
-    
 
-	
+
+
 	//----------------------------------------
 	this.findLowestDeadFoodBitInArray = function()
-	{		
+	{
         let f = NULL_INDEX;
         let t = NULL_INDEX;
 
         let looking = true;
-        
+
         while ( looking )
         {
             t ++;
@@ -2289,21 +2396,21 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
         return f;
     }
 
-    
+
 	//-------------------------------------------------
     this.createNewSwimbotWithGenes = function( genes )
     {
         let index = this.findLowestDeadSwimbotInArray();
 
         assert( index != NULL_INDEX, "GenePool.createNewSwimbotWithGenes: index != NULL_INDEX" );
-           
+
         _myGenotype.setGenes( genes );
-    
-        let initialAge      = YOUNG_AGE_DURATION;          
+
+        let initialAge      = YOUNG_AGE_DURATION;
         let initialAngle    = ZERO;
         let initialEnergy   = DEFAULT_SWIMBOT_HUNGER_THRESHOLD;
-        
-        _swimbots[ index ].create( index, initialAge, _camera.getPosition(), initialAngle, initialEnergy, _myGenotype, _embryology );			
+
+        _swimbots[ index ].create( index, initialAge, _camera.getPosition(), initialAngle, initialEnergy, _myGenotype, _embryology );
 
         //-------------------------------------------------------
         // add the new swimbot to the family tree
@@ -2320,39 +2427,39 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
     {
         //console.log( "loading pool file:" );
         //console.log( data );
-                
+
         //-------------------------------------------
         // frozen or running?
         //-------------------------------------------
         _simulationRunning = data.simulationRunning;
-        
+
         //-------------------------------
         // load food
         //-------------------------------
         _numFoodBits = data.numFoodBits;
-        
+
         for (let f=0; f<MAX_FOODBITS; f++)
         {
             _foodBits[f].kill();
-        }        
+        }
 
         for (let f=0; f<data.numFoodBits; f++)
         {
             let id = data.foodBitArray[f].id;
-            
+
             _foodBits[ id ].initialize( id );
 
             // older save files have no food type - those are plants
             let type = data.foodBitArray[f].type;
             _foodBits[ id ].setType( ( type === 1 || type === 2 ) ? type : 0 );
-                
+
             let foodBitPosition = new Vector2D();
             foodBitPosition.setXY( data.foodBitArray[f].x, data.foodBitArray[f].y );
-            _foodBits[ id ].setPosition( foodBitPosition );                
-        }        
+            _foodBits[ id ].setPosition( foodBitPosition );
+        }
 
         //---------------------------------
-        // load swimbots 
+        // load swimbots
         //---------------------------------
         _numSwimbots = data.numSwimbots;
 
@@ -2360,77 +2467,77 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
         {
             _swimbots[s].die();
         }
-       
+
         //----------------------------------------
         // reset family tree array
-        //----------------------------------------  
+        //----------------------------------------
         _familyTree.reset();
 
         //----------------------------------------
         // create the swimbots
-        //----------------------------------------  
+        //----------------------------------------
         for (let s=0; s<data.numSwimbots; s++)
         {
             let id = data.swimbotArray[s].id;
-            
+
             let swimbotPosition = new Vector2D();
-            swimbotPosition.setXY( data.swimbotArray[s].x, data.swimbotArray[s].y );  
+            swimbotPosition.setXY( data.swimbotArray[s].x, data.swimbotArray[s].y );
 
             let loadedGenotype = new Genotype();
             loadedGenotype.setGenes( data.swimbotArray[s].genes );
-            
+
             //this seems to be glitched - I must explore why
-            //console.log( "s = " + s + "; id = " + id );            
+            //console.log( "s = " + s + "; id = " + id );
             //assert( id === s, "GenePool.js: this.setPoolData: assert: id === s" );
 
             _swimbots[ id ].create
-            ( 
+            (
                 s,
                 //id, //this seems to be glitched - I must explore why
-                data.swimbotArray[s].age, 
-                swimbotPosition, 
-                data.swimbotArray[s].angle, 
-                data.swimbotArray[s].energy, 
+                data.swimbotArray[s].age,
+                swimbotPosition,
+                data.swimbotArray[s].angle,
+                data.swimbotArray[s].energy,
                 loadedGenotype,
-                _embryology 
-            );		
-            
+                _embryology
+            );
+
             //------------------------------------------------------------------------------------
             // add the new swimbot to the family tree
             //------------------------------------------------------------------------------------
             _familyTree.addNode( id, NULL_INDEX, NULL_INDEX, _clock, this.getSwimbotGenes( id ) );
         }
-        
+
         //----------------------------------------
         // camera
-        //----------------------------------------        
+        //----------------------------------------
         let cameraPosition = new Vector2D();
         cameraPosition.setXY( data.cameraX, data.cameraY );
         _camera.setPosition( cameraPosition );
         _camera.setScale( data.cameraScale );
-        
+
         //------------------------
         // set view control
-        //------------------------          
+        //------------------------
         _viewTracking.reset();
-                
+
         //--------------------------------------------------------------
         // set tweakers
-        //--------------------------------------------------------------           
+        //--------------------------------------------------------------
         this.setFoodGrowthDelay     ( data.foodRegenerationPeriod   );
         this.setFoodSpread          ( data.foodSpread               );
         this.setFoodBitEnergy       ( data.foodBitEnergy            );
         this.setHungerThreshold     ( data.hungerThreshold          );
         this.setAttraction          ( data.attractionCriterion      );
         this.setOffspringEnergyRatio( data.childEnergyRatio         );
-        
-        _renderingGoals = data.renderingGoals;        
+
+        _renderingGoals = data.renderingGoals;
 
 
         //--------------------------------------------------------------
         // set obstacle
-        //--------------------------------------------------------------   
-        //to do        
+        //--------------------------------------------------------------
+        //to do
 		let end1 = new Vector2D();
 		let end2 = new Vector2D();
 
@@ -2440,7 +2547,7 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 		if ( data.obstacleEnd2X === undefined ) { console.log( data.obstacleEnd2X ); }
 		if ( data.obstacleEnd2Y === undefined ) { console.log( data.obstacleEnd2Y ); }
 		*/
-		
+
 		if (( data.obstacleEnd1X != undefined )
 		&&  ( data.obstacleEnd1Y != undefined )
 		&&  ( data.obstacleEnd2X != undefined )
@@ -2451,16 +2558,16 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
         }
         else
         {
-            //console.log( data.obstacleEnd1X + ", " + data.obstacleEnd1Y );		
-            //console.log( data.obstacleEnd2X + ", " + data.obstacleEnd2Y );		
+            //console.log( data.obstacleEnd1X + ", " + data.obstacleEnd1Y );
+            //console.log( data.obstacleEnd2X + ", " + data.obstacleEnd2Y );
 
     		end1.setXY( 100, 100 );
     		end2.setXY( 200, 100 );
         }
-        		
-		
+
+
         _obstacle.setEndpointPositions( end1, end2 );
-        
+
 		//---------------------------------
 		// start time
 		//---------------------------------
@@ -2475,45 +2582,45 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 		// initialize pool
 		//----------------------------------
 	    _pool.initialize( _seconds );
-	    
+
 		//---------------------------------
 		// clear this!
 		//---------------------------------
         setSelectedSwimbot( NULL_INDEX );
-        
+
 		//---------------------------------
 		// set clock to 0
 		//---------------------------------
 		_clock = 0;
     }
-    
+
     //--------------------------------------
     // set selected swimbot
     //--------------------------------------
     function setSelectedSwimbot( index )
     {
         _selectedSwimbot = index;
-        
-// hey...maybe I need to turn off any other things that assume there is a selected swimbot...here        
-        
+
+// hey...maybe I need to turn off any other things that assume there is a selected swimbot...here
+
     }
-    
-    
-    
+
+
+
 	//-------------------------------------
 	this.makeNewRandomSwimbot = function()
-	{		
+	{
 	    let index = this.findLowestDeadSwimbotInArray();
-	    
+
 	    if ( index != NULL_INDEX )
 	    {
-            let initialAge      = YOUNG_AGE_DURATION;          
+            let initialAge      = YOUNG_AGE_DURATION;
             let initialAngle    = getRandomAngleInDegrees(); //-180.0 + gpRandom() * 360.0;
             let initialEnergy   = DEFAULT_SWIMBOT_HUNGER_THRESHOLD;
-        
+
             _myGenotype.randomize();
-        
-            _swimbots[ index ].create( index, initialAge, _camera.getPosition(), initialAngle, initialEnergy, _myGenotype, _embryology );			
+
+            _swimbots[ index ].create( index, initialAge, _camera.getPosition(), initialAngle, initialEnergy, _myGenotype, _embryology );
 
             //--------------------------------------------------
             // add the new swimbot to the family tree
@@ -2530,7 +2637,7 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 
 	//---------------------------------------
 	this.zapSwimbot = function( ID, amount )
-	{		
+	{
         assert( ID != NULL_INDEX, "genepool: zapSwimbot: ID != NULL_INDEX" );
         _swimbots[ ID ].zap( _embryology, amount );
         _pool.endTouch( _swimbots[ ID ].getPosition(), _seconds );
@@ -2538,23 +2645,23 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 
 	//------------------------------------
 	this.randomizeSwimbot = function( ID )
-	{	
+	{
         assert( ID != NULL_INDEX, "genepool: randomizeSwimbot: ID != NULL_INDEX" );
 	    this.zapSwimbot( ID, ONE );
 	    _pool.endTouch( _swimbots[ ID ].getPosition(), _seconds );
 	}
-	
-	
+
+
 	//----------------------------------
 	this.cloneSwimbot = function( ID )
-	{		
+	{
         assert( ID != NULL_INDEX, "genepool: cloneSwimbot: ID != NULL_INDEX" );
 
         let index = this.findLowestDeadSwimbotInArray();
-        
+
         if ( index != NULL_INDEX )
         {
-            //let initialAge      = YOUNG_AGE_DURATION;          
+            //let initialAge      = YOUNG_AGE_DURATION;
             let initialAge      = _swimbots[ ID ].getAge();
             let initialAngle    = _swimbots[ ID ].getAngle();
             let initialEnergy   = _swimbots[ ID ].getEnergy() * ONE_HALF;
@@ -2564,13 +2671,13 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
             let p = new Vector2D();
             initialPosition.copyFrom( _swimbots[ ID ].getPosition() );
             p.copyFrom( initialPosition );
-        
+
             initialPosition.x += CLONE_SEPARATION;
             p.x -= CLONE_SEPARATION;
-        
+
             _swimbots[ ID ].setPosition(p);
             _swimbots[ ID ].setEnergy( initialEnergy ); // the clonee gets its energy halved as well as the cloned
-            _swimbots[ index ].create( index, initialAge, initialPosition, initialAngle, initialEnergy, genotype, _embryology );			
+            _swimbots[ index ].create( index, initialAge, initialPosition, initialAngle, initialEnergy, genotype, _embryology );
 
             //--------------------------------------------------
             // add the new swimbot to the family tree
@@ -2653,8 +2760,8 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 	    _swimbots[ ID ].setEternal( !_swimbots[ ID ].getEternal() );
 
 	}
-    
-    
+
+
 	//----------------------------------------
 	this.updateCameraNavigation = function()
 	{
@@ -2708,25 +2815,25 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 
 	//-----------------------------------------
 	this.setSimulationRunning = function(s)
-	{	
+	{
         _simulationRunning = s;
     }
 
 	//-------------------------------
 	this.setRendering = function(r)
-	{	
+	{
         _rendering = r;
     }
-    
+
 	//-------------------------------------------
 	this.setMillisecondsPerUpdate = function(m)
-	{	
+	{
         _millisecondsPerUpdate = m;
     }
-    
+
 	//--------------------------------------------------
 	this.setMillisecondsPerUpdateToDefault = function()
-	{	
+	{
         _millisecondsPerUpdate = DEFAULT_MILLISECONDS_PER_UPDATE;
     }
 
@@ -2746,7 +2853,7 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
             this.setRenderingGoals( _savedRenderingGoals );
         }
     }
-    
+
 	//-----------------------------------
 	this.toggleGoalOverlay = function()
 	{
@@ -2766,7 +2873,7 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 	           _swimbots[s].setRenderingGoals( _renderingGoals );
 	       }
 	   }
-    
+
 	//---------------------------------------------------------------------
 	// shift any food bit that maye be overlapping with the obstacle...
 	//---------------------------------------------------------------------
@@ -2783,14 +2890,14 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
                     _foodBits[f].shiftPosition( _vectorUtility );
 
                 }
-            }                        
-        }             
+            }
+        }
     }
 
 	//---------------------------------------------
 	this.setShowingViewTrackingMode = function(s)
 	{
-        _showViewTrackingMode = s;		
+        _showViewTrackingMode = s;
 	}
 
 	//-------------------------
@@ -2809,13 +2916,13 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
         let yScale = _canvasHeight / _camera.getYDimension();
 
 		_canvas.translate( xTranslation, yTranslation );
-        _canvas.scale( xScale, yScale ); 
+        _canvas.scale( xScale, yScale );
 
 		//----------------------------------
 		// render the pool
 		//----------------------------------
         _pool.render( _seconds, _camera );
-        
+
 		//-------------------------
 		// render obstacle
 		//-------------------------
@@ -2836,24 +2943,24 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 		//-----------------------------------------------------------------------
         if ( _viewTracking.getMode() === ViewTrackingMode.MUTUAL )
         {
-            //console.log( "mutual" );            
-            //console.log( _viewTracking.getLover1Index() + ", " + _viewTracking.getLover2Index() );            
+            //console.log( "mutual" );
+            //console.log( _viewTracking.getLover1Index() + ", " + _viewTracking.getLover2Index() );
             if (( _viewTracking.getLover1Index() != NULL_INDEX )
             &&  ( _viewTracking.getLover2Index() != NULL_INDEX ))
             {
                 _canvas.lineCap = "round";
-                _canvas.lineWidth = 5; 
-                _canvas.strokeStyle = "rgba( 200, 200, 200, 0.06 )";   
+                _canvas.lineWidth = 5;
+                _canvas.strokeStyle = "rgba( 200, 200, 200, 0.06 )";
                 _canvas.moveTo( _swimbots[ _viewTracking.getLover1Index() ].getGenitalPosition().x, _swimbots[ _viewTracking.getLover1Index() ].getGenitalPosition().y );
                 _canvas.lineTo( _swimbots[ _viewTracking.getLover2Index() ].getGenitalPosition().x, _swimbots[ _viewTracking.getLover2Index() ].getGenitalPosition().y );
                 _canvas.stroke();
 
-                _canvas.lineWidth = 2; 
-                _canvas.strokeStyle = "rgba( 255, 255, 200, 0.06 )";   
+                _canvas.lineWidth = 2;
+                _canvas.strokeStyle = "rgba( 255, 255, 200, 0.06 )";
                 _canvas.moveTo( _swimbots[ _viewTracking.getLover1Index() ].getGenitalPosition().x, _swimbots[ _viewTracking.getLover1Index() ].getGenitalPosition().y );
                 _canvas.lineTo( _swimbots[ _viewTracking.getLover2Index() ].getGenitalPosition().x, _swimbots[ _viewTracking.getLover2Index() ].getGenitalPosition().y );
                 _canvas.stroke();
-            }		
+            }
         }
 
 		//---------------------
@@ -2865,27 +2972,27 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 		// reset transform
 		//---------------------
         _canvas.resetTransform();
-		
+
         /*
 		//----------------------------------
 		// render framerate
 		//----------------------------------
         _canvas.font = "14px Arial";
-		_canvas.fillStyle = "rgba( 255, 255, 255, 0.5 )";		
-        _canvas.fillText( "framerate = " + _frameRate.toString(), _canvasWidth - 200, 20 ); 
-        */       
-        
+		_canvas.fillStyle = "rgba( 255, 255, 255, 0.5 )";
+        _canvas.fillText( "framerate = " + _frameRate.toString(), _canvasWidth - 200, 20 );
+        */
+
 		//----------------------------------
 		// render view tracking info
 		//----------------------------------
 		if ( _showViewTrackingMode )
 		{
             let viewTrackingMode = _viewTracking.getMode();
-        
+
             if ( viewTrackingMode != NULL_INDEX )
             {
                 let modeString = "(error)";
-            
+
                      if ( viewTrackingMode === ViewTrackingMode.WHOLE_POOL ) { modeString = "viewing whole pool"         }
                 else if ( viewTrackingMode === ViewTrackingMode.AUTOTRACK  ) { modeString = "autotracking group"         }
                 else if ( viewTrackingMode === ViewTrackingMode.SELECTED   ) { modeString = "viewing selected swimbot"   }
@@ -2894,45 +3001,45 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
                 else if ( viewTrackingMode === ViewTrackingMode.EFFICIENT  ) { modeString = "viewing most efficient"     }
                 else if ( viewTrackingMode === ViewTrackingMode.VIRGIN     ) { modeString = "viewing oldest virgin"      }
                 else if ( viewTrackingMode === ViewTrackingMode.HUNGRY     ) { modeString = "viewing glutton"            }
-            
+
                 _canvas.font = "14px Arial";
-                _canvas.fillStyle = "rgba( 255, 255, 255, 0.5 )";		
-                _canvas.fillText( modeString, _canvasWidth - 170, _canvasHeight - 30 );        
-            }        
+                _canvas.fillStyle = "rgba( 255, 255, 255, 0.5 )";
+                _canvas.fillText( modeString, _canvasWidth - 170, _canvasHeight - 30 );
+            }
         }
-        
+
 		//---------------------------
 		// render touch state
 		//---------------------------
 		//_touch.render();
-		
+
 		//---------------------------
 		// render border
 		//---------------------------
-        _canvas.lineWidth = 1; 
-        _canvas.strokeStyle = "rgb( 0, 0, 0 )";   
+        _canvas.lineWidth = 1;
+        _canvas.strokeStyle = "rgb( 0, 0, 0 )";
 		_canvas.strokeRect( 0, 0, _canvasWidth, _canvasHeight );
-		/*     
+		/*
         //_canvas.strokeStyle = "rgb( 220, 230, 240 )";
         _canvas.beginPath();
         _canvas.moveTo( 0, _canvasHeight );
         _canvas.lineTo( _canvasWidth, _canvasHeight );
         _canvas.closePath();
         _canvas.stroke();
-        
+
         _canvas.beginPath();
         _canvas.moveTo( _canvasWidth, _canvasHeight );
         _canvas.lineTo( _canvasWidth, 0 );
         _canvas.closePath();
         _canvas.stroke();
 
-        
+
         _canvas.beginPath();
         _canvas.moveTo( 0, 0 );
         _canvas.lineTo( 0, _canvasHeight );
         _canvas.closePath();
         _canvas.stroke();
-        
+
         _canvas.beginPath();
         _canvas.moveTo( 0, 0 );
         _canvas.lineTo( _canvasWidth, 0 );
@@ -2940,33 +3047,33 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
         _canvas.stroke();
         */
 	}
-	
-	
+
+
 	/*
 	//----------------------------------------
 	function renderSwimbotSelectCircle( s, m )
 	{
-	    let lineWidth = 1.6 + 0.005 * _camera.getScale(); 	
-	    let alpha = 0.07;	
-	    	    
+	    let lineWidth = 1.6 + 0.005 * _camera.getScale();
+	    let alpha = 0.07;
+
         if ( m )
         {
-    	    alpha = 0.03;	
+    	    alpha = 0.03;
         }
-        
+
         canvas.lineWidth = lineWidth;
-        canvas.strokeStyle = "rgba( 255, 255, 255, " + alpha + " )";	
+        canvas.strokeStyle = "rgba( 255, 255, 255, " + alpha + " )";
         canvas.beginPath();
         canvas.arc( _swimbots[s].getPosition().x, _swimbots[s].getPosition().y, _swimbots[s].getSelectRadius(), 0, PI2, false );
         canvas.stroke();
-        canvas.closePath();	
+        canvas.closePath();
 
         canvas.lineWidth = lineWidth * 0.4;
         canvas.strokeStyle = "rgba( 255, 255, 255, " + alpha + " )";
         canvas.beginPath();
         canvas.arc( _swimbots[s].getPosition().x, _swimbots[s].getPosition().y, _swimbots[s].getSelectRadius(), 0, PI2, false );
         canvas.stroke();
-        canvas.closePath();		    
+        canvas.closePath();
 	}
 	*/
 
@@ -2974,58 +3081,58 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 	//----------------------------------------
 	function renderSelectCircle( x, y, r, m )
 	{
-	    let lineWidth = 1.6 + 0.005 * _camera.getScale(); 	
-	    let alpha = 0.07;	
-	    	    
+	    let lineWidth = 1.6 + 0.005 * _camera.getScale();
+	    let alpha = 0.07;
+
         if ( m )
         {
-    	    alpha = 0.03;	
+    	    alpha = 0.03;
         }
-        
+
         canvas.lineWidth = lineWidth;
-        canvas.strokeStyle = "rgba( 255, 255, 255, " + alpha + " )";	
+        canvas.strokeStyle = "rgba( 255, 255, 255, " + alpha + " )";
         canvas.beginPath();
         canvas.arc( x, y, r, 0, PI2, false );
         canvas.stroke();
-        canvas.closePath();	
+        canvas.closePath();
 
         canvas.lineWidth = lineWidth * 0.4;
         canvas.strokeStyle = "rgba( 255, 255, 255, " + alpha + " )";
         canvas.beginPath();
         canvas.arc( x, y, r, 0, PI2, false );
         canvas.stroke();
-        canvas.closePath();		    
+        canvas.closePath();
 	}
 
-	
-	
+
+
 	//-------------------------------
 	function renderCamera()
 	{
-		_canvas.strokeStyle = "rgb( 255, 255, 255 )";		
-		_canvas.lineWidth = _camera.getScale() * 0.007; 
-		
+		_canvas.strokeStyle = "rgb( 255, 255, 255 )";
+		_canvas.lineWidth = _camera.getScale() * 0.007;
+
 		let spacing = 15;
-		
+
 		let x = _camera.getPosition().x - _camera.getXDimension() * ONE_HALF;
 		let y = _camera.getPosition().y - _camera.getYDimension() * ONE_HALF;
 		let w = _camera.getXDimension();
 		let h = _camera.getYDimension();
-		
+
 		_canvas.strokeRect( x + spacing * ONE_HALF, y + spacing * ONE_HALF, w - spacing, h - spacing );
 
-		_canvas.fillStyle = "rgb( 255, 255, 255 )";		
+		_canvas.fillStyle = "rgb( 255, 255, 255 )";
 		_canvas.strokeRect
-		( 
-			_camera.getPosition().x - _camera.getXDimension() * 0.01, 
+		(
+			_camera.getPosition().x - _camera.getXDimension() * 0.01,
 			_camera.getPosition().y - _camera.getYDimension() * 0.01, 0.01, 0.01
 		);
     }
-            		
 
 
 
-	
+
+
 	//-------------------------------
 this.renderFoodBits = function()
 {
@@ -3059,12 +3166,12 @@ this.renderFoodBits = function()
     const cameraPos = _camera.getPosition();
     const cameraChanged = !_lastCameraPosition.equals(cameraPos);
     _lastCameraPosition.copyFrom(cameraPos);
-    
+
     // Reuse existing batch objects
     while (_renderBatch.length > 0) {
         releaseBatchObject(_renderBatch.pop());
     }
-    
+
     // Add all visible swimbots to the batch using object pooling
     for (let i = 0; i < _aliveSwimbotIndices.length; i++)
     {
@@ -3073,25 +3180,25 @@ this.renderFoodBits = function()
         {
             const position = _swimbots[s].getPosition();
             const boundingRadius = _swimbots[s].getBoundingRadius();
-            
+
             if (_camera.getWithinView(position, boundingRadius))
             {
                 const swimbotPos = _swimbots[s].getPosition();
                 const posChanged = !_lastSwimbotPositions[s].equals(swimbotPos);
-                
+
                 // Update cache if needed
                 if (cameraChanged || posChanged) {
                     _lastSwimbotPositions[s].copyFrom(swimbotPos);
                     // Calculate and cache squared distance to avoid sqrt
                     _distanceCache[s] = swimbotPos.getDistanceSquaredTo(cameraPos);
                 }
-                
+
                 const batchObj = getBatchObject();
                 batchObj.swimbot = _swimbots[s];
                 batchObj.isSelected = (s === _selectedSwimbot);
                 batchObj.isMousedOver = (s === _mousedOverSwimbot);
                 batchObj.distance = _distanceCache[s];
-                
+
                 _renderBatch.push(batchObj);
             }
         }
@@ -3135,16 +3242,16 @@ this.renderFoodBits = function()
 	        }
 	    }
 	}
- 
+
 	//--------------------------------------
 	this.initializeDebugTrail = function(s)
 	{
         for (let t=0; t<TRAIL_LENGTH; t++)
         {
             _debugTrail[t].set( _swimbots[s].getPosition() );
-        }	
+        }
     }
- 
+
 
 	//-----------------------------------
 	this.showSwimbotTrail = function(s)
@@ -3156,16 +3263,16 @@ this.renderFoodBits = function()
         {
             for (let t=TRAIL_LENGTH-1; t>0; t--)
             {
-                _debugTrail[t].set( _debugTrail[t-1] ); 
-            }	
+                _debugTrail[t].set( _debugTrail[t-1] );
+            }
 
-           _debugTrail[0].set( _swimbots[s].getPosition() ); 
+           _debugTrail[0].set( _swimbots[s].getPosition() );
         }
 
         //------------------------------------
         // render trail
         //------------------------------------
-        _canvas.lineWidth = 2; 
+        _canvas.lineWidth = 2;
         _canvas.strokeStyle = "rgb( 255, 255, 255 )";
 
         for (let t=1; t<TRAIL_LENGTH; t++)
@@ -3175,17 +3282,17 @@ this.renderFoodBits = function()
             _canvas.lineTo( _debugTrail[t].x, _debugTrail[t].y );
             _canvas.closePath();
             _canvas.stroke();
-        }	
+        }
 	}
-	
-	
+
+
 	//----------------------------------------------------
 	this.setGeneTweakCategory = function( swimbotIndex )
 	{
 	    //console.log( "setGeneTweakCategory: swimbotIndex = " + swimbotIndex );
     }
-    
-    
+
+
 	//--------------------------------------------------------------
 	this.tweakGene = function( swimbotIndex, geneIndex, geneValue )
 	{
@@ -3194,11 +3301,11 @@ this.renderFoodBits = function()
 	    assert( geneIndex    < NUM_GENES,   "genepool.js: tweakGene: geneIndex    < NUM_GENES"      );
 	    assert( geneValue    >= 0,          "genepool.js: tweakGene: geneValue    >= 0"             );
 	    assert( geneValue    < BYTE_SIZE,   "genepool.js: tweakGene: geneValue    < BYTE_SIZE"      );
-	    
+
 	    //console.log( "uh, tweakGene: swimbotIndex = " + swimbotIndex + "; geneIndex = " + geneIndex  + "; geneValue = " + geneValue );
-	    
+
 	    _swimbots[ swimbotIndex ].setGeneValue( geneIndex, geneValue, _embryology );
-	    
+
 	    _vectorUtility.x = ZERO;
 	    _vectorUtility.y = ZERO;
 	    _swimbots[ swimbotIndex ].setVelocity( _vectorUtility );
@@ -3208,26 +3315,26 @@ this.renderFoodBits = function()
 	//--------------------------------
 	this.touchDown = function( x, y )
 	{
-        _touch.setToDown( x, y ); 	
+        _touch.setToDown( x, y );
        this.handleNonUITouchDownActions( x, y );
 	}
-	
+
 	//--------------------------------------------------------------
 	this.convertScreenCoordinatesToPoolPosition = function( x, y )
-	{	
+	{
 	    _vectorUtility.x = _camera.getPosition().x - _camera.getXDimension() * ONE_HALF + ( x / _canvasWidth  ) * _camera.getXDimension();
-    	_vectorUtility.y = _camera.getPosition().y - _camera.getYDimension() * ONE_HALF + ( y / _canvasHeight ) * _camera.getYDimension(); 
+    	_vectorUtility.y = _camera.getPosition().y - _camera.getYDimension() * ONE_HALF + ( y / _canvasHeight ) * _camera.getYDimension();
 
 	    return _vectorUtility;
     }
-    	
-	
+
+
 	//-------------------------------
 	this.touchMove = function( x, y )
-	{	
+	{
         if (( x < _canvasWidth  )
         &&  ( y < _canvasHeight ))
-    	{		
+    	{
             _touch.setToMove( x, y );
 
             _vectorUtility = this.convertScreenCoordinatesToPoolPosition( x, y );
@@ -3244,7 +3351,7 @@ this.renderFoodBits = function()
                 {
                     _vectorUtility = this.convertScreenCoordinatesToPoolPosition( x, y );
                     _swimbots[ _selectedSwimbot ].setPosition( _vectorUtility );
-                    
+
                     _vectorUtility.setXY( ZERO, ZERO );
                     _swimbots[ _selectedSwimbot ].setVelocity( _vectorUtility );
                 }
@@ -3259,19 +3366,19 @@ this.renderFoodBits = function()
                 }
                 else
                 {
-                    if ( _obstacle.getBeingMoved() )        
+                    if ( _obstacle.getBeingMoved() )
                     {
                         //--------------------------------------
-                        // set the new moved position       
+                        // set the new moved position
                         //--------------------------------------
                         _vectorUtility = this.convertScreenCoordinatesToPoolPosition( x, y );
                         _obstacle.setMovePosition( _vectorUtility );
-                        
+
                         //--------------------------------------
-                        // keep food away from obstacle       
+                        // keep food away from obstacle
                         //--------------------------------------
                         moveFoodBitsFromObstacle();
-                    }    
+                    }
                     else
                     {
                         let x = _touch.getVelocityX();
@@ -3284,7 +3391,7 @@ this.renderFoodBits = function()
             {
                 //throttle
                 //if ( _clock % 4 == 0 )
-                
+
                 _vectorUtility = this.convertScreenCoordinatesToPoolPosition( x, y );
 
                 //------------------------------------------------------------------------
@@ -3296,37 +3403,37 @@ this.renderFoodBits = function()
                 //------------------------------------------------------------
                 // check to see if the mouse if hovering over the obstacle
                 //------------------------------------------------------------
-                _obstacle.detectHover( _vectorUtility )                 
-            }		
+                _obstacle.detectHover( _vectorUtility )
+            }
         }
 	}
 
-	
+
 	//-------------------------------
 	this.touchUp = function( x, y )
 	{
     	_touch.setToUp( x, y );
-		
+
         _swimbotBeingDragged = false;
 		_foodBitBeingDragged = false;
-		
+
         //-----------------------------------------------------
         // if no button or swimbot or food bit was un-clicked
         //-----------------------------------------------------
 		if (( _selectedSwimbot === NULL_INDEX )
         &&  ( _selectedFoodBit === NULL_INDEX ))
         {
-            if ( _obstacle.getBeingMoved() )        
+            if ( _obstacle.getBeingMoved() )
             {
                 _obstacle.stopMoving();
-            }    
-        
+            }
+
             _vectorUtility = this.convertScreenCoordinatesToPoolPosition( x, y );
     		_pool.endTouch( _vectorUtility, _seconds );
 	    }
     }
 
-	
+
 	//-------------------------------
 	this.touchOut = function( x, y )
 	{
@@ -3338,19 +3445,19 @@ this.renderFoodBits = function()
 	{
         if (( e.x < _canvasWidth  )
         &&  ( e.y < _canvasHeight ))
-    	{		
-            _camera.drag( -e.deltaX, -e.deltaY );  
+    	{
+            _camera.drag( -e.deltaX, -e.deltaY );
             this.clearViewMode();
         }
     }
-    
+
 	//------------------------------------------------
 	// start camera Navigation
 	//------------------------------------------------
     this.startCameraNavigation = function( action )
     {
         _viewTracking.stopTracking();
-        
+
              if ( action === CameraNavigationAction.LEFT  ) { _panningLeft  = true; }
         else if ( action === CameraNavigationAction.RIGHT ) { _panningRight = true; }
         else if ( action === CameraNavigationAction.DOWN  ) { _panningDown  = true; }
@@ -3358,7 +3465,7 @@ this.renderFoodBits = function()
         else if ( action === CameraNavigationAction.IN    ) { _zoomingIn    = true; }
         else if ( action === CameraNavigationAction.OUT   ) { _zoomingOut   = true; }
 	}
-	
+
 	//-----------------------------------------------
 	// stop camera Navigation
 	//-----------------------------------------------
@@ -3387,26 +3494,26 @@ this.renderFoodBits = function()
 	{
         this.setViewMode( ViewTrackingMode.NULL );
 	}
-	
+
 	//--------------------------------------
 	this.setViewMode = function( viewMode )
 	{
         //console.log( "setViewMode to " + viewMode );
         //console.log( "_selectedSwimbot = " + _selectedSwimbot );
-	
+
 	    //-----------------------------------------------------------------------------------------
 	    // if the new mode is "selected" but there is no swimbot selected, then bail out...
-	    //-----------------------------------------------------------------------------------------	
+	    //-----------------------------------------------------------------------------------------
 	    if (( viewMode === ViewTrackingMode.SELECTED )
 	    &&  ( _selectedSwimbot === NULL_INDEX ))
-	    {	    
+	    {
 	        return;
         }
-        	        	    
+
         let selectedSwimbot = _viewTracking.setMode( viewMode, _camera.getPosition(), _camera.getScale(), _selectedSwimbot );
         setSelectedSwimbot( selectedSwimbot );
 	}
-	
+
 	//--------------------------------------------------
 	this.handleNonUITouchDownActions = function( x, y )
 	{
@@ -3417,12 +3524,12 @@ this.renderFoodBits = function()
             // in case view control is tracking, stop it...
             //-----------------------------------------------
             _viewTracking.stopTracking();
-            
+
             //------------------------------------------
             // has a swimmer been clicked?
             //------------------------------------------
             setSelectedSwimbot( this.indexOfClosestSwimbotToScreenPosition( x, y ) );
-        
+
             //------------------------------------------
             // a swimmer is clicked
             //------------------------------------------
@@ -3439,7 +3546,7 @@ this.renderFoodBits = function()
             {
                 _selectedFoodBit = this.indexOfClosestFoodBitToScreenPosition( x, y );
                 //console.log( _selectedFoodBit );
-            
+
                 if ( _selectedFoodBit != NULL_INDEX )
                 {
                     _foodBitBeingDragged = true;
@@ -3449,7 +3556,7 @@ this.renderFoodBits = function()
             {
                 _mousedOverFoodBit = NULL_INDEX;
             }
-        
+
             //----------------------------------------
             // if no swimbot or food bit was clicked
             //----------------------------------------
@@ -3457,7 +3564,7 @@ this.renderFoodBits = function()
             &&  ( _selectedFoodBit == NULL_INDEX ))
             {
                 _vectorUtility = this.convertScreenCoordinatesToPoolPosition( x, y );
-                
+
                 //--------------------------------------
                 // did the obstacle get touched?
                 //--------------------------------------
@@ -3474,8 +3581,8 @@ this.renderFoodBits = function()
                 }
             }
         }
-    }	
-	
+    }
+
 
 
 	//----------------------------------------------
@@ -3483,13 +3590,13 @@ this.renderFoodBits = function()
 	{
         let indexOfClosest = NULL_INDEX;
         let closestDistance = 1000.0;
-        
+
         for (let s=0; s<MAX_SWIMBOTS; s++)
         {
             if ( _swimbots[s].getAlive() )
             {
                 _vectorUtility = this.convertScreenCoordinatesToPoolPosition( x, y );
-                
+
                 let distanceSquared = _swimbots[s].getPosition().getDistanceSquaredTo( _vectorUtility );
                 if ( distanceSquared < _swimbots[s].getSelectRadius() * _swimbots[s].getSelectRadius() )
                 {
@@ -3501,11 +3608,11 @@ this.renderFoodBits = function()
                 }
              }
         }
-                
+
         return indexOfClosest;
     }
-    
-    
+
+
 
 
 	//------------------------------------------------------------
@@ -3513,13 +3620,13 @@ this.renderFoodBits = function()
 	{
         let indexOfClosest = NULL_INDEX;
         let closestDistance = 1000.0;
-        
+
         for (let f=0; f<MAX_FOODBITS; f++)
         {
             if ( _foodBits[f].getAlive() )
             {
                 _vectorUtility = this.convertScreenCoordinatesToPoolPosition( x, y );
-                
+
                 let distanceSquared = _foodBits[f].getPosition().getDistanceSquaredTo( _vectorUtility );
                 if ( distanceSquared < FOOD_BIT_GRAB_RADIUS * FOOD_BIT_GRAB_RADIUS )
                 {
@@ -3534,14 +3641,14 @@ this.renderFoodBits = function()
 
         return indexOfClosest;
     }
-    
-    
-    
+
+
+
 	//------------------------------------------------------------------------------------
 	// get functions....
 	//------------------------------------------------------------------------------------
-    
-	
+
+
 	//----------------------------------------------------------------------------
 	// various quickie getters...
 	//----------------------------------------------------------------------------
@@ -3551,31 +3658,31 @@ this.renderFoodBits = function()
     this.getHungerThreshold     = function() { return globalTweakers.hungerThreshold;   }
     this.getEnergyToOffspring   = function() { return globalTweakers.childEnergyRatio;  }
     this.getMaximumSwimbotAge   = function() { return globalTweakers.maximumLifeSpan;   }
-    this.getTimeStep            = function() { return _clock;                   }    
+    this.getTimeStep            = function() { return _clock;                   }
 	this.getRenderingGoals      = function() { return _renderingGoals;          }
 	this.getSimulationRunning   = function() { return _simulationRunning;       }
 	this.getRendering           = function() { return _rendering;               }
 	this.getSelectedSwimbotID   = function() { return _selectedSwimbot;         }
 	this.getViewMode            = function() { return _viewTracking.getMode();  }
-    this.getNumDeadSwimbots     = function() { return simCounters.numDeadSwimbots;         }   
-    
+    this.getNumDeadSwimbots     = function() { return simCounters.numDeadSwimbots;         }
+
 	//--------------------------------------------------
 	// check to see if the camera navigation is active
 	//--------------------------------------------------
     this.getCameraNavigationActive = function( action )
 	{
 	    let result = false;
-	    
-	    if ( ( action === CameraNavigationAction.LEFT  ) && ( _panningLeft  ) ) { result = true; } 
-	    if ( ( action === CameraNavigationAction.RIGHT ) && ( _panningRight ) ) { result = true; } 
-	    if ( ( action === CameraNavigationAction.DOWN  ) && ( _panningDown  ) ) { result = true; } 
-	    if ( ( action === CameraNavigationAction.UP    ) && ( _panningUp    ) ) { result = true; } 
-	    if ( ( action === CameraNavigationAction.IN    ) && ( _zoomingIn    ) ) { result = true; } 
-	    if ( ( action === CameraNavigationAction.OUT   ) && ( _zoomingOut   ) ) { result = true; } 
+
+	    if ( ( action === CameraNavigationAction.LEFT  ) && ( _panningLeft  ) ) { result = true; }
+	    if ( ( action === CameraNavigationAction.RIGHT ) && ( _panningRight ) ) { result = true; }
+	    if ( ( action === CameraNavigationAction.DOWN  ) && ( _panningDown  ) ) { result = true; }
+	    if ( ( action === CameraNavigationAction.UP    ) && ( _panningUp    ) ) { result = true; }
+	    if ( ( action === CameraNavigationAction.IN    ) && ( _zoomingIn    ) ) { result = true; }
+	    if ( ( action === CameraNavigationAction.OUT   ) && ( _zoomingOut   ) ) { result = true; }
 
         return result;
 	}
-	
+
 	//----------------------------------------
 	this.getASwimbotIsSelected = function()
 	{
@@ -3583,15 +3690,15 @@ this.renderFoodBits = function()
         {
             return true;
         }
-	
+
 	    return false;
-    }	    
+    }
 
 	//-----------------------------------
     this.getPresetGenotype = function(p)
     {
         _myGenotype.setToPreset(p);
-            
+
         return _myGenotype.getGenes();
     }
 
@@ -3610,9 +3717,9 @@ this.renderFoodBits = function()
 	}
 
 	this.getNumFoodBits = function()
-	{       
+	{
         let num = 0;
-    
+
         for (let f=0; f<MAX_FOODBITS; f++)
         {
             if ( _foodBits[f].getAlive() )
@@ -3630,7 +3737,7 @@ this.renderFoodBits = function()
                 }
             }
         }
-    
+
         /*
         if ( globalTweakers.numFoodTypes === 2  )
         {
@@ -3644,7 +3751,7 @@ this.renderFoodBits = function()
                     }
                 }
             }
-        }        
+        }
         else
         {
             for (let f=0; f<MAX_FOODBITS; f++)
@@ -3654,18 +3761,18 @@ this.renderFoodBits = function()
                     num ++;
                 }
             }
-        }       
-        */         
-            
-	    return num;	
+        }
+        */
+
+	    return num;
 	}
 
     /*
 	//------------------------------
 	this.getNumFoodBits0 = function()
-	{       
+	{
         let num = 0;
-        
+
         for (let f=0; f<MAX_FOODBITS; f++)
         {
             if ( _foodBits[f].getAlive() )
@@ -3676,16 +3783,16 @@ this.renderFoodBits = function()
                 }
             }
         }
-                
-	    return num;	
+
+	    return num;
 	}
     */
-    
+
 	//------------------------------
 	this.getNumFoodBits1 = function()
-	{       
+	{
         let num = 0;
-        
+
         for (let f=0; f<MAX_FOODBITS; f++)
         {
             if ( _foodBits[f].getAlive() )
@@ -3696,15 +3803,15 @@ this.renderFoodBits = function()
                 }
             }
         }
-                    
-	    return num;	
+
+	    return num;
 	}
 
 	//------------------------------
 	this.getNumSwimbots = function()
-	{       
+	{
         let num = 0;
-        
+
         for (let s=0; s<MAX_SWIMBOTS; s++)
         {
             if ( _swimbots[s].getAlive() )
@@ -3712,10 +3819,10 @@ this.renderFoodBits = function()
                 num ++;
             }
         }
-                    
-	    return num;	
+
+	    return num;
 	}
-	
+
 
 	//----------------------------
 	this.getPoolData = function()
@@ -3730,9 +3837,9 @@ this.renderFoodBits = function()
             this.y      = ZERO;
             this.type   = 0;    // 0, 1 = plants, 2 = meat
         }
-        
+
 	    let foodBitDataArray = new Array();
-        
+
         let numFoodbits = 0;
         for (let f=0; f<MAX_FOODBITS; f++)
         {
@@ -3747,7 +3854,7 @@ this.renderFoodBits = function()
                 numFoodbits ++;
             }
         }
- 
+
 	    //-------------------------
 	    // create swimbot array
 	    //-------------------------
@@ -3761,9 +3868,9 @@ this.renderFoodBits = function()
             this.id     = 0;
             this.genes  = new Array();
         }
-        
+
 	    let swimbotDataArray = new Array();
-	    
+
         let numSwimbots = 0;
         for (let s=0; s<MAX_SWIMBOTS; s++)
         {
@@ -3780,53 +3887,53 @@ this.renderFoodBits = function()
 
 
 
-//_myGenotype.randomize();   
-//swimbotDataArray[ numSwimbots ].genes = _myGenotype;               
-  
+//_myGenotype.randomize();
+//swimbotDataArray[ numSwimbots ].genes = _myGenotype;
+
 /*
 for (let g=0; g<NUM_GENES; g++)
 {
-    swimbotDataArray[ numSwimbots ].genes[g] = Math.floor( gpRandom() * 256.0 );               
+    swimbotDataArray[ numSwimbots ].genes[g] = Math.floor( gpRandom() * 256.0 );
 }
 */
 //data.swimbotArray[s].genes = _myGenotype;
-      
-//console.log( swimbotDataArray[ numSwimbots ].genes );          
 
-//_myGenotype.randomize();     
-//_myGenotype.copyFromGenotype( data.swimbotArray[s].genes );               
+//console.log( swimbotDataArray[ numSwimbots ].genes );
 
-
-//swimbotDataArray[ numSwimbots ].genes = _swimbots[s].getGenotype();            
+//_myGenotype.randomize();
+//_myGenotype.copyFromGenotype( data.swimbotArray[s].genes );
 
 
-//console.log( swimbotDataArray[ numSwimbots ].genes );          
+//swimbotDataArray[ numSwimbots ].genes = _swimbots[s].getGenotype();
 
-//_myGenotype.randomize();     
+
+//console.log( swimbotDataArray[ numSwimbots ].genes );
+
+//_myGenotype.randomize();
 
 //data.swimbotArray[s].genes = _myGenotype;
-      
-//console.log( data.swimbotArray[s].genes );          
+
+//console.log( data.swimbotArray[s].genes );
 
 //swimbotDataArray[ numSwimbots ].genes = _myGenotype;
 
-//_myGenotype.randomize();     
+//_myGenotype.randomize();
 //data.swimbotArray[ numSwimbots ].genes = _myGenotype;
-  
+
 //_myGenotype.randomize();  //this.getSwimbotGenes(s);
 //swimbotDataArray[ numSwimbots ].genes   = _myGenotype;
-                
-                
-                
+
+
+
                 numSwimbots ++;
             }
         }
-	    
-        let poolData = 
-        { 
-            "simulationRunning"         : _simulationRunning, 
-            "numFoodBits"               : numFoodbits, 
-            "numSwimbots"               : numSwimbots, 
+
+        let poolData =
+        {
+            "simulationRunning"         : _simulationRunning,
+            "numFoodBits"               : numFoodbits,
+            "numSwimbots"               : numSwimbots,
             "foodBitArray"              : foodBitDataArray,
             "swimbotArray"              : swimbotDataArray,
             "cameraX"                   : _camera.getPosition().x,
@@ -3844,67 +3951,67 @@ for (let g=0; g<NUM_GENES; g++)
             "obstacleEnd2X"             : _obstacle.getEnd2Position().x,
             "obstacleEnd2Y"             : _obstacle.getEnd2Position().y
         }
-        
+
         return poolData;
     }
 
-    
+
 	//------------------------------------
 	this.getSwimbotGenes = function( ID )
-	{		
+	{
         let genotype = _swimbots[ ID ].getGenotype();
         return genotype.getGenes();
-    }	
-    
+    }
+
 	//----------------------------------
 	this.getFamilyTree = function()
-	{		
+	{
 	    return _familyTree;
-    }	
-    
-    
+    }
+
+
 	//------------------------------
 	this.getAttraction = function()
-	{		
+	{
         return globalTweakers.attractionCriterion;
-    }	
-    
-    
-    
+    }
+
+
+
 	//------------------------------
 	this.getGeneName = function(g)
-	{		
+	{
         //let genotype = _swimbots[0].getGenotype();
         //return genotype.getGeneName(g);
-        
+
         return _embryology.getGeneName(g);
-    }	
-    
-    
+    }
+
+
 	//--------------------------------------------------
 	this.getGeneValue = function( swimbotID, geneIndex )
 	{
 	    let genotype = _swimbots[ swimbotID ].getGenotype();
 
         return genotype.getGeneValue( geneIndex );
-    }	
-    
+    }
+
 	//----------------------------------
 	this.getNumGenesPerCategory = function()
 	{
         return _embryology.getNumGenesPerCategory();
-    }	
-    
+    }
+
 	//----------------------------------
 	this.getNumGeneCategories = function()
 	{
         return _embryology.getNumGeneCategories();
-    }	
-    
-    
-    
-    
-	
+    }
+
+
+
+
+
 	//-----------------------------------------------------------------------------------------------------------------------------
 	// swimbot getters...
 	//-----------------------------------------------------------------------------------------------------------------------------
@@ -3919,7 +4026,7 @@ for (let g=0; g<NUM_GENES; g++)
     this.getSwimbotPreferredFoodType        = function( ID ) {	return _swimbots[ ID ].getPreferredFoodType         (); }
     this.getSwimbotDigestibleFoodType       = function( ID ) {	return _swimbots[ ID ].getDigestibleFoodType        (); }
     this.getSwimbotEternalStatus            = function( ID ) {	return _swimbots[ ID ].isEternal                     (); }
-    
+
     // this is now being initialized from the index.html...
 	//--------------------------------
 	// start this puppy

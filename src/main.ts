@@ -104,6 +104,22 @@ document.getElementById( "loadSwimbotFile" ).addEventListener( "change", functio
 //------------------------------------------------------------------------------
 // start the simulation once the page (images, styles) has loaded
 //------------------------------------------------------------------------------
+//------------------------------------------------------------------------------
+// While the page is hidden (another tab, minimized window) the browser draws no
+// frames; the metronome thread keeps the simulation going without drawing.
+//------------------------------------------------------------------------------
+function startBackgroundMetronome()
+{
+    const metronome = new Worker( new URL( "./metronome.worker.ts", import.meta.url ), { type: "module" } );
+    metronome.onmessage = () =>
+    {
+        if ( document.hidden && ( typeof genePool != "undefined" ))
+        {
+            genePool.runFrame( performance.now() );
+        }
+    };
+}
+
 function startGenePool()
 {
     const pool = new GenePoolModule.GenePool();
@@ -113,6 +129,8 @@ function startGenePool()
     pool.setCanvas( canvas );
     pool.setCanvasDimensions( canvasID.width, canvasID.height );
     pool.setShowingViewTrackingMode( true );
+
+    startBackgroundMetronome();
 }
 
 if ( document.readyState === "complete" )

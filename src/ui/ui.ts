@@ -736,6 +736,8 @@ export function updateUI()
             let graphDataHTML =
                 "time step: " + genePool.getTimeStep()
                 + "<br>"
+                + "<br>"
+                + "speed: " + Math.round( genePool.getStepsPerSecond() ) + " steps/sec"
                 + "swimbots: " + genePool.getNumSwimbots()
                 + "<br>"
                 + "food bits: " + genePool.getNumFoodBits()
