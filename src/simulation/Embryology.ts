@@ -1,3 +1,4 @@
+import { geneAverage, thermalWidthOf, GENES_HUNGER, GENES_PREDATOR, GENES_THERMAL_OPTIMUM, GENES_DIGESTION } from "./EcologyGenes";
 //--------------------------------------------------------------------------
 //                                                                        
 //    This file is part of GenePool Swimbots.                             
@@ -200,15 +201,14 @@ let testNoEel = true;
         let cutOffRange             = MAX_CUT_OFF           - MIN_CUT_OFF;
         let splinedRange            = MAX_SPLINED           - MIN_SPLINED;
         let endCapSplineRange       = MAX_END_CAP_SPLINE    - MIN_END_CAP_SPLINE;
-        let hungerGene              = genotype.getGeneValue(50);
-        phenotype.hungerThresholdRatio = 0.1 + (hungerGene / 255) * 0.9;
+        phenotype.hungerThresholdRatio = 0.1 + geneAverage( genotype, GENES_HUNGER ) * 0.9;
 
 
-        // NOTE:
-        // This simulation already uses gene 50 for hunger.
-        // Gene 51 is the predator gene (continuous).
-        let predatorGene            = genotype.getGeneValue(51);
-        phenotype.predatorLevel    = predatorGene / 255; // 0..1
+        // predator level and hunger live in the ecology gene block (EcologyGenes.ts)
+        phenotype.predatorLevel    = geneAverage( genotype, GENES_PREDATOR ); // 0..1
+        phenotype.thermalOptimum   = geneAverage( genotype, GENES_THERMAL_OPTIMUM );
+        phenotype.thermalWidth     = thermalWidthOf( genotype );
+        phenotype.digestion        = geneAverage( genotype, GENES_DIGESTION );
 
         // Legacy/binary compatibility for other code that may still look for isPredator
         phenotype.isPredator       = phenotype.predatorLevel > PREDATOR_LEVEL_THRESHOLD;

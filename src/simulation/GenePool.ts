@@ -1,3 +1,4 @@
+import { setTrait, GENES_PREDATOR } from "./EcologyGenes";
 import { BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_PREY } from "./Brain";
 import { Camera } from "./Camera";
 import { Embryology } from "./Embryology";
@@ -768,7 +769,7 @@ if ( mode === SimulationStartMode.SPECIES )
                 let predatorGeneValue = ( gpRandom() < INITIAL_PREDATOR_FRACTION )
                     ? thresholdGeneValue + 1 + gpRandom() * ( 254 - thresholdGeneValue )
                     : gpRandom() * thresholdGeneValue;
-                _myGenotype.setGeneValue( 51, Math.floor( predatorGeneValue ) );
+                setTrait( _myGenotype, GENES_PREDATOR, Math.floor( predatorGeneValue ) / 255 );
             }
 
             //-------------------------------------------------------------------------------
@@ -4148,7 +4149,7 @@ this.testPredation = function()
 
     // --- helper to create swimbot with predator gene ---
     const setPredatorGene = function(genotype, value255) {
-        genotype.setGeneValue(51, Math.floor(value255));
+        setTrait(genotype, GENES_PREDATOR, Math.floor(value255) / 255);
     };
 
     const createSwimbotWithPredatorGene = function(index, predatorGeneValue255, posOffsetX) {

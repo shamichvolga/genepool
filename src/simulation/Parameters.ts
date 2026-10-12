@@ -1,3 +1,4 @@
+import { WORLD_AREA_FACTOR } from "./World";
 import { DEFAULT_FOOD_BIT_ENERGY, DEFAULT_FOOD_BIT_MAX_SPAWN_RADIUS } from "./FoodBit";
 import { ONE, ONE_HALF, ZERO } from "./MathConstants";
 import { ATTRACTION_SIMILAR_COLOR } from "./SwimbotTypes";
@@ -29,13 +30,13 @@ export const MAX_CHILD_ENERGY_RATIO                = ONE;
 export const MIN_SWIMBOT_HUNGER_THRESHOLD          = ZERO;
 
 
-export const MAX_SWIMBOTS = 2000;
+export const MAX_SWIMBOTS = 1500 * WORLD_AREA_FACTOR;
 
-export const INITIAL_NUM_SWIMBOTS =  1000;
+export const INITIAL_NUM_SWIMBOTS =  500 * WORLD_AREA_FACTOR;
 
-export const MAX_FOODBITS           = 2000;
-export const MAX_FOODBITS_PER_TYPE  = 1000;
-export const INITIAL_NUM_FOODBITS   = 1000;
+export const MAX_FOODBITS           = 2000 * WORLD_AREA_FACTOR;
+export const MAX_FOODBITS_PER_TYPE  = 1000 * WORLD_AREA_FACTOR;
+export const INITIAL_NUM_FOODBITS   = 1000 * WORLD_AREA_FACTOR;
 
 export const NON_REPRODUCING_JUNK_DNA_LIMIT    = 0.1;
 
@@ -83,6 +84,12 @@ export const ATTACK_COOLDOWN               = 60;
 
 // Доля хищников в стартовой популяции (у остальных ген хищности низкий).
 export const INITIAL_PREDATOR_FRACTION     = 0.1;
+
+// In the "random" pool with environment, the start is herbivores only (in several
+// gardens, one per biome); at this step a few swimbots become predators.
+export const PREDATOR_INTRODUCTION_STEP    = 20000;
+export const PREDATOR_INTRODUCTION_FRACTION = 0.05;
+export const GARDEN_RADIUS                 = 1200;
 
 // Травоядный убегает, если хищник ближе этого расстояния.
 export const PREDATOR_FLEE_RADIUS          = 150.0;

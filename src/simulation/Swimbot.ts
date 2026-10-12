@@ -1,3 +1,4 @@
+import { setTrait, GENES_PREDATOR } from "./EcologyGenes";
 //--------------------------------------------------------------------------
 //
 //    This file is part of GenePool Swimbots.
@@ -837,15 +838,14 @@ _position.copyFrom( position );
 
 
 	//---------------------------------------------------------------------
-	// apply predator level: rewrites gene 51 and regrows the phenotype,
+	// apply predator level: rewrites the predator genes and regrows the phenotype,
 	// so the change is also inherited by offspring
 	//---------------------------------------------------------------------
 	this.applyPredatorLevel = function( level )
 	{
 	    assert( _embryology != null, "Swimbot:applyPredatorLevel: _embryology != null" );
 
-	    let geneValue = Math.round( Math.max( ZERO, Math.min( ONE, level ) ) * 255 );
-	    _genotype.setGeneValue( 51, geneValue );
+	    setTrait( _genotype, GENES_PREDATOR, Math.max( ZERO, Math.min( ONE, level ) ) );
 	    _phenotype = _embryology.generatePhenotypeFromGenotype( _genotype );
 	    this.processPhenotype();
 

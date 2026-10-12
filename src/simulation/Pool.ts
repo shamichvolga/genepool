@@ -1,4 +1,5 @@
 import { ONE, ONE_HALF, PI2, ZERO } from "./MathConstants";
+import { WORLD_SCALE } from "./World";
 import { Touch } from "./Touch";
 import { Vector2D } from "./Vector2D";
 
@@ -6,9 +7,9 @@ import { Vector2D } from "./Vector2D";
 // metrics
 //-------------------------------------
 export const POOL_LEFT     = ZERO;
-export const POOL_RIGHT    = 8000.0;
+export const POOL_RIGHT    = 8000.0 * WORLD_SCALE;
 export const POOL_TOP      = ZERO;
-export const POOL_BOTTOM   = 8000.0;
+export const POOL_BOTTOM   = 8000.0 * WORLD_SCALE;
 
 export const POOL_WIDTH  = ( POOL_RIGHT  - POOL_LEFT );
 export const POOL_HEIGHT = ( POOL_BOTTOM - POOL_TOP  );
