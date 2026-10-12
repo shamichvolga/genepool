@@ -85,8 +85,20 @@ var    flopperYV = 0;
     let _lastEnergyForEfficiencyMeasurement = ZERO;
 	let _readyforSensoryInputToBrain = false;
 
+	//-----------------------------------------
+	// predation
+	//-----------------------------------------
+	let _embryology         = null;  // kept so the phenotype can be regrown (applyPredatorLevel)
+	let _chosenPrey         = null;
+	let _nearestPredator    = null;
+	let _tryingToHunt       = false;
+	let _numPreyEaten       = 0;
+	let _scanRadius         = SWIMBOT_VIEW_RADIUS;
+	let _scanCooldown       = 0;
+	let _eternal            = false;
 
-let _parent = null;	
+
+let _parent = null;
 
 //----------------------------------
 this.setParent = function( parent )
@@ -120,12 +132,13 @@ this.setParent = function( parent )
 	//-----------------------------------------
 	this.updateBodyParts = function()
 	{
-        let oldAgeThreshold = globalTweakers.maximumLifeSpan - OLD_AGE_DURATION;
+        let oldAgeThreshold = this.getOldAgeThreshold();
 
         //----------------------------------
         // swimmer is not old yet
+        // (eternal swimbots never get old)
         //----------------------------------
-        if ( _age < oldAgeThreshold )
+        if (( _age < oldAgeThreshold ) || _eternal )
         {	
             if ( _age < YOUNG_AGE_DURATION )
             {
@@ -583,8 +596,11 @@ _position.copyFrom( position );
     	//--------------------------------
 	    // initialize brain
 	    //--------------------------------
+        _embryology = embryology;
+
         _brain.initialize();
         _brain.setHungerThreshold( DEFAULT_SWIMBOT_HUNGER_THRESHOLD );
+        _brain.setPredatorLevel( this.getPredatorLevel() );
         _brain.setEnergyLevel( _energy );
         _brain.update();
 	}
@@ -675,7 +691,33 @@ _position.copyFrom( position );
 		// do this 
 		//--------------------------------
         _timerDelta = ZERO;
+
+        //-----------------------------------------------------
+        // the predator gene may have changed (zap, gene tweak)
+        //-----------------------------------------------------
+        _brain.setPredatorLevel( this.getPredatorLevel() );
     }
+
+
+	//---------------------------------------------------------------------
+	// apply predator level: rewrites gene 51 and regrows the phenotype,
+	// so the change is also inherited by offspring
+	//---------------------------------------------------------------------
+	this.applyPredatorLevel = function( level )
+	{
+	    assert( _embryology != null, "Swimbot:applyPredatorLevel: _embryology != null" );
+
+	    let geneValue = Math.round( Math.max( ZERO, Math.min( ONE, level ) ) * 255 );
+	    _genotype.setGeneValue( 51, geneValue );
+	    _phenotype = _embryology.generatePhenotypeFromGenotype( _genotype );
+	    this.processPhenotype();
+
+	    _chosenPrey      = null;
+	    _nearestPredator = null;
+	    _tryingToHunt    = false;
+	    _brain.setFoundPrey( false );
+	    _brain.setNearbyPredatorThreat( false );
+	}
 
 
 	//-----------------------------------------
@@ -787,11 +829,73 @@ _position.copyFrom( position );
                 }
             }
         }
-    
+
+        //------------------------------------------
+        // I wanna bite my chosen prey
+        //------------------------------------------
+        else if ( _brain.getState() === BRAIN_STATE_PURSUING_PREY )
+        {
+            if ( this.getChosenPreyIsValid() )
+            {
+                let biteDistance = SWIMBOT_MOUTH_LENGTH + _chosenPrey.getBoundingRadius() * ONE_HALF;
+
+                if ( this.getMouthPosition().getDistanceTo( _chosenPrey.getPosition() ) < biteDistance )
+                {
+                    _tryingToHunt = true;
+                }
+            }
+        }
+
+        //------------------------------------------------------------
+        // a hungry predator with no prey in sight eats meat it sees
+        //------------------------------------------------------------
+        else if ( _brain.getState() === BRAIN_STATE_LOOKING_FOR_PREY )
+        {
+            if ( this.getChosenMeatIsValid() )
+            {
+                if ( this.getMouthPosition().getDistanceTo( _chosenFoodBit.getPosition() ) < SWIMBOT_MOUTH_LENGTH )
+                {
+                    _tryingToEat = true;
+                }
+            }
+        }
+
         //----------------------------------------------------------------------
         // determine the direction to the goal...
         //----------------------------------------------------------------------
-        if (( _brain.getState() === BRAIN_STATE_LOOKING_FOR_FOOD )
+        if ( _brain.getState() === BRAIN_STATE_LOOKING_FOR_PREY )
+        {
+            if ( this.getChosenMeatIsValid() )
+            {
+                _directionToGoal.set( _chosenFoodBit.getPosition() );
+                _directionToGoal.subtract( _phenotype.parts[ MOUTH_INDEX ].position );
+                _directionToGoal.normalize();
+            }
+            else
+            {
+                this.wanderFocus();
+            }
+        }
+        else if ( _brain.getState() === BRAIN_STATE_PURSUING_PREY )
+        {
+            if ( this.getChosenPreyIsValid() )
+            {
+                _directionToGoal.set( _chosenPrey.getPosition() );
+                _directionToGoal.subtract( _phenotype.parts[ MOUTH_INDEX ].position );
+                _directionToGoal.normalize();
+            }
+        }
+        else if ( _brain.getState() === BRAIN_STATE_FLEEING_PREDATOR )
+        {
+            if (( _nearestPredator != null ) && ( _nearestPredator.getAlive() ))
+            {
+                // swim directly away from the predator
+                _directionToGoal.set( _position );
+                _directionToGoal.subtract( _nearestPredator.getPosition() );
+                _directionToGoal.normalize();
+            }
+        }
+        else if (( _brain.getState() === BRAIN_STATE_LOOKING_FOR_FOOD )
         ||  ( _brain.getState() === BRAIN_STATE_LOOKING_FOR_MATE ))
         {
             this.wanderFocus();
@@ -906,8 +1010,13 @@ _position.copyFrom( position );
         if ( _energy <= ZERO )
         {
             _energy = ZERO;
-            this.die();
-        }		
+
+            // eternal swimbots don't starve to death
+            if ( !_eternal )
+            {
+                this.die();
+            }
+        }
 
 		//---------------------------
 		// wall collisions
@@ -1288,7 +1397,73 @@ let partAccelerationY = -strokeForceY;
 	this.getSelectRadius                = function() { return _selectRadius;                                }
 	this.getPreferredFoodType           = function() { return _phenotype.preferredFoodType;                 }
 	this.getDigestibleFoodType          = function() { return _phenotype.digestibleFoodType;                }
-	
+	this.getIsTryingToHunt              = function() { return _tryingToHunt;                                }
+	this.getNumPreyEaten                = function() { return _numPreyEaten;                                }
+	this.getPhenotypeMass               = function() { return _phenotype.mass;                              }
+	this.getHungerThreshold             = function() { return _brain.getHungerThreshold();                  }
+	this.getMaxEnergy                   = function() { return SWIMBOT_MAX_ENERGY;                           }
+	this.getMaxAge                      = function() { return globalTweakers.maximumLifeSpan;               }
+	this.getOldAgeThreshold             = function() { return globalTweakers.maximumLifeSpan - OLD_AGE_DURATION; }
+	this.getDynamicScanRadius           = function() { return _scanRadius;                                  }
+	this.getEternal                     = function() { return _eternal;                                     }
+	this.isEternal                      = function() { return _eternal;                                     }
+	this.setEternal                     = function(e) { _eternal = e;                                       }
+
+	//---------------------------------------
+	this.getPredatorLevel = function()
+	{
+	    if (( _phenotype == null ) || ( _phenotype.predatorLevel === undefined ))
+	    {
+	        return ZERO;
+	    }
+
+	    return _phenotype.predatorLevel;
+	}
+
+	//---------------------------------------
+	this.getChosenPreyIsValid = function()
+	{
+	    return (( _chosenPrey != null ) && _chosenPrey.getAlive() );
+	}
+
+	//---------------------------------------
+	this.getChosenMeatIsValid = function()
+	{
+	    return (( _chosenFoodBit != null ) && _chosenFoodBit.getAlive() && ( _chosenFoodBit.getType() === 2 ));
+	}
+
+
+	//------------------------------------------------------------------------
+	// the predator's "radar": grows while a hungry predator sees no prey,
+	// holds still for a while after prey is found, and relaxes back to
+	// the normal view radius when the predator is not hunting.
+	//------------------------------------------------------------------------
+	this.updateScanRadius = function()
+	{
+	    let state = _brain.getState();
+	    let hunting = ( this.getPredatorLevel() > PREDATOR_LEVEL_THRESHOLD )
+	              && (( state === BRAIN_STATE_LOOKING_FOR_PREY ) || ( state === BRAIN_STATE_PURSUING_PREY ));
+
+	    if ( _scanCooldown > 0 )
+	    {
+	        _scanCooldown -= BRAIN_SENSORY_UPDATE_PERIOD;
+	    }
+	    else if ( hunting && ( state === BRAIN_STATE_LOOKING_FOR_PREY ))
+	    {
+	        _scanRadius = Math.min( _scanRadius + PREY_SCAN_RADIUS_GROWTH, SWIMBOT_VIEW_RADIUS * PREY_SCAN_RADIUS_MAX_SCALE );
+	    }
+	    else if ( !hunting )
+	    {
+	        _scanRadius = Math.max( _scanRadius - PREY_SCAN_RADIUS_GROWTH, SWIMBOT_VIEW_RADIUS );
+	    }
+	}
+
+	//---------------------------------------
+	this.notifyTargetFound = function()
+	{
+	    _scanCooldown = PREY_SCAN_COOLDOWN;
+	}
+
 
 	//---------------------------------------
     this.getGoalDescription = function() 
@@ -1300,7 +1475,10 @@ let partAccelerationY = -strokeForceY;
         else if ( brainState ===  BRAIN_STATE_PURSUING_MATE      ) { return "pursuing mate";        }
         else if ( brainState ===  BRAIN_STATE_LOOKING_FOR_FOOD   ) { return "looking for food bit"; }
         else if ( brainState ===  BRAIN_STATE_PURSUING_FOOD      ) { return "pursuing food bit";    }
-                
+        else if ( brainState ===  BRAIN_STATE_LOOKING_FOR_PREY   ) { return "looking for prey";     }
+        else if ( brainState ===  BRAIN_STATE_PURSUING_PREY      ) { return "pursuing prey";        }
+        else if ( brainState ===  BRAIN_STATE_FLEEING_PREDATOR   ) { return "fleeing predator";     }
+
         return "(no goal identified)";
     }
     
@@ -1379,7 +1557,9 @@ let partAccelerationY = -strokeForceY;
                 // If the type of the chosen food bit is not compatible with the 
                 // digestible type of the swimbot, then it gets less energy...
                 //----------------------------------------------------------------------
-                if ( _chosenFoodBit.getType() != _phenotype.digestibleFoodType )
+                // (meat, type 2, is always fully digestible for predators)
+                if (( _chosenFoodBit.getType() != 2 )
+                &&  ( _chosenFoodBit.getType() != _phenotype.digestibleFoodType ))
                 {
                     //console.log( "decrease energy from food bit..." );
                     energyFromFoodBit *= FOOD_TYPE_OFFSET;
@@ -1406,23 +1586,110 @@ let partAccelerationY = -strokeForceY;
 // not sure if this is the right place to fix, but it needs fixing
             //_brain.setFoundFoodBit( false );
         }
-    
+
         return _chosenFoodBitIndex;
     }
-    
+
+
+	//------------------------------------------------------------------------
+	// huntEatChosenPrey: the prey dies and its energy goes to the predator.
+	// Whatever doesn't fit under the max energy drops as red meat.
+	//------------------------------------------------------------------------
+	this.huntEatChosenPrey = function()
+	{
+	    _tryingToHunt = false;
+
+	    if (( !this.getChosenPreyIsValid() )
+	    ||  ( _chosenPrey.isEternal() ))
+	    {
+	        return;
+	    }
+
+	    let preyPosition = new Vector2D();
+	    preyPosition.set( _chosenPrey.getPosition() );
+
+	    let energyFromPrey = _chosenPrey.getEnergy() * PREDATION_ENERGY_TRANSFER;
+
+	    _chosenPrey.die();
+
+	    _attackCount ++;
+	    _numPreyEaten ++;
+
+	    let room = Math.max( ZERO, SWIMBOT_MAX_ENERGY - _energy );
+
+	    if ( energyFromPrey > room )
+	    {
+	        _energy += room;
+
+	        let numMeatBits = Math.floor( ( energyFromPrey - room ) / DEFAULT_FOOD_BIT_ENERGY );
+	        _parent.spawnMeatFoodBits( preyPosition, numMeatBits );
+	    }
+	    else
+	    {
+	        _energy += energyFromPrey;
+	    }
+
+	    _timerDelta = ZERO;
+	    _chosenPrey = null;
+	    _brain.setFoundPrey( false );
+	}
+
     
 
 	//--------------------------------------------
 	// setEnvironmentalStimuli
 	//--------------------------------------------
-	this.setEnvironmentalStimuli = function( numNearbySwimbots, nearbySwimbotArray, foodBitWasFound, theFoodBit )
+	this.setEnvironmentalStimuli = function( numNearbySwimbots, nearbySwimbotArray, foodBitWasFound, theFoodBit, preyWasFound, thePrey, theNearestPredator )
     {
         //------------------------------------------------------------
+        // predator threat (herbivores only - genepool only passes
+        // a nearest predator to herbivores)
+        //------------------------------------------------------------
+        _nearestPredator = null;
+
+        if (( theNearestPredator != null )
+        &&  ( theNearestPredator.getPosition().getDistanceTo( _position ) < PREDATOR_FLEE_RADIUS ))
+        {
+            _nearestPredator = theNearestPredator;
+        }
+
+        _brain.setNearbyPredatorThreat( _nearestPredator != null );
+
+        //------------------------------------------------------------
+        // if hunting, choose the prey that was found
+        //------------------------------------------------------------
+        _chosenPrey = null;
+
+        if (( _brain.getState() == BRAIN_STATE_LOOKING_FOR_PREY )
+        ||  ( _brain.getState() == BRAIN_STATE_PURSUING_PREY ))
+        {
+            let preyIsValid = ( preyWasFound === true ) && ( thePrey != null );
+
+            _brain.setFoundPrey( preyIsValid );
+
+            if ( preyIsValid )
+            {
+                _chosenPrey = thePrey;
+            }
+        }
+
+        //------------------------------------------------------------
         // if looking for a food bit, choose the one that was found
+        // (a hunting predator with no prey in sight takes meat)
         //------------------------------------------------------------
         _chosenFoodBit = null;
         _chosenFoodBitIndex = NULL_INDEX;
-        
+
+        if (( _brain.getState() == BRAIN_STATE_LOOKING_FOR_PREY )
+        &&  ( _chosenPrey == null )
+        &&  ( foodBitWasFound )
+        &&  ( theFoodBit != null )
+        &&  ( theFoodBit.getType() === 2 ))
+        {
+            _chosenFoodBit = theFoodBit;
+            _chosenFoodBitIndex = _chosenFoodBit.getIndex();
+        }
+
         if (( _brain.getState() == BRAIN_STATE_LOOKING_FOR_FOOD )
         ||  ( _brain.getState() == BRAIN_STATE_PURSUING_FOOD ))
         {
@@ -1432,9 +1699,15 @@ let partAccelerationY = -strokeForceY;
             {
                 //console.log( "foodBitWasFound" );            
                 assert( theFoodBit != null, "swimbot.js: setEnvironmentalStimuli: theFoodBit != null" );
-                _chosenFoodBit = theFoodBit;	
+                _chosenFoodBit = theFoodBit;
                 _chosenFoodBitIndex = _chosenFoodBit.getIndex();
             }
+        }
+
+        // nothing to eat anymore - cancel any pending bite
+        if ( _chosenFoodBit == null )
+        {
+            _tryingToEat = false;
         }
 
         //------------------------------------------------------------------------------------------------
@@ -1974,8 +2247,16 @@ v[p].setXY( _phenotype.parts[p].axis.x / _phenotype.parts[p].length, _phenotype.
         _selectRadius       = ZERO;	
         _lastEnergyForEfficiencyMeasurement = ZERO;
         _readyforSensoryInputToBrain = false;
+
+        _chosenPrey         = null;
+        _nearestPredator    = null;
+        _tryingToHunt       = false;
+        _numPreyEaten       = 0;
+        _scanRadius         = SWIMBOT_VIEW_RADIUS;
+        _scanCooldown       = 0;
+        _eternal            = false;
     }
-    
+
 
 	//--------------------------
 	// contribute to offspring
@@ -2083,7 +2364,8 @@ console.log( "contributeToOffspring: _childEnergyRatio = " + _childEnergyRatio )
 	        _energy,
 	        _growthScale, 
 	        _focusDirection,
-	        levelOfDetail
+	        levelOfDetail,
+	        this
 	    );
 
               

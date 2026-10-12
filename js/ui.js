@@ -706,8 +706,9 @@ function updateUI()
                     "sexual attraction = " + genePool.getSwimbotAttractionDescription(selectedSwimbot) + "<br>" +
                     "number of offspring = " + Math.floor(genePool.getSwimbotNumOffspring(selectedSwimbot)) + "<br>" +
                     "eternal status = " + (genePool.getSwimbotEternalStatus(selectedSwimbot) ? "Yes" : "No") + "<br>" +
-                    "predator level = " + genePool.getSwimbots()[selectedSwimbot].getPredatorLevel().toFixed(2) +
-                    (genePool.getSwimbots()[selectedSwimbot].getPredatorLevel() > 0.6 ? " 🔴 predator" : " 🌿 herbivore");
+                    "prey eaten = " + swimbot.getNumPreyEaten() + "<br>" +
+                    "predator level = " + swimbot.getPredatorLevel().toFixed(2) +
+                    (swimbot.getPredatorLevel() > PREDATOR_LEVEL_THRESHOLD ? " 🔴 predator" : " 🌿 herbivore");
 
 
                 if (swimbotPanelHTML !== _lastSwimbotPanelHTML)
@@ -880,16 +881,6 @@ document.onkeyup = function(e)
 // Add the toggleEternalSwimbot function
 function toggleEternalSwimbot( swimbotID )
 {
+    // the info panel is redrawn every frame, so it picks up the new status by itself
     genePool.toggleEternalSwimbot( swimbotID );
-    // Update the UI to reflect the change
-    let selectedSwimbot = genePool.getSelectedSwimbotID();
-    if ( selectedSwimbot !== NULL_INDEX )
-    {
-        let eternalStatus = genePool.getSwimbotEternalStatus(selectedSwimbot) ? "Yes" : "No";
-        let swimbotData = document.getElementById('swimbotDataPanel').innerHTML;
-        // Update only the eternal status line
-        let lines = swimbotData.split('<br>');
-        lines[lines.length - 1] = "eternal status = " + eternalStatus;
-        document.getElementById('swimbotDataPanel').innerHTML = lines.join('<br>');
-    }
 }

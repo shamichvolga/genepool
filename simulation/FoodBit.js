@@ -93,8 +93,11 @@ function FoodBit()
               // randomize position
               //-----------------------------
               this.randomizeSpawnPosition( parentFoodBit );
-        
+
     }
+
+    // GenePool.updateFood calls it by this name
+    this.setSpawnPositionRelativeToParent = this.spawnFromParent;
 
 
 

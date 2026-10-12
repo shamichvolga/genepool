@@ -1253,7 +1253,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
                 // Источник мяса:
                 // - смерть от старости (как раньше)
                 // - смерть от голода (новое)
-if ( _swimbots[s].getPredatorLevel() <= 0.6
+if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
                 && ( _swimbots[s].getAge() >= _swimbots[s].getMaxAge() ) )
                 {
                     let meatIndex = this.findLowestDeadFoodBitInArray();
@@ -1570,7 +1570,7 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
         _numNearbySwimbots = 0;
 
         // Use spatial grid for optimized nearby swimbot search
-        const nearbySwimbots = _spatialGrid.getNearbyObjects(me, (predatorLevel > 0.5) ? preyViewRadius : viewRadius);
+        const nearbySwimbots = _spatialGrid.getNearbyObjects(me, (predatorLevel > PREDATOR_LEVEL_THRESHOLD) ? preyViewRadius : viewRadius);
 
 
         for (let i = 0; i < nearbySwimbots.length && _numNearbySwimbots < BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS; i++)
@@ -1583,7 +1583,7 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
                 const otherGenitalPosition = _swimbots[o].getGenitalPosition();
                 let distanceSquared = myGenitalPosition.getDistanceSquaredTo(otherGenitalPosition);
 
-                const matchRadiusSquared = (predatorLevel > 0.5) ? preyViewRadiusSquared : viewRadiusSquared;
+                const matchRadiusSquared = (predatorLevel > PREDATOR_LEVEL_THRESHOLD) ? preyViewRadiusSquared : viewRadiusSquared;
                 if (distanceSquared < matchRadiusSquared)
 
                 {
@@ -1615,7 +1615,12 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
             if (foodBit.getType() === 2)
             {
                 // Meat (type 2): eat only by predators
-                if (predatorLevel <= 0.6) okay = false;
+                if (predatorLevel <= PREDATOR_LEVEL_THRESHOLD) okay = false;
+            }
+            else if (predatorLevel > PREDATOR_LEVEL_THRESHOLD)
+            {
+                // Predators don't eat plants
+                okay = false;
             }
             else if (globalTweakers.numFoodTypes === 2)
             {
@@ -1661,7 +1666,7 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 
 
         // ─── Поиск добычи (только для хищников) ───────────────────────────────────
-        if (predatorLevel > 0.5) {
+        if (predatorLevel > PREDATOR_LEVEL_THRESHOLD) {
             for (let i = 0; i < nearbySwimbots.length; i++) {
                 let candidate = nearbySwimbots[i];
                 if (!candidate.getAlive()) continue;
@@ -1670,7 +1675,10 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
                 // Порог совпадает с порогом окраски в чёрный (Embryology.js, predatorLevel > 0.6),
                 // иначе боты с predatorLevel 0.5-0.6 визуально выглядят добычей,
                 // но хищники их игнорируют как "своих"
-                if (candidate.getPredatorLevel() > 0.6) continue;
+                if (candidate.getPredatorLevel() > PREDATOR_LEVEL_THRESHOLD) continue;
+
+                // Бессмертных не едят
+                if (candidate.isEternal()) continue;
 
 
                 let distance = myMouthPosition.getDistanceTo(candidate.getPosition());
@@ -1706,11 +1714,11 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
         let nearestPredator     = null;
         let nearestPredatorDist = Infinity;
 
-        if (predatorLevel < 0.4) { // Я — травоядный, ищу угрозу
+        if (predatorLevel <= PREDATOR_LEVEL_THRESHOLD) { // Я — травоядный, ищу угрозу
             for (let i = 0; i < _numNearbySwimbots; i++) {
                 let candidate = _nearbySwimbotsArray[i];
                 if (!candidate.getAlive()) continue;
-                if (candidate.getPredatorLevel() <= 0.5) continue;
+                if (candidate.getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD) continue;
 
                 let distance = myGenitalPosition.getDistanceTo(candidate.getGenitalPosition());
                 if (distance > viewRadius) continue;
@@ -2592,10 +2600,6 @@ if ( globalTweakers.numFoodTypes === 2 )
 	    //------------------------------
 	    _swimbots[ ID ].setEternal( !_swimbots[ ID ].getEternal() );
 
-	    //------------------------------
-	    // update UI to reflect change
-	    //------------------------------
-	    this.updateSwimbotDataPanel( ID );
 	}
     
     

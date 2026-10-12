@@ -56,7 +56,9 @@ function Brain()
 	    _hungerThreshold        = ZERO;
 	    _attractionCriterion    = ATTRACTION_SIMILAR_COLOR;
 	    */
-		_predatorLevel = ZERO;
+		_predatorLevel        = ZERO;
+		_foundPrey            = false;
+		_nearbyPredatorThreat = false;
     }
 
     //-----------------------
@@ -71,14 +73,15 @@ function Brain()
         // ВЫСШИЙ ПРИОРИТЕТ: бегство от хищника в упор
         // Перекрывает и голод, и поиск партнёра.
         // Только для травоядных; только пока угроза активна.
-        if ( _nearbyPredatorThreat && _predatorLevel <= 0.6 )
+        if ( _nearbyPredatorThreat && _predatorLevel <= PREDATOR_LEVEL_THRESHOLD )
         {
             _state = BRAIN_STATE_FLEEING_PREDATOR;
+            return;
         }
 
         if ( _energy < _hungerThreshold )
         {
-            if ( _predatorLevel > 0.6 )
+            if ( _predatorLevel > PREDATOR_LEVEL_THRESHOLD )
             {
                 if (( _state != BRAIN_STATE_PURSUING_PREY )
                 &&  ( _state != BRAIN_STATE_LOOKING_FOR_PREY ))

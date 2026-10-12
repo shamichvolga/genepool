@@ -206,7 +206,7 @@ let testNoEel = true;
         phenotype.predatorLevel    = predatorGene / 255; // 0..1
 
         // Legacy/binary compatibility for other code that may still look for isPredator
-        phenotype.isPredator       = phenotype.predatorLevel > 0.6; // keep old threshold behavior
+        phenotype.isPredator       = phenotype.predatorLevel > PREDATOR_LEVEL_THRESHOLD;
 
         //---------------------------------
         // apply genes
@@ -307,7 +307,7 @@ let testNoEel = true;
         phenotype.frequency = _frequency;
         
         // ВРЕМЕННО: хищники — чёрные, чтобы их было видно
-        if (phenotype.predatorLevel > 0.6) {
+        if (phenotype.predatorLevel > PREDATOR_LEVEL_THRESHOLD) {
             for (let c = 0; c < NUM_CATEGORIES; c++) {
                 _categoryValues[c].startRed   = 0;
                 _categoryValues[c].startGreen = 0;
