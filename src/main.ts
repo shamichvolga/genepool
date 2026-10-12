@@ -31,6 +31,8 @@ import * as logger   from "./ui/logger";
 import * as saveLoad from "./ui/saveLoad";
 import * as ui       from "./ui/ui";
 
+import { CapsuleRenderer } from "./render/CapsuleRenderer";
+
 //------------------------------------------------------------------------------
 // The HTML buttons call functions and constants by their global names
 // (onclick="choosePoolToLoad( SimulationStartMode.RANDOM )" and so on),
@@ -45,12 +47,28 @@ Object.assign( window,
 //------------------------------------------------------------------------------
 // prepare the UI: turn on the info panel and set it to the first page
 //------------------------------------------------------------------------------
-ui.resize();
+//------------------------------------------------------------------------------
+// graphics-card layer: same size and place as the pool canvas
+//------------------------------------------------------------------------------
+const glCanvas = document.getElementById( "GLCanvas" ) as HTMLCanvasElement;
+const capsuleRenderer = CapsuleRenderer.create( glCanvas );
+if ( capsuleRenderer === null ) { console.warn( "No WebGL2: drawing everything the old way." ); }
+
+function resizeAll()
+{
+    ui.resize();
+    glCanvas.width      = canvasID.width;
+    glCanvas.height     = canvasID.height;
+    glCanvas.style.left = canvasID.offsetLeft + "px";
+    glCanvas.style.top  = canvasID.offsetTop  + "px";
+}
+
+resizeAll();
 ui.openInfoPanel();
 ui.setInfoPage( 2 );
 ui.initializeUI();
 
-window.addEventListener( "resize", () => ui.resize() );
+window.addEventListener( "resize", resizeAll );
 
 //------------------------------------------------------------------------------
 // loading a single swimbot from a .json gene file
@@ -129,6 +147,7 @@ function startGenePool()
     pool.setCanvas( canvas );
     pool.setCanvasDimensions( canvasID.width, canvasID.height );
     pool.setShowingViewTrackingMode( true );
+    pool.setCapsuleRenderer( capsuleRenderer );
 
     startBackgroundMetronome();
 }

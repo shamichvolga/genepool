@@ -184,6 +184,7 @@ export function GenePool()
     let _lastCameraPosition = new Vector2D();
     let _seedSource = new FoodBit(); // scratch: a stand-in parent position for seeding
     let _genitalPositionUtility = new Vector2D(); // scratch: another swimbot's genital position
+    let _capsuleRenderer        = null;           // graphics-card renderer (browser only, may be absent)
     _lastCameraPosition.setXY(0, 0);
 
     let hhh = 0;
@@ -1399,6 +1400,9 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	}
 
 	this.getStepsPerSecond = function() { return _stepsPerSecond; }
+
+	// the graphics-card renderer (set up by main.ts in the browser)
+	this.setCapsuleRenderer = function( renderer ) { _capsuleRenderer = renderer; }
 
 	//--------------------------------
 	this.updateSwimbots = function()
@@ -2921,6 +2925,11 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 		//----------------------------------
 		// render the pool
 		//----------------------------------
+        // zoomed out (many swimbots on screen): bodies and food go to the
+        // graphics card; zoomed in: the detailed 2D drawing as before
+        const useGraphicsCard = ( _capsuleRenderer !== null ) && ( _levelOfDetail !== SWIMBOT_LEVEL_OF_DETAIL_HIGH );
+        if ( useGraphicsCard ) { _capsuleRenderer.begin(); }
+
         _pool.render( _seconds, _camera );
 
 		//-------------------------
@@ -2931,12 +2940,27 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 		//-------------------------
 		// render food
 		//-------------------------
-		this.renderFoodBits();
+		this.renderFoodBits( useGraphicsCard );
 
 		//----------------------------------
 		// render swimbots with batching
 		//----------------------------------
-        this.renderSwimbotsWithBatching();
+        this.renderSwimbotsWithBatching( useGraphicsCard );
+
+        if ( useGraphicsCard )
+        {
+            _capsuleRenderer.draw
+            (
+                _camera.getPosition().x - _camera.getXDimension() * ONE_HALF,
+                _camera.getPosition().y - _camera.getYDimension() * ONE_HALF,
+                _camera.getXDimension(),
+                _camera.getYDimension()
+            );
+        }
+        else if ( _capsuleRenderer !== null )
+        {
+            _capsuleRenderer.clear();
+        }
 
 		//-----------------------------------------------------------------------
 		// when view is in mutual love mode, show a line between the lovers...
@@ -3134,7 +3158,7 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 
 
 	//-------------------------------
-this.renderFoodBits = function()
+this.renderFoodBits = function( useGraphicsCard )
 {
         for (let i = 0; i < _aliveFoodBitIndices.length; i++)
         {
@@ -3143,7 +3167,8 @@ this.renderFoodBits = function()
 
             if (_camera.getWithinView(_foodBits[f].getPosition(), FOOD_BIT_GRAB_RADIUS))
             {
-                _foodBits[f].render(_camera.getScale());
+                if ( useGraphicsCard ) { _foodBits[f].writeCapsule( _capsuleRenderer, _camera.getScale() ); }
+                else                   { _foodBits[f].render( _camera.getScale() ); }
 
                 if (f === _selectedFoodBit)
                 {
@@ -3161,7 +3186,7 @@ this.renderFoodBits = function()
 	//----------------------------------
 	// render swimbots with batching
 	//----------------------------------
-	this.renderSwimbotsWithBatching = function()
+	this.renderSwimbotsWithBatching = function( useGraphicsCard )
 	{
     const cameraPos = _camera.getPosition();
     const cameraChanged = !_lastCameraPosition.equals(cameraPos);
@@ -3213,7 +3238,8 @@ this.renderFoodBits = function()
         const batchItem = _renderBatch[i];
         const swimbot = batchItem.swimbot;
 
-	        swimbot.render(_levelOfDetail);
+	        if ( useGraphicsCard ) { swimbot.writeCapsules( _capsuleRenderer, _levelOfDetail === SWIMBOT_LEVEL_OF_DETAIL_DOT ); }
+	        else                   { swimbot.render(_levelOfDetail); }
 
 	        if (batchItem.isSelected || batchItem.isMousedOver)
 	        {

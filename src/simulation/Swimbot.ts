@@ -10,6 +10,7 @@
 //    This software is intended for education, game design, and research.
 //
 // --------------------------------------------------------------------------
+import { SWIMBOT_DOT_RENDER_RADIUS } from "./Parameters";
 import { BRAIN_FOCUS_TARGET_SHIFT_STRENGTH, BRAIN_FOCUS_TARGET_SHIFT_THRESHOLD, BRAIN_SENSORY_UPDATE_PERIOD, BRAIN_STATE_FLEEING_PREDATOR, BRAIN_STATE_LOOKING_FOR_FOOD, BRAIN_STATE_LOOKING_FOR_MATE, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_FOOD, BRAIN_STATE_PURSUING_MATE, BRAIN_STATE_PURSUING_PREY, BRAIN_STATE_RESTING, BRAIN_WANDER_AMOUNT, Brain } from "./Brain";
 import { GREATEST_POSSIBLE_SWIMBOT_LENGTH, GREATEST_POSSIBLE_SWIMBOT_MASS } from "./Embryology";
 import { DEFAULT_FOOD_BIT_ENERGY, FoodBit } from "./FoodBit";
@@ -2533,6 +2534,34 @@ console.log( "contributeToOffspring: _childEnergyRatio = " + _childEnergyRatio )
 	//-------------------------------------
 	// render
 	//-------------------------------------
+	//-------------------------------------------------------------------
+	// hand the body to the graphics-card renderer: one capsule per part
+	// (or a single dot when far away)
+	//-------------------------------------------------------------------
+	this.writeCapsules = function( capsules, asDot )
+	{
+	    _swimbotRenderer.prepareColors( _phenotype, _age, _energy, _growthScale, this );
+
+	    if ( asDot )
+	    {
+	        const c = _swimbotRenderer.calculatePartColor(1);
+	        const x = _pd[ ROOT_PART * PS + P_X ], y = _pd[ ROOT_PART * PS + P_Y ];
+	        capsules.add( x, y, x, y, SWIMBOT_DOT_RENDER_RADIUS, c.red, c.green, c.blue, 1 );
+	        return;
+	    }
+
+	    for (let p=1; p<_numParts; p++)
+	    {
+	        const parent = _pParent[p];
+	        let ax, ay;
+	        if ( parent == NULL_PART ) { ax = _position.x; ay = _position.y; }
+	        else { ax = _pd[ parent * PS + P_X ]; ay = _pd[ parent * PS + P_Y ]; }
+
+	        const c = _swimbotRenderer.calculatePartColor(p);
+	        capsules.add( ax, ay, _pd[ p * PS + P_X ], _pd[ p * PS + P_Y ], _pWidth[p], c.red, c.green, c.blue, 1 );
+	    }
+	}
+
 	this.render = function( levelOfDetail )
 	{
 	    this.syncPartObjects();

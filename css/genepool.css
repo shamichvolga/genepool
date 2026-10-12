@@ -149,6 +149,13 @@ html
     position: absolute; 
 }
 
+/* graphics-card layer: exactly over #Canvas, lets the mouse through */
+#GLCanvas
+{
+    position: absolute;
+    pointer-events: none;
+}
+
 #masterPanel
 {
     position:           absolute; 

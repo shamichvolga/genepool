@@ -12,25 +12,25 @@ var    flopperX = 0;
 var    flopperY = 0;
 var    flopperXV = 0;
 var    flopperYV = 0;
-    
+
     //---------------------------------
-    //  colors 
+    //  colors
     //---------------------------------
     const COLOR_WHITENESS   = 0.4; // 0.0 = normal-saturated color; 0.5 = white-washed; 1.0 = pure white
     const DEAD_COLOR_RED    = 0.2;
     const DEAD_COLOR_GREEN  = 0.25;
     const DEAD_COLOR_BLUE   = 0.3;
-    const ROLLOVER_COLOR    = "rgba( 180, 190, 200, 0.7 )";	
-    const SELECT_COLOR      = "rgba( 255, 255, 255, 0.8 )";	
-    const OUTLINE_COLOR     = "rgba( 0, 0, 0, 0.4 )";	
-    
+    const ROLLOVER_COLOR    = "rgba( 180, 190, 200, 0.7 )";
+    const SELECT_COLOR      = "rgba( 255, 255, 255, 0.8 )";
+    const OUTLINE_COLOR     = "rgba( 0, 0, 0, 0.4 )";
+
     //---------------------------------
-    //  spline 
+    //  spline
     //---------------------------------
     const DEFAULT_SPLINE_FACTOR = 0.4;
 
     //---------------------------------
-    //  egg size 
+    //  egg size
     //---------------------------------
     const EGG_SIZE = 5.0;
 
@@ -70,7 +70,7 @@ var    flopperYV = 0;
 	// set rendering goals
 	//-------------------------------------------
 	this.setRenderingGoals = function( r )
-	{	
+	{
 	    _renderingGenitalsAndMouths = r;
     }
 
@@ -89,7 +89,7 @@ var    flopperYV = 0;
 	    levelOfDetail,
 	    swimbot
 	)
-    
+
 	{
 
     	_phenotype      = phenotype;
@@ -103,11 +103,11 @@ var    flopperYV = 0;
 
 		if ( levelOfDetail == SWIMBOT_LEVEL_OF_DETAIL_DOT )
 		{
-            
+
 		    let p = 1;
 
-            _colorUtility = this.calculatePartColor(p);  
-            
+            _colorUtility = this.calculatePartColor(p);
+
             let red   = Math.floor( _colorUtility.red   * 255 );
             let green = Math.floor( _colorUtility.green * 255 );
             let blue  = Math.floor( _colorUtility.blue  * 255 );
@@ -119,31 +119,31 @@ var    flopperYV = 0;
 			canvas.arc( center.x, center.y, SWIMBOT_DOT_RENDER_RADIUS, 0, PI2, false );
 			canvas.fill();
 
-              
+
         }
 		else if ( levelOfDetail == SWIMBOT_LEVEL_OF_DETAIL_LOW )
 		{
 			for (let p=1; p<_phenotype.numParts; p++)
 			{
 				let parentPosition = this.getPartParentPosition(p);
-                
-				_colorUtility = this.calculatePartColor(p);  
+
+				_colorUtility = this.calculatePartColor(p);
                 let red   = Math.floor( _colorUtility.red   * 255 );
                 let green = Math.floor( _colorUtility.green * 255 );
                 let blue  = Math.floor( _colorUtility.blue  * 255 );
 
-				canvas.strokeStyle = "rgb( " + red + ", " + green + ", " + blue + " )";	
-				canvas.lineWidth = _phenotype.parts[p].width * 2.0; 
+				canvas.strokeStyle = "rgb( " + red + ", " + green + ", " + blue + " )";
+				canvas.lineWidth = _phenotype.parts[p].width * 2.0;
 
 				canvas.beginPath();
 				canvas.moveTo( parentPosition.x, parentPosition.y );
 				canvas.lineTo( _phenotype.parts[p].position.x, _phenotype.parts[p].position.y );
 				canvas.closePath();
 				canvas.stroke();
-			}	
+			}
 		}
 		else if ( levelOfDetail == SWIMBOT_LEVEL_OF_DETAIL_HIGH )
-		{ 
+		{
 			for (let p=1; p<_phenotype.numParts; p++)
 			{
 				if ( _phenotype.parts[p].length > ZERO )
@@ -179,7 +179,7 @@ var    flopperYV = 0;
                                 ||  ( _brain.getState() == BRAIN_STATE_LOOKING_FOR_PREY )
                                 ||  ( _brain.getState() == BRAIN_STATE_PURSUING_PREY )
                             )
-                            {	
+                            {
                                 // Store the mouth color before rendering to ensure consistency
                                 _mouthColor = {
                                     red: _colorUtility.red,
@@ -187,14 +187,14 @@ var    flopperYV = 0;
                                     blue: _colorUtility.blue
                                 };
                                 this.renderMouth();
-                            }		
+                            }
 
                         }
                     }
 				}
 			}
 		}
-		
+
         if ( _renderingGenitalsAndMouths )
 		{
             //--------------------------------------------
@@ -202,7 +202,7 @@ var    flopperYV = 0;
             //--------------------------------------------
             if (( _brain.getState() == BRAIN_STATE_LOOKING_FOR_MATE	)
             ||  ( _brain.getState() == BRAIN_STATE_PURSUING_MATE ))
-            {	
+            {
                 this.renderGenital();
             }
         }
@@ -216,15 +216,15 @@ var    flopperYV = 0;
 	// render part normal (not splined)
 	//-----------------------------------
 	this.renderPartNormal = function(p)
-	{			
+	{
         let width           = _phenotype.parts[p].width;
         let position 		= _phenotype.parts[p].position;
         let parentPosition  = this.getPartParentPosition(p);
-        
+
         //---------------------------
         // baby growing...
         //---------------------------
-        if ( _growthScale < ONE )        
+        if ( _growthScale < ONE )
         {
             width = width * _growthScale + EGG_SIZE * ( ONE - _growthScale );
         }
@@ -245,14 +245,14 @@ var    flopperYV = 0;
         let y2 = position.y + pp0y;
 
         let x3 = position.x - pp0x;
-        let y3 = position.y - pp0y;		
-    
+        let y3 = position.y - pp0y;
+
         _colorUtility = this.calculatePartColor(p);
         let red   = Math.floor( _colorUtility.red   * 255 );
         let green = Math.floor( _colorUtility.green * 255 );
         let blue  = Math.floor( _colorUtility.blue  * 255 );
 
-        canvas.fillStyle = "rgb( " + red + ", " + green + ", " + blue + " )";	
+        canvas.fillStyle = "rgb( " + red + ", " + green + ", " + blue + " )";
 
         canvas.beginPath();
         canvas.moveTo( x0, y0 );
@@ -261,23 +261,23 @@ var    flopperYV = 0;
         canvas.lineTo( x3, y3 );
         canvas.closePath();
         canvas.fill();
-        
+
         let radius = width;
 
         canvas.beginPath();
         canvas.arc( position.x, position.y, radius, 0, PI2, false );
         canvas.fill();
-        canvas.closePath();	
+        canvas.closePath();
 
         canvas.beginPath();
-        canvas.arc( parentPosition.x, parentPosition.y, radius, 0, PI2, false );								
+        canvas.arc( parentPosition.x, parentPosition.y, radius, 0, PI2, false );
         canvas.fill();
-        canvas.closePath();	
+        canvas.closePath();
 
         //--------------------------------
         // outline
         //--------------------------------
-        canvas.lineWidth = 1.0; 
+        canvas.lineWidth = 1.0;
         canvas.strokeStyle = OUTLINE_COLOR
 
         let radian = _phenotype.parts[p].currentAngle * PI_OVER_180;
@@ -285,7 +285,7 @@ var    flopperYV = 0;
         canvas.beginPath();
         canvas.arc( parentPosition.x, parentPosition.y, radius, Math.PI - radian, Math.PI - radian + Math.PI, false );
         canvas.stroke();
-        canvas.closePath();	    
+        canvas.closePath();
 
         canvas.beginPath();
         canvas.moveTo( x1, y1 );
@@ -294,7 +294,7 @@ var    flopperYV = 0;
         canvas.moveTo( x0, y0 );
         canvas.lineTo( x3, y3 );
         canvas.stroke();
-        canvas.closePath();	
+        canvas.closePath();
     }
 
 
@@ -303,7 +303,7 @@ var    flopperYV = 0;
 
 
 	//------------------------------------
-	// render part splined 
+	// render part splined
 	//------------------------------------
 	this.renderPartSplined = function(p)
 	{
@@ -316,7 +316,7 @@ var    flopperYV = 0;
         //---------------------------
         // baby growing...
         //---------------------------
-        if ( _growthScale < ONE )        
+        if ( _growthScale < ONE )
         {
             width       = width         * _growthScale + EGG_SIZE * ( ONE - _growthScale );
             parentWidth = parentWidth   * _growthScale + EGG_SIZE * ( ONE - _growthScale );
@@ -336,13 +336,13 @@ var    flopperYV = 0;
         {
             perpStartX += _phenotype.parts[ parentIndex ].perpendicular.x;
             perpStartY += _phenotype.parts[ parentIndex ].perpendicular.y;
-    
+
             let length = Math.sqrt( perpStartX * perpStartX + perpStartY * perpStartY );
             perpStartX /= length;
             perpStartY /= length;
         }
 
-        
+
         if ( _phenotype.parts[p].child != NULL_INDEX )
         {
             perpEndX += _phenotype.parts[ _phenotype.parts[p].child ].perpendicular.x;
@@ -374,7 +374,7 @@ var    flopperYV = 0;
         perpEndX *= width;
         perpEndY *= width;
 
-        if ( p === 1 ) 
+        if ( p === 1 )
         {
             perpStartX  *= width;
             perpStartY  *= width;
@@ -419,7 +419,7 @@ var    flopperYV = 0;
         let green = Math.floor( _colorUtility.green * 255 );
         let blue  = Math.floor( _colorUtility.blue  * 255 );
 
-        canvas.fillStyle = "rgb( " + red + ", " + green + ", " + blue + " )";	
+        canvas.fillStyle = "rgb( " + red + ", " + green + ", " + blue + " )";
         canvas.strokeStyle = OUTLINE_COLOR;
 
 
@@ -431,38 +431,38 @@ var    flopperYV = 0;
             canvas.beginPath();
             canvas.arc( _phenotype.parts[ parentIndex ].position.x, _phenotype.parts[ parentIndex ].position.y, width, 0, PI2, false );
             canvas.fill();
-            canvas.closePath();	
-            
+            canvas.closePath();
+
             let radian = _phenotype.parts[ parentIndex ].currentAngle * PI_OVER_180;
-            
+
             canvas.beginPath();
             canvas.arc
-            ( 
-                _phenotype.parts[ parentIndex ].position.x, 
-                _phenotype.parts[ parentIndex ].position.y, 
-                width, 
-                
-                Math.PI - radian, 
-                Math.PI - radian + Math.PI, 
-                
-                false 
+            (
+                _phenotype.parts[ parentIndex ].position.x,
+                _phenotype.parts[ parentIndex ].position.y,
+                width,
+
+                Math.PI - radian,
+                Math.PI - radian + Math.PI,
+
+                false
             );
-            
+
             canvas.stroke();
-            canvas.closePath();	    
+            canvas.closePath();
         }
 
         //---------------------------------------
         // a terminating end part
         //---------------------------------------
                 if ( _phenotype.parts[p].child === NULL_INDEX )
-        {        
+        {
             let s =  width * _phenotype.parts[p].endCapSpline;
             let f = -1.0;
-            
+
             let axisNormalX = _phenotype.parts[p].axis.x / _phenotype.parts[p].length;
             let axisNormalY = _phenotype.parts[p].axis.y / _phenotype.parts[p].length;
-            
+
             let startx  = endLeftX  + axisNormalX * f;
             let starty  = endLeftY  + axisNormalY * f;
             let endx    = endRightX + axisNormalX * f;
@@ -487,7 +487,7 @@ var    flopperYV = 0;
             canvas.bezierCurveTo( c1x, c1y, c2x, c2y, endx, endy );
             canvas.stroke();
         }
-        
+
         //---------------------------------------
         // fill interior
         //---------------------------------------
@@ -497,18 +497,18 @@ var    flopperYV = 0;
         canvas.lineTo( endRightX, endRightY );
         canvas.bezierCurveTo( control2RightX, control2RightY, control1RightX, control1RightY, startRightX, startRightY );
         canvas.lineTo( startLeftX, startLeftY );
-        canvas.closePath();	    
-        canvas.fill();	
+        canvas.closePath();
+        canvas.fill();
 
         canvas.beginPath();
-        canvas.arc( parentPosition.x, parentPosition.y, parentWidth * 0.9, 0, PI2, false );								
+        canvas.arc( parentPosition.x, parentPosition.y, parentWidth * 0.9, 0, PI2, false );
         canvas.fill();
-        canvas.closePath();	
+        canvas.closePath();
 
         //---------------------------------------
         // draw outline
         //---------------------------------------
-        canvas.lineWidth = 1.0;       	
+        canvas.lineWidth = 1.0;
         canvas.beginPath();
         canvas.moveTo( startLeftX, startLeftY );
         canvas.bezierCurveTo( control1LeftX, control1LeftY, control2LeftX, control2LeftY, endLeftX, endLeftY );
@@ -524,6 +524,19 @@ var    flopperYV = 0;
 	//------------------------------------------------------
 	// calculate part color
 	//------------------------------------------------------
+	//------------------------------------------------------
+	// set the state calculatePartColor needs, without drawing
+	// (the graphics-card renderer asks for colors this way)
+	//------------------------------------------------------
+	this.prepareColors = function( phenotype, age, energy, growthScale, swimbot )
+	{
+    	_phenotype      = phenotype;
+    	_age            = age;
+    	_energy         = energy;
+    	_growthScale    = growthScale;
+    	_swimbot        = swimbot;
+	}
+
 	this.calculatePartColor = function(p)
 	{
 	    // Calculate the color if not cached
@@ -579,7 +592,7 @@ var    flopperYV = 0;
 	            _colorUtility.blue  = DEAD_COLOR_BLUE   * f + _phenotype.parts[p].blue  * ( ONE - f );
 	        }
 	    }
-        
+
         assert( _colorUtility.red   >= ZERO, "_colorUtility.red   >= ZERO" );
         assert( _colorUtility.red   <= ONE,  "_colorUtility.red   <= ONE"  );
 
@@ -595,25 +608,25 @@ var    flopperYV = 0;
 
 
 
-    
+
 	//--------------------------------
 	// render genital
 	//--------------------------------
 	this.renderGenital = function()
-	{	
+	{
         let genitalLength = SWIMBOT_GENITAL_LENGTH * _growthScale;
-        
+
         let x = _phenotype.parts[ GENITAL_INDEX ].position.x + _focusDirection.x * genitalLength;
         let y = _phenotype.parts[ GENITAL_INDEX ].position.y + _focusDirection.y * genitalLength;
-        
-		canvas.lineWidth = 1.0; 
-        canvas.strokeStyle = "rgba( 255, 255, 255, 0.7 )";	
+
+		canvas.lineWidth = 1.0;
+        canvas.strokeStyle = "rgba( 255, 255, 255, 0.7 )";
         canvas.beginPath();
         canvas.moveTo( _phenotype.parts[ GENITAL_INDEX ].position.x, _phenotype.parts[ GENITAL_INDEX ].position.y );
         canvas.lineTo( x, y );
         canvas.stroke();
-        canvas.closePath();			
-        
+        canvas.closePath();
+
         //--------------------------------------------------------
         // if pursuing a mate, show arrow head
         //--------------------------------------------------------
@@ -626,13 +639,13 @@ var    flopperYV = 0;
 
             let xRight = x + _focusDirection.y * arrowWidth - _focusDirection.x * arrowLength;
             let yRight = y - _focusDirection.x * arrowWidth - _focusDirection.y * arrowLength;
-            
+
             canvas.beginPath();
             canvas.moveTo( xLeft, yLeft );
             canvas.lineTo( x, y );
             canvas.lineTo( xRight, yRight );
             canvas.stroke();
-            canvas.closePath();			
+            canvas.closePath();
         }
 	}
 
@@ -646,22 +659,22 @@ var    flopperYV = 0;
 	this.renderMouth = function()
 	{
         // new version
-        
+
 	    let mouthLength = _phenotype.parts[1].width * 2.5;
 	    if ( mouthLength < SWIMBOT_MIN_MOUTH_LENGTH )
 	    {
 	        mouthLength = SWIMBOT_MIN_MOUTH_LENGTH;
 	    }
-	    	    
+
 	    let mouthWidth = _phenotype.parts[1].width;
 	    if ( mouthWidth < SWIMBOT_MIN_MOUTH_WIDTH )
 	    {
 	        mouthWidth = SWIMBOT_MIN_MOUTH_WIDTH;
 	    }
-	    
+
 	    mouthLength *= _growthScale;
 	    mouthWidth  *= _growthScale;
-	    
+
 	    let baseX = _phenotype.parts[ MOUTH_INDEX ].position.x;
 	    let baseY = _phenotype.parts[ MOUTH_INDEX ].position.y;
 
@@ -670,25 +683,25 @@ var    flopperYV = 0;
 
         let mouthEndX = baseX + _focusDirection.x * mouthLength;
         let mouthEndY = baseY + _focusDirection.y * mouthLength;
-        
+
         let basePerpX =  _focusDirection.y * _phenotype.parts[1].width * 0.5;
         let basePerpY = -_focusDirection.x * _phenotype.parts[1].width * 0.5;
 
         let endPerpX  =  _focusDirection.y * mouthWidth;
         let endPerpY  = -_focusDirection.x * mouthWidth;
-        
+
         let leftJawX  = baseX - basePerpX;
         let leftJawY  = baseY - basePerpY;
         let rightJawX = baseX + basePerpX;
         let rightJawY = baseY + basePerpY;
-        
+
         let leftEndX  = mouthEndX;
         let leftEndY  = mouthEndY;
         let rightEndX = mouthEndX;
         let rightEndY = mouthEndY;
-            
-		canvas.lineWidth = SWIMBOT_MOUTH_WIDTH; 
-        
+
+		canvas.lineWidth = SWIMBOT_MOUTH_WIDTH;
+
         // Predator mouth highlight (visual differentiation) based on predatorLevel (0..1)
         let predatorLevel = (_phenotype && _phenotype.predatorLevel !== undefined) ? _phenotype.predatorLevel : 0;
         predatorLevel = Math.max(0, Math.min(1, predatorLevel));
@@ -716,9 +729,9 @@ var    flopperYV = 0;
         let red   = Math.floor(baseRed   * (1 - predatorLevel) + predRed   * predatorLevel);
         let green = Math.floor(baseGreen * (1 - predatorLevel) + predGreen * predatorLevel);
         let blue  = Math.floor(baseBlue  * (1 - predatorLevel) + predBlue  * predatorLevel);
-        
-        canvas.fillStyle = "rgb( " + red + ", " + green + ", " + blue + " )";	
-        
+
+        canvas.fillStyle = "rgb( " + red + ", " + green + ", " + blue + " )";
+
         //--------------------------------------------------------
         // open jaws
         //--------------------------------------------------------
@@ -731,7 +744,7 @@ var    flopperYV = 0;
             leftEndY  -= endPerpY;
             rightEndX += endPerpX;
             rightEndY += endPerpY;
-        }        
+        }
 
         canvas.beginPath();
         canvas.moveTo( mouthStartX, mouthStartY );
@@ -742,29 +755,29 @@ var    flopperYV = 0;
         canvas.lineTo( rightJawX,   rightJawY   );
         canvas.lineTo( leftJawX,    leftJawY    );
         canvas.fill();
-        canvas.closePath();	
-        
-        canvas.strokeStyle = "rgba( 255, 255, 255, 0.7 )";	
+        canvas.closePath();
+
+        canvas.strokeStyle = "rgba( 255, 255, 255, 0.7 )";
         canvas.beginPath();
         canvas.moveTo( rightEndX,   rightEndY  );
         canvas.lineTo( mouthStartX, mouthStartY );
         canvas.lineTo( leftEndX,    leftEndY );
         canvas.stroke();
-        canvas.closePath();	     
-               					
-        canvas.strokeStyle = OUTLINE_COLOR; 
+        canvas.closePath();
+
+        canvas.strokeStyle = OUTLINE_COLOR;
         canvas.beginPath();
         canvas.moveTo( leftJawX, leftJawY );
         canvas.lineTo( leftEndX, leftEndY );
         canvas.stroke();
-        canvas.closePath();	            					
+        canvas.closePath();
 
         canvas.beginPath();
         canvas.moveTo( rightJawX, rightJawY );
         canvas.lineTo( rightEndX, rightEndY );
         canvas.stroke();
-        canvas.closePath();	 
-                   					
+        canvas.closePath();
+
     }
-    
+
 }//end of entire Swimbots function -------------------------
