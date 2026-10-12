@@ -1757,14 +1757,18 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
                 }
             }
 
-            if (okay && foodBit.getAlive())
+            if (!okay) continue;
+
+            // distance from my mouth (from the arrays; the food bit itself
+            // is only looked at for the few that could be the closest)
+            const mx = myMouthPosition.x - _foodX[f];
+            const my = myMouthPosition.y - _foodY[f];
+            let viewDistanceSquared = mx * mx + my * my;
+
+            if ( viewDistanceSquared < viewRadiusSquared && viewDistanceSquared < smallestDistanceSquared && foodBit.getAlive() )
             {
                 const foodPosition = foodBit.getPosition();
-                let viewDistanceSquared = myMouthPosition.getDistanceSquaredTo(foodPosition);
-
-                if (viewDistanceSquared < viewRadiusSquared)
                 {
-                    if (viewDistanceSquared < smallestDistanceSquared)
                     {
                         if (!_obstacle.getObstruction(myMouthPosition, foodPosition))
                         {
