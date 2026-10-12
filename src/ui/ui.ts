@@ -442,24 +442,22 @@ export function toggleSimulationRunning()
     }
 }
 
-//----------------------------------
+//----------------------------------------------------------
+// simulation speed buttons:  >  >>  >>>
+//----------------------------------------------------------
+export function setSpeed( level )
+{
+    genePool.setSpeedLevel( level );
+    for ( let l = 1; l <= 3; l++ )
+    {
+        document.getElementById( "speed" + l + "Button" ).classList.toggle( "activeButton", l === level );
+    }
+}
+
+// (kept for old code that still calls it)
 export function toggleFastRendering()
 {
-    if ( _runningFast )
-    {
-        _runningFast = false;
-        genePool.setFastMode( false );
-        genePool.setMillisecondsPerUpdateToDefault();
-        document.getElementById( "fastButton" ).style = "border-color: " + DEFAULT_BASIC_BUTTON_BORDER_COLOR;
-    }
-    else
-    {
-        _runningFast = true;
-        genePool.setFastMode( true );
-        genePool.setMillisecondsPerUpdate(0);
-        document.getElementById( "fastButton" ).style.borderColor = ACTIVE_BORDER_COLOR;
-        document.getElementById( "fastButton" ).style.borderWidth =  "3px";
-    }
+    setSpeed( genePool.getSpeedLevel() === 3 ? 1 : 3 );
 }
 
 //-------------------------

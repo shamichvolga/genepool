@@ -37,9 +37,12 @@ export function GenePool()
     // speed asks for - within a time budget, so drawing never stalls - and
     // then draws once.
     //--------------------------------------------------------------------------
-    const NORMAL_STEPS_PER_SECOND   = 50;   // normal speed (like the old 20 ms timer)
+    const NORMAL_STEPS_PER_SECOND   = 50;   // speed ">"   (like the old 20 ms timer)
+    const FAST_STEPS_PER_SECOND     = 250;  // speed ">>"
     const NORMAL_FRAME_BUDGET_MS    = 12;   // at most this much simulation per frame
-    const FAST_FRAME_BUDGET_MS      = 40;   // fast mode: simulate more, draw less often
+    const FAST_FRAME_BUDGET_MS      = 25;   // speed ">>"
+    const MAX_FRAME_BUDGET_MS       = 40;   // speed ">>>": as many steps as fit
+    let _speedLevel                 = 1;
     let _useAnimationFrames         = false;
     let _lastFrameTime              = 0;
     let _stepDebt                   = 0;    // simulation steps owed at normal speed
@@ -1358,18 +1361,22 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 
         if ( _simulationRunning )
         {
-            const deadline = performance.now() + ( _fastMode ? FAST_FRAME_BUDGET_MS : NORMAL_FRAME_BUDGET_MS );
-
-            if ( _fastMode )
+            if ( _speedLevel === 3 )
             {
                 // as many steps as fit into the frame
+                const deadline = performance.now() + MAX_FRAME_BUDGET_MS;
                 do { this.simulateStep(); } while ( performance.now() < deadline );
                 _stepDebt = 0;
             }
             else
             {
-                _stepDebt += elapsedSeconds * NORMAL_STEPS_PER_SECOND;
-                if ( _stepDebt > 3 ) { _stepDebt = 3; }
+                const fast          = ( _speedLevel === 2 );
+                const deadline      = performance.now() + ( fast ? FAST_FRAME_BUDGET_MS : NORMAL_FRAME_BUDGET_MS );
+                const stepsPerSecond = fast ? FAST_STEPS_PER_SECOND : NORMAL_STEPS_PER_SECOND;
+
+                _stepDebt += elapsedSeconds * stepsPerSecond;
+                const maximumDebt = stepsPerSecond * 0.06;
+                if ( _stepDebt > maximumDebt ) { _stepDebt = maximumDebt; }
 
                 while (( _stepDebt >= 1 ) && ( performance.now() < deadline ))
                 {
@@ -2846,17 +2853,23 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 	{
         _fastMode = f;
         _fastRenderCounter = 0;
-
-        if ( _fastMode )
-        {
-            _savedRenderingGoals = _renderingGoals;
-            this.setRenderingGoals( false );
-        }
-        else
-        {
-            this.setRenderingGoals( _savedRenderingGoals );
-        }
+        _speedLevel = f ? 3 : 1;
+        // (the original turned mouths and genitals off here to save drawing
+        //  time; drawing is cheap now, so they stay visible)
     }
+
+	//--------------------------------------------------------------
+	// simulation speed: 1 = normal, 2 = fast, 3 = as fast as possible
+	//--------------------------------------------------------------
+	this.setSpeedLevel = function( level )
+	{
+        _speedLevel = Math.min( 3, Math.max( 1, level ));
+        _fastMode   = ( _speedLevel === 3 );
+        _fastRenderCounter = 0;
+        _stepDebt = 0;
+	}
+
+	this.getSpeedLevel = function() { return _speedLevel; }
 
 	//-----------------------------------
 	this.toggleGoalOverlay = function()

@@ -70,11 +70,13 @@
                     </div>
                 </div>
 
-                <div id = "viewOptionsPanel" class = "gpGrid4">
+                <div id = "viewOptionsPanel">
                     <button id = "viewGoalButton" class = "basicButton" onClick = "toggleGoalOverlay();"       >mouth/genital</button>
                     <button id = "freezeButton"   class = "basicButton" onClick = "toggleSimulationRunning();" >freeze</button>
                     <button id = "noRenderButton" class = "basicButton" onClick = "toggleRendering();"         >rendering OFF</button>
-                    <button id = "fastButton"     class = "basicButton" onClick = "toggleFastRendering();"     >fastest</button>
+                    <button id = "speed1Button"   class = "basicButton speedButton activeButton" onClick = "setSpeed(1);" title = "normal speed (50 steps per second)" >&gt;</button>
+                    <button id = "speed2Button"   class = "basicButton speedButton" onClick = "setSpeed(2);" title = "fast (250 steps per second)" >&gt;&gt;</button>
+                    <button id = "speed3Button"   class = "basicButton speedButton" onClick = "setSpeed(3);" title = "as fast as the computer can" >&gt;&gt;&gt;</button>
                 </div>
             </section>
 

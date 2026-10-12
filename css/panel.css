@@ -169,7 +169,15 @@
 #outNav   { grid-column: 3; grid-row: 3; }
 
 #viewTrackingPanel { flex: 1 1 auto; }
-#viewOptionsPanel  { margin-top: 8px; }
+#viewOptionsPanel
+{
+    margin-top:             8px;
+    display:                grid;
+    grid-template-columns:  1fr 0.7fr 1fr 30px 34px 40px;
+    gap:                    5px;
+}
+#masterPanel .speedButton  { font-size: 12px; letter-spacing: -1px; padding: 0; }
+#masterPanel .activeButton { border-color: #ffffff; background-color: var(--button-hover); }
 
 /* ----------------------------------------------------------- tabs -------- */
 #menuButtonPanel
