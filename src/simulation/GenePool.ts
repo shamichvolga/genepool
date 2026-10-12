@@ -9,8 +9,8 @@ import { BYTE_SIZE, MILLISECONDS_PER_SECOND, NULL_INDEX, ONE, ONE_HALF, PI2, ZER
 import { Obstacle } from "./Obstacle";
 import { DEFAULT_CHILD_ENERGY_RATIO, DEFAULT_FOOD_REGENERATION_PERIOD, DEFAULT_GARDEN_OF_EDEN_RADIUS, DEFAULT_MAXIMUM_AGE, DEFAULT_SWIMBOT_HUNGER_THRESHOLD, FOOD_LOCAL_CAPACITY, FOOD_LOCAL_RADIUS, FOOD_RANDOM_SEED_CHANCE, FOOD_SPROUT_RATE, INITIAL_NUM_FOODBITS, INITIAL_NUM_SWIMBOTS, INITIAL_PREDATOR_FRACTION, LOCAL_PLANT_GROWTH, LOCAL_PLANT_SEED_RADIUS, MAX_CHILD_ENERGY_RATIO, MAX_FOODBITS, MAX_FOODBITS_PER_TYPE, MAX_FOOD_REGENERATION_PERIOD, MAX_MAXIMUM_AGE, MAX_SWIMBOTS, MAX_SWIMBOT_HUNGER_THRESHOLD, MEAT_DECAY_TIME, MIN_CHILD_ENERGY_RATIO, MIN_FOOD_REGENERATION_PERIOD, MIN_MAXIMUM_AGE, MIN_SWIMBOT_HUNGER_THRESHOLD, NON_REPRODUCING_JUNK_DNA_LIMIT, PREDATOR_LEVEL_THRESHOLD, PREY_MAX_MASS_RATIO, RENDER_SWIMBOT_AS_DOT, SWIMBOT_LEVEL_OF_DETAIL_DOT, SWIMBOT_LEVEL_OF_DETAIL_HIGH, SWIMBOT_LEVEL_OF_DETAIL_LOW, YOUNG_AGE_DURATION } from "./Parameters";
 import { PhyloTree } from "./PhyloTree";
-import { POOL_HEIGHT, POOL_LEFT, POOL_TOP, POOL_WIDTH, Pool } from "./Pool";
-import { SpatialGrid } from "./SpatialGrid";
+import { POOL_BOTTOM, POOL_HEIGHT, POOL_LEFT, POOL_RIGHT, POOL_TOP, POOL_WIDTH, Pool } from "./Pool";
+import { UniformGrid } from "./UniformGrid";
 import { Swimbot } from "./Swimbot";
 import { ATTRACTION_SIMILAR_COLOR, NUM_ATTRACTIONS, SWIMBOT_VIEW_RADIUS } from "./SwimbotTypes";
 import { Touch, TouchState } from "./Touch";
@@ -122,19 +122,37 @@ export function GenePool()
     let _fastRenderCounter      = 0;
     let _savedRenderingGoals    = true;
 
-    // Performance optimization variables
-    let _spatialGrid = new SpatialGrid(200); // Spatial grid for collision detection
+    //--------------------------------------------------------------------------
+    // Fast neighbour search: swimbot positions are copied into plain number
+    // arrays, and two grids (swimbots, food) are rebuilt from them every step.
+    //--------------------------------------------------------------------------
+    let _swimbotGrid    = new UniformGrid( 200, POOL_LEFT, POOL_TOP, POOL_RIGHT, POOL_BOTTOM, MAX_SWIMBOTS );
+    let _foodBitGrid    = new UniformGrid( 150, POOL_LEFT, POOL_TOP, POOL_RIGHT, POOL_BOTTOM, MAX_FOODBITS );
+    let _botX           = new Float64Array( MAX_SWIMBOTS );  // body center
+    let _botY           = new Float64Array( MAX_SWIMBOTS );
+    let _genitalX       = new Float64Array( MAX_SWIMBOTS );
+    let _genitalY       = new Float64Array( MAX_SWIMBOTS );
+    let _botAlive       = new Uint8Array  ( MAX_SWIMBOTS );    // kept exact: see notifySwimbotDeathTime
+    let _botEternal     = new Uint8Array  ( MAX_SWIMBOTS );
+    let _botPredator    = new Float64Array( MAX_SWIMBOTS );    // predator level 0..1
+    let _botMass        = new Float64Array( MAX_SWIMBOTS );
+    let _foodX          = new Float64Array( MAX_FOODBITS );
+    let _foodY          = new Float64Array( MAX_FOODBITS );
+    let _foodType       = new Uint8Array  ( MAX_FOODBITS );    // 0, 1 = plants, 2 = meat
+    let _gridResult     = new Int32Array( MAX_SWIMBOTS * 2 );  // scratch for grid queries
+    let _foodGridResult = new Int32Array( MAX_FOODBITS * 2 );
+    let _nearbyIndices  = new Int32Array( MAX_SWIMBOTS );      // swimbots within search radius
+
     let _renderBatch = []; // Batch rendering array
-    let _foodBitSpatialGrid = new SpatialGrid(150); // Separate grid for food bits
     let _batchObjectPool = [];
     let _distanceCache = new Array(MAX_SWIMBOTS);
     let _lastSwimbotPositions = new Array(MAX_SWIMBOTS);
     let _aliveSwimbotIndices = [];
     let _aliveFoodBitIndices = [];
     let _swimbotWasAlive = new Array(MAX_SWIMBOTS);
-    let _foodBitWasAlive = new Array(MAX_FOODBITS);
     let _lastCameraPosition = new Vector2D();
     let _seedSource = new FoodBit(); // scratch: a stand-in parent position for seeding
+    let _genitalPositionUtility = new Vector2D(); // scratch: another swimbot's genital position
     _lastCameraPosition.setXY(0, 0);
     
     let hhh = 0;	
@@ -172,27 +190,91 @@ export function GenePool()
     //------------------------------------------------------------
     // scratch arrays for picking the nearest perceived swimbots
     //------------------------------------------------------------
-    let _candidateSwimbots  = new Array(MAX_SWIMBOTS);
+    let _candidateIndices   = new Int32Array(MAX_SWIMBOTS);
     let _candidateDistances = new Float64Array(MAX_SWIMBOTS);
+    let _nearestIndices     = new Int32Array(BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS);
+    let _nearestDistances   = new Float64Array(BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS);
 
+    // a is "closer" than b: by distance, ties broken by swimbot index,
+    // so the order never depends on how the grid happens to store them
+    function isCloser( distanceA, indexA, distanceB, indexB )
+    {
+        return ( distanceA < distanceB ) || ( distanceA === distanceB && indexA < indexB );
+    }
+
+    //------------------------------------------------------------------
+    // sort all candidates, nearest first (insertion sort)
+    //------------------------------------------------------------------
     function sortCandidatesByDistance(count)
     {
-        // insertion sort by distance, ties broken by swimbot index, so the
-        // order never depends on how the spatial grid happens to store them
         for (let i = 1; i < count; i++)
         {
-            const bot = _candidateSwimbots[i];
-            const d   = _candidateDistances[i];
+            const index = _candidateIndices[i];
+            const d     = _candidateDistances[i];
             let j = i - 1;
-            while (j >= 0 && (_candidateDistances[j] > d || (_candidateDistances[j] === d && _candidateSwimbots[j].getIndex() > bot.getIndex())))
+            while (j >= 0 && isCloser( d, index, _candidateDistances[j], _candidateIndices[j] ))
             {
-                _candidateSwimbots [j + 1] = _candidateSwimbots [j];
+                _candidateIndices  [j + 1] = _candidateIndices  [j];
                 _candidateDistances[j + 1] = _candidateDistances[j];
                 j--;
             }
-            _candidateSwimbots [j + 1] = bot;
+            _candidateIndices  [j + 1] = index;
             _candidateDistances[j + 1] = d;
         }
+    }
+
+    //------------------------------------------------------------------
+    // the `limit` nearest candidates, nearest first, into _nearestIndices
+    // (keeps a short sorted list instead of sorting everything)
+    //------------------------------------------------------------------
+    function selectNearestCandidates( count, limit )
+    {
+        let kept = 0;
+        for (let i = 0; i < count; i++)
+        {
+            const index = _candidateIndices[i];
+            const d     = _candidateDistances[i];
+
+            if (( kept === limit ) && !isCloser( d, index, _nearestDistances[ kept - 1 ], _nearestIndices[ kept - 1 ] )) continue;
+
+            let j = ( kept < limit ) ? kept : kept - 1;
+            if ( kept < limit ) kept ++;
+
+            while (j > 0 && isCloser( d, index, _nearestDistances[j - 1], _nearestIndices[j - 1] ))
+            {
+                _nearestIndices  [j] = _nearestIndices  [j - 1];
+                _nearestDistances[j] = _nearestDistances[j - 1];
+                j--;
+            }
+            _nearestIndices  [j] = index;
+            _nearestDistances[j] = d;
+        }
+        return kept;
+    }
+
+    //------------------------------------------------------------------
+    // copy a swimbot's current state into the fast arrays.
+    // Positions change every step (after update); the other values only
+    // when a swimbot is born or edited between steps.
+    //------------------------------------------------------------------
+    function syncSwimbotPosition( s )
+    {
+        const position = _swimbots[s].getPosition();
+        const genital  = _swimbots[s].getGenitalPosition();
+        _botX    [s] = position.x;
+        _botY    [s] = position.y;
+        _genitalX[s] = genital.x;
+        _genitalY[s] = genital.y;
+    }
+
+    function syncSwimbot( s )
+    {
+        const swimbot = _swimbots[s];
+        syncSwimbotPosition( s );
+        _botAlive   [s] = swimbot.getAlive() ? 1 : 0;
+        _botEternal [s] = swimbot.isEternal() ? 1 : 0;
+        _botPredator[s] = swimbot.getPredatorLevel();
+        _botMass    [s] = swimbot.getPhenotypeMass();
     }
 
     function rebuildAliveIndexCaches()
@@ -231,7 +313,6 @@ export function GenePool()
 	for (let f=0; f<MAX_FOODBITS; f++)
 	{
 		_foodBits[f] = new FoodBit(); 
-        _foodBitWasAlive[f] = false;
 	}	
     
 	//-------------------------------------
@@ -339,15 +420,9 @@ export function GenePool()
             _foodBits[f].kill();
         }            
 
-        _spatialGrid.clear();
-        _foodBitSpatialGrid.clear();
         for (let s=0; s<MAX_SWIMBOTS; s++)
         {
             _swimbotWasAlive[s] = false;
-        }
-        for (let f=0; f<MAX_FOODBITS; f++)
-        {
-            _foodBitWasAlive[f] = false;
         }
         
         //-------------------------------------------------------------------
@@ -1065,6 +1140,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
     assert( deceasedSwimbotIndex != NULL_INDEX, "GenePool.js: this.notifySwimbotDeathTime: deceasedSwimbotIndex != NULL_INDEX" )
     //console.log( deceasedSwimbotIndex + " just died" );
     _familyTree.setDeathTime( deceasedSwimbotIndex, _clock );
+    _botAlive[ deceasedSwimbotIndex ] = 0;
 }
 
     // -------------------------------------------------------------
@@ -1092,6 +1168,10 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
                 _foodBits[foodIndex].setPosition(position);
                 _foodBits[foodIndex].randomizeSpawnPosition({ getPosition: function(){ return position; } });
             }
+
+            _foodX[foodIndex] = _foodBits[foodIndex].getPosition().x;
+            _foodY[foodIndex] = _foodBits[foodIndex].getPosition().y;
+            _foodType[foodIndex] = 2;
         }
     }
 			
@@ -1210,9 +1290,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	//--------------------------------
 	this.updateSwimbots = function()
 	{		
-        rebuildAliveIndexCaches();
-
-	    // Incremental swimbot grid sync: remove dead, update living
+	    // Swimbots that died last step: leave the grid, maybe leave meat
 	    for (let s = 0; s < MAX_SWIMBOTS; s++)
 	    {
             if (_swimbotWasAlive[s] && !_swimbots[s].getAlive())
@@ -1220,7 +1298,6 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
                 // Запомнить позицию трупа ДО удаления из грида
                 let deadPosition = _swimbots[s].getPosition();
 
-                _spatialGrid.removeObject(_swimbots[s]);
                 _swimbotWasAlive[s] = false;
 
                 // Мясо только от травоядных.
@@ -1241,28 +1318,29 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
 
             }
 	    }
+
+	    // who is alive now (after the meat above appeared)
+        rebuildAliveIndexCaches();
+
+	    // rebuild the swimbot grid from the living swimbots
 	    for (let i = 0; i < _aliveSwimbotIndices.length; i++)
 	    {
             let s = _aliveSwimbotIndices[i];
-	        _spatialGrid.addObject(_swimbots[s]);
+            syncSwimbot(s);
             _swimbotWasAlive[s] = true;
 	    }
+        _swimbotGrid.build( _aliveSwimbotIndices, _aliveSwimbotIndices.length, _botX, _botY );
 
-	    // Incremental food grid sync: remove dead, update living
-	    for (let f = 0; f < MAX_FOODBITS; f++)
-	    {
-            if (_foodBitWasAlive[f] && !_foodBits[f].getAlive())
-            {
-                _foodBitSpatialGrid.removeObject(_foodBits[f]);
-                _foodBitWasAlive[f] = false;
-            }
-	    }
+	    // rebuild the food grid from the living food bits
 	    for (let i = 0; i < _aliveFoodBitIndices.length; i++)
 	    {
             let f = _aliveFoodBitIndices[i];
-	        _foodBitSpatialGrid.addObject(_foodBits[f]);
-            _foodBitWasAlive[f] = true;
+            const position = _foodBits[f].getPosition();
+            _foodX[f] = position.x;
+            _foodY[f] = position.y;
+            _foodType[f] = _foodBits[f].getType();
 	    }
+        _foodBitGrid.build( _aliveFoodBitIndices, _aliveFoodBitIndices.length, _foodX, _foodY );
 
         for (let i = 0; i < _aliveSwimbotIndices.length; i++)
         {
@@ -1273,6 +1351,7 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
             
             
                 _swimbots[s].update();
+                syncSwimbotPosition(s);
                 
                 //-----------------------------------------------------------------
                 // provide aspects of the environment for the swimbot to perceive
@@ -1387,6 +1466,7 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
                                 //--------------------------------------------
                                 let initialAngle = getRandomAngleInDegrees();                                                        
                                 _swimbots[ newBornSwimbotIndex ].create( newBornSwimbotIndex, 0, _vectorUtility, initialAngle, energyToOffspring, _childGenotype, _embryology )
+                                syncSwimbot( newBornSwimbotIndex );
  
                                 //--------------------------------------------------
                                 // add the new swimbot to the family tree
@@ -1553,42 +1633,84 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 	    //------------------------------------------------------
         _numNearbySwimbots = 0;
 
-        // Use spatial grid for optimized nearby swimbot search
-        const nearbySwimbots = _spatialGrid.getNearbyObjects(me, (predatorLevel > PREDATOR_LEVEL_THRESHOLD) ? preyViewRadius : viewRadius);
+        //------------------------------------------------------------------
+        // everybody within the search radius (wider for a hunting predator)
+        //------------------------------------------------------------------
+        const myPosition   = me.getPosition();
+        const myX          = myPosition.x;
+        const myY          = myPosition.y;
+        const searchRadius = (predatorLevel > PREDATOR_LEVEL_THRESHOLD) ? preyViewRadius : viewRadius;
+        const searchRadiusSquared = searchRadius * searchRadius;
 
+        let numNearby = 0;
+        const numInCells = _swimbotGrid.collect( myX, myY, searchRadius, _gridResult );
+
+        for (let k = 0; k < numInCells; k++)
+        {
+            const o = _gridResult[k];
+            if ( o === s ) continue;
+
+            const dx = _botX[o] - myX;
+            const dy = _botY[o] - myY;
+            if ( dx * dx + dy * dy < searchRadiusSquared )
+            {
+                _nearbyIndices[ numNearby ++ ] = o;
+            }
+        }
 
         //------------------------------------------------------------------
         // the brain perceives the NEAREST swimbots within normal view,
-        // always in order of distance (the grid returns them in cell order)
+        // always in order of distance
         //------------------------------------------------------------------
+        const myGenitalX = myGenitalPosition.x;
+        const myGenitalY = myGenitalPosition.y;
         let numCandidates = 0;
 
-        for (let i = 0; i < nearbySwimbots.length; i++)
+        for (let i = 0; i < numNearby; i++)
         {
-            const other = nearbySwimbots[i];
+            const o = _nearbyIndices[i];
 
-            if ((other.getIndex() != s) && other.getAlive())
+            if ( _botAlive[o] === 1 )
             {
-                const distanceSquared = myGenitalPosition.getDistanceSquaredTo(other.getGenitalPosition());
+                const dx = myGenitalX - _genitalX[o];
+                const dy = myGenitalY - _genitalY[o];
+                const distanceSquared = dx * dx + dy * dy;
 
                 if (distanceSquared < viewRadiusSquared)
                 {
-                    _candidateSwimbots [numCandidates] = other;
+                    _candidateIndices  [numCandidates] = o;
                     _candidateDistances[numCandidates] = distanceSquared;
                     numCandidates++;
                 }
             }
         }
 
-        sortCandidatesByDistance(numCandidates);
+        // usually only the nearest few are needed; if the obstacle hides
+        // some of them, fall back to sorting the whole list
+        let numNearest = selectNearestCandidates( numCandidates, BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS );
+        let nearestList = _nearestIndices;
 
-        for (let i = 0; i < numCandidates && _numNearbySwimbots < BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS; i++)
+        for (let i = 0; i < numNearest; i++)
         {
-            const other = _candidateSwimbots[i];
-
-            if (!_obstacle.getObstruction(myGenitalPosition, other.getGenitalPosition()))
+            const o = _nearestIndices[i];
+            _genitalPositionUtility.setXY( _genitalX[o], _genitalY[o] );
+            if ( _obstacle.getObstruction( myGenitalPosition, _genitalPositionUtility ) && ( numCandidates > numNearest ))
             {
-                _nearbySwimbotsArray[_numNearbySwimbots] = other;
+                sortCandidatesByDistance( numCandidates );
+                nearestList = _candidateIndices;
+                numNearest  = numCandidates;
+                break;
+            }
+        }
+
+        for (let i = 0; i < numNearest && _numNearbySwimbots < BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS; i++)
+        {
+            const o = nearestList[i];
+            _genitalPositionUtility.setXY( _genitalX[o], _genitalY[o] );
+
+            if (!_obstacle.getObstruction(myGenitalPosition, _genitalPositionUtility))
+            {
+                _nearbySwimbotsArray[_numNearbySwimbots] = _swimbots[o];
                 _numNearbySwimbots++;
             }
         }
@@ -1599,17 +1721,25 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
         let foundFoodBit = false;
         let smallestDistanceSquared = Number.MAX_SAFE_INTEGER;
 
-        // Use food bit spatial grid for optimized search
-        const nearbyFoodBits = _foodBitSpatialGrid.getNearbyObjects(me, viewRadius);
+        const numFoodInCells = _foodBitGrid.collect( myX, myY, viewRadius, _foodGridResult );
 
-        for (let i = 0; i < nearbyFoodBits.length; i++)
+        for (let k = 0; k < numFoodInCells; k++)
         {
-            const foodBit = nearbyFoodBits[i];
+            const f  = _foodGridResult[k];
+
+            // within the search radius of my body center?
+            const fx = _foodX[f] - myX;
+            const fy = _foodY[f] - myY;
+            if ( fx * fx + fy * fy >= viewRadiusSquared ) continue;
+
+            const foodBit = _foodBits[f];
+            const foodType = _foodType[f];
+
             let okay = true;
 
             // Check food type compatibility
             // Type 2 (meat) must be eaten only by predators, independent of numFoodTypes
-            if (foodBit.getType() === 2)
+            if (foodType === 2)
             {
                 // Meat (type 2): eat only by predators
                 if (predatorLevel <= PREDATOR_LEVEL_THRESHOLD) okay = false;
@@ -1621,7 +1751,7 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
             }
             else if (globalTweakers.numFoodTypes === 2)
             {
-                if (foodBit.getType() != preferredFoodType)
+                if (foodType != preferredFoodType)
                 {
                     okay = false;
                 }
@@ -1664,26 +1794,30 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 
         // ─── Поиск добычи (только для хищников) ───────────────────────────────────
         if (predatorLevel > PREDATOR_LEVEL_THRESHOLD) {
-            for (let i = 0; i < nearbySwimbots.length; i++) {
-                let candidate = nearbySwimbots[i];
-                if (!candidate.getAlive()) continue;
+            for (let i = 0; i < numNearby; i++) {
+                const o = _nearbyIndices[i];
+                if (_botAlive[o] === 0) continue;
 
                 // Охотиться только на травоядных (хищники на хищников не нападают)
                 // Порог совпадает с порогом окраски в чёрный (Embryology.js, predatorLevel > 0.6),
                 // иначе боты с predatorLevel 0.5-0.6 визуально выглядят добычей,
                 // но хищники их игнорируют как "своих"
-                if (candidate.getPredatorLevel() > PREDATOR_LEVEL_THRESHOLD) continue;
+                if (_botPredator[o] > PREDATOR_LEVEL_THRESHOLD) continue;
 
                 // Бессмертных не едят
-                if (candidate.isEternal()) continue;
+                if (_botEternal[o] === 1) continue;
 
                 // Слишком крупная добыча хищнику не по зубам
-                if (candidate.getPhenotypeMass() > myMass * PREY_MAX_MASS_RATIO) continue;
+                if (_botMass[o] > myMass * PREY_MAX_MASS_RATIO) continue;
 
 
-                let distance = myMouthPosition.getDistanceTo(candidate.getPosition());
+                const px = myMouthPosition.x - _botX[o];
+                const py = myMouthPosition.y - _botY[o];
+                let distance = Math.sqrt( px * px + py * py );
 
                 if (distance > preyViewRadius) continue;
+
+                const candidate = _swimbots[o];
 
                 // Скоринг: предпочитаем максимально близкую жертву.
                 // Энергия остаётся небольшим плюсом, но выбор делаем по близости.
@@ -1717,14 +1851,17 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
         if (predatorLevel <= PREDATOR_LEVEL_THRESHOLD) { // Я — травоядный, ищу угрозу
             for (let i = 0; i < _numNearbySwimbots; i++) {
                 let candidate = _nearbySwimbotsArray[i];
-                if (!candidate.getAlive()) continue;
-                if (candidate.getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD) continue;
+                const o = candidate.getIndex();
+                if (_botAlive[o] === 0) continue;
+                if (_botPredator[o] <= PREDATOR_LEVEL_THRESHOLD) continue;
 
                 // сытый хищник не опасен — бежим только от охотящегося
                 const predatorState = candidate.getBrainState();
                 if ((predatorState !== BRAIN_STATE_LOOKING_FOR_PREY) && (predatorState !== BRAIN_STATE_PURSUING_PREY)) continue;
 
-                let distance = myGenitalPosition.getDistanceTo(candidate.getGenitalPosition());
+                const gx = myGenitalX - _genitalX[o];
+                const gy = myGenitalY - _genitalY[o];
+                let distance = Math.sqrt( gx * gx + gy * gy );
                 if (distance > viewRadius) continue;
 
                 if (distance < nearestPredatorDist) {
@@ -1869,11 +2006,21 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
         //---------------------------------------------
         // crowded? then the seed does not take root
         //---------------------------------------------
-        let neighbors = _foodBitSpatialGrid.getNearbyObjects( _foodBits[ child ], FOOD_LOCAL_RADIUS );
+        const childPosition = _foodBits[ child ].getPosition();
+        _foodX[ child ] = childPosition.x;
+        _foodY[ child ] = childPosition.y;
+        _foodType[ child ] = type;
+        const numInCells = _foodBitGrid.collect( childPosition.x, childPosition.y, FOOD_LOCAL_RADIUS, _foodGridResult );
         let numPlantNeighbors = 0;
-        for (let i = 0; i < neighbors.length; i++)
+        for (let k = 0; k < numInCells; k++)
         {
-            if ( neighbors[i].getAlive() && ( neighbors[i].getType() !== 2 )) { numPlantNeighbors ++; }
+            const f = _foodGridResult[k];
+            if ( f === child ) continue;
+            const neighbor = _foodBits[f];
+            const p = neighbor.getPosition();
+            const dx = p.x - childPosition.x;
+            const dy = p.y - childPosition.y;
+            if (( dx * dx + dy * dy < FOOD_LOCAL_RADIUS * FOOD_LOCAL_RADIUS ) && neighbor.getAlive() && ( neighbor.getType() !== 2 )) { numPlantNeighbors ++; }
         }
 
         if ( numPlantNeighbors >= FOOD_LOCAL_CAPACITY )
@@ -1883,8 +2030,7 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
         }
 
         // put it in the grid right away so the next seed this step sees it
-        _foodBitSpatialGrid.addObject( _foodBits[ child ] );
-        _foodBitWasAlive[ child ] = true;
+        _foodBitGrid.addExtra( child );
 
         return true;
     }

@@ -1,0 +1,147 @@
+//------------------------------------------------------------------------------
+// UniformGrid: "who is near this point?" for thousands of items, fast.
+//
+// Items are plain integer indices (a swimbot or food bit slot number) with
+// coordinates kept in Float64Arrays. Once per step the grid is rebuilt from
+// scratch with a counting sort - no objects, no maps, no garbage:
+//
+//   cellCount[c]  how many items are in cell c
+//   cellStart[c]  where cell c's items begin in `sorted`
+//   sorted[]      item indices grouped cell by cell
+//
+// A cell is floor( x / cellSize ), exactly like the previous object-based
+// grid, so queries return the same items. Items added after the rebuild
+// (e.g. a plant that sprouted this step) go to a small "extras" list that
+// queries also scan.
+//------------------------------------------------------------------------------
+const MARGIN_CELLS = 16;  // room for items outside the pool walls
+
+export class UniformGrid
+{
+    readonly cellSize   : number;
+    private  minCellX   : number;
+    private  minCellY   : number;
+    private  cols       : number;
+    private  rows       : number;
+    private  cellStart  : Int32Array;
+    private  cellCount  : Int32Array;
+    private  cellOfItem : Int32Array;
+    private  sorted     : Int32Array;
+    private  extras     : Int32Array;
+    private  numExtras  = 0;
+    private  isExtra    : Uint8Array;   // 1 = moved to extras since the rebuild
+
+    constructor( cellSize: number, left: number, top: number, right: number, bottom: number, capacity: number )
+    {
+        this.cellSize   = cellSize;
+        this.minCellX   = Math.floor( left   / cellSize ) - MARGIN_CELLS;
+        this.minCellY   = Math.floor( top    / cellSize ) - MARGIN_CELLS;
+        this.cols       = Math.floor( right  / cellSize ) + MARGIN_CELLS - this.minCellX + 1;
+        this.rows       = Math.floor( bottom / cellSize ) + MARGIN_CELLS - this.minCellY + 1;
+        this.cellStart  = new Int32Array( this.cols * this.rows + 1 );
+        this.cellCount  = new Int32Array( this.cols * this.rows );
+        this.cellOfItem = new Int32Array( capacity );
+        this.sorted     = new Int32Array( capacity );
+        this.extras     = new Int32Array( capacity );
+        this.isExtra    = new Uint8Array( capacity );
+    }
+
+    //--------------------------------------------------------------------
+    // column / row of a coordinate (clamped to the grid)
+    //--------------------------------------------------------------------
+    private column( x: number ): number
+    {
+        const c = Math.floor( x / this.cellSize ) - this.minCellX;
+        return c < 0 ? 0 : ( c >= this.cols ? this.cols - 1 : c );
+    }
+
+    private row( y: number ): number
+    {
+        const r = Math.floor( y / this.cellSize ) - this.minCellY;
+        return r < 0 ? 0 : ( r >= this.rows ? this.rows - 1 : r );
+    }
+
+    //--------------------------------------------------------------------
+    // rebuild from the given items (indices) and their coordinates
+    //--------------------------------------------------------------------
+    build( items: ArrayLike<number>, numItems: number, xs: Float64Array, ys: Float64Array ): void
+    {
+        const cellCount = this.cellCount;
+        cellCount.fill( 0 );
+
+        for ( let e = 0; e < this.numExtras; e++ ) this.isExtra[ this.extras[e] ] = 0;
+        this.numExtras = 0;
+
+        for ( let i = 0; i < numItems; i++ )
+        {
+            const item = items[i];
+            const cell = this.row( ys[ item ] ) * this.cols + this.column( xs[ item ] );
+            this.cellOfItem[ item ] = cell;
+            cellCount[ cell ] ++;
+        }
+
+        // running total: where each cell starts
+        const cellStart = this.cellStart;
+        let total = 0;
+        for ( let c = 0; c < cellCount.length; c++ )
+        {
+            cellStart[c] = total;
+            total += cellCount[c];
+        }
+        cellStart[ cellCount.length ] = total;
+
+        // place the items (cellCount is reused as a fill counter)
+        cellCount.fill( 0 );
+        for ( let i = 0; i < numItems; i++ )
+        {
+            const item = items[i];
+            const cell = this.cellOfItem[ item ];
+            this.sorted[ cellStart[ cell ] + cellCount[ cell ] ] = item;
+            cellCount[ cell ] ++;
+        }
+    }
+
+    //--------------------------------------------------------------------
+    // an item that appeared after the last rebuild
+    //--------------------------------------------------------------------
+    addExtra( item: number ): void
+    {
+        if ( this.isExtra[ item ] ) return;
+        this.isExtra[ item ] = 1;
+        this.extras[ this.numExtras ++ ] = item;
+    }
+
+    //--------------------------------------------------------------------
+    // collect: writes into `out` every item whose cell overlaps the square
+    // around (x, y), and returns how many. The caller checks real distances.
+    // Extras come last; an item moved to the extras is not listed twice.
+    //--------------------------------------------------------------------
+    collect( x: number, y: number, radius: number, out: Int32Array ): number
+    {
+        const c0 = this.column( x - radius ), c1 = this.column( x + radius );
+        const r0 = this.row   ( y - radius ), r1 = this.row   ( y + radius );
+        const cols = this.cols, cellStart = this.cellStart, sorted = this.sorted;
+        let n = 0;
+
+        for ( let c = c0; c <= c1; c++ )
+        {
+            for ( let r = r0; r <= r1; r++ )
+            {
+                const cell = r * cols + c;
+                const end = cellStart[ cell + 1 ];
+                for ( let k = cellStart[ cell ]; k < end; k++ )
+                {
+                    const item = sorted[k];
+                    if ( this.isExtra[ item ] === 0 ) out[ n ++ ] = item;
+                }
+            }
+        }
+
+        for ( let e = 0; e < this.numExtras; e++ )
+        {
+            out[ n ++ ] = this.extras[e];
+        }
+
+        return n;
+    }
+}

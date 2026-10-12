@@ -62,9 +62,9 @@ function makeNullCanvas()
 //------------------------------------------------
 // script list, read from index.html
 //------------------------------------------------
-function getSimulationScripts()
+function getSimulationScripts( root )
 {
-    const html = fs.readFileSync( path.join( ROOT, "index.html" ), "utf8" );
+    const html = fs.readFileSync( path.join( root, "index.html" ), "utf8" );
     const re = /src\s*=\s*"(simulation\/[^"?]+)/g;
     const list = [];
     let m;
@@ -76,15 +76,15 @@ function getSimulationScripts()
 // the TypeScript version (src/) is bundled in memory with esbuild;
 // the old plain-script version is concatenated in index.html order
 //------------------------------------------------
-function isTypeScriptProject()
+function isTypeScriptProject( root )
 {
-    return fs.existsSync( path.join( ROOT, "src", "simulation", "GenePool.ts" ) );
+    return fs.existsSync( path.join( root, "src", "simulation", "GenePool.ts" ) );
 }
 
-function bundleTypeScript()
+function bundleTypeScript( root )
 {
     const esbuild = require( path.join( __dirname, "..", "node_modules", "esbuild" ) );
-    const dir = path.join( ROOT, "src", "simulation" );
+    const dir = path.join( root, "src", "simulation" );
     const modules = fs.readdirSync( dir ).filter( f => f.endsWith( ".ts" ) ).map( f => f.slice( 0, -3 ) );
 
     // put every export on the global object, like the plain-script version had them
@@ -99,12 +99,12 @@ function bundleTypeScript()
     return result.outputFiles[0].text;
 }
 
-function concatenateScripts()
+function concatenateScripts( root )
 {
     let source = "";
-    for ( const file of getSimulationScripts() )
+    for ( const file of getSimulationScripts( root ) )
     {
-        source += fs.readFileSync( path.join( ROOT, file ), "utf8" ) + "\n;\n";
+        source += fs.readFileSync( path.join( root, file ), "utf8" ) + "\n;\n";
     }
     // gpRandom() and Math.random() both use the seeded generator
     return source + "\n;gpRandom = function() { return Math.random(); };\n";
@@ -113,7 +113,7 @@ function concatenateScripts()
 //------------------------------------------------
 // build the sandbox and load the simulation
 //------------------------------------------------
-function createSimulation( seed, overrides = {} )
+function createSimulation( seed, overrides = {}, root = ROOT )
 {
 const random = makeRandom( seed );
 const seededMath = Object.create( Math );
@@ -136,7 +136,7 @@ const sandbox =
 sandbox.window = sandbox;
 vm.createContext( sandbox );
 
-let source = isTypeScriptProject() ? bundleTypeScript() : concatenateScripts();
+let source = isTypeScriptProject( root ) ? bundleTypeScript( root ) : concatenateScripts( root );
 
 // optional: override constants, e.g. { INITIAL_NUM_SWIMBOTS: 500 }
 for ( const name in overrides )
@@ -213,7 +213,7 @@ const run = vm.runInContext( `
     }
 
     const genePool = new GenePool();
-    genePool.startSimulation( SimulationStartMode.RANDOM );
+    genePool.initialize();   // same start as in the browser (pool center, random pool)
     genePool.setRendering( false );
     genePool.setSimulationRunning( true );
 

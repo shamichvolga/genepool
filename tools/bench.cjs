@@ -14,6 +14,7 @@ const { createSimulation } = require( path.join( __dirname, "headless.cjs" ) );
 const bots  = parseInt( process.argv[2] || "1000", 10 );
 const steps = parseInt( process.argv[3] || "200",  10 );
 const seed  = parseInt( process.argv[4] || "1",    10 );
+const root  = process.argv[5] || path.join( __dirname, ".." );   // another copy of the project, to compare
 
 const overrides =
 {
@@ -26,7 +27,7 @@ const overrides =
 
 const memoryBefore = process.memoryUsage().heapUsed;
 const t0 = Date.now();
-const run = createSimulation( seed, overrides );
+const run = createSimulation( seed, overrides, root );
 const createMs = Date.now() - t0;
 
 for ( let i = 0; i < 20; i++ ) run.genePool.update();   // warm-up

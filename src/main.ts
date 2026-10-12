@@ -17,7 +17,6 @@ import * as Obstacle        from "./simulation/Obstacle";
 import * as Parameters      from "./simulation/Parameters";
 import * as PhyloTree       from "./simulation/PhyloTree";
 import * as Pool            from "./simulation/Pool";
-import * as SpatialGrid     from "./simulation/SpatialGrid";
 import * as Swimbot         from "./simulation/Swimbot";
 import * as SwimbotRenderer from "./simulation/SwimbotRenderer";
 import * as SwimbotTypes    from "./simulation/SwimbotTypes";
@@ -39,7 +38,7 @@ import * as ui       from "./ui/ui";
 //------------------------------------------------------------------------------
 Object.assign( window,
     Brain, Camera, Embryology, FamilyTree, FoodBit, GenePoolModule, Genotype, Globals,
-    MathConstants, Obstacle, Parameters, PhyloTree, Pool, SpatialGrid, Swimbot,
+    MathConstants, Obstacle, Parameters, PhyloTree, Pool, Swimbot,
     SwimbotRenderer, SwimbotTypes, Touch, Utility, Vector2D, ViewTracking,
     graph, info, logger, saveLoad, ui );
 
