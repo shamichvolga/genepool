@@ -10,7 +10,7 @@ export function Camera()
 	const DRAG_FORCE            =  0.03;
     const PAN_OVERSHOOT_PUSH 	=  0.7;
     const SCALE_OVERSHOOT_PUSH	=  0.7;
-    const MINIMUM_SCALE 		=  250.0;   // closest zoom: height of the view in pool units
+    const MINIMUM_SCALE 		=  80.0;    // closest zoom: height of the view in pool units
     
 	//------------------------------------------
 	// members

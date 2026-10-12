@@ -1,9 +1,14 @@
+import { PREDATOR_LEVEL_THRESHOLD } from "./Parameters";
 import { BRAIN_STATE_LOOKING_FOR_FOOD, BRAIN_STATE_LOOKING_FOR_MATE, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_FOOD, BRAIN_STATE_PURSUING_MATE, BRAIN_STATE_PURSUING_PREY } from "./Brain";
 import { NULL_INDEX, ONE, PI2, PI_OVER_180, ZERO } from "./MathConstants";
 import { OLD_AGE_DURATION, SWIMBOT_DOT_RENDER_RADIUS, SWIMBOT_LEVEL_OF_DETAIL_DOT, SWIMBOT_LEVEL_OF_DETAIL_HIGH, SWIMBOT_LEVEL_OF_DETAIL_LOW, YOUNG_AGE_DURATION } from "./Parameters";
 import { GENITAL_INDEX, MOUTH_INDEX, NULL_PART, ROOT_PART, STARVING, SWIMBOT_GENITAL_LENGTH, SWIMBOT_MIN_MOUTH_LENGTH, SWIMBOT_MIN_MOUTH_WIDTH, SWIMBOT_MOUTH_WIDTH } from "./SwimbotTypes";
 import { Color, assert } from "./Utility";
 import { Vector2D } from "./Vector2D";
+
+// predator beaks: red, with light teeth
+const PREDATOR_MOUTH_COLOR = "rgb( 190, 38, 30 )";
+const PREDATOR_TEETH_COLOR = "rgba( 255, 244, 228, 0.95 )";
 
 export function SwimbotRenderer()
 {
@@ -48,7 +53,6 @@ var    flopperYV = 0;
 	let _splineFactor       = ZERO;
 	let _renderingGenitalsAndMouths = false;
 	let _swimbot            = null;
-	let _mouthColor         = null;
 
 
 
@@ -180,12 +184,6 @@ var    flopperYV = 0;
                                 ||  ( _brain.getState() == BRAIN_STATE_PURSUING_PREY )
                             )
                             {
-                                // Store the mouth color before rendering to ensure consistency
-                                _mouthColor = {
-                                    red: _colorUtility.red,
-                                    green: _colorUtility.green,
-                                    blue: _colorUtility.blue
-                                };
                                 this.renderMouth();
                             }
 
@@ -658,19 +656,14 @@ var    flopperYV = 0;
 	//--------------------------------
 	this.renderMouth = function()
 	{
-        // new version
-
+	    //------------------------------------------------------------------
+	    // the beak's size follows the first body part (as in the original)
+	    //------------------------------------------------------------------
 	    let mouthLength = _phenotype.parts[1].width * 2.5;
-	    if ( mouthLength < SWIMBOT_MIN_MOUTH_LENGTH )
-	    {
-	        mouthLength = SWIMBOT_MIN_MOUTH_LENGTH;
-	    }
+	    if ( mouthLength < SWIMBOT_MIN_MOUTH_LENGTH ) { mouthLength = SWIMBOT_MIN_MOUTH_LENGTH; }
 
 	    let mouthWidth = _phenotype.parts[1].width;
-	    if ( mouthWidth < SWIMBOT_MIN_MOUTH_WIDTH )
-	    {
-	        mouthWidth = SWIMBOT_MIN_MOUTH_WIDTH;
-	    }
+	    if ( mouthWidth < SWIMBOT_MIN_MOUTH_WIDTH ) { mouthWidth = SWIMBOT_MIN_MOUTH_WIDTH; }
 
 	    mouthLength *= _growthScale;
 	    mouthWidth  *= _growthScale;
@@ -680,13 +673,11 @@ var    flopperYV = 0;
 
         let mouthStartX = baseX + _focusDirection.x * mouthLength * 0.3;
         let mouthStartY = baseY + _focusDirection.y * mouthLength * 0.3;
-
-        let mouthEndX = baseX + _focusDirection.x * mouthLength;
-        let mouthEndY = baseY + _focusDirection.y * mouthLength;
+        let mouthEndX   = baseX + _focusDirection.x * mouthLength;
+        let mouthEndY   = baseY + _focusDirection.y * mouthLength;
 
         let basePerpX =  _focusDirection.y * _phenotype.parts[1].width * 0.5;
         let basePerpY = -_focusDirection.x * _phenotype.parts[1].width * 0.5;
-
         let endPerpX  =  _focusDirection.y * mouthWidth;
         let endPerpY  = -_focusDirection.x * mouthWidth;
 
@@ -700,50 +691,41 @@ var    flopperYV = 0;
         let rightEndX = mouthEndX;
         let rightEndY = mouthEndY;
 
-		canvas.lineWidth = SWIMBOT_MOUTH_WIDTH;
+        const isPredator = ( _phenotype.predatorLevel !== undefined ) && ( _phenotype.predatorLevel > PREDATOR_LEVEL_THRESHOLD );
+        const state      = _brain.getState();
 
-        // Predator mouth highlight (visual differentiation) based on predatorLevel (0..1)
-        let predatorLevel = (_phenotype && _phenotype.predatorLevel !== undefined) ? _phenotype.predatorLevel : 0;
-        predatorLevel = Math.max(0, Math.min(1, predatorLevel));
+        //--------------------------------------------------------------
+        // the beak opens while going for food (predators: prey or meat)
+        //--------------------------------------------------------------
+        const open = isPredator
+            ? (( state === BRAIN_STATE_PURSUING_PREY ) || ( state === BRAIN_STATE_PURSUING_FOOD ))
+            :  ( state === BRAIN_STATE_PURSUING_FOOD );
 
-        // Use the stored mouth color, blended toward "predator orange/red"
-        let baseRed, baseGreen, baseBlue;
-
-        if (_mouthColor) {
-            baseRed   = Math.floor( _mouthColor.red   * 255 );
-            baseGreen = Math.floor( _mouthColor.green * 255 );
-            baseBlue  = Math.floor( _mouthColor.blue  * 255 );
-        } else {
-            _colorUtility = this.calculatePartColor(1);
-            baseRed   = Math.floor( _colorUtility.red   * 255 );
-            baseGreen = Math.floor( _colorUtility.green * 255 );
-            baseBlue  = Math.floor( _colorUtility.blue  * 255 );
-        }
-
-        // Predator highlight target color
-        const predRed = 255;
-        const predGreen = 120;
-        const predBlue = 0;
-
-        // Linear blend by predatorLevel
-        let red   = Math.floor(baseRed   * (1 - predatorLevel) + predRed   * predatorLevel);
-        let green = Math.floor(baseGreen * (1 - predatorLevel) + predGreen * predatorLevel);
-        let blue  = Math.floor(baseBlue  * (1 - predatorLevel) + predBlue  * predatorLevel);
-
-        canvas.fillStyle = "rgb( " + red + ", " + green + ", " + blue + " )";
-
-        //--------------------------------------------------------
-        // open jaws
-        //--------------------------------------------------------
-        if (
-            _brain.getState() === BRAIN_STATE_PURSUING_FOOD ||
-            _brain.getState() === BRAIN_STATE_PURSUING_PREY
-        )
+        if ( open )
         {
             leftEndX  -= endPerpX;
             leftEndY  -= endPerpY;
             rightEndX += endPerpX;
             rightEndY += endPerpY;
+        }
+
+		canvas.lineWidth = SWIMBOT_MOUTH_WIDTH;
+
+        //--------------------------------------------------------------
+        // color: herbivores like their first body part (as in the
+        // original), predators red
+        //--------------------------------------------------------------
+        if ( isPredator )
+        {
+            canvas.fillStyle = PREDATOR_MOUTH_COLOR;
+        }
+        else
+        {
+            _colorUtility = this.calculatePartColor(1);
+            let red   = Math.floor( _colorUtility.red   * 255 );
+            let green = Math.floor( _colorUtility.green * 255 );
+            let blue  = Math.floor( _colorUtility.blue  * 255 );
+            canvas.fillStyle = "rgb( " + red + ", " + green + ", " + blue + " )";
         }
 
         canvas.beginPath();
@@ -757,14 +739,54 @@ var    flopperYV = 0;
         canvas.fill();
         canvas.closePath();
 
-        canvas.strokeStyle = "rgba( 255, 255, 255, 0.7 )";
-        canvas.beginPath();
-        canvas.moveTo( rightEndX,   rightEndY  );
-        canvas.lineTo( mouthStartX, mouthStartY );
-        canvas.lineTo( leftEndX,    leftEndY );
-        canvas.stroke();
-        canvas.closePath();
+        //--------------------------------------------------------------
+        // predators: small teeth on the inside of the jaws
+        //--------------------------------------------------------------
+        if ( isPredator )
+        {
+            canvas.fillStyle = PREDATOR_TEETH_COLOR;
 
+            if ( open )
+            {
+                // two teeth on each jaw, pointing towards the other jaw
+                this.renderTeeth( mouthStartX, mouthStartY, leftEndX,  leftEndY,  endPerpX,  endPerpY );
+                this.renderTeeth( mouthStartX, mouthStartY, rightEndX, rightEndY, -endPerpX, -endPerpY );
+            }
+            else
+            {
+                // closed: the teeth show as a fine zigzag along the seam
+                let ax = mouthEndX - mouthStartX, ay = mouthEndY - mouthStartY;
+                let px = endPerpX * 0.16, py = endPerpY * 0.16;
+                canvas.beginPath();
+                canvas.moveTo( mouthStartX, mouthStartY );
+                for ( let k = 1; k <= 5; k++ )
+                {
+                    let t    = k / 6.0;
+                    let side = ( k % 2 === 1 ) ? 1 : -1;
+                    canvas.lineTo( mouthStartX + ax * t + px * side, mouthStartY + ay * t + py * side );
+                }
+                canvas.lineTo( mouthEndX, mouthEndY );
+                canvas.lineWidth   = Math.max( 0.4, mouthWidth * 0.12 );
+                canvas.strokeStyle = PREDATOR_TEETH_COLOR;
+                canvas.stroke();
+                canvas.closePath();
+                canvas.lineWidth   = SWIMBOT_MOUTH_WIDTH;
+            }
+        }
+        else
+        {
+            canvas.strokeStyle = "rgba( 255, 255, 255, 0.7 )";
+            canvas.beginPath();
+            canvas.moveTo( rightEndX,   rightEndY  );
+            canvas.lineTo( mouthStartX, mouthStartY );
+            canvas.lineTo( leftEndX,    leftEndY );
+            canvas.stroke();
+            canvas.closePath();
+        }
+
+        //--------------------------------------------------------------
+        // outline of the outer jaw edges (as in the original)
+        //--------------------------------------------------------------
         canvas.strokeStyle = OUTLINE_COLOR;
         canvas.beginPath();
         canvas.moveTo( leftJawX, leftJawY );
@@ -777,7 +799,35 @@ var    flopperYV = 0;
         canvas.lineTo( rightEndX, rightEndY );
         canvas.stroke();
         canvas.closePath();
-
     }
+
+	//------------------------------------------------------------------
+	// two small triangular teeth along a jaw's inner edge (from the
+	// mouth corner to the jaw tip), pointing in the (inwardX, inwardY)
+	// direction
+	//------------------------------------------------------------------
+	this.renderTeeth = function( cornerX, cornerY, tipX, tipY, inwardX, inwardY )
+	{
+	    let ex = tipX - cornerX, ey = tipY - cornerY;
+	    let inwardLength = Math.sqrt( inwardX * inwardX + inwardY * inwardY );
+	    if ( inwardLength <= 0 ) return;
+
+	    let toothHeight = Math.sqrt( ex * ex + ey * ey ) * 0.22;
+	    let ix = inwardX / inwardLength * toothHeight;
+	    let iy = inwardY / inwardLength * toothHeight;
+
+	    canvas.beginPath();
+	    for ( const t of [ 0.35, 0.7 ] )
+	    {
+	        let x0 = cornerX + ex * ( t - 0.12 ), y0 = cornerY + ey * ( t - 0.12 );
+	        let x1 = cornerX + ex * ( t + 0.12 ), y1 = cornerY + ey * ( t + 0.12 );
+	        let mx = cornerX + ex * t,            my = cornerY + ey * t;
+	        canvas.moveTo( x0, y0 );
+	        canvas.lineTo( mx + ix, my + iy );
+	        canvas.lineTo( x1, y1 );
+	        canvas.closePath();
+	    }
+	    canvas.fill();
+	}
 
 }//end of entire Swimbots function -------------------------
