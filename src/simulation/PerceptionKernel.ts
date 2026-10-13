@@ -9,7 +9,7 @@
 // (checked by comparing both on the same state, see GenePool PERCEPTION_CHECK).
 //------------------------------------------------------------------------------
 import { BRAIN_STATE_LOOKING_FOR_MATE, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_PREY } from "./Brain";
-import { IGNORE_FOOD_EFFICIENCY, mateAcceptance, pairRandom, preyVisibility } from "./Ecology";
+import { IGNORE_FOOD_EFFICIENCY, mateAcceptance, pairRandom, preyVisibility, searchImageFactor, sizeSignature } from "./Ecology";
 import { PLANT_TYPE_WARM } from "./Environment";
 import { ONE, ONE_THIRD } from "./MathConstants";
 import { PREDATOR_LEVEL_THRESHOLD, PREY_MAX_MASS_RATIO, YOUNG_AGE_DURATION } from "./Parameters";
@@ -304,6 +304,8 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
     let chosenPrey = -1;
     if ( iAmPredator )
     {
+        const imageStrength = st.imageStrength[s];
+        const imageR = st.imageR[s], imageG = st.imageG[s], imageB = st.imageB[s], imageSize = st.imageSize[s];
         let bestPreyValue = -Infinity;
         for (let i = 0; i < numNearby; i++)
         {
@@ -318,8 +320,14 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
             const distance = Math.sqrt( px * px + py * py );
             if ( distance > preyViewRadius ) continue;
 
-            // camouflage: prey that matches the bottom is seen only up close
-            if ( environmentOn && distance > preyViewRadius * preyVisibility( st.brightness[o], backgroundAt( st, botX[o], botY[o] ))) continue;
+            // camouflage: prey that matches the bottom is seen only up close;
+            // the search image: prey like the last meals is seen from farther
+            if ( environmentOn )
+            {
+                const image = searchImageFactor( imageStrength,
+                    st.colorR[o] - imageR, st.colorG[o] - imageG, st.colorB[o] - imageB, sizeSignature( st.mass[o] ) - imageSize );
+                if ( distance > preyViewRadius * image * preyVisibility( st.brightness[o], backgroundAt( st, botX[o], botY[o] ))) continue;
+            }
 
             const value = -distance + st.energy[o] * 0.001;
             if ( value > bestPreyValue )

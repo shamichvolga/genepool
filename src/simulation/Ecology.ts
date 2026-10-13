@@ -82,6 +82,34 @@ export function climateFoodFactor( fit: number, peak: number ): number
     return ENVIRONMENT_FOOD_BONUS * ( FOOD_BASE_FRACTION + ( 1 - FOOD_BASE_FRACTION ) * fit * peak );
 }
 
+//------------------------------------------------------------------------------
+// Search image: a predator remembers what its recent prey looked like (color
+// and size) and notices similar prey from farther away, different prey only
+// up close. Common kinds of prey get eaten more, rare kinds less: this keeps
+// many body forms and colors alive ("apostatic" selection).
+//------------------------------------------------------------------------------
+export const SEARCH_IMAGE_EFFECT        = 0.6;     // 0 = off; prey like the image seen up to 1 + 0.6 farther
+export const SEARCH_IMAGE_LEARNING      = 0.3;     // how much one meal changes the image
+export const SEARCH_IMAGE_GAIN          = 0.25;    // how much one meal strengthens it
+export const SEARCH_IMAGE_FORGETTING    = 0.9997;  // per step (half gone after ~2300 steps)
+export const SEARCH_IMAGE_WIDTH         = 0.18;    // how alike counts as "like the image"
+
+// body size as a number 0..1 for the search image (ln mass around 5.9 +- 1.5)
+export function sizeSignature( mass: number ): number
+{
+    const s = 0.5 + ( Math.log( Math.max( 1, mass )) - 5.9 ) / 3;
+    return s < 0 ? 0 : ( s > 1 ? 1 : s );
+}
+
+// how much a search image changes the distance at which prey is noticed
+export function searchImageFactor( strength: number, dr: number, dg: number, db: number, dsize: number ): number
+{
+    if ( strength <= 0 ) return 1;
+    const d2 = ( dr * dr + dg * dg + db * db + dsize * dsize ) / 4;
+    const similarity = Math.exp( -d2 / ( 2 * SEARCH_IMAGE_WIDTH * SEARCH_IMAGE_WIDTH ));    // 1 = just like the image
+    return 1 + SEARCH_IMAGE_EFFECT * strength * ( 2 * similarity - 1 );
+}
+
 // how far away a predator notices prey (as a share of its search radius)
 export function preyVisibility( brightness: number, background: number ): number
 {

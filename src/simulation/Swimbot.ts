@@ -4,7 +4,7 @@ import * as SS from "./SharedState";
 import { think, sigmoid, NUM_INPUTS, NUM_HIDDEN, NUM_OUTPUTS, NUM_DRIVES, THINK_PERIOD, DRIVE_HYSTERESIS, EFFORT_MIN, EFFORT_RANGE, IN_BIAS, IN_HUNGER, IN_ENERGY, IN_AGE, IN_FIT, IN_TREND, IN_FOOD, IN_MATE, IN_THREAT, IN_PREY, IN_CROWD, IN_PREDATOR, OUT_FOOD, OUT_MATE, OUT_FLEE, OUT_HUNT, OUT_CLIMATE, OUT_SOCIAL, OUT_EFFORT } from "./NeuralBrain";
 import { NEURAL_BRAIN_ENABLED, CLIMATE_STEERING, SOCIAL_STEERING, CLIMATE_PROBE_DISTANCE } from "./Parameters";
 import { environment, PLANT_TYPE_WARM, PLANT_TYPE_COLD } from "./Environment";
-import { bodySize, sizeDietFactor, climateFoodFactor, digestionEfficiency, thermalFit, thermalPeak, THERMAL_MISMATCH_DRAIN, THERMAL_FIT_UPDATE_PERIOD, THERMOMELANISM, mateAcceptance, pairRandom, KINESIS_PERIOD, KINESIS_TURN_CHANCE, KINESIS_MAX_TURN, EMERGENCY_THERMAL_FIT, EMERGENCY_PROBE_DISTANCE } from "./Ecology";
+import { sizeSignature, SEARCH_IMAGE_LEARNING, SEARCH_IMAGE_GAIN, SEARCH_IMAGE_FORGETTING, bodySize, sizeDietFactor, climateFoodFactor, digestionEfficiency, thermalFit, thermalPeak, THERMAL_MISMATCH_DRAIN, THERMAL_FIT_UPDATE_PERIOD, THERMOMELANISM, mateAcceptance, pairRandom, KINESIS_PERIOD, KINESIS_TURN_CHANCE, KINESIS_MAX_TURN, EMERGENCY_THERMAL_FIT, EMERGENCY_PROBE_DISTANCE } from "./Ecology";
 //--------------------------------------------------------------------------
 //
 //    This file is part of GenePool Swimbots.
@@ -232,6 +232,36 @@ this.setParent = function( parent )
 	}
 
 	this.getSlot = function() { return _slot; }
+
+	//------------------------------------------------------------------------
+	// predator search image (see Ecology.ts): learn from a meal, fade with time
+	//------------------------------------------------------------------------
+	this.learnSearchImage = function( prey )
+	{
+	    if ( _slot < 0 ) return;
+	    const st = _shared, s = _slot, k = SEARCH_IMAGE_LEARNING;
+	    const color = prey.getAverageColor();
+	    const size  = sizeSignature( prey.getPhenotypeMass() );
+	    if ( st.imageStrength[s] <= 0 )
+	    {
+	        st.imageR[s] = color.red; st.imageG[s] = color.green; st.imageB[s] = color.blue; st.imageSize[s] = size;
+	    }
+	    else
+	    {
+	        st.imageR   [s] += k * ( color.red   - st.imageR   [s] );
+	        st.imageG   [s] += k * ( color.green - st.imageG   [s] );
+	        st.imageB   [s] += k * ( color.blue  - st.imageB   [s] );
+	        st.imageSize[s] += k * ( size        - st.imageSize[s] );
+	    }
+	    st.imageStrength[s] = Math.min( ONE, st.imageStrength[s] + SEARCH_IMAGE_GAIN );
+	}
+
+	this.getSearchImage = function()
+	{
+	    if ( _slot < 0 ) return null;
+	    const st = _shared, s = _slot;
+	    return { red: st.imageR[s], green: st.imageG[s], blue: st.imageB[s], size: st.imageSize[s], strength: st.imageStrength[s] };
+	}
 
 	// the numbers other threads read about me that change only with a new phenotype
 	this.writeStaticPerception = function()
@@ -848,6 +878,9 @@ _position.copyFrom( position );
 		_alive		        = true;
 		_growthScale        = ONE;
 
+		// nothing learned yet
+		if ( _slot >= 0 ) { _shared.imageStrength[ _slot ] = ZERO; }
+
 		// the neural brain is used in the environment pool (stage 6)
 		_neural         = environment.active && NEURAL_BRAIN_ENABLED;
 		_nnHidden.fill( ZERO );
@@ -1134,6 +1167,9 @@ _position.copyFrom( position );
 		// update age
 		//---------------------------
 		_age ++;
+
+		// a predator's search image fades
+		if (( _slot >= 0 ) && ( _shared.imageStrength[ _slot ] > ZERO )) { _shared.imageStrength[ _slot ] *= SEARCH_IMAGE_FORGETTING; }
 
         if ( _huntCooldown > 0 )
         {
@@ -2254,6 +2290,7 @@ let partAccelerationY = -strokeForceY;
 
 	    let energyFromPrey = _chosenPrey.getEnergy() * PREDATION_ENERGY_TRANSFER;
 
+	    this.learnSearchImage( _chosenPrey );
 	    _chosenPrey.die();
 
 	    simCounters.attackCount ++;

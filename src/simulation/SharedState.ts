@@ -141,6 +141,11 @@ export class SharedState
     readonly colorB       : Float64Array;
     readonly choosiness   : Float64Array;
     readonly attraction   : Int8Array;      // the swimbot's mate choice criterion
+    readonly imageR       : Float64Array;   // predator search image: color, size, strength 0..1
+    readonly imageG       : Float64Array;
+    readonly imageB       : Float64Array;
+    readonly imageSize    : Float64Array;
+    readonly imageStrength: Float64Array;
 
     readonly foodX        : Float64Array;
     readonly foodY        : Float64Array;
@@ -223,6 +228,11 @@ export class SharedState
         this.colorB     = f64( "colorB", n );
         this.choosiness = f64( "choosiness", n );
         this.attraction = new Int8Array( make( "attraction", n ));
+        this.imageR        = f64( "imageR", n );
+        this.imageG        = f64( "imageG", n );
+        this.imageB        = f64( "imageB", n );
+        this.imageSize     = f64( "imageSize", n );
+        this.imageStrength = f64( "imageStrength", n );
 
         this.foodX      = f64( "foodX", MAX_FOODBITS );
         this.foodY      = f64( "foodY", MAX_FOODBITS );

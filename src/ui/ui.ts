@@ -748,6 +748,14 @@ export function updateUI()
                         row( "temperature here",  here.toFixed(2) + " (suits " + percent( swimbot.getThermalFit() ) + ")" ) +
                         ( TWO_PLANT_TYPES ? row( "digests", "green " + percent( swimbot.getDigestionEfficiency(0) ) + " · blue " + percent( swimbot.getDigestionEfficiency(1) ) ) : "" ) +
                         row( "brightness",        swimbot.getBrightness().toFixed(2) + " (picky " + percent( swimbot.getChoosiness() ) + ")" );
+                    const image = swimbot.getSearchImage();
+                    if ( isPredator && image && image.strength > 0.05 )
+                    {
+                        const swatch = "rgb(" + Math.round( image.red * 255 ) + "," + Math.round( image.green * 255 ) + "," + Math.round( image.blue * 255 ) + ")";
+                        foodRows += row( "hunts for",
+                            "<span style='display:inline-block;width:10px;height:10px;background:" + swatch + ";border:1px solid #888'></span> "
+                            + ( image.size < 0.4 ? "small" : ( image.size > 0.6 ? "big" : "medium" )) + " prey (" + percent( image.strength ) + ")" );
+                    }
                     if ( swimbot.getUsesNeuralBrain() )
                     {
                         const social = swimbot.getSocialWeight();
