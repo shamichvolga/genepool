@@ -216,6 +216,7 @@ export function GenePool()
 	{
 		_swimbots[s] = new Swimbot();
 		_swimbots[s].setParent(this);
+		_swimbots[s].bindSharedState(s);
         _lastSwimbotPositions[s] = new Vector2D();
         _distanceCache[s] = 0;
         _swimbotWasAlive[s] = false;

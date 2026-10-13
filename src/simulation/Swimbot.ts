@@ -1,4 +1,6 @@
 import { setTrait, GENES_PREDATOR } from "./EcologyGenes";
+import { physicsPartA, physicsPartB } from "./PhysicsKernel";
+import * as SS from "./SharedState";
 import { think, sigmoid, NUM_INPUTS, NUM_HIDDEN, NUM_OUTPUTS, NUM_DRIVES, THINK_PERIOD, DRIVE_HYSTERESIS, EFFORT_MIN, EFFORT_RANGE, IN_BIAS, IN_HUNGER, IN_ENERGY, IN_AGE, IN_FIT, IN_TREND, IN_FOOD, IN_MATE, IN_THREAT, IN_PREY, IN_CROWD, IN_PREDATOR, OUT_FOOD, OUT_MATE, OUT_FLEE, OUT_HUNT, OUT_CLIMATE, OUT_SOCIAL, OUT_EFFORT } from "./NeuralBrain";
 import { NEURAL_BRAIN_ENABLED, CLIMATE_STEERING, SOCIAL_STEERING, CLIMATE_PROBE_DISTANCE } from "./Parameters";
 import { environment, PLANT_TYPE_WARM, PLANT_TYPE_COLD } from "./Environment";
@@ -201,6 +203,136 @@ this.setParent = function( parent )
 {
     _parent = parent;
 }
+
+	//-----------------------------------------------------------------------
+	// Stage 7: a swimbot of the pool owns a slot in the shared state. Its
+	// body part arrays then live there (so other threads can move the body),
+	// and the physics runs in PhysicsKernel.ts.
+	//-----------------------------------------------------------------------
+	let _slot   = -1;
+	let _shared : SS.SharedState | null = null;
+
+	this.bindSharedState = function( slot )
+	{
+	    const st = SS.sharedState();
+	    _shared = st;
+	    _slot   = slot;
+	    const from = slot * MAX_PARTS, to = from + MAX_PARTS;
+	    _pd         = st.parts        .subarray( slot * SS.PART_STRIDE, ( slot + 1 ) * SS.PART_STRIDE );
+	    _pLength    = st.partLength   .subarray( from, to );
+	    _pWidth     = st.partWidth    .subarray( from, to );
+	    _pMass      = st.partMass     .subarray( from, to );
+	    _pAngle     = st.partAngle    .subarray( from, to );
+	    _pAmp       = st.partAmp      .subarray( from, to );
+	    _pPhase     = st.partPhase    .subarray( from, to );
+	    _pTurnAmp   = st.partTurnAmp  .subarray( from, to );
+	    _pTurnPhase = st.partTurnPhase.subarray( from, to );
+	    _pMoment    = st.partMoment   .subarray( from, to );
+	    _pParent    = st.partParent   .subarray( from, to );
+	}
+
+	this.getSlot = function() { return _slot; }
+
+	// copy the numbers the physics needs into the shared state
+	this.writePhysicsState = function()
+	{
+	    const B = _shared.bots, b = _slot * SS.BOT_STRIDE;
+	    B[ b + SS.B_POS_X         ] = _position.x;
+	    B[ b + SS.B_POS_Y         ] = _position.y;
+	    B[ b + SS.B_VEL_X         ] = _velocity.x;
+	    B[ b + SS.B_VEL_Y         ] = _velocity.y;
+	    B[ b + SS.B_ANGLE         ] = _angle;
+	    B[ b + SS.B_SPIN          ] = _spin;
+	    B[ b + SS.B_TIMER         ] = _timer;
+	    B[ b + SS.B_TIMER_DELTA   ] = _timerDelta;
+	    B[ b + SS.B_EFFORT        ] = _effort;
+	    B[ b + SS.B_FOCUS_X       ] = _focusDirection.x;
+	    B[ b + SS.B_FOCUS_Y       ] = _focusDirection.y;
+	    B[ b + SS.B_GROWTH        ] = _growthScale;
+	    B[ b + SS.B_ENERGY        ] = _energy;
+	    B[ b + SS.B_AGE           ] = _age;
+	    B[ b + SS.B_ETERNAL       ] = _eternal ? 1 : 0;
+	    B[ b + SS.B_NUM_PARTS     ] = _numParts;
+	    B[ b + SS.B_FREQUENCY     ] = _frequency;
+	    B[ b + SS.B_SUM_LENGTHS   ] = _sumPartLengths;
+	    B[ b + SS.B_BODY_MASS     ] = _bodyMass;
+	    B[ b + SS.B_GOAL_X        ] = _directionToGoal.x;
+	    B[ b + SS.B_GOAL_Y        ] = _directionToGoal.y;
+	    B[ b + SS.B_SELECT_RADIUS ] = _selectRadius;
+	    B[ b + SS.B_DEATHS        ] = 0;
+	    B[ b + SS.B_BASAL         ] = _basalMetabolism;
+	    B[ b + SS.B_LAST_X        ] = _lastPositionForEfficiencyMeasurement.x;
+	    B[ b + SS.B_LAST_Y        ] = _lastPositionForEfficiencyMeasurement.y;
+	    B[ b + SS.B_LAST_ENERGY   ] = _lastEnergyForEfficiencyMeasurement;
+	    B[ b + SS.B_EFFICIENCY    ] = _energyEfficiency;
+	}
+
+	// take the results of the physics back
+	this.readPhysicsState = function()
+	{
+	    const B = _shared.bots, b = _slot * SS.BOT_STRIDE;
+	    _position.x         = B[ b + SS.B_POS_X       ];
+	    _position.y         = B[ b + SS.B_POS_Y       ];
+	    _velocity.x         = B[ b + SS.B_VEL_X       ];
+	    _velocity.y         = B[ b + SS.B_VEL_Y       ];
+	    _angle              = B[ b + SS.B_ANGLE       ];
+	    _spin               = B[ b + SS.B_SPIN        ];
+	    _timer              = B[ b + SS.B_TIMER       ];
+	    _timerDelta         = B[ b + SS.B_TIMER_DELTA ];
+	    _growthScale        = B[ b + SS.B_GROWTH      ];
+	    _energy             = B[ b + SS.B_ENERGY      ];
+	    _directionToGoal.x  = B[ b + SS.B_GOAL_X      ];
+	    _directionToGoal.y  = B[ b + SS.B_GOAL_Y      ];
+	    _selectRadius       = B[ b + SS.B_SELECT_RADIUS ];
+	    _mouthPosition  .setXY( B[ b + SS.B_MOUTH_X   ], B[ b + SS.B_MOUTH_Y   ] );
+	    _genitalPosition.setXY( B[ b + SS.B_GENITAL_X ], B[ b + SS.B_GENITAL_Y ] );
+	    _centerOfMass   .setXY( B[ b + SS.B_COM_X     ], B[ b + SS.B_COM_Y     ] );
+	    _lastPositionForEfficiencyMeasurement.setXY( B[ b + SS.B_LAST_X ], B[ b + SS.B_LAST_Y ] );
+	    _lastEnergyForEfficiencyMeasurement = B[ b + SS.B_LAST_ENERGY ];
+	    _energyEfficiency   = B[ b + SS.B_EFFICIENCY  ];
+	}
+
+	// the physics decided to die (old age / starvation): do it here
+	this.applyPhysicsDeaths = function()
+	{
+	    const B = _shared.bots, b = _slot * SS.BOT_STRIDE;
+	    const deaths = B[ b + SS.B_DEATHS ];
+	    B[ b + SS.B_DEATHS ] = 0;
+	    for (let d = 0; d < deaths; d++) { this.die(); }
+	}
+
+	// the climate drain (between physics parts A and B)
+	this.applyClimateDrain = function()
+	{
+	    if ( environment.active )
+	    {
+	        if ( ( _age + _index ) % THERMAL_FIT_UPDATE_PERIOD === 0 ) { this.updateThermalFit(); }
+	        _energy -= THERMAL_MISMATCH_DRAIN * ( ONE - _thermalFit );
+	    }
+	}
+
+	//-----------------------------------------------------------------------
+	// the whole physics of one step, through the kernel
+	//-----------------------------------------------------------------------
+	this.runPhysicsKernel = function()
+	{
+	    const B = _shared.bots, b = _slot * SS.BOT_STRIDE;
+	    _shared.params[ SS.PARAM_MAX_LIFESPAN ] = globalTweakers.maximumLifeSpan;
+
+	    this.writePhysicsState();
+	    physicsPartA( _slot, _shared );
+
+	    // the climate drain needs the new position
+	    _position.x = B[ b + SS.B_POS_X ];
+	    _position.y = B[ b + SS.B_POS_Y ];
+	    _energy     = B[ b + SS.B_ENERGY ];
+	    this.applyClimateDrain();
+	    B[ b + SS.B_ENERGY ] = _energy;
+
+	    physicsPartB( _slot, _shared );
+	    this.readPhysicsState();
+	    this.applyPhysicsDeaths();
+	}
 
     //------------------------------------
     this.computeMomentFactors = function()
@@ -1175,15 +1307,15 @@ _position.copyFrom( position );
         //_focusDirection.addScaled( _directionToGoal, BRAIN_FOCUS_TARGET_SHIFT_STRENGTH );
         //_focusDirection.normalize();
 
-		//---------------------------
-		// update body parts
-		//---------------------------
-		this.updateBodyParts();
-
-		//---------------------------
-		// update physics
-		//---------------------------
-        this.updatePhysics();
+        if ( _slot >= 0 )
+        {
+            this.runPhysicsKernel();
+        }
+        else
+        {
+            this.updateBodyParts();
+            this.updatePhysics();
+        }
 	}
 
 
