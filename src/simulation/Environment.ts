@@ -151,6 +151,16 @@ export class Environment
 
     setTime( step: number ): void { this.time = step; }
 
+    // the season now (the warm part of the year is "summer")
+    seasonName(): string
+    {
+        const phase = 2 * Math.PI * this.time / SEASON_PERIOD;
+        const s = Math.sin( phase ), c = Math.cos( phase );
+        if ( s >  0.5 ) return "summer";
+        if ( s < -0.5 ) return "winter";
+        return ( c > 0 ) ? "spring" : "autumn";
+    }
+
     //--------------------------------------------------------------------
     // temperature at a point, now (smoothly interpolated, with season)
     //--------------------------------------------------------------------

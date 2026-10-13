@@ -795,16 +795,25 @@ export function updateUI()
         }
         if ( panelIsOpen( 'graphPanel' ) )
         {
+            const environment = genePool.getEnvironment();
+            let predators = 0;
+            for ( const swimbot of genePool.getSwimbots() )
+            {
+                if ( swimbot.getAlive() && swimbot.getPredatorLevel() > PREDATOR_LEVEL_THRESHOLD ) { predators ++; }
+            }
             let graphDataHTML =
                 "time step: " + genePool.getTimeStep()
-                + "<br>"
+                + ( environment.active ? " (" + environment.seasonName() + ")" : "" )
                 + "<br>"
                 + "speed: " + Math.round( genePool.getStepsPerSecond() ) + " steps/sec"
-                + "swimbots: " + genePool.getNumSwimbots()
                 + "<br>"
-                + "food bits: " + genePool.getNumFoodBits()
+                + "swimbots: " + genePool.getNumSwimbots() + " (predators: " + predators + ")"
                 + "<br>"
-                + "food bits 1: " + genePool.getNumFoodBits1();
+                + "green plants: " + genePool.getNumFoodBitsOfType(0)
+                + "<br>"
+                + "blue plants: " + genePool.getNumFoodBitsOfType(1)
+                + "<br>"
+                + "meat: " + genePool.getNumFoodBitsOfType(2);
             if (graphDataHTML !== _lastGraphDataHTML)
             {
                 document.getElementById( 'graphData' ).innerHTML = graphDataHTML;
