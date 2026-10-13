@@ -131,6 +131,7 @@ var    flopperYV = 0;
 	let _thermalFit         = ONE;    // 0..1, how well the place suits me (updated every few steps)
 	let _comfort            = -ONE;   // last "how good is it here" (for kinesis)
 	let _comfortTrend       = ZERO;   // +1 it got better here, -1 worse
+	let _averageColor       = null;   // cached by getAverageColor (reset with a new phenotype)
 
 	//-----------------------------------------------------------------------
 	// neural brain (stage 6, see NeuralBrain.ts)
@@ -877,6 +878,7 @@ _position.copyFrom( position );
         // bigger bodies cost more to keep alive (Kleiber's law)
         //-----------------------------------------------------
         _basalMetabolism = BASAL_METABOLISM * Math.pow( _phenotype.mass, 0.75 );
+        _averageColor    = null;
 
         //-----------------------------------------------------
         // ecology traits
@@ -1284,6 +1286,14 @@ _position.copyFrom( position );
 	}
 
 	this.getUsesNeuralBrain = function() { return _neural;        }
+
+	// GenePool tells where the swimbots I see are, on the whole (sum of offsets)
+	this.setSocialOffset = function( sx, sy )
+	{
+	    const length = Math.sqrt( sx * sx + sy * sy );
+	    _socialDirX = ( length > ZERO ) ? sx / length : ZERO;
+	    _socialDirY = ( length > ZERO ) ? sy / length : ZERO;
+	}
 	this.getEffort          = function() { return _effort;        }
 	this.getClimateWeight   = function() { return _climateWeight; }
 	this.getSocialWeight    = function() { return _socialWeight;  }
@@ -2090,19 +2100,6 @@ let partAccelerationY = -strokeForceY;
         _seenPrey = ( preyWasFound && ( thePrey != null )) || ( foodBitWasFound && ( theFoodBit != null ) && ( theFoodBit.getType() === 2 ));
         _numSeen  = numNearbySwimbots;
 
-        if ( _neural )
-        {
-            let sx = ZERO, sy = ZERO;
-            for (let o = 0; o < numNearbySwimbots; o++)
-            {
-                const p = nearbySwimbotArray[o].getPosition();
-                sx += p.x - _position.x;
-                sy += p.y - _position.y;
-            }
-            const length = Math.sqrt( sx * sx + sy * sy );
-            _socialDirX = ( length > ZERO ) ? sx / length : ZERO;
-            _socialDirY = ( length > ZERO ) ? sy / length : ZERO;
-        }
 
         if (( theNearestPredator != null )
         &&  ( theNearestPredator.getPosition().getDistanceTo( _position ) < PREDATOR_FLEE_RADIUS ))
@@ -2627,6 +2624,9 @@ let partAccelerationY = -strokeForceY;
 	//---------------------------------
 	this.getAverageColor = function()
 	{
+        // the colors only change with a new phenotype, so remember the result
+        if ( _averageColor !== null ) { return _averageColor; }
+
         let r = ZERO;
         let g = ZERO;
         let b = ZERO;
@@ -2656,6 +2656,7 @@ let partAccelerationY = -strokeForceY;
         c.green = g;
         c.blue  = b;
 
+        _averageColor = c;
         return c;
     }
 

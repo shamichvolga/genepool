@@ -2035,6 +2035,7 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
             }
         }
 
+        let socialX = 0, socialY = 0;
         for (let i = 0; i < numNearest && _numNearbySwimbots < BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS; i++)
         {
             const o = nearestList[i];
@@ -2044,8 +2045,13 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
             {
                 _nearbySwimbotsArray[_numNearbySwimbots] = _swimbots[o];
                 _numNearbySwimbots++;
+                socialX += _botX[o] - myX;
+                socialY += _botY[o] - myY;
             }
         }
+
+        // the neural brain may want to swim towards (or away from) the others
+        if ( me.getUsesNeuralBrain() ) { me.setSocialOffset( socialX, socialY ); }
 
         //------------------------------------------------------
         // find the closest food bit using spatial grid
