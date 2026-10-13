@@ -1132,6 +1132,47 @@ if ( mode === SimulationStartMode.SPECIES )
 	this.getEnvironment = function() { return environment; }
 
 	//------------------------------------------------------------------------
+	// How many "species" by body (for the statistics panel): swimbots whose
+	// body genes differ on average by less than 12% go into one group (the
+	// same rule as tools/headless.cjs). Uses an even sample of at most
+	// `sampleSize` swimbots and no random numbers (does not disturb the run).
+	// Groups smaller than 3% of the sample are not counted as species.
+	//------------------------------------------------------------------------
+	this.estimateSpecies = function( sampleSize = 400 )
+	{
+	    const alive = [];
+	    for (let s = 0; s < MAX_SWIMBOTS; s++) { if ( _swimbots[s].getAlive() ) alive.push(s); }
+	    const n = alive.length;
+	    if ( n === 0 ) return { species: 0, largestShare: 0, sampled: 0 };
+
+	    const stride = Math.max( 1, n / sampleSize );
+	    const groups = [];   // { genes, count }
+	    let sampled = 0;
+	    for (let i = 0; i < n; i += stride)
+	    {
+	        const genotype = _swimbots[ alive[ Math.floor(i) ]].getGenotype();
+	        const genes = genotype.getGenes();
+	        const limit = 0.12 * NUM_GENES_USED * 255;
+	        let found = null;
+	        for ( const group of groups )
+	        {
+	            let sum = 0;
+	            for (let g = 0; g < NUM_GENES_USED && sum < limit; g++) { sum += Math.abs( group.genes[g] - genes[g] ); }
+	            if ( sum < limit ) { found = group; break; }
+	        }
+	        if ( found ) { found.count ++; }
+	        else
+	        {
+	            groups.push({ genes: genes.slice( 0, NUM_GENES_USED ), count: 1 });
+	        }
+	        sampled ++;
+	    }
+	    const big = groups.filter( g => g.count >= sampled * 0.03 );
+	    const largest = groups.reduce( ( m, g ) => Math.max( m, g.count ), 0 );
+	    return { species: big.length, largestShare: largest / sampled, sampled };
+	}
+
+	//------------------------------------------------------------------------
 	// stage 7: fill the shared arrays that perception reads, from the objects
 	//------------------------------------------------------------------------
 	this.writePerceptionParams = function()

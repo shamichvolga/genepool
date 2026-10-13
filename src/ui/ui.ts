@@ -820,6 +820,8 @@ export function updateUI()
                 + "<br>"
                 + "swimbots: " + genePool.getNumSwimbots() + " (predators: " + predators + ")"
                 + "<br>"
+                + speciesText()
+                + "<br>"
                 + "green plants: " + genePool.getNumFoodBitsOfType(0)
                 + "<br>"
                 + "blue plants: " + genePool.getNumFoodBitsOfType(1)
@@ -1042,4 +1044,22 @@ export function showWorldSize()
         const button = document.getElementById( "world" + w + "Button" );
         if ( button ) { button.classList.toggle( "activeButton", w === WORLD_SCALE ); }
     }
+}
+
+
+//----------------------------------------------------------
+// "species" by body, recounted every 5 seconds (it takes a moment)
+//----------------------------------------------------------
+let _speciesText = "species: …";
+let _speciesTime = 0;
+function speciesText()
+{
+    const now = performance.now();
+    if ( now - _speciesTime > 5000 )
+    {
+        _speciesTime = now;
+        const result = genePool.estimateSpecies( 400 );
+        _speciesText = "species (by body): " + result.species + ", largest " + Math.round( result.largestShare * 100 ) + "%";
+    }
+    return _speciesText;
 }
