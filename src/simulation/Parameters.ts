@@ -91,6 +91,12 @@ export const PREDATOR_INTRODUCTION_STEP    = 20000;
 export const PREDATOR_INTRODUCTION_FRACTION = 0.05;
 export const GARDEN_RADIUS                 = 1200;
 
+// neural brain (stage 6): used in the environment ("random") pool
+export const NEURAL_BRAIN_ENABLED          = true;
+export const CLIMATE_STEERING              = 1.0;    // pull towards a better temperature (x brain output)
+export const SOCIAL_STEERING               = 0.6;    // pull towards / push from the others (x brain output)
+export const CLIMATE_PROBE_DISTANCE        = 150;
+
 // the classic presets keep the original numbers (they don't use the environment)
 export const CLASSIC_NUM_SWIMBOTS          = 1000;
 export const CLASSIC_NUM_FOODBITS          = 1000;

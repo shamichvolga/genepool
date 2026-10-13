@@ -1,4 +1,5 @@
 import { gpRandom } from "./Globals";
+import { OUT_FLEE, OUT_FOOD, OUT_HUNT, OUT_MATE } from "./NeuralBrain";
 import { ZERO } from "./MathConstants";
 import { PREDATOR_LEVEL_THRESHOLD } from "./Parameters";
 import { ATTRACTION_SIMILAR_COLOR } from "./SwimbotTypes";
@@ -45,6 +46,7 @@ export function Brain()
 	let _attractionCriterion = ATTRACTION_SIMILAR_COLOR;
 	let _predatorLevel          = ZERO; // 0..1
 	let _nearbyPredatorThreat   = false; // хищник в зоне экстренного бегства
+	let _goal                   = -1;    // neural brain: the chosen drive (OUT_FOOD...), -1 = classic brain
 	
 	
     //-----------------------------
@@ -63,6 +65,7 @@ export function Brain()
 		_predatorLevel        = ZERO;
 		_foundPrey            = false;
 		_nearbyPredatorThreat = false;
+		_goal                 = -1;
     }
 
     //-----------------------
@@ -77,13 +80,31 @@ export function Brain()
         // ВЫСШИЙ ПРИОРИТЕТ: бегство от хищника в упор
         // Перекрывает и голод, и поиск партнёра.
         // Только для травоядных; только пока угроза активна.
-        if ( _nearbyPredatorThreat && _predatorLevel <= PREDATOR_LEVEL_THRESHOLD )
+        //----------------------------------------------------------------------
+        // neural brain: the network has chosen the goal (see NeuralBrain.ts);
+        // the looking / pursuing steps below stay the same
+        //----------------------------------------------------------------------
+        if ( _goal >= 0 )
+        {
+            if ( _goal === OUT_FLEE )
+            {
+                _state = BRAIN_STATE_FLEEING_PREDATOR;
+                return;
+            }
+            const wantsFood = ( _goal === OUT_FOOD );
+            const wantsPrey = ( _goal === OUT_HUNT );
+            const wantsMate = ( _goal === OUT_MATE );
+
+            if ( wantsPrey && ( _state != BRAIN_STATE_PURSUING_PREY ) && ( _state != BRAIN_STATE_LOOKING_FOR_PREY )) { _state = BRAIN_STATE_LOOKING_FOR_PREY; }
+            if ( wantsFood && ( _state != BRAIN_STATE_PURSUING_FOOD ) && ( _state != BRAIN_STATE_LOOKING_FOR_FOOD )) { _state = BRAIN_STATE_LOOKING_FOR_FOOD; }
+            if ( wantsMate && ( _state != BRAIN_STATE_PURSUING_MATE ) && ( _state != BRAIN_STATE_LOOKING_FOR_MATE )) { _state = BRAIN_STATE_LOOKING_FOR_MATE; }
+        }
+        else if ( _nearbyPredatorThreat && _predatorLevel <= PREDATOR_LEVEL_THRESHOLD )
         {
             _state = BRAIN_STATE_FLEEING_PREDATOR;
             return;
         }
-
-        if ( _energy < _hungerThreshold )
+        else if ( _energy < _hungerThreshold )
         {
             if ( _predatorLevel > PREDATOR_LEVEL_THRESHOLD )
             {
@@ -197,6 +218,8 @@ export function Brain()
     this.setFoundPrey       = function(f) { _foundPrey    = f; };
     this.setPredatorLevel          = function(level) { _predatorLevel = level; };
     this.setNearbyPredatorThreat   = function(v)     { _nearbyPredatorThreat = v; };
+    this.setGoal                   = function(g)     { _goal = g; };
+    this.getGoal                   = function()      { return _goal; };
 
     //--------------------------------
     this.setAttraction = function(a) 

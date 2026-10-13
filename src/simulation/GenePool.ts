@@ -2761,6 +2761,7 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
             let genes = data.swimbotArray[s].genes.slice();
             if ( !data.geneLayout ) { convertOldGenes( genes ); }
             loadedGenotype.setGenes( genes );
+            loadedGenotype.setBrain( data.swimbotArray[s].brain );   // (older files: the innate brain)
 
             //this seems to be glitched - I must explore why
             //console.log( "s = " + s + "; id = " + id );
@@ -4185,6 +4186,7 @@ this.renderFoodBits = function( useGraphicsCard )
                 swimbotDataArray[ numSwimbots ].age     = _swimbots[s].getAge();
                 swimbotDataArray[ numSwimbots ].energy  = _swimbots[s].getEnergy();
                 swimbotDataArray[ numSwimbots ].genes   = this.getSwimbotGenes(s);
+                swimbotDataArray[ numSwimbots ].brain   = Array.from( _swimbots[s].getGenotype().getBrain() );
 
 
 

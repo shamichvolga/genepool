@@ -744,7 +744,17 @@ export function updateUI()
                     foodRows =
                         row( "likes temperature", swimbot.getThermalOptimum().toFixed(2) + " ± " + swimbot.getThermalWidth().toFixed(2) ) +
                         row( "temperature here",  here.toFixed(2) + " (suits " + percent( swimbot.getThermalFit() ) + ")" ) +
-                        row( "digests",           "green " + percent( swimbot.getDigestionEfficiency(0) ) + " · blue " + percent( swimbot.getDigestionEfficiency(1) ) );
+                        row( "digests",           "green " + percent( swimbot.getDigestionEfficiency(0) ) + " · blue " + percent( swimbot.getDigestionEfficiency(1) ) ) +
+                        row( "brightness",        swimbot.getBrightness().toFixed(2) + " (picky " + percent( swimbot.getChoosiness() ) + ")" );
+                    if ( swimbot.getUsesNeuralBrain() )
+                    {
+                        const social = swimbot.getSocialWeight();
+                        foodRows +=
+                            row( "brain",         "neural" ) +
+                            row( "swims",         percent( swimbot.getEffort() ) + " effort" ) +
+                            row( "climate pull",  percent( swimbot.getClimateWeight() ) ) +
+                            row( "company",       ( social >= 0 ? "seeks " : "avoids " ) + percent( Math.abs( social ) ) );
+                    }
                 }
                 else
                 {

@@ -1,5 +1,6 @@
 import { ecologyMutationRate, isEcologyGene, isMarkerGene, mutateEcologyGene, mutateMarkerGene } from "./EcologyGenes";
 import { gpRandom } from "./Globals";
+import { BRAIN_SIZE, founderBrain, inheritBrain, innateBrain, mutateBrain } from "./NeuralBrain";
 import { BYTE_SIZE, ONE_HALF } from "./MathConstants";
 import { CROSSOVER_RATE, MUTATION_RATE } from "./Parameters";
 import { assert, assertInteger } from "./Utility";
@@ -52,6 +53,21 @@ export function Genotype()
         _genes[g] = 0;
     }
 
+	//------------------------------------------------
+	// the brain chromosome: weights of the neural
+	// brain (stage 6, see NeuralBrain.ts)
+	//------------------------------------------------
+	const _brain = new Float32Array( BRAIN_SIZE );
+	_brain.set( innateBrain() );
+
+	this.getBrain = function() { return _brain; }
+
+	this.setBrain = function( weights )
+	{
+	    if (( weights == null ) || ( weights.length !== BRAIN_SIZE )) { _brain.set( innateBrain() ); return; }
+	    for (let k = 0; k < BRAIN_SIZE; k++) { _brain[k] = Number( weights[k] ) || 0; }
+	}
+
 	//--------------------------------
 	// randomize genes
 	//--------------------------------
@@ -66,6 +82,9 @@ export function Genotype()
             assert( _genes[g] < BYTE_SIZE, "Genotype: randomize: _genes[g] < BYTE_SIZE" );
             assertInteger( _genes[g], "Genotype:randomize; assertInteger( _genes[g]" );
 		}
+
+		// a random founder gets the innate brain with a little individual variation
+		founderBrain( _brain );
 	}
 
 	//------------------------------------------
@@ -91,6 +110,7 @@ export function Genotype()
 		{
 			_genes[g] = 0;
 		}
+		_brain.set( innateBrain() );
 	}
 
     //-------------------------------
@@ -145,6 +165,7 @@ export function Genotype()
             assert( _genes[g] < BYTE_SIZE, "Genotype:copyFromGenotype: assert _genes[g] < BYTE_SIZE" );
             assertInteger( _genes[g], "Genotype:copyFromGenotype; assertInteger, _genes[g]" );
         }
+        _brain.set( otherGenotype.getBrain() );
     }
 
 	//--------------------------------
@@ -331,6 +352,9 @@ g++; _genes[g] = 255;
     //--------------------------------------------------------
 	this.setAsOffspring = function( parent_0, parent_1 )
 	{
+	    // the brain chromosome: whole neurons from either parent, small mutations
+	    inheritBrain( _brain, parent_0.getBrain(), parent_1.getBrain() );
+
 	    //console.log( parent_0 );
 	    //console.log( parent_1 );
 
@@ -485,6 +509,7 @@ g++; _genes[g] = 255;
                 else                         { this.mutateGene(g); }
             }
         }
+        mutateBrain( _brain, amount );
     }
 }
 

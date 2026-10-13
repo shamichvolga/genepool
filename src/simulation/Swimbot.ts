@@ -1,4 +1,6 @@
 import { setTrait, GENES_PREDATOR } from "./EcologyGenes";
+import { think, sigmoid, NUM_INPUTS, NUM_HIDDEN, NUM_OUTPUTS, NUM_DRIVES, THINK_PERIOD, DRIVE_HYSTERESIS, EFFORT_MIN, EFFORT_RANGE, IN_BIAS, IN_HUNGER, IN_ENERGY, IN_AGE, IN_FIT, IN_TREND, IN_FOOD, IN_MATE, IN_THREAT, IN_PREY, IN_CROWD, IN_PREDATOR, OUT_FOOD, OUT_MATE, OUT_FLEE, OUT_HUNT, OUT_CLIMATE, OUT_SOCIAL, OUT_EFFORT } from "./NeuralBrain";
+import { NEURAL_BRAIN_ENABLED, CLIMATE_STEERING, SOCIAL_STEERING, CLIMATE_PROBE_DISTANCE } from "./Parameters";
 import { environment, PLANT_TYPE_WARM, PLANT_TYPE_COLD } from "./Environment";
 import { climateFoodFactor, digestionEfficiency, thermalFit, thermalPeak, THERMAL_MISMATCH_DRAIN, THERMAL_FIT_UPDATE_PERIOD, THERMOMELANISM, mateAcceptance, pairRandom, KINESIS_PERIOD, KINESIS_TURN_CHANCE, KINESIS_MAX_TURN, EMERGENCY_THERMAL_FIT, EMERGENCY_PROBE_DISTANCE } from "./Ecology";
 //--------------------------------------------------------------------------
@@ -128,6 +130,26 @@ var    flopperYV = 0;
 	let _choosiness         = ZERO;
 	let _thermalFit         = ONE;    // 0..1, how well the place suits me (updated every few steps)
 	let _comfort            = -ONE;   // last "how good is it here" (for kinesis)
+	let _comfortTrend       = ZERO;   // +1 it got better here, -1 worse
+
+	//-----------------------------------------------------------------------
+	// neural brain (stage 6, see NeuralBrain.ts)
+	//-----------------------------------------------------------------------
+	let _neural             = false;
+	const _nnInputs         = new Float64Array( NUM_INPUTS  );
+	const _nnHidden         = new Float64Array( NUM_HIDDEN  );
+	const _nnNewHidden      = new Float64Array( NUM_HIDDEN  );
+	const _nnOutputs        = new Float64Array( NUM_OUTPUTS );
+	let _effort             = ONE;    // how hard I swim (stroke speed)
+	let _climateWeight      = ZERO;   // how strongly I follow the better temperature
+	let _socialWeight       = ZERO;   // + towards the others, - away from them
+	let _climateDirX        = ZERO;
+	let _climateDirY        = ZERO;
+	let _socialDirX         = ZERO;   // towards the middle of the swimbots I see
+	let _socialDirY         = ZERO;
+	let _seenFood           = false;
+	let _seenPrey           = false;
+	let _numSeen            = 0;
 
 	//-----------------------------------------------------------------------
 	// Body part state lives in flat number arrays, which is much faster than
@@ -288,7 +310,7 @@ this.setParent = function( parent )
             }
         }
 
-        _timer += _timerDelta;
+        _timer += _timerDelta * _effort;
 
 		//---------------------------------------------------------------
 		// calculate the modulators as a function of the dot between the
@@ -676,6 +698,15 @@ _position.copyFrom( position );
 		_energy             = energy;
 		_alive		        = true;
 		_growthScale        = ONE;
+
+		// the neural brain is used in the environment pool (stage 6)
+		_neural         = environment.active && NEURAL_BRAIN_ENABLED;
+		_nnHidden.fill( ZERO );
+		_effort         = ONE;
+		_climateWeight  = ZERO;
+		_socialWeight   = ZERO;
+		_comfortTrend   = ZERO;
+		_brain.setGoal( -1 );
 		//_maximumLifeSpan    = DEFAULT_MAXIMUM_LIFESPAN;
 
 		//_spin		        = ZERO;
@@ -949,6 +980,14 @@ _position.copyFrom( position );
         }
 
         //-----------------------------
+        // neural brain: think now and then
+        //-----------------------------
+        if ( _neural && (( _age + _index ) % THINK_PERIOD === 0 ))
+        {
+            this.think();
+        }
+
+        //-----------------------------
         // update brain
         //-----------------------------
         _brain.setEnergyLevel( _energy );
@@ -1097,6 +1136,21 @@ _position.copyFrom( position );
 
 
         //----------------------------------------------------------------------
+        // neural brain: while searching, also follow the better temperature
+        // and keep close to (or away from) the others, as the brain decides
+        //----------------------------------------------------------------------
+        if ( _neural )
+        {
+            const state = _brain.getState();
+            if (( state === BRAIN_STATE_LOOKING_FOR_FOOD ) || ( state === BRAIN_STATE_LOOKING_FOR_MATE ) || ( state === BRAIN_STATE_LOOKING_FOR_PREY ))
+            {
+                _directionToGoal.x += CLIMATE_STEERING * _climateWeight * _climateDirX + SOCIAL_STEERING * _socialWeight * _socialDirX;
+                _directionToGoal.y += CLIMATE_STEERING * _climateWeight * _climateDirY + SOCIAL_STEERING * _socialWeight * _socialDirY;
+                _directionToGoal.normalize();
+            }
+        }
+
+        //----------------------------------------------------------------------
         // continually push the focus direction towards the goal
         //----------------------------------------------------------------------
         let previousFocusDirection = _previousFocusDirection;
@@ -1164,6 +1218,78 @@ _position.copyFrom( position );
 
 
 	//------------------------------------------------------------------------
+	// one thought of the neural brain: what do I want, and how do I move?
+	//------------------------------------------------------------------------
+	this.think = function()
+	{
+	    const hunger    = _brain.getHungerThreshold();
+	    const predator  = this.getPredatorLevel() > PREDATOR_LEVEL_THRESHOLD;
+	    const threat    = ( _nearestPredator != null );
+	    const x         = _nnInputs;
+
+	    x[ IN_BIAS     ] = ONE;
+	    x[ IN_HUNGER   ] = Math.max( -ONE, Math.min( ONE, ( hunger - _energy ) / Math.max( ONE, hunger )));
+	    x[ IN_ENERGY   ] = Math.min( 2, _energy / 100 );
+	    x[ IN_AGE      ] = _age / globalTweakers.maximumLifeSpan;
+	    x[ IN_FIT      ] = _thermalFit;
+	    x[ IN_TREND    ] = _comfortTrend;
+	    x[ IN_FOOD     ] = _seenFood ? ONE : ZERO;
+	    x[ IN_MATE     ] = ( _numSeen > 0 ) ? ONE : ZERO;
+	    x[ IN_THREAT   ] = threat ? ONE : ZERO;
+	    x[ IN_PREY     ] = _seenPrey ? ONE : ZERO;
+	    x[ IN_CROWD    ] = Math.min( ONE, _numSeen / 10 );
+	    x[ IN_PREDATOR ] = predator ? ONE : ZERO;
+
+	    think( _genotype.getBrain(), x, _nnHidden, _nnNewHidden, _nnOutputs );
+
+	    //------------------------------------------------------
+	    // the strongest possible drive wins (the current goal
+	    // gets a small bonus so the swimbot doesn't dither)
+	    //------------------------------------------------------
+	    const current = _brain.getGoal();
+	    let best = OUT_MATE, bestValue = -Infinity;
+	    for (let d = 0; d < NUM_DRIVES; d++)
+	    {
+	        if (( d === OUT_FLEE ) && ( !threat || predator )) continue;   // nothing to flee from
+	        if (( d === OUT_HUNT ) && !predator ) continue;                // only predators hunt
+	        if (( d === OUT_FOOD ) && predator ) continue;                 // predators don't eat plants
+	        const value = _nnOutputs[d] + ( d === current ? DRIVE_HYSTERESIS : ZERO );
+	        if ( value > bestValue ) { bestValue = value; best = d; }
+	    }
+	    _brain.setGoal( best );
+
+	    //------------------------------------------------------
+	    // how to move
+	    //------------------------------------------------------
+	    _effort        = EFFORT_MIN + EFFORT_RANGE * sigmoid( _nnOutputs[ OUT_EFFORT ] );
+	    _socialWeight  = Math.tanh( _nnOutputs[ OUT_SOCIAL ] );
+	    _climateWeight = environment.active ? sigmoid( _nnOutputs[ OUT_CLIMATE ] ) : ZERO;
+
+	    if ( _climateWeight > 0.05 )
+	    {
+	        // which way does the temperature suit me better?
+	        const d  = CLIMATE_PROBE_DISTANCE;
+	        const gx = thermalFit( this.feltTemperature( _position.x + d, _position.y ), _thermalOptimum, _thermalWidth )
+	                 - thermalFit( this.feltTemperature( _position.x - d, _position.y ), _thermalOptimum, _thermalWidth );
+	        const gy = thermalFit( this.feltTemperature( _position.x, _position.y + d ), _thermalOptimum, _thermalWidth )
+	                 - thermalFit( this.feltTemperature( _position.x, _position.y - d ), _thermalOptimum, _thermalWidth );
+	        const length = Math.sqrt( gx * gx + gy * gy );
+	        _climateDirX = ( length > 1e-4 ) ? gx / length : ZERO;
+	        _climateDirY = ( length > 1e-4 ) ? gy / length : ZERO;
+	    }
+	    else
+	    {
+	        _climateDirX = _climateDirY = ZERO;
+	    }
+	}
+
+	this.getUsesNeuralBrain = function() { return _neural;        }
+	this.getEffort          = function() { return _effort;        }
+	this.getClimateWeight   = function() { return _climateWeight; }
+	this.getSocialWeight    = function() { return _socialWeight;  }
+	this.getDrives          = function() { return _nnOutputs;     }
+
+	//------------------------------------------------------------------------
 	// kinesis ("run and tumble", like bacteria): now and then compare how good
 	// it is here with how good it was; if it got worse, maybe turn. If the
 	// temperature is really wrong, look around and head for the best way.
@@ -1196,6 +1322,8 @@ _position.copyFrom( position );
 	    const food = ( environment.plantCount[ PLANT_TYPE_WARM ][ cell ] * _efficiencyWarm
 	                 + environment.plantCount[ PLANT_TYPE_COLD ][ cell ] * _efficiencyCold ) / 6;
 	    const comfort = ( 0.05 + _thermalFit * _thermalPeak ) * ( 0.05 + food );
+
+	    _comfortTrend = ( _comfort < ZERO ) ? ZERO : ( comfort > _comfort ? ONE : ( comfort < _comfort ? -ONE : ZERO ));
 
 	    if (( _comfort >= ZERO ) && ( comfort < _comfort ) && ( gpRandom() < KINESIS_TURN_CHANCE ))
 	    {
@@ -1954,6 +2082,27 @@ let partAccelerationY = -strokeForceY;
         // a nearest predator to herbivores)
         //------------------------------------------------------------
         _nearestPredator = null;
+
+        //------------------------------------------------------------
+        // remember what I see, for the neural brain
+        //------------------------------------------------------------
+        _seenFood = foodBitWasFound && ( theFoodBit != null ) && ( theFoodBit.getType() !== 2 );
+        _seenPrey = ( preyWasFound && ( thePrey != null )) || ( foodBitWasFound && ( theFoodBit != null ) && ( theFoodBit.getType() === 2 ));
+        _numSeen  = numNearbySwimbots;
+
+        if ( _neural )
+        {
+            let sx = ZERO, sy = ZERO;
+            for (let o = 0; o < numNearbySwimbots; o++)
+            {
+                const p = nearbySwimbotArray[o].getPosition();
+                sx += p.x - _position.x;
+                sy += p.y - _position.y;
+            }
+            const length = Math.sqrt( sx * sx + sy * sy );
+            _socialDirX = ( length > ZERO ) ? sx / length : ZERO;
+            _socialDirY = ( length > ZERO ) ? sy / length : ZERO;
+        }
 
         if (( theNearestPredator != null )
         &&  ( theNearestPredator.getPosition().getDistanceTo( _position ) < PREDATOR_FLEE_RADIUS ))
