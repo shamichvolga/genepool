@@ -1097,7 +1097,11 @@ _position.copyFrom( position );
 	//--------------------------------
 	// update
 	//--------------------------------
-	this.update = function()
+	//------------------------------------------------------------------------
+	// decide: age, brain, intentions, where to swim (everything of a step
+	// before the body moves)
+	//------------------------------------------------------------------------
+	this.decide = function()
 	{
 		//---------------------------
 		// update age
@@ -1307,6 +1311,15 @@ _position.copyFrom( position );
         //_focusDirection.addScaled( _directionToGoal, BRAIN_FOCUS_TARGET_SHIFT_STRENGTH );
         //_focusDirection.normalize();
 
+	}
+
+	//------------------------------------------------------------------------
+	// one whole step of this swimbot alone (the old interleaved order)
+	//------------------------------------------------------------------------
+	this.update = function()
+	{
+	    this.decide();
+
         if ( _slot >= 0 )
         {
             this.runPhysicsKernel();
@@ -1317,6 +1330,27 @@ _position.copyFrom( position );
             this.updatePhysics();
         }
 	}
+
+	//------------------------------------------------------------------------
+	// phased step (stage 7): decide and hand the numbers to the physics,
+	// which then runs for all swimbots (maybe in several threads); then
+	// take the results back
+	//------------------------------------------------------------------------
+	this.prepareStep = function()
+	{
+	    this.decide();
+	    this.applyClimateDrain();
+	    this.writePhysicsState();
+	}
+
+	this.finishStep = function()
+	{
+	    this.readPhysicsState();
+	    this.applyPhysicsDeaths();
+	}
+
+	this.cancelEating     = function() { _tryingToEat = false; }
+	this.getChosenFoodBit = function() { return _chosenFoodBit; }
 
 
 

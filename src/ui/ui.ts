@@ -806,6 +806,7 @@ export function updateUI()
                 + ( environment.active ? " (" + environment.seasonName() + ")" : "" )
                 + "<br>"
                 + "speed: " + Math.round( genePool.getStepsPerSecond() ) + " steps/sec"
+                + " (threads: " + genePool.getNumThreads() + ")"
                 + "<br>"
                 + "swimbots: " + genePool.getNumSwimbots() + " (predators: " + predators + ")"
                 + "<br>"

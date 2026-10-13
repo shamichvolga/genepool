@@ -1,7 +1,7 @@
 import { geneAverage, convertOldGenes, GENE_LAYOUT_VERSION, setTrait, gaussian, thermalWidthToGene, GENES_PREDATOR, GENES_THERMAL_OPTIMUM, GENES_THERMAL_WIDTH, GENES_DIGESTION, GENES_BRIGHTNESS, GENES_CHOOSINESS } from "./EcologyGenes";
 import { environment, PLANT_TYPE_WARM, PLANT_TYPE_COLD } from "./Environment";
 import { IGNORE_FOOD_EFFICIENCY, preyVisibility } from "./Ecology";
-import { PERCEPTION_CHECK, DIET_SWITCH_RATE, CLASSIC_NUM_SWIMBOTS, CLASSIC_NUM_FOODBITS, GARDEN_RADIUS, PREDATOR_INTRODUCTION_STEP, PREDATOR_INTRODUCTION_FRACTION, ENVIRONMENT_SEEDS_PER_PERIOD, PLANT_CELL_CAPACITY, PLANT_PARENT_SEED_FRACTION, PLANT_SEED_MIN_DISTANCE, PLANT_SEED_MAX_DISTANCE } from "./Parameters";
+import { INTERLEAVED_STEP, PERCEPTION_CHECK, DIET_SWITCH_RATE, CLASSIC_NUM_SWIMBOTS, CLASSIC_NUM_FOODBITS, GARDEN_RADIUS, PREDATOR_INTRODUCTION_STEP, PREDATOR_INTRODUCTION_FRACTION, ENVIRONMENT_SEEDS_PER_PERIOD, PLANT_CELL_CAPACITY, PLANT_PARENT_SEED_FRACTION, PLANT_SEED_MIN_DISTANCE, PLANT_SEED_MAX_DISTANCE } from "./Parameters";
 
 import { BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_PREY } from "./Brain";
 import { Camera } from "./Camera";
@@ -18,6 +18,7 @@ import { POOL_BOTTOM, POOL_HEIGHT, POOL_LEFT, POOL_RIGHT, POOL_TOP, POOL_WIDTH, 
 import { UniformGrid } from "./UniformGrid";
 import * as SS from "./SharedState";
 import { perceive, PerceptionScratch } from "./PerceptionKernel";
+import { physicsStep } from "./PhysicsKernel";
 import { FLAT_ENVIRONMENT } from "./Environment";
 import { Swimbot } from "./Swimbot";
 import { ATTRACTION_SIMILAR_COLOR, NUM_ATTRACTIONS, SWIMBOT_VIEW_RADIUS } from "./SwimbotTypes";
@@ -197,6 +198,24 @@ export function GenePool()
     let _foodY          = _st.foodY;
     let _foodType       = _st.foodType;     // 0, 1 = plants, 2 = meat
     const _perceptionScratch = new PerceptionScratch( MAX_SWIMBOTS, MAX_FOODBITS );
+
+    // runs the heavy phases over a list of swimbot slots (one thread here;
+    // setParallelRunner can replace it with worker threads)
+    let _runner: any =
+    {
+        getNumThreads() { return 1; },
+        physics( list, n )
+        {
+            for (let i = 0; i < n; i++) { const s = list[i]; if ( _st.alive[s] ) { physicsStep( s, _st ); } }
+        },
+        perception( list, n )
+        {
+            for (let i = 0; i < n; i++) { const s = list[i]; if ( _st.sensing[s] ) { perceive( s, _st, _perceptionScratch ); } }
+        },
+    };
+    this.setParallelRunner = function( runner ) { _runner = runner; }
+    this.getNumThreads     = function() { return _runner.getNumThreads(); }
+    this.getParallelRunner = function() { return _runner; }
     let _perceptionMismatches = 0;          // PERCEPTION_CHECK: kernel and old code disagreed
     let _perceptionChecks     = 0;
     let _gridResult     = new Int32Array( MAX_SWIMBOTS * 2 );  // scratch for grid queries
@@ -1730,83 +1749,12 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	this.setCapsuleRenderer = function( renderer ) { _capsuleRenderer = renderer; }
 
 	//--------------------------------
-	this.updateSwimbots = function()
+	//------------------------------------------------------------------------
+	// what a swimbot does with the world after it moved and looked around:
+	// bump into the obstacle, eat, bite, mate
+	//------------------------------------------------------------------------
+	this.interact = function( s )
 	{
-	    // Swimbots that died last step: leave the grid, maybe leave meat
-	    for (let s = 0; s < MAX_SWIMBOTS; s++)
-	    {
-            if (_swimbotWasAlive[s] && !_swimbots[s].getAlive())
-            {
-                // Запомнить позицию трупа ДО удаления из грида
-                let deadPosition = _swimbots[s].getPosition();
-
-                _swimbotWasAlive[s] = false;
-
-                // Мясо только от травоядных.
-                // Источник мяса:
-                // - смерть от старости (как раньше)
-                // - смерть от голода (новое)
-if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
-                && ( _swimbots[s].getAge() >= _swimbots[s].getMaxAge() ) )
-                {
-                    let meatIndex = this.findLowestDeadFoodBitInArray();
-                    if ( meatIndex !== NULL_INDEX )
-                    {
-                        _foodBits[meatIndex].initialize(meatIndex);
-                        _foodBits[meatIndex].setType(2);
-                        _foodBits[meatIndex].setPosition(deadPosition);
-                    }
-                }
-
-            }
-	    }
-
-	    // who is alive now (after the meat above appeared)
-        rebuildAliveIndexCaches();
-
-	    // rebuild the swimbot grid from the living swimbots
-	    for (let i = 0; i < _aliveSwimbotIndices.length; i++)
-	    {
-            let s = _aliveSwimbotIndices[i];
-            syncSwimbot(s);
-            _swimbotWasAlive[s] = true;
-	    }
-        _swimbotGrid.build( _aliveSwimbotIndices, _aliveSwimbotIndices.length, _botX, _botY );
-
-	    // rebuild the food grid from the living food bits
-	    for (let i = 0; i < _aliveFoodBitIndices.length; i++)
-	    {
-            let f = _aliveFoodBitIndices[i];
-            const position = _foodBits[f].getPosition();
-            _foodX[f] = position.x;
-            _foodY[f] = position.y;
-            _foodType[f] = _foodBits[f].getType();
-	    }
-        _foodBitGrid.build( _aliveFoodBitIndices, _aliveFoodBitIndices.length, _foodX, _foodY );
-
-        for (let i = 0; i < _aliveSwimbotIndices.length; i++)
-        {
-            let s = _aliveSwimbotIndices[i];
-            if ( _swimbots[s].getAlive() )
-            {
-
-
-
-                _swimbots[s].update();
-                syncSwimbotPosition(s);
-
-                //-----------------------------------------------------------------
-                // provide aspects of the environment for the swimbot to perceive
-                //-----------------------------------------------------------------
-                if ( _swimbots[s].getIsLookingForSensoryInput() )
-                {
-                    this.giveSwimbotNearbyEnvironmentalStimuli(s);
-                }
-
-                // Не сбрасываем _tryingToHunt принудительно.
-                // Это ломало/теряло попытки укуса при некоторых состояниях мозга.
-
-
                 //--------------------------------------------------------------------------------------------------------
                 // check for obstacle collision....
                 //--------------------------------------------------------------------------------------------------------
@@ -1823,7 +1771,10 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
                 //-------------------------------------
                 if ( _swimbots[s].getIsTryingToEat() )
                 {
-                    let eatenFoodBit = _swimbots[s].eatChosenFoodBit();
+                    // (in the phased step someone else may have eaten it first)
+                    const food = _swimbots[s].getChosenFoodBit();
+                    if (( food != null ) && food.getAlive()) { _swimbots[s].eatChosenFoodBit(); }
+                    else                                     { _swimbots[s].cancelEating(); }
                 }
 
                 //-------------------------------------
@@ -1945,6 +1896,177 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
                         _swimbots[s].abortMating();
                     }
                 }         //    if ( swimbot[s].isTryingToMate() )
+	}
+
+	//------------------------------------------------------------------------
+	// stage 7: the step in phases. The heavy phases (moving the bodies,
+	// looking around) touch only the shared arrays and can run in several
+	// threads (_runner); deciding and acting stay in this thread, in order.
+	//------------------------------------------------------------------------
+	this.updateSwimbotsInPhases = function()
+	{
+	    const list = _aliveSwimbotIndices;
+	    const n    = list.length;
+	    this.writePerceptionParams();
+
+	    // 1. decide
+	    for (let i = 0; i < n; i++)
+	    {
+	        const b = _swimbots[ list[i] ];
+	        if ( b.getAlive() ) { b.prepareStep(); }
+	    }
+
+	    // 2. move (many threads)
+	    _runner.physics( list, n );
+
+	    // 3. take the results back; get ready to look around
+	    for (let i = 0; i < n; i++)
+	    {
+	        const s = list[i];
+	        const b = _swimbots[s];
+	        _st.sensing[s] = 0;
+	        if ( !b.getAlive() ) continue;
+
+	        b.finishStep();
+	        syncSwimbotPosition(s);
+	        if ( !b.getAlive() ) continue;              // died of old age or hunger just now
+
+	        if ( b.getIsLookingForSensoryInput() )
+	        {
+	            b.updateScanRadius();
+	            _st.sensing[s] = 1;
+	        }
+	        this.writePerceptionInputs(s);
+	    }
+
+	    // 4. look around (many threads)
+	    _runner.perception( list, n );
+
+	    // 5. act, one after the other
+	    for (let i = 0; i < n; i++)
+	    {
+	        const s = list[i];
+	        if ( !_swimbots[s].getAlive() )
+	        {
+	            if ( _selectedSwimbot === s ) { setSelectedSwimbot( NULL_INDEX ); }
+	            continue;
+	        }
+	        if ( _st.sensing[s] ) { this.applyPerception(s); }
+	        this.interact(s);
+	    }
+	}
+
+	// give a swimbot what the perception kernel found for it
+	this.applyPerception = function( s )
+	{
+	    const me    = _swimbots[s];
+	    const count = _st.seenCount[s];
+	    const base  = s * SS.MAX_SEEN;
+	    for (let k = 0; k < count; k++) { _nearbySwimbotsArray[k] = _swimbots[ _st.seen[ base + k ] ]; }
+	    _numNearbySwimbots = count;
+
+	    if ( me.getUsesNeuralBrain() ) { me.setSocialOffset( _st.socialX[s], _st.socialY[s] ); }
+
+	    // (something may have been eaten since the look)
+	    const f = _st.seenFood[s];
+	    const p = _st.seenPrey[s];
+	    const t = _st.seenThreat[s];
+	    const foodOkay   = ( f >= 0 ) && _foodBits[f].getAlive();
+	    const preyOkay   = ( p >= 0 ) && _swimbots[p].getAlive();
+	    const threatOkay = ( t >= 0 ) && _swimbots[t].getAlive();
+
+	    if ( preyOkay ) { me.notifyTargetFound(); }
+
+	    me.setEnvironmentalStimuli( count, _nearbySwimbotsArray,
+	                                foodOkay, foodOkay ? _foodBits[f] : null,
+	                                preyOkay, preyOkay ? _swimbots[p] : null,
+	                                threatOkay ? _swimbots[t] : null );
+	}
+
+	this.updateSwimbots = function()
+	{
+	    // Swimbots that died last step: leave the grid, maybe leave meat
+	    for (let s = 0; s < MAX_SWIMBOTS; s++)
+	    {
+            if (_swimbotWasAlive[s] && !_swimbots[s].getAlive())
+            {
+                // Запомнить позицию трупа ДО удаления из грида
+                let deadPosition = _swimbots[s].getPosition();
+
+                _swimbotWasAlive[s] = false;
+
+                // Мясо только от травоядных.
+                // Источник мяса:
+                // - смерть от старости (как раньше)
+                // - смерть от голода (новое)
+if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
+                && ( _swimbots[s].getAge() >= _swimbots[s].getMaxAge() ) )
+                {
+                    let meatIndex = this.findLowestDeadFoodBitInArray();
+                    if ( meatIndex !== NULL_INDEX )
+                    {
+                        _foodBits[meatIndex].initialize(meatIndex);
+                        _foodBits[meatIndex].setType(2);
+                        _foodBits[meatIndex].setPosition(deadPosition);
+                    }
+                }
+
+            }
+	    }
+
+	    // who is alive now (after the meat above appeared)
+        rebuildAliveIndexCaches();
+
+	    // rebuild the swimbot grid from the living swimbots
+	    for (let i = 0; i < _aliveSwimbotIndices.length; i++)
+	    {
+            let s = _aliveSwimbotIndices[i];
+            syncSwimbot(s);
+            _swimbotWasAlive[s] = true;
+	    }
+        _swimbotGrid.build( _aliveSwimbotIndices, _aliveSwimbotIndices.length, _botX, _botY );
+
+	    // rebuild the food grid from the living food bits
+	    _st.foodAlive.fill( 0 );
+	    for (let i = 0; i < _aliveFoodBitIndices.length; i++)
+	    {
+            let f = _aliveFoodBitIndices[i];
+            _st.foodAlive[f] = 1;
+            const position = _foodBits[f].getPosition();
+            _foodX[f] = position.x;
+            _foodY[f] = position.y;
+            _foodType[f] = _foodBits[f].getType();
+	    }
+        _foodBitGrid.build( _aliveFoodBitIndices, _aliveFoodBitIndices.length, _foodX, _foodY );
+
+        if ( !INTERLEAVED_STEP )
+        {
+            this.updateSwimbotsInPhases();
+        }
+        else for (let i = 0; i < _aliveSwimbotIndices.length; i++)
+        {
+            let s = _aliveSwimbotIndices[i];
+            if ( _swimbots[s].getAlive() )
+            {
+
+
+
+                _swimbots[s].update();
+                syncSwimbotPosition(s);
+
+                //-----------------------------------------------------------------
+                // provide aspects of the environment for the swimbot to perceive
+                //-----------------------------------------------------------------
+                if ( _swimbots[s].getIsLookingForSensoryInput() )
+                {
+                    this.giveSwimbotNearbyEnvironmentalStimuli(s);
+                }
+
+                // Не сбрасываем _tryingToHunt принудительно.
+                // Это ломало/теряло попытки укуса при некоторых состояниях мозга.
+
+
+                this.interact(s);
             }            //     if ( _swimbots[s].getAlive() )
             else
             {

@@ -104,6 +104,11 @@ export const DIET_SWITCH_RATE              = 0.004;
 // stage 7 test switch: compare the perception kernel with the old code
 export const PERCEPTION_CHECK              = false;
 
+// stage 7: true = the old order (each swimbot does its whole step before the
+// next one); false = in phases (all decide, all move, all look, all act),
+// which lets the moving and the looking run in several threads
+export const INTERLEAVED_STEP              = false;
+
 // neural brain (stage 6): used in the environment ("random") pool
 export const NEURAL_BRAIN_ENABLED          = true;
 export const CLIMATE_STEERING              = 1.0;    // pull towards a better temperature (x brain output)

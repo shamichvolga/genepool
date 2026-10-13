@@ -32,6 +32,8 @@ import * as saveLoad from "./ui/saveLoad";
 import * as ui       from "./ui/ui";
 
 import { CapsuleRenderer } from "./render/CapsuleRenderer";
+import { ParallelRunner } from "./parallel/ParallelRunner";
+import { sharedState } from "./simulation/SharedState";
 
 //------------------------------------------------------------------------------
 // The HTML buttons call functions and constants by their global names
@@ -153,6 +155,21 @@ function startGenePool()
     pool.setCanvasDimensions( canvasID.width, canvasID.height );
     pool.setShowingViewTrackingMode( true );
     pool.setCapsuleRenderer( capsuleRenderer );
+
+    //--------------------------------------------------------------------
+    // stage 7: several threads move the bodies and look around. Needs
+    // shared memory (the page is cross-origin isolated, see vite.config.ts).
+    //--------------------------------------------------------------------
+    const st = sharedState();
+    if ( st.shared && ( typeof crossOriginIsolated !== "undefined" ) && crossOriginIsolated )
+    {
+        const numWorkers = Math.max( 1, Math.min( 7, ( navigator.hardwareConcurrency || 2 ) - 1 ));
+        pool.setParallelRunner( new ParallelRunner( st, numWorkers ));
+    }
+    else
+    {
+        console.warn( "No shared memory: the simulation runs in one thread." );
+    }
 
     startBackgroundMetronome();
 }

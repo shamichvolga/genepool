@@ -382,3 +382,13 @@ export function physicsPartB( s: number, st: SharedState ): void
     B[ b + B_VEL_X  ] = velX;  B[ b + B_VEL_Y  ] = velY;
     B[ b + B_GOAL_X ] = goalX; B[ b + B_GOAL_Y ] = goalY;
 }
+
+//------------------------------------------------------------------------------
+// the whole physics of one swimbot for one step (phased step: the climate
+// drain was already applied before)
+//------------------------------------------------------------------------------
+export function physicsStep( s: number, st: SharedState ): void
+{
+    physicsPartA( s, st );
+    physicsPartB( s, st );
+}
