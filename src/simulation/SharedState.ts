@@ -80,6 +80,12 @@ export const PARAM_OBSTACLE_Y1  = 4;
 export const PARAM_OBSTACLE_X2  = 5;
 export const PARAM_OBSTACLE_Y2  = 6;
 export const PARAM_ENV_FIELDS   = 7;    // 1 = the maps vary (environment on and not the flat control)
+export const PARAM_OB_MID_X     = 8;    // obstacle geometry (see Obstacle.writeGeometry)
+export const PARAM_OB_MID_Y     = 9;
+export const PARAM_OB_LENGTH    = 10;
+export const PARAM_OB_PERP_X    = 11;
+export const PARAM_OB_PERP_Y    = 12;
+export const PARAM_OB_END_RADIUS= 13;
 export const NUM_PARAMS         = 16;
 
 export const MAX_SEEN           = BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS;
@@ -129,6 +135,12 @@ export class SharedState
     readonly eternal      : Uint8Array;
     readonly sensing      : Uint8Array;     // 1 = perceives this step
     readonly brainState   : Int8Array;
+    readonly age          : Float64Array;
+    readonly colorR       : Float64Array;   // average body color (mate choice by similar color)
+    readonly colorG       : Float64Array;
+    readonly colorB       : Float64Array;
+    readonly choosiness   : Float64Array;
+    readonly attraction   : Int8Array;      // the swimbot's mate choice criterion
 
     readonly foodX        : Float64Array;
     readonly foodY        : Float64Array;
@@ -148,6 +160,7 @@ export class SharedState
     readonly seenFood     : Int32Array;     // chosen food bit, -1 = none
     readonly seenPrey     : Int32Array;     // chosen prey, -1 = none
     readonly seenThreat   : Int32Array;     // nearest hunting predator, -1 = none
+    readonly seenMate     : Int32Array;     // chosen mate, -1 = none, -2 = not chosen here (main thread does it)
     readonly socialX      : Float64Array;   // sum of offsets to the swimbots seen
     readonly socialY      : Float64Array;
 
@@ -204,6 +217,12 @@ export class SharedState
         this.eternal    = u8 ( "eternal", n );
         this.sensing    = u8 ( "sensing", n );
         this.brainState = new Int8Array( make( "brainState", n ));
+        this.age        = f64( "age", n );
+        this.colorR     = f64( "colorR", n );
+        this.colorG     = f64( "colorG", n );
+        this.colorB     = f64( "colorB", n );
+        this.choosiness = f64( "choosiness", n );
+        this.attraction = new Int8Array( make( "attraction", n ));
 
         this.foodX      = f64( "foodX", MAX_FOODBITS );
         this.foodY      = f64( "foodY", MAX_FOODBITS );
@@ -221,6 +240,7 @@ export class SharedState
         this.seenFood   = new Int32Array( make( "seenFood",   n * 4 ));
         this.seenPrey   = new Int32Array( make( "seenPrey",   n * 4 ));
         this.seenThreat = new Int32Array( make( "seenThreat", n * 4 ));
+        this.seenMate   = new Int32Array( make( "seenMate",   n * 4 ));
         this.socialX    = f64( "socialX", n );
         this.socialY    = f64( "socialY", n );
     }

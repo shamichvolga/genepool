@@ -20,7 +20,9 @@ import {
     B_ENERGY, B_ETERNAL, B_FOCUS_X, B_FOCUS_Y, B_FREQUENCY, B_GENITAL_X, B_GENITAL_Y, B_GOAL_X, B_GOAL_Y, B_GROWTH,
     B_LAST_ENERGY, B_LAST_X, B_LAST_Y, B_MOUTH_X, B_MOUTH_Y, B_NUM_PARTS, B_POS_X, B_POS_Y, B_SELECT_RADIUS,
     B_SPIN, B_SUM_LENGTHS, B_TIMER, B_TIMER_DELTA, B_VEL_X, B_VEL_Y, BOT_STRIDE, C_A, M_X, M_Y, N_X, N_Y, P_X,
-    P_Y, PARAM_MAX_LIFESPAN, PART_STRIDE, PS, Q_X, Q_Y, SharedState, V_X, V_Y
+    P_Y, PARAM_MAX_LIFESPAN, PART_STRIDE, PS, Q_X, Q_Y, SharedState, V_X, V_Y,
+    PARAM_OB_END_RADIUS, PARAM_OB_LENGTH, PARAM_OB_MID_X, PARAM_OB_MID_Y, PARAM_OB_PERP_X, PARAM_OB_PERP_Y,
+    PARAM_OBSTACLE_X1, PARAM_OBSTACLE_Y1
 } from "./SharedState";
 
 //------------------------------------------------------------------------------
@@ -391,4 +393,38 @@ export function physicsStep( s: number, st: SharedState ): void
 {
     physicsPartA( s, st );
     physicsPartB( s, st );
+    obstacleCollision( s, st );
+}
+
+//------------------------------------------------------------------------------
+// bumping into the obstacle pushes the swimbot away (as Obstacle.getCollision,
+// with the push of GenePool: force x 1.2 added to the velocity)
+//------------------------------------------------------------------------------
+export function obstacleCollision( s: number, st: SharedState ): void
+{
+    const B = st.bots, b = s * BOT_STRIDE, P = st.params;
+    const endRadius = P[ PARAM_OB_END_RADIUS ];
+    let radius = B[ b + B_SUM_LENGTHS ] * ONE_HALF;
+    if ( radius < endRadius ) { radius = endRadius; }
+
+    const xx = B[ b + B_POS_X ] - P[ PARAM_OB_MID_X ];
+    const yy = B[ b + B_POS_Y ] - P[ PARAM_OB_MID_Y ];
+    const distanceSquared = xx * xx + yy * yy;
+    const ll = P[ PARAM_OB_LENGTH ] * ONE_HALF + endRadius + radius;
+
+    if ( distanceSquared < ll * ll )
+    {
+        const perpX = P[ PARAM_OB_PERP_X ], perpY = P[ PARAM_OB_PERP_Y ];
+        const testX = B[ b + B_POS_X ] - P[ PARAM_OBSTACLE_X1 ];
+        const testY = B[ b + B_POS_Y ] - P[ PARAM_OBSTACLE_Y1 ];
+        const dot = testX * perpX + testY * perpY;
+
+        if ( Math.abs( dot ) < radius )
+        {
+            let penetration = ( ONE - ( dot / radius ) );
+            if ( dot < ZERO ) { penetration *= -ONE; }
+            B[ b + B_VEL_X ] += ( perpX * penetration ) * 1.2;
+            B[ b + B_VEL_Y ] += ( perpY * penetration ) * 1.2;
+        }
+    }
 }

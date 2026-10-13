@@ -233,6 +233,22 @@ this.setParent = function( parent )
 
 	this.getSlot = function() { return _slot; }
 
+	// the numbers other threads read about me that change only with a new phenotype
+	this.writeStaticPerception = function()
+	{
+	    if ( _slot < 0 ) return;
+	    const st = _shared, s = _slot;
+	    st.effWarm   [s] = this.getDigestionEfficiency( PLANT_TYPE_WARM );
+	    st.effCold   [s] = this.getDigestionEfficiency( PLANT_TYPE_COLD );
+	    st.preferred [s] = _phenotype.preferredFoodType;
+	    st.choosiness[s] = _choosiness;
+	    st.attraction[s] = _brain.getAttractionCriterion();
+	    const color = this.getAverageColor();
+	    st.colorR    [s] = color.red;
+	    st.colorG    [s] = color.green;
+	    st.colorB    [s] = color.blue;
+	}
+
 	// copy the numbers the physics needs into the shared state
 	this.writePhysicsState = function()
 	{
@@ -1026,6 +1042,7 @@ _position.copyFrom( position );
         _efficiencyCold = digestionEfficiency( _digestion, PLANT_TYPE_COLD ) * sizeDietFactor( size, PLANT_TYPE_COLD );
         _comfort        = -ONE;
         this.updateThermalFit();
+        this.writeStaticPerception();
 
         //-----------------------------------------------------
         // the predator gene may have changed (zap, gene tweak)
@@ -1539,6 +1556,7 @@ _position.copyFrom( position );
 	}
 
 	this.getBrightness      = function() { return _brightness;      }
+	this.getAttractionCriterion = function() { return _brain.getAttractionCriterion(); }
 	this.getChoosiness      = function() { return _choosiness;      }
 
 	this.getDigestionEfficiency = function( type )
@@ -2252,7 +2270,7 @@ let partAccelerationY = -strokeForceY;
 	//--------------------------------------------
 	// setEnvironmentalStimuli
 	//--------------------------------------------
-	this.setEnvironmentalStimuli = function( numNearbySwimbots, nearbySwimbotArray, foodBitWasFound, theFoodBit, preyWasFound, thePrey, theNearestPredator )
+	this.setEnvironmentalStimuli = function( numNearbySwimbots, nearbySwimbotArray, foodBitWasFound, theFoodBit, preyWasFound, thePrey, theNearestPredator, mateChoice = undefined, seenIndices = null )
     {
         //------------------------------------------------------------
         // predator threat (herbivores only - genepool only passes
@@ -2342,7 +2360,13 @@ let partAccelerationY = -strokeForceY;
             let atLeastOneBabeIsVisible = false;
             let highestBabeFactor = -100.0;
 
-            for (let o=0; o<numNearbySwimbots; o++)
+            // the perception threads may already have chosen (null = nobody)
+            if ( mateChoice !== undefined )
+            {
+                mostAttractiveFound     = mateChoice;
+                atLeastOneBabeIsVisible = ( mateChoice !== null );
+            }
+            else for (let o=0; o<numNearbySwimbots; o++)
             {
                 let babeFactor = nearbySwimbotArray[o].getAttractiveness( this );
 
@@ -2383,7 +2407,7 @@ let partAccelerationY = -strokeForceY;
 
             for (let o=0; o<numNearbySwimbots; o++)
             {
-                let index = nearbySwimbotArray[o].getIndex();
+                let index = ( seenIndices !== null ) ? seenIndices[o] : nearbySwimbotArray[o].getIndex();
                 if ( index === _chosenMateIndex )
                 {
                     ICanStillSeeYou = true;
@@ -2440,6 +2464,7 @@ let partAccelerationY = -strokeForceY;
 	this.setAttraction = function( attraction )
 	{
 	    _brain.setAttraction( attraction );
+	    if ( _slot >= 0 ) { _shared.attraction[ _slot ] = attraction; }
 
 //here I need to tell the brain to stop pursuing its current chosen mate (if it is)...
 

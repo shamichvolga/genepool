@@ -8,13 +8,13 @@
 // The arithmetic is the same as the old GenePool.giveSwimbotNearbyEnvironmentalStimuli
 // (checked by comparing both on the same state, see GenePool PERCEPTION_CHECK).
 //------------------------------------------------------------------------------
-import { BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_PREY } from "./Brain";
-import { IGNORE_FOOD_EFFICIENCY, preyVisibility } from "./Ecology";
+import { BRAIN_STATE_LOOKING_FOR_MATE, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_PREY } from "./Brain";
+import { IGNORE_FOOD_EFFICIENCY, mateAcceptance, pairRandom, preyVisibility } from "./Ecology";
 import { PLANT_TYPE_WARM } from "./Environment";
-import { ONE } from "./MathConstants";
-import { PREDATOR_LEVEL_THRESHOLD, PREY_MAX_MASS_RATIO } from "./Parameters";
+import { ONE, ONE_THIRD } from "./MathConstants";
+import { PREDATOR_LEVEL_THRESHOLD, PREY_MAX_MASS_RATIO, YOUNG_AGE_DURATION } from "./Parameters";
 import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
-import { SWIMBOT_VIEW_RADIUS } from "./SwimbotTypes";
+import { ATTRACTION_SIMILAR_COLOR, STARVING, SWIMBOT_VIEW_RADIUS } from "./SwimbotTypes";
 import {
     BACKGROUND_SIZE, MAX_SEEN, PARAM_ENV_ACTIVE, PARAM_ENV_FIELDS, PARAM_FOOD_TYPES, PARAM_OBSTACLE_X1, PARAM_OBSTACLE_X2,
     PARAM_OBSTACLE_Y1, PARAM_OBSTACLE_Y2, SharedState
@@ -361,4 +361,44 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
         }
     }
     st.seenThreat[s] = threat;
+
+    //------------------------------------------------------------------
+    // a mate (when looking for one, by similar color): the most similar
+    // grown-up, not starving swimbot in sight that accepts me
+    // (as Swimbot.setEnvironmentalStimuli; other criteria: main thread)
+    //------------------------------------------------------------------
+    let mate = -2;
+    if (( st.brainState[s] === BRAIN_STATE_LOOKING_FOR_MATE ) && ( st.attraction[s] === ATTRACTION_SIMILAR_COLOR ))
+    {
+        mate = -1;
+        let highest = -100.0;
+        const r = st.colorR, g = st.colorG, b = st.colorB;
+        for (let i = 0; i < numSeen; i++)
+        {
+            const o = st.seen[ seenBase + i ];
+            const rDiff = Math.abs( r[o] - r[s] );
+            const gDiff = Math.abs( g[o] - g[s] );
+            const bDiff = Math.abs( b[o] - b[s] );
+            const attractiveness = ONE - ( ( rDiff + gDiff + bDiff ) * ONE_THIRD );
+
+            if (( attractiveness > highest )
+            &&  ( attractiveness > 0 )
+            &&  ( st.age[o] > YOUNG_AGE_DURATION )
+            &&  ( st.energy[o] > STARVING )
+            &&  accepts( st, o, s, environmentOn ))
+            {
+                highest = attractiveness;
+                mate = o;
+            }
+        }
+    }
+    st.seenMate[s] = mate;
+}
+
+// does swimbot o accept swimbot s as a mate? (as Swimbot.acceptsMate)
+function accepts( st: SharedState, o: number, s: number, environmentOn: boolean ): boolean
+{
+    if ( !environmentOn ) return true;
+    const db = Math.abs( st.brightness[s] - st.brightness[o] );
+    return pairRandom( s, o ) < mateAcceptance( db, st.choosiness[o] );
 }

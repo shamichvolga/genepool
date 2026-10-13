@@ -21,7 +21,7 @@ import { perceive, PerceptionScratch } from "./PerceptionKernel";
 import { physicsStep } from "./PhysicsKernel";
 import { FLAT_ENVIRONMENT } from "./Environment";
 import { Swimbot } from "./Swimbot";
-import { ATTRACTION_SIMILAR_COLOR, NUM_ATTRACTIONS, SWIMBOT_VIEW_RADIUS } from "./SwimbotTypes";
+import { ATTRACTION_SIMILAR_COLOR, NUM_ATTRACTIONS, STARVING, SWIMBOT_VIEW_RADIUS } from "./SwimbotTypes";
 import { Touch, TouchState } from "./Touch";
 import { assert, getRandomAngleInDegrees } from "./Utility";
 import { Vector2D } from "./Vector2D";
@@ -1142,6 +1142,7 @@ if ( mode === SimulationStartMode.SPECIES )
 	    P[ SS.PARAM_OBSTACLE_Y1  ] = _obstacle.getEnd1Position().y;
 	    P[ SS.PARAM_OBSTACLE_X2  ] = _obstacle.getEnd2Position().x;
 	    P[ SS.PARAM_OBSTACLE_Y2  ] = _obstacle.getEnd2Position().y;
+	    _obstacle.writeGeometry( P, SS.PARAM_OB_MID_X, SS.PARAM_OB_MID_Y, SS.PARAM_OB_LENGTH, SS.PARAM_OB_PERP_X, SS.PARAM_OB_PERP_Y, SS.PARAM_OB_END_RADIUS );
 	}
 
 	this.writePerceptionInputs = function( s )
@@ -1152,10 +1153,10 @@ if ( mode === SimulationStartMode.SPECIES )
 	    _st.mouthY    [s] = mouth.y;
 	    _st.energy    [s] = b.getEnergy();
 	    _st.scanRadius[s] = b.getDynamicScanRadius();
-	    _st.effWarm   [s] = b.getDigestionEfficiency( PLANT_TYPE_WARM );
-	    _st.effCold   [s] = b.getDigestionEfficiency( PLANT_TYPE_COLD );
-	    _st.preferred [s] = b.getPreferredFoodType();
 	    _st.brainState[s] = b.getBrainState();
+	    _st.age       [s] = b.getAge();
+	    // (digestion, colors, choosiness... change only with a new phenotype:
+	    //  the swimbot writes them itself, see Swimbot.writeStaticPerception)
 	}
 
 	//------------------------------------------------------------------------
@@ -1185,6 +1186,30 @@ if ( mode === SimulationStartMode.SPECIES )
 	        if ( _st.seen[ s * SS.MAX_SEEN + i ] !== _nearbySwimbotsArray[i].getIndex() ) { same = false; }
 	    }
 	    if ( !same ) { _perceptionMismatches ++; }
+	}
+
+	// PERCEPTION_CHECK: the mate the threads chose = the one the old code would choose?
+	this.checkMateChoices = function( list, n )
+	{
+	    for (let i = 0; i < n; i++)
+	    {
+	        const s = list[i];
+	        if ( !_st.sensing[s] || _st.seenMate[s] === -2 ) continue;
+	        const me = _swimbots[s];
+	        let best = -1, highest = -100.0;
+	        for (let k = 0; k < _st.seenCount[s]; k++)
+	        {
+	            const other = _swimbots[ _st.seen[ s * SS.MAX_SEEN + k ] ];
+	            const babe = other.getAttractiveness( me );
+	            if (( babe > highest ) && ( babe > 0 ) && ( other.getAge() > YOUNG_AGE_DURATION ) && ( other.getEnergy() > STARVING ) && other.acceptsMate( me ))
+	            {
+	                highest = babe;
+	                best = other.getIndex();
+	            }
+	        }
+	        _perceptionChecks ++;
+	        if ( best !== _st.seenMate[s] ) { _perceptionMismatches ++; }
+	    }
 	}
 
 	this.getPerceptionMismatches = function() { return { checks: _perceptionChecks, mismatches: _perceptionMismatches }; }
@@ -1761,7 +1786,8 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
                 //--------------------------------------------------------------------------------------------------------
                 // check for obstacle collision....
                 //--------------------------------------------------------------------------------------------------------
-                if ( _obstacle.getCollision( _swimbots[s].getPosition(), _swimbots[s].getBoundingRadius() * ONE_HALF ) )
+                // (in the phased step the physics threads do this, see PhysicsKernel.obstacleCollision)
+                if ( INTERLEAVED_STEP && _obstacle.getCollision( _swimbots[s].getPosition(), _swimbots[s].getBoundingRadius() * ONE_HALF ) )
                 {
                     // only call this IMMEDIATELY after calling "_obstacle.getCollision"...
                     _vectorUtility = _obstacle.getCurrentCollisionForce();
@@ -1953,6 +1979,8 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 	    _runner.perception( list, n );
 	    t = phaseTime( 3, t );
 
+	    if ( PERCEPTION_CHECK ) { this.checkMateChoices( list, n ); }
+
 	    // 5. act, one after the other
 	    for (let i = 0; i < n; i++)
 	    {
@@ -1997,10 +2025,15 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 
 	    if ( preyOkay ) { me.notifyTargetFound(); }
 
+	    // the mate the threads chose (-2: choose here, the old way)
+	    const m = _st.seenMate[s];
+	    const mateChoice = ( m === -2 ) ? undefined : (( m >= 0 && _swimbots[m].getAlive() ) ? _swimbots[m] : null );
+
 	    me.setEnvironmentalStimuli( count, _nearbySwimbotsArray,
 	                                foodOkay, foodOkay ? _foodBits[f] : null,
 	                                preyOkay, preyOkay ? _swimbots[p] : null,
-	                                threatOkay ? _swimbots[t] : null );
+	                                threatOkay ? _swimbots[t] : null,
+	                                mateChoice, _st.seen.subarray( base, base + count ));
 	}
 
 	this.updateSwimbots = function()

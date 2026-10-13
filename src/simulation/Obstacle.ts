@@ -219,6 +219,15 @@ export function Obstacle()
 	// if a collision has been detected, then add the resulting force
 	// NOTE: call this immediately after calling "getCollision"
 	//-------------------------------------------------------------------
+	// the numbers getCollision needs (for the physics threads)
+	this.writeGeometry = function( params, midX, midY, length, perpX, perpY, endRadius )
+	{
+	    params[ midX ] = _mid.x;   params[ midY ] = _mid.y;
+	    params[ length ] = _length;
+	    params[ perpX ] = _perp.x; params[ perpY ] = _perp.y;
+	    params[ endRadius ] = END_RADIUS;
+	}
+
 	this.getCurrentCollisionForce = function() 
 	{
     	return _collisionForce;
