@@ -87,7 +87,7 @@ export function innateBrain(): Float32Array
         io( OUT_FLEE,    IN_BIAS,   -5 );
         io( OUT_CLIMATE, IN_BIAS,    2 );      // follow the temperature more when it doesn't suit me
         io( OUT_CLIMATE, IN_FIT,    -3 );
-        io( OUT_EFFORT,  IN_BIAS,    1.6 );    // ~ normal swimming
+        io( OUT_EFFORT,  IN_BIAS,    0.92 );   // effort 1.0 = classic swimming
 
         // hidden neurons start with tiny weights: unused, but ready for evolution
         _innate = w;

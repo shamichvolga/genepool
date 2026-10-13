@@ -3,7 +3,7 @@
 //
 //  thermal fit       g = exp( -(T - θ)² / (2w²) )        how well the place suits me
 //  thermal peak      (W_MIN / w)^a                       broad tolerance = lower peak
-//  food energy       50 · 1.6 · eff(d, type) · (0.3 + 0.7 · g · peak)
+//  food energy       50 · 2.5 · eff(d, type) · (0.3 + 0.7 · g · peak)
 //  extra drain       0.006 · (1 - g)   per step          living in the wrong climate costs
 //  digestion         eff_warm = 0.15 + 0.85 · d^1.5,  eff_cold = 0.15 + 0.85 · (1-d)^1.5
 //
@@ -17,10 +17,11 @@ export const THERMAL_TRADE_OFF          = 0.5;     // "a": 0 = no cost of being 
 export const THERMAL_MISMATCH_DRAIN     = 0.006;   // extra energy per step at a totally wrong temperature
 export const FOOD_BASE_FRACTION         = 0.3;     // part of the food energy you always get
 // Swimbots find food at the same rate as in the classic pool, but get only a
-// part of its energy here; this bonus makes an adapted specialist at home get
-// more than in the classic pool (~1.4x), a typical founder about the same, and
-// a misplaced generalist much less (~0.4x).
-export const ENVIRONMENT_FOOD_BONUS     = 1.6;
+// part of its energy here (they mostly eat "their" plant type). This bonus was
+// tuned by runs (tools/eco.cjs, 3 seeds): at 1.6 the population starved down
+// to ~600, at 2.2 it held 1200-2000, at 2.8 about 2600. An adapted specialist
+// at home now gets ~2x the classic energy, a misplaced generalist ~0.5x.
+export const ENVIRONMENT_FOOD_BONUS     = 2.5;
 export const DIGESTION_MINIMUM          = 0.15;
 export const DIGESTION_CURVE            = 1.5;     // > 1: in-between digestion is bad at both foods
 export const IGNORE_FOOD_EFFICIENCY     = 0.3;     // food worse than this is ignored unless starving
