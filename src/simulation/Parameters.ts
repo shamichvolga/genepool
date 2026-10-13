@@ -67,6 +67,11 @@ export const PREDATION_ENERGY_TRANSFER     = 0.3;
 // (a typical prey of mass ~400 gives ~50 more; before, a kill gave only 10-20)
 export const PREY_BODY_ENERGY              = 0.12;
 
+// autotomy (see Swimbot.autotomize): a dropped part grows back after this
+// many steps, if the swimbot has the energy it lost (it pays it again)
+export const AUTOTOMY_REGROW_DELAY         = 2000;
+export const AUTOTOMY_DECOY_SPAN           = 0.8;    // genes 0..1 -> drop when the hunter is within 0..80% of the view
+
 // "Радар" хищника: пока голодный хищник не видит добычу, радиус поиска
 // постепенно растёт от обычного радиуса зрения до (обычный * MAX_SCALE).
 // Когда добыча найдена, радиус замирает на PREY_SCAN_COOLDOWN шагов,

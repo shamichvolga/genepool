@@ -146,6 +146,10 @@ export function Phenotype()
 	this.brightness         = 0.5;
 	this.choosiness         = 0;
 	this.hungerFactor       = 1;
+	this.autotomyBite       = 0;
+	this.autotomyThreat     = 0;
+	this.autotomyAmount     = 0;
+	this.autotomyWhich      = 0;
 	for (let p=0; p<MAX_PARTS; p++)
 	{
 		this.parts[p] = new Part(); 

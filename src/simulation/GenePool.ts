@@ -1,4 +1,4 @@
-import { geneAverage, convertOldGenes, GENE_LAYOUT_VERSION, setTrait, gaussian, thermalWidthToGene, GENES_PREDATOR, GENES_THERMAL_OPTIMUM, GENES_THERMAL_WIDTH, GENES_DIGESTION, GENES_BRIGHTNESS, GENES_CHOOSINESS, GENES_HUNGER } from "./EcologyGenes";
+import { geneAverage, convertOldGenes, GENE_LAYOUT_VERSION, setTrait, gaussian, thermalWidthToGene, GENES_PREDATOR, GENES_THERMAL_OPTIMUM, GENES_THERMAL_WIDTH, GENES_DIGESTION, GENES_BRIGHTNESS, GENES_CHOOSINESS, GENES_HUNGER, GENES_AUTOTOMY_BITE, GENES_AUTOTOMY_THREAT, GENES_AUTOTOMY_AMOUNT, GENES_AUTOTOMY_WHICH } from "./EcologyGenes";
 import { environment, PLANT_TYPE_WARM, PLANT_TYPE_COLD } from "./Environment";
 import { IGNORE_FOOD_EFFICIENCY, preyVisibility, TWO_PLANT_TYPES } from "./Ecology";
 import { INTERLEAVED_STEP, PERCEPTION_CHECK, DIET_SWITCH_RATE, CLASSIC_NUM_SWIMBOTS, CLASSIC_NUM_FOODBITS, GARDEN_RADIUS, PREDATOR_INTRODUCTION_STEP, PREDATOR_INTRODUCTION_FRACTION, ENVIRONMENT_SEEDS_PER_PERIOD, PLANT_CELL_CAPACITY, PLANT_PARENT_SEED_FRACTION, PLANT_SEED_MIN_DISTANCE, PLANT_SEED_MAX_DISTANCE } from "./Parameters";
@@ -974,6 +974,12 @@ if ( mode === SimulationStartMode.SPECIES )
 	    const brightness = Math.min( 1, Math.max( 0, ( shown - ( 1 - BRIGHTNESS_FROM_GENES ) * theta ) / BRIGHTNESS_FROM_GENES ));
 	    setTrait( genotype, GENES_BRIGHTNESS,      brightness,                  0.02 );
 	    setTrait( genotype, GENES_CHOOSINESS,      0.2 + 0.4 * gpRandom(),      0.02 );
+	    // autotomy: a little of it here and there, selection decides the rest
+	    setTrait( genotype, GENES_AUTOTOMY_BITE,   0.3 * gpRandom(),            0 );
+	    setTrait( genotype, GENES_AUTOTOMY_THREAT, 0.3 * gpRandom(),            0 );
+	    setTrait( genotype, GENES_AUTOTOMY_AMOUNT, gpRandom(),                  0 );
+	    setTrait( genotype, GENES_AUTOTOMY_WHICH,  gpRandom(),                  0 );
+
 	    // hunger threshold factor around 1 (gene 1/3), a little different for each founder
 	    setTrait( genotype, GENES_HUNGER,          1 / 3 + gaussian() * 0.06,   0 );
 	}
@@ -1588,6 +1594,30 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
     // -------------------------------------------------------------
     // Predation overflow support: spawn extra red meat foodbits
     // -------------------------------------------------------------
+    //--------------------------------------------------------------------
+    // meat holding a given energy (a dropped body part): in bits of <= 50
+    //--------------------------------------------------------------------
+    this.spawnMeatWithEnergy = function( x, y, energy )
+    {
+        if ( !( energy > 0 )) return;
+        const count = Math.max( 1, Math.ceil( energy / DEFAULT_FOOD_BIT_ENERGY ));
+        const position = new Vector2D();
+        position.setXY( x, y );
+        for (let i = 0; i < count; i++)
+        {
+            const f = this.findLowestDeadFoodBitInArray();
+            if ( f === NULL_INDEX ) return;
+            _foodBits[f].initialize( f );
+            _foodBits[f].setType( 2 );
+            _foodBits[f].setPosition( position );
+            if ( i > 0 ) { _foodBits[f].randomizeSpawnPosition({ getPosition: function() { return position; } }); }
+            _foodBits[f].setEnergy( energy / count );
+            _foodX[f] = _foodBits[f].getPosition().x;
+            _foodY[f] = _foodBits[f].getPosition().y;
+            _foodType[f] = 2;
+        }
+    }
+
     this.spawnMeatFoodBits = function(position, count)
     {
         // type = 2 => red meat, edible by predators

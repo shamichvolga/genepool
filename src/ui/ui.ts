@@ -748,6 +748,18 @@ export function updateUI()
                         row( "temperature here",  here.toFixed(2) + " (suits " + percent( swimbot.getThermalFit() ) + ")" ) +
                         ( TWO_PLANT_TYPES ? row( "digests", "green " + percent( swimbot.getDigestionEfficiency(0) ) + " · blue " + percent( swimbot.getDigestionEfficiency(1) ) ) : "" ) +
                         row( "brightness",        swimbot.getBrightness().toFixed(2) + " (picky " + percent( swimbot.getChoosiness() ) + ")" );
+                    const a = swimbot.getAutotomy();
+                    if ( !isPredator )
+                    {
+                        foodRows += row( "drops a part", ( a.bite > 0.01 || a.threat > 0.05 )
+                            ? percent( a.amount ) + " of body · bitten " + percent( a.bite ) + ( a.threat > 0.05 ? " · when chased" : "" )
+                              + ( a.partsLost ? " · <b>missing</b> (" + Math.max( 0, a.regrowIn ) + ")" : "" )
+                            : "never" );
+                    }
+                    else if ( swimbot.getNumPartsEaten() > 0 )
+                    {
+                        foodRows += row( "parts eaten", swimbot.getNumPartsEaten() );
+                    }
                     const image = swimbot.getSearchImage();
                     if ( isPredator && image && image.strength > 0.05 )
                     {

@@ -1,4 +1,4 @@
-import { geneAverage, thermalWidthOf, GENES_HUNGER, GENES_PREDATOR, GENES_THERMAL_OPTIMUM, GENES_DIGESTION, GENES_BRIGHTNESS, GENES_CHOOSINESS } from "./EcologyGenes";
+import { GENES_AUTOTOMY_BITE, GENES_AUTOTOMY_THREAT, GENES_AUTOTOMY_AMOUNT, GENES_AUTOTOMY_WHICH, geneAverage, thermalWidthOf, GENES_HUNGER, GENES_PREDATOR, GENES_THERMAL_OPTIMUM, GENES_DIGESTION, GENES_BRIGHTNESS, GENES_CHOOSINESS } from "./EcologyGenes";
 import { environment } from "./Environment";
 //--------------------------------------------------------------------------
 //                                                                        
@@ -208,6 +208,11 @@ let testNoEel = true;
         // the swimbot's own hunger threshold = the pool's setting x 0.5 .. 2
         // (gene 1/3 = exactly the setting); used in the environment pool
         phenotype.hungerFactor     = 0.5 + 1.5 * geneAverage( genotype, GENES_HUNGER );
+        // autotomy (dropping a part of the body)
+        phenotype.autotomyBite     = geneAverage( genotype, GENES_AUTOTOMY_BITE );                // chance when bitten
+        phenotype.autotomyThreat   = geneAverage( genotype, GENES_AUTOTOMY_THREAT );              // 0 never .. 1 at first sight
+        phenotype.autotomyAmount   = 0.1 + 0.5 * geneAverage( genotype, GENES_AUTOTOMY_AMOUNT );  // 10 .. 60 % of the parts
+        phenotype.autotomyWhich    = geneAverage( genotype, GENES_AUTOTOMY_WHICH );
 
 
         // predator level and hunger live in the ecology gene block (EcologyGenes.ts)

@@ -19,11 +19,16 @@ export const GENES_PREDATOR        = [ 129, 130 ];             // predator level
 export const GENES_HUNGER          = [ 131 ];                  // hunger (was gene 50; not used yet)
 export const GENES_BRIGHTNESS      = [ 132, 133, 134 ];        // body brightness b: camouflage + mating signal
 export const GENES_CHOOSINESS      = [ 135, 136 ];             // how picky about a mate's brightness
+// autotomy: dropping a part of the body (like a lizard's tail)
+export const GENES_AUTOTOMY_BITE   = [ 137 ];                  // chance to drop a part when bitten
+export const GENES_AUTOTOMY_THREAT = [ 138 ];                  // drop one as a decoy when a hunter comes this close (0 = never)
+export const GENES_AUTOTOMY_AMOUNT = [ 139 ];                  // how much of the body to drop
+export const GENES_AUTOTOMY_WHICH  = [ 140 ];                  // which limb (tail / side branch...)
 
 export const ECOLOGY_GENES_FIRST   = 120;
-export const ECOLOGY_GENES_LAST    = 139;
-export const MARKER_GENES_FIRST    = 140;                      // neutral markers: change slowly, affect nothing,
-export const MARKER_GENES_LAST     = 155;                      // used to measure how related populations are
+export const ECOLOGY_GENES_LAST    = 143;
+export const MARKER_GENES_FIRST    = 144;                      // neutral markers: change slowly, affect nothing,
+export const MARKER_GENES_LAST     = 159;                      // used to measure how related populations are
 
 export const THERMAL_WIDTH_MIN     = 0.04;
 export const THERMAL_WIDTH_MAX     = 0.40;

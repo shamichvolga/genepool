@@ -25,7 +25,7 @@ import { DEFAULT_FOOD_BIT_ENERGY, FoodBit } from "./FoodBit";
 import { Genotype } from "./Genotype";
 import { globalTweakers, gpRandom, simCounters } from "./Globals";
 import { NULL_INDEX, ONE, ONE_HALF, ONE_THIRD, PI_OVER_180, ZERO } from "./MathConstants";
-import { PREY_BODY_ENERGY, ATTACK_COOLDOWN, ATTACK_SUCCESS_CHANCE, ENVIRONMENT_ATTACK_SUCCESS_CHANCE, BASAL_METABOLISM, DEFAULT_SWIMBOT_HUNGER_THRESHOLD, FOOD_TYPE_OFFSET, OLD_AGE_DURATION, PREDATION_ENERGY_TRANSFER, PREDATOR_FLEE_RADIUS, PREDATOR_LEVEL_THRESHOLD, PREY_SCAN_COOLDOWN, PREY_SCAN_RADIUS_GROWTH, PREY_SCAN_RADIUS_MAX_SCALE, SWIMBOT_MAX_ENERGY, SWIMBOT_SELECT_RADIUS_SCALAR, YOUNG_AGE_DURATION } from "./Parameters";
+import { AUTOTOMY_REGROW_DELAY, AUTOTOMY_DECOY_SPAN, PREY_BODY_ENERGY, ATTACK_COOLDOWN, ATTACK_SUCCESS_CHANCE, ENVIRONMENT_ATTACK_SUCCESS_CHANCE, BASAL_METABOLISM, DEFAULT_SWIMBOT_HUNGER_THRESHOLD, FOOD_TYPE_OFFSET, OLD_AGE_DURATION, PREDATION_ENERGY_TRANSFER, PREDATOR_FLEE_RADIUS, PREDATOR_LEVEL_THRESHOLD, PREY_SCAN_COOLDOWN, PREY_SCAN_RADIUS_GROWTH, PREY_SCAN_RADIUS_MAX_SCALE, SWIMBOT_MAX_ENERGY, SWIMBOT_SELECT_RADIUS_SCALAR, YOUNG_AGE_DURATION } from "./Parameters";
 import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
 import { SwimbotRenderer } from "./SwimbotRenderer";
 import { ATTRACTION_BIG, ATTRACTION_CLOSEST, ATTRACTION_COLORFUL, ATTRACTION_CROOKED, ATTRACTION_HYPER, ATTRACTION_LONG, ATTRACTION_NO_COLOR, ATTRACTION_RANDOM, ATTRACTION_SHORT, ATTRACTION_SIMILAR_COLOR, ATTRACTION_SIMILAR_HYPER, ATTRACTION_SIMILAR_LENGTH, ATTRACTION_SIMILAR_SIZE, ATTRACTION_SIMILAR_STRAIGHT, ATTRACTION_SMALL, ATTRACTION_STILL, ATTRACTION_STRAIGHT, CONTINUAL_ENERGY_DRAIN, ENERGY_EFFICIENCY_MEASUREMENT_PERIOD, ENERGY_USED_UP_SWIMMING, GENITAL_INDEX, MAX_PARTS, MOUTH_INDEX, NULL_PART, Phenotype, ROOT_PART, STARVING, STARVING_TIMER_DELTA, SWIMBOT_GENITAL_LENGTH, SWIMBOT_MOUTH_LENGTH, SWIMBOT_VIEW_RADIUS, TIMER_DELTA_INCREASE_RATE, WALL_BOUNCE } from "./SwimbotTypes";
@@ -114,6 +114,7 @@ var    flopperYV = 0;
 	let _nearestPredator    = null;
 	let _tryingToHunt       = false;
 	let _numPreyEaten       = 0;
+	let _numPartsEaten      = 0;      // parts that prey dropped when bitten
 	let _scanRadius         = SWIMBOT_VIEW_RADIUS;
 	let _scanCooldown       = 0;
 	let _eternal            = false;
@@ -136,6 +137,10 @@ var    flopperYV = 0;
 	let _comfortTrend       = ZERO;   // +1 it got better here, -1 worse
 	let _averageColor       = null;   // cached by getAverageColor (reset with a new phenotype)
 	let _baseHungerThreshold = DEFAULT_SWIMBOT_HUNGER_THRESHOLD;   // the pool's setting
+	let _partsLost          = false;  // autotomy: a part is missing (grows back later)
+	let _autotomyLoss       = ZERO;   // the energy that went with it
+	let _regrowTimer        = 0;
+	let _partsDropped       = 0;      // how many times in its life
 
 	//-----------------------------------------------------------------------
 	// neural brain (stage 6, see NeuralBrain.ts)
@@ -241,6 +246,97 @@ this.setParent = function( parent )
 	}
 
 	this.getSlot = function() { return _slot; }
+
+	//------------------------------------------------------------------------
+	// Autotomy: drop the tip of a limb (which limb and how much: genes). The
+	// dropped parts take the same share of my energy as of my body mass.
+	// Returns { energy, x, y } (where the parts were), or null.
+	//------------------------------------------------------------------------
+	this.autotomize = function()
+	{
+	    if ( _partsLost || !environment.active ) return null;
+	    const n = _phenotype.numParts;
+	    if ( n <= 4 ) return null;
+	    this.syncPartObjects();
+	    const parts = _phenotype.parts;
+
+	    // parts that carry nothing (leaves); the mouth (0) and genital (1) stay
+	    const children = new Array( n ).fill( 0 );
+	    for (let p = 1; p < n; p++) { if ( parts[p].parent >= 0 ) children[ parts[p].parent ] ++; }
+	    const leaves = [];
+	    for (let p = 2; p < n; p++) { if ( children[p] === 0 ) leaves.push(p); }
+	    if ( leaves.length === 0 ) return null;
+
+	    const leaf  = leaves[ Math.min( leaves.length - 1, Math.floor( _phenotype.autotomyWhich * leaves.length )) ];
+	    const limit = Math.min( n - 3, Math.max( 1, Math.round( _phenotype.autotomyAmount * ( n - 2 ))));
+
+	    // climb from the leaf while the whole branch below stays within the limit
+	    const subtree = ( r ) =>
+	    {
+	        const out = [];
+	        for (let p = 2; p < n; p++)
+	        {
+	            let q = p;
+	            while ( q > 1 && q !== r ) { q = parts[q].parent; }
+	            if ( q === r ) out.push(p);
+	        }
+	        return out;
+	    };
+	    let root = leaf, drop = [ leaf ];
+	    while ( parts[ root ].parent >= 2 )
+	    {
+	        const bigger = subtree( parts[ root ].parent );
+	        if ( bigger.length > limit ) break;
+	        root = parts[ root ].parent;
+	        drop = bigger;
+	    }
+
+	    // how much of me goes, and where it lies
+	    let droppedMass = ZERO, x = ZERO, y = ZERO;
+	    for ( const p of drop ) { droppedMass += parts[p].mass; x += parts[p].midPosition.x * parts[p].mass; y += parts[p].midPosition.y * parts[p].mass; }
+	    if ( droppedMass <= ZERO ) return null;
+	    x /= droppedMass; y /= droppedMass;
+	    const lost = _energy * ( droppedMass / _phenotype.mass );
+
+	    // the body without them: keep the order, renumber parents and children
+	    const isDropped = new Array( n ).fill( false );
+	    for ( const p of drop ) isDropped[p] = true;
+	    const newIndex = new Array( n ).fill( NULL_INDEX );
+	    const kept = [], gone = [];
+	    for (let p = 0; p < n; p++) { if ( isDropped[p] ) { gone.push( parts[p] ); } else { newIndex[p] = kept.length; kept.push( parts[p] ); } }
+	    for ( const part of kept )
+	    {
+	        if ( part.parent >= 0 ) { part.parent = newIndex[ part.parent ]; }
+	        if ( part.child  >= 0 ) { part.child  = newIndex[ part.child  ]; }   // a dropped child -> none (the end gets a cap)
+	    }
+	    const order = kept.concat( gone );
+	    for (let p = n; p < parts.length; p++) { order.push( parts[p] ); }
+	    _phenotype.parts    = order;
+	    _phenotype.numParts = kept.length;
+
+	    this.processPhenotype();
+
+	    _energy      -= lost;
+	    _autotomyLoss = lost;
+	    _partsLost    = true;
+	    _regrowTimer  = AUTOTOMY_REGROW_DELAY;
+	    _partsDropped ++;
+	    return { energy: lost, x, y };
+	};
+
+	// bitten: maybe drop a part instead of dying (chance = gene)
+	this.tryAutotomyOnBite = function()
+	{
+	    if ( _partsLost || ( _phenotype.autotomyBite <= ZERO ) || ( gpRandom() >= _phenotype.autotomyBite )) return null;
+	    return this.autotomize();
+	};
+
+	this.getAutotomy = function()
+	{
+	    return { bite: _phenotype.autotomyBite, threat: _phenotype.autotomyThreat, amount: _phenotype.autotomyAmount,
+	             partsLost: _partsLost, regrowIn: _regrowTimer, timesDropped: _partsDropped };
+	};
+	this.getNumPartsEaten = function() { return _numPartsEaten; }
 
 	//------------------------------------------------------------------------
 	// predator search image (see Ecology.ts): learn from a meal, fade with time
@@ -887,6 +983,9 @@ _position.copyFrom( position );
 		_alive		        = true;
 		_growthScale        = ONE;
 
+		// whole body
+		_partsLost = false; _autotomyLoss = ZERO; _regrowTimer = 0; _partsDropped = 0;
+
 		// nothing learned yet
 		if ( _slot >= 0 ) { _shared.imageStrength[ _slot ] = ZERO; }
 
@@ -1189,6 +1288,20 @@ _position.copyFrom( position );
 		// update age
 		//---------------------------
 		_age ++;
+
+		// a dropped part grows back after a while, if I can pay for it
+		if ( _partsLost )
+		{
+		    _regrowTimer --;
+		    if (( _regrowTimer <= 0 ) && ( _energy > _brain.getHungerThreshold() + _autotomyLoss ) && ( _embryology != null ))
+		    {
+		        this.syncPartObjects();
+		        _phenotype = _embryology.generatePhenotypeFromGenotype( _genotype );
+		        this.processPhenotype();
+		        _energy   -= _autotomyLoss;
+		        _partsLost = false;
+		    }
+		}
 
 		// a predator's search image fades
 		if (( _slot >= 0 ) && ( _shared.imageStrength[ _slot ] > ZERO )) { _shared.imageStrength[ _slot ] *= SEARCH_IMAGE_FORGETTING; }
@@ -2294,7 +2407,9 @@ let partAccelerationY = -strokeForceY;
             //----------------------------------------------------------------------
             if ( environment.active )
             {
-                energyFromFoodBit = _chosenFoodBit.getEnergy()
+                // (meat: exactly the energy it holds, e.g. a dropped tail)
+                energyFromFoodBit = ( _chosenFoodBit.getType() === 2 ) ? _chosenFoodBit.getEnergy()
+                                  : _chosenFoodBit.getEnergy()
                                   * this.getDigestionEfficiency( _chosenFoodBit.getType() )
                                   * climateFoodFactor( _thermalFit, _thermalPeak );
             }
@@ -2351,6 +2466,17 @@ let partAccelerationY = -strokeForceY;
 
 	    let preyPosition = new Vector2D();
 	    preyPosition.set( _chosenPrey.getPosition() );
+
+	    // autotomy: the prey may drop a part and get away; I eat the part
+	    const dropped = _chosenPrey.tryAutotomyOnBite();
+	    if ( dropped !== null )
+	    {
+	        _energy += Math.min( Math.max( ZERO, SWIMBOT_MAX_ENERGY - _energy ), dropped.energy );
+	        _chosenPrey.notifyAttackedBy( this );
+	        _numPartsEaten ++;
+	        _timerDelta = ZERO;
+	        return;
+	    }
 
 	    // the prey's energy (a part) and its body
 	    let energyFromPrey = _chosenPrey.getEnergy() * PREDATION_ENERGY_TRANSFER + _chosenPrey.getPhenotypeMass() * PREY_BODY_ENERGY;
@@ -2417,6 +2543,14 @@ let partAccelerationY = -strokeForceY;
             if ( distance < PREDATOR_FLEE_RADIUS ) { _nearestPredator = theNearestPredator; }
         }
         _brain.setNearbyPredatorThreat( _nearestPredator != null );
+
+        // autotomy as a decoy: a hunter came too close - drop a part and leave it behind
+        if (( theNearestPredator != null ) && !_partsLost && ( _phenotype.autotomyThreat > 0.05 )
+        &&  ( _threatCloseness >= ONE - AUTOTOMY_DECOY_SPAN * _phenotype.autotomyThreat ))
+        {
+            const dropped = this.autotomize();
+            if ( dropped !== null ) { _parent.spawnMeatWithEnergy( dropped.x, dropped.y, dropped.energy ); }
+        }
 
         if ( anyPredator != null )
         {
