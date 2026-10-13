@@ -52,7 +52,8 @@ export const MIN_PHASE             =  -1.0;
 export const MAX_PHASE             =   1.0;	
 export const MIN_COLOR             =   ZERO;
 export const MAX_COLOR             =   ONE;
-const BRIGHTNESS_COLOR_SHARE        =   0.6;    // how much the brightness gene decides the body color
+const BRIGHTNESS_COLOR_SHARE        =   0.6;    // how much the brightness decides the body color
+export const BRIGHTNESS_FROM_GENES  =   0.5;    // the rest of the brightness comes from the preferred temperature
 export const MIN_BRANCH_PERIOD     =   1;
 export const MAX_BRANCH_PERIOD     =   4;	
 export const MIN_BRANCH_ANGLE      =  -90.0;
@@ -211,7 +212,13 @@ let testNoEel = true;
         phenotype.thermalOptimum   = geneAverage( genotype, GENES_THERMAL_OPTIMUM );
         phenotype.thermalWidth     = thermalWidthOf( genotype );
         phenotype.digestion        = geneAverage( genotype, GENES_DIGESTION );
-        phenotype.brightness       = geneAverage( genotype, GENES_BRIGHTNESS );
+        // the body brightness others see: half its own genes, half the preferred
+        // temperature (cold-adapted swimbots are darker, like real animals).
+        // So the climate a swimbot is adapted to shows in its colors, and
+        // choosing a mate of similar color means choosing one from a similar
+        // climate (a "magic trait", see docs/БИОЛОГ_ЭТАП5.md)
+        phenotype.brightness       = BRIGHTNESS_FROM_GENES * geneAverage( genotype, GENES_BRIGHTNESS )
+                                   + ( 1 - BRIGHTNESS_FROM_GENES ) * phenotype.thermalOptimum;
         phenotype.choosiness       = geneAverage( genotype, GENES_CHOOSINESS );
 
         // Legacy/binary compatibility for other code that may still look for isPredator

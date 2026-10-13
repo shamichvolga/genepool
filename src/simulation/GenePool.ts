@@ -5,7 +5,7 @@ import { CLASSIC_NUM_SWIMBOTS, CLASSIC_NUM_FOODBITS, GARDEN_RADIUS, PREDATOR_INT
 
 import { BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_PREY } from "./Brain";
 import { Camera } from "./Camera";
-import { Embryology } from "./Embryology";
+import { BRIGHTNESS_FROM_GENES, Embryology } from "./Embryology";
 import { FamilyTree } from "./FamilyTree";
 import { DEFAULT_FOOD_BIT_ENERGY, DEFAULT_FOOD_BIT_MAX_SPAWN_RADIUS, FOOD_BIT_BOUNDARY_MARGIN, FOOD_BIT_GRAB_RADIUS, FoodBit, MAX_FOOD_BIT_ENERGY, MAX_FOOD_BIT_MAX_SPAWN_RADIUS, MIN_FOOD_BIT_ENERGY, MIN_FOOD_BIT_MAX_SPAWN_RADIUS } from "./FoodBit";
 import { Genotype, NUM_GENES, PRESET_GENOTYPE_DARWIN, PRESET_GENOTYPE_DENNETT, PRESET_GENOTYPE_MENDEL, PRESET_GENOTYPE_TURING, PRESET_GENOTYPE_WILSON } from "./Genotype";
@@ -932,7 +932,9 @@ if ( mode === SimulationStartMode.SPECIES )
 	    setTrait( genotype, GENES_THERMAL_WIDTH,   thermalWidthToGene( width ), 0.02 );
 	    setTrait( genotype, GENES_DIGESTION,       digestion,                   0.02 );
 
-	    const brightness = Math.min( 1, Math.max( 0, environment.backgroundAt( x, y ) + gaussian() * 0.15 ));
+	    // brightness genes chosen so the body (genes + temperature part) roughly matches the bottom
+	    const shown      = environment.backgroundAt( x, y ) + gaussian() * 0.1;
+	    const brightness = Math.min( 1, Math.max( 0, ( shown - ( 1 - BRIGHTNESS_FROM_GENES ) * theta ) / BRIGHTNESS_FROM_GENES ));
 	    setTrait( genotype, GENES_BRIGHTNESS,      brightness,                  0.02 );
 	    setTrait( genotype, GENES_CHOOSINESS,      0.2 + 0.4 * gpRandom(),      0.02 );
 	}
@@ -1052,18 +1054,32 @@ if ( mode === SimulationStartMode.SPECIES )
 	}
 
 	//------------------------------------------------------------------------
-	// predators appear some time after the start: a few swimbots become
-	// predators (in the environment pool everybody starts as a herbivore)
+	// predators appear some time after the start (in the environment pool
+	// everybody starts as a herbivore). They appear in small groups, one per
+	// garden: lonely predators scattered over the big world never find a mate.
 	//------------------------------------------------------------------------
 	this.introducePredators = function()
 	{
 	    _predatorsIntroduced = true;
-	    for (let i = 0; i < _aliveSwimbotIndices.length; i++)
+
+	    const alive = _aliveSwimbotIndices.filter( s => _swimbots[s].getAlive() && !_swimbots[s].isEternal() );
+	    if ( alive.length === 0 ) return;
+
+	    const wanted  = Math.max( 10, Math.round( alive.length * PREDATOR_INTRODUCTION_FRACTION ));
+	    const perGroup = Math.ceil( wanted / Math.max( 1, _gardens.length ));
+
+	    for (let g = 0; g < Math.max( 1, _gardens.length ); g++)
 	    {
-	        const s = _aliveSwimbotIndices[i];
-	        if ( _swimbots[s].getAlive() && !_swimbots[s].isEternal() && ( gpRandom() < PREDATOR_INTRODUCTION_FRACTION ))
+	        // the group forms around a random swimbot: its nearest neighbors join
+	        const center = _swimbots[ alive[ Math.floor( gpRandom() * alive.length ) ] ].getPosition();
+	        const byDistance = alive
+	            .filter( s => _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD )
+	            .map( s => ({ s, d: _swimbots[s].getPosition().getDistanceTo( center ) }))
+	            .sort( ( a, b ) => a.d - b.d );
+
+	        for (let k = 0; k < perGroup && k < byDistance.length; k++)
 	        {
-	            _swimbots[s].applyPredatorLevel( 0.75 + 0.25 * gpRandom() );
+	            _swimbots[ byDistance[k].s ].applyPredatorLevel( 0.75 + 0.25 * gpRandom() );
 	        }
 	    }
 	}
