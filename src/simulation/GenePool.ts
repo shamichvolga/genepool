@@ -1073,7 +1073,8 @@ if ( mode === SimulationStartMode.SPECIES )
 	                type = this.choosePlantTypeAt( _vectorUtility.x, _vectorUtility.y );
 	            }
 
-	            if (( type === PLANT_TYPE_WARM ) && ( numType0FoodBits >= MAX_FOODBITS_PER_TYPE )) continue;
+	            // (with one food for everybody, it may fill the whole food store)
+	            if (( type === PLANT_TYPE_WARM ) && ( numType0FoodBits >= ( TWO_PLANT_TYPES ? MAX_FOODBITS_PER_TYPE : MAX_FOODBITS ))) continue;
 	            if (( type === PLANT_TYPE_COLD ) && ( numType1FoodBits >= MAX_FOODBITS_PER_TYPE )) continue;
 	            if ( !this.plantCanGrowAt( _vectorUtility.x, _vectorUtility.y, type )) continue;
 	            if (( parent !== null ) && _obstacle.getObstruction( parent.getPosition(), _vectorUtility )) continue;

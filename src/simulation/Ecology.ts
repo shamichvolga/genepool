@@ -23,10 +23,10 @@ export const FOOD_BASE_FRACTION         = 0.3;     // part of the food energy yo
 // at home now gets ~2x the classic energy, a misplaced generalist ~0.5x.
 //
 // One food for everybody (TWO_PLANT_TYPES = false): digestion no longer
-// matters, a bite is worth more on average, so the bonus is lower (1.75 keeps
-// a typical swimbot at the classic 50 energy per bite).
+// matters (runs, 2 seeds x 30 000 steps: 1.75 and 2.0 slowly starved the
+// population to ~1000-1500, 2.4 holds ~2000, 2.8 ~3000).
 export const TWO_PLANT_TYPES            = false;
-export const ENVIRONMENT_FOOD_BONUS     = TWO_PLANT_TYPES ? 2.5 : 1.75;
+export const ENVIRONMENT_FOOD_BONUS     = TWO_PLANT_TYPES ? 2.5 : 2.4;
 export const DIGESTION_MINIMUM          = 0.15;
 export const DIGESTION_CURVE            = 1.5;     // > 1: in-between digestion is bad at both foods
 export const IGNORE_FOOD_EFFICIENCY     = 0.3;     // food worse than this is ignored unless starving
