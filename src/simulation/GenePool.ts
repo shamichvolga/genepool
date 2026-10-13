@@ -55,8 +55,11 @@ export function GenePool()
     let _stepsPerSecond             = 0;    // measured, for display
     let _stepsSecondStart           = 0;
 
+    let _lastAnimationFrame         = 0;    // when the screen refresh last called us
+
     function animationFrame( now )
     {
+        _lastAnimationFrame = now;
         _this.runFrame( now );
         requestAnimationFrame( animationFrame );
     }
@@ -1591,7 +1594,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	//--------------------------------------------------------------
 	// one browser frame: simulate (within the time budget), then draw
 	//--------------------------------------------------------------
-	this.runFrame = function( now )
+	this.runFrame = function( now, draw = true )
 	{
 		_seconds = ( (new Date).getTime() - _startTime ) / MILLISECONDS_PER_SECOND;
 
@@ -1637,7 +1640,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
         // nothing to draw while the page is hidden
         const pageHidden = ( typeof document !== "undefined" ) && document.hidden;
 
-        if ( _rendering && !pageHidden )
+        if ( _rendering && !pageHidden && draw )
         {
             rebuildAliveIndexCaches();
             this.renderFrame();
@@ -1647,6 +1650,9 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	}
 
 	this.getStepsPerSecond = function() { return _stepsPerSecond; }
+
+	// no screen refresh for a while (hidden or covered window, embedded view)?
+	this.screenRefreshStalled = function( now ) { return ( now - _lastAnimationFrame ) > 100; }
 
 	// the graphics-card renderer (set up by main.ts in the browser)
 	this.setCapsuleRenderer = function( renderer ) { _capsuleRenderer = renderer; }

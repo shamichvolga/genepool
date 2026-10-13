@@ -1,3 +1,4 @@
+import { WORLD_AREA_FACTOR } from "../simulation/World";
 //--------------------------------------------------------------------------
 //                                                                        
 //    This file is part of GenePool Swimbots.                             
@@ -21,7 +22,9 @@ export function Graph()
     const GRAPH_RIGHT_MARGIN    = 20;
     const GRAPH_BOTTOM_MARGIN   = 160;
     const GRAPH_TOP_MARGIN      = 40;
-    const GRAPH_MAX_POPULATION  = 2000;
+    const GRAPH_MAX_POPULATION  = 2000 * WORLD_AREA_FACTOR;   // the world is bigger now
+    const GRAPH_LINE_HIGH       = GRAPH_MAX_POPULATION / 2;
+    const GRAPH_LINE_LOW        = GRAPH_MAX_POPULATION / 4;
     const RECIPROCAL_OF_MAX_POP = 1 / GRAPH_MAX_POPULATION;
     const GRAPH_FOODBIT_COLOR   = "rgb( 20,  100,  20 )";
     const GRAPH_FOODBIT_1_COLOR = "rgb( 20,  100, 200 )";
@@ -155,8 +158,8 @@ _top = 0;
         _graphWidth	    = _graphRight  - _graphLeft;
         _graphHeight    = _graphBottom - _graphTop;
 
-        _level1000	= _graphBottom - ( 1000	* RECIPROCAL_OF_MAX_POP ) * _graphHeight;
-        _level0500	= _graphBottom - ( 500	* RECIPROCAL_OF_MAX_POP ) * _graphHeight;
+        _level1000	= _graphBottom - ( GRAPH_LINE_HIGH * RECIPROCAL_OF_MAX_POP ) * _graphHeight;
+        _level0500	= _graphBottom - ( GRAPH_LINE_LOW  * RECIPROCAL_OF_MAX_POP ) * _graphHeight;
         _level0000	= _graphBottom - (   0	* RECIPROCAL_OF_MAX_POP ) * _graphHeight;
 
         //-------------------------------
@@ -214,8 +217,8 @@ _top = 0;
             graphCanvas.fillStyle = "rgb( 100, 100, 100 )";	
             	
             graphCanvas.fillText( "0",      left, _level0000 -  8 );        
-            graphCanvas.fillText( "500",    left, _level0500 +  8 );        
-            graphCanvas.fillText( "1000",   left, _level1000 + 18 );        
+            graphCanvas.fillText( String( GRAPH_LINE_LOW  ), left, _level0500 +  8 );
+            graphCanvas.fillText( String( GRAPH_LINE_HIGH ), left, _level1000 + 18 );        
             
             graphCanvas.lineWidth = 2; 
             graphCanvas.strokeStyle = GRAPH_FOODBIT_COLOR;

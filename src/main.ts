@@ -131,9 +131,14 @@ function startBackgroundMetronome()
     const metronome = new Worker( new URL( "./metronome.worker.ts", import.meta.url ), { type: "module" } );
     metronome.onmessage = () =>
     {
-        if ( document.hidden && ( typeof genePool != "undefined" ))
+        if ( typeof genePool == "undefined" ) return;
+
+        // hidden page, or the browser stopped giving us screen refreshes
+        // (a covered window, an embedded view): keep simulating without drawing
+        const now = performance.now();
+        if ( document.hidden || genePool.screenRefreshStalled( now ))
         {
-            genePool.runFrame( performance.now() );
+            genePool.runFrame( now, false );
         }
     };
 }
