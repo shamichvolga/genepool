@@ -2048,7 +2048,7 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 	                                foodOkay, foodOkay ? _foodBits[f] : null,
 	                                preyOkay, preyOkay ? _swimbots[p] : null,
 	                                threatOkay ? _swimbots[t] : null,
-	                                mateChoice, _st.seen.subarray( base, base + count ));
+	                                mateChoice, _st.seen, base );
 	}
 
 	this.updateSwimbots = function()

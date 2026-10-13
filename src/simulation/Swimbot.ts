@@ -2283,7 +2283,7 @@ let partAccelerationY = -strokeForceY;
 	//--------------------------------------------
 	// setEnvironmentalStimuli
 	//--------------------------------------------
-	this.setEnvironmentalStimuli = function( numNearbySwimbots, nearbySwimbotArray, foodBitWasFound, theFoodBit, preyWasFound, thePrey, theNearestPredator, mateChoice = undefined, seenIndices = null )
+	this.setEnvironmentalStimuli = function( numNearbySwimbots, nearbySwimbotArray, foodBitWasFound, theFoodBit, preyWasFound, thePrey, theNearestPredator, mateChoice = undefined, seenIndices = null, seenBase = 0 )
     {
         //------------------------------------------------------------
         // predator threat (herbivores only - genepool only passes
@@ -2421,7 +2421,7 @@ let partAccelerationY = -strokeForceY;
 
             for (let o=0; o<numNearbySwimbots; o++)
             {
-                let index = ( seenIndices !== null ) ? seenIndices[o] : nearbySwimbotArray[o].getIndex();
+                let index = ( seenIndices !== null ) ? seenIndices[ seenBase + o ] : nearbySwimbotArray[o].getIndex();
                 // (a mate that turned predator / herbivore meanwhile is given up)
                 if (( index === _chosenMateIndex ) && nearbySwimbotArray[o].sameDiet( this ))
                 {
