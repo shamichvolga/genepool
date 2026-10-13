@@ -16,6 +16,7 @@ import { SharedState } from "../simulation/SharedState";
 import { physicsStep } from "../simulation/PhysicsKernel";
 import { perceive, PerceptionScratch } from "../simulation/PerceptionKernel";
 import { MAX_FOODBITS } from "../simulation/Parameters";
+import { WORLD_SCALE } from "../simulation/World";
 import { CTRL_COUNT, CTRL_DONE, CTRL_GENERATION, CTRL_NEXT, CTRL_SIZE, CTRL_TASK, TASK_PERCEPTION, TASK_PHYSICS, workOnList } from "./ParallelWork";
 
 export class ParallelRunner
@@ -38,7 +39,8 @@ export class ParallelRunner
 
         for (let w = 0; w < numWorkers; w++)
         {
-            const worker = new Worker( new URL( "./sim.worker.ts", import.meta.url ), { type: "module" } );
+            // (the name tells the worker the world size, see World.ts)
+            const worker = new Worker( new URL( "./sim.worker.ts", import.meta.url ), { type: "module", name: "world=" + WORLD_SCALE } );
             worker.onmessage = ( e ) => { if ( e.data === "ready" ) { this.numReady ++; } };
             worker.onerror   = ( e ) => { console.error( "simulation worker failed:", e.message ); this.broken = true; };
             worker.postMessage({ buffers: st.buffers, maxSwimbots: st.maxSwimbots, control: this.control.buffer, list: this.list.buffer });

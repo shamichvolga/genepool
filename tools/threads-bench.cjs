@@ -44,8 +44,8 @@ function workerSource()
             const st = new SharedState( data.maxSwimbots, data.buffers );
             const scratch = new PerceptionScratch( data.maxSwimbots, MAX_FOODBITS );
             const control = new Int32Array( data.control ), list = new Int32Array( data.list );
-            parentPort.postMessage( "ready" );
             let generation = Atomics.load( control, 0 );
+            parentPort.postMessage( "ready" );
             while ( true )
             {
                 Atomics.wait( control, 0, generation );

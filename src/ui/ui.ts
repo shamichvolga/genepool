@@ -1,4 +1,5 @@
 import { TWO_PLANT_TYPES } from "../simulation/Ecology";
+import { WORLD_SCALE } from "../simulation/World";
 //--------------------------------------------------------------------------
 //                                                                        
 //    This file is part of GenePool Swimbots.                             
@@ -1012,4 +1013,25 @@ export function toggleEternalSwimbot( swimbotID )
 {
     // the info panel is redrawn every frame, so it picks up the new status by itself
     genePool.toggleEternalSwimbot( swimbotID );
+}
+
+
+//----------------------------------------------------------
+// world size: reload the page with ?world=1..4 (see World.ts)
+//----------------------------------------------------------
+export function setWorldSize( scale )
+{
+    if ( scale === WORLD_SCALE ) return;
+    const url = new URL( window.location.href );
+    url.searchParams.set( "world", String( scale ));
+    window.location.href = url.toString();
+}
+
+export function showWorldSize()
+{
+    for ( let w = 1; w <= 4; w++ )
+    {
+        const button = document.getElementById( "world" + w + "Button" );
+        if ( button ) { button.classList.toggle( "activeButton", w === WORLD_SCALE ); }
+    }
 }

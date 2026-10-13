@@ -19,9 +19,10 @@ self.onmessage = ( e: MessageEvent ) =>
     const control = new Int32Array( controlBuffer );
     const list    = new Int32Array( listBuffer );
 
-    ( self as any ).postMessage( "ready" );
-
+    // remember where the phase counter is BEFORE saying "ready": otherwise the
+    // first phase could start in between, and this worker would sleep through it
     let generation = Atomics.load( control, CTRL_GENERATION );
+    ( self as any ).postMessage( "ready" );
     while ( true )
     {
         Atomics.wait( control, CTRL_GENERATION, generation );       // sleep until the next phase

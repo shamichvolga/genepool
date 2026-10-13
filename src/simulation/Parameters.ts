@@ -1,4 +1,4 @@
-import { WORLD_AREA_FACTOR } from "./World";
+import { WORLD_AREA_FACTOR, WORLD_SCALE } from "./World";
 import { DEFAULT_FOOD_BIT_ENERGY, DEFAULT_FOOD_BIT_MAX_SPAWN_RADIUS } from "./FoodBit";
 import { ONE, ONE_HALF, ZERO } from "./MathConstants";
 import { ATTRACTION_SIMILAR_COLOR } from "./SwimbotTypes";
@@ -93,7 +93,7 @@ export const INITIAL_PREDATOR_FRACTION     = 0.1;
 // gardens, one per biome); at this step a few swimbots become predators.
 export const PREDATOR_INTRODUCTION_STEP    = 20000;
 export const PREDATOR_INTRODUCTION_FRACTION = 0.05;
-export const GARDEN_RADIUS                 = 1200;
+export const GARDEN_RADIUS                 = 600 * WORLD_SCALE;   // (1200 in the normal world: same crowding in every size)
 
 // Now and then a newborn switches diet (herbivore <-> predator), like a big
 // mutation. In the old pool this happened by accident (the predator gene was

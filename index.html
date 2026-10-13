@@ -105,6 +105,14 @@
                         <button id = "pool8Button" class = "basicButton" onClick = "choosePoolToLoad( SimulationStartMode.EMPTY        ); requestToLoadPoolFromPreset();" >empty</button>
                     </div>
 
+                    <div class = "gpHeading">world size (starts a new random pool)</div>
+                    <div id = "worldSizePanel" class = "gpGrid4">
+                        <button id = "world1Button" class = "basicButton" onClick = "setWorldSize(1);" title = "8000 × 8000, about 500 swimbots"     >small</button>
+                        <button id = "world2Button" class = "basicButton" onClick = "setWorldSize(2);" title = "16000 × 16000, about 2000 swimbots"   >normal</button>
+                        <button id = "world3Button" class = "basicButton" onClick = "setWorldSize(3);" title = "24000 × 24000, about 4500 swimbots"   >large</button>
+                        <button id = "world4Button" class = "basicButton" onClick = "setWorldSize(4);" title = "32000 × 32000, about 8000 swimbots (needs a fast computer)" >huge</button>
+                    </div>
+
                     <div class = "gpHeading">research data</div>
                     <div id = "saveLoadPanel" class = "gpNote">
                         Run a pool (for example "speciation") for tens of thousands of steps,

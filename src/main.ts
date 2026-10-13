@@ -172,6 +172,7 @@ function startGenePool()
     }
 
     startBackgroundMetronome();
+    ui.showWorldSize();
 }
 
 if ( document.readyState === "complete" )
