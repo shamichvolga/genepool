@@ -1118,8 +1118,18 @@ _position.copyFrom( position );
 	// decide: age, brain, intentions, where to swim (everything of a step
 	// before the body moves)
 	//------------------------------------------------------------------------
-	this.decide = function()
+	this.decide = function( fastTargets = false )
 	{
+	    // In the phased step the targets (food bit, mate) are read from the
+	    // shared arrays: same numbers, but much faster than visiting their
+	    // objects. (The old interleaved step keeps reading the objects.)
+	    const fast = fastTargets && ( _slot >= 0 );
+	    const st   = _shared;
+	    const f    = _chosenFoodBitIndex;
+	    const m    = _chosenMateIndex;
+	    const foodAlive = ( _chosenFoodBit != null ) && ( fast ? (( f !== NULL_INDEX ) && ( st.foodAlive[f] === 1 )) : _chosenFoodBit.getAlive() );
+	    const mateAlive = ( _chosenMate    != null ) && ( fast ? ( st.alive[m] === 1 ) : _chosenMate.getAlive() );
+
 		//---------------------------
 		// update age
 		//---------------------------
@@ -1154,14 +1164,10 @@ _position.copyFrom( position );
         //-------------------------------------
         if ( _brain.getState() === BRAIN_STATE_PURSUING_FOOD )
         {
-            if (( _chosenFoodBit != null )
-            &&  ( _chosenFoodBit.getAlive()))
+            if ( foodAlive )
             {
-                //let distanceSquared = _chosenFoodBit.getPosition().getDistanceSquaredTo( _phenotype.parts[ MOUTH_INDEX ].position );
-                //if ( distanceSquared < SWIMBOT_MOUTH_LENGTH * SWIMBOT_MOUTH_LENGTH )
-
-                let xx = _chosenFoodBit.getPosition().x - this.getMouthPosition().x;
-                let yy = _chosenFoodBit.getPosition().y - this.getMouthPosition().y;
+                let xx = ( fast ? st.foodX[f] : _chosenFoodBit.getPosition().x ) - _mouthPosition.x;
+                let yy = ( fast ? st.foodY[f] : _chosenFoodBit.getPosition().y ) - _mouthPosition.y;
                 let distance = Math.sqrt( xx*xx + yy*yy );
 
                 if ( distance < SWIMBOT_MOUTH_LENGTH )
@@ -1177,11 +1183,10 @@ _position.copyFrom( position );
         //------------------------------------------
         else if ( _brain.getState() === BRAIN_STATE_PURSUING_MATE )
         {
-            if (( _chosenMate != null )
-            &&  ( _chosenMate.getAlive() ))
+            if ( mateAlive )
             {
-                let xx = _chosenMate.getGenitalPosition().x - this.getGenitalPosition().x;
-                let yy = _chosenMate.getGenitalPosition().y - this.getGenitalPosition().y;
+                let xx = ( fast ? st.genitalX[m] : _chosenMate.getGenitalPosition().x ) - _genitalPosition.x;
+                let yy = ( fast ? st.genitalY[m] : _chosenMate.getGenitalPosition().y ) - _genitalPosition.y;
                 let distance = Math.sqrt( xx*xx + yy*yy );
 
                 if ( distance < SWIMBOT_GENITAL_LENGTH )
@@ -1274,7 +1279,8 @@ _position.copyFrom( position );
             //console.log( "BRAIN_STATE_PURSUING_MATE");
             if ( _chosenMate != null )
             {
-                _directionToGoal.set( _chosenMate.getGenitalPosition() );
+                if ( fast ) { _directionToGoal.setXY( st.genitalX[m], st.genitalY[m] ); }
+                else        { _directionToGoal.set( _chosenMate.getGenitalPosition() ); }
                 _directionToGoal.subtract( _genitalPosition );
                 _directionToGoal.normalize();
             }
@@ -1284,7 +1290,8 @@ _position.copyFrom( position );
             //console.log( "BRAIN_STATE_PURSUING_FOOD");
             if ( _chosenFoodBit != null )
             {
-                _directionToGoal.set( _chosenFoodBit.getPosition() );
+                if ( fast && ( f !== NULL_INDEX )) { _directionToGoal.setXY( st.foodX[f], st.foodY[f] ); }
+                else                               { _directionToGoal.set( _chosenFoodBit.getPosition() ); }
                 _directionToGoal.subtract( _mouthPosition );
                 _directionToGoal.normalize();
             }
@@ -1355,7 +1362,7 @@ _position.copyFrom( position );
 	//------------------------------------------------------------------------
 	this.prepareStep = function()
 	{
-	    this.decide();
+	    this.decide( true );
 	    this.applyClimateDrain();
 	    this.writePhysicsState();
 	}
