@@ -385,6 +385,7 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
             &&  ( attractiveness > 0 )
             &&  ( st.age[o] > YOUNG_AGE_DURATION )
             &&  ( st.energy[o] > STARVING )
+            &&  (( predator[o] > PREDATOR_LEVEL_THRESHOLD ) === iAmPredator )     // predators mate with predators only
             &&  accepts( st, o, s, environmentOn ))
             {
                 highest = attractiveness;

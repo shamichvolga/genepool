@@ -21,7 +21,12 @@ export const FOOD_BASE_FRACTION         = 0.3;     // part of the food energy yo
 // tuned by runs (tools/eco.cjs, 3 seeds): at 1.6 the population starved down
 // to ~600, at 2.2 it held 1200-2000, at 2.8 about 2600. An adapted specialist
 // at home now gets ~2x the classic energy, a misplaced generalist ~0.5x.
-export const ENVIRONMENT_FOOD_BONUS     = 2.5;
+//
+// One food for everybody (TWO_PLANT_TYPES = false): digestion no longer
+// matters, a bite is worth more on average, so the bonus is lower (1.75 keeps
+// a typical swimbot at the classic 50 energy per bite).
+export const TWO_PLANT_TYPES            = false;
+export const ENVIRONMENT_FOOD_BONUS     = TWO_PLANT_TYPES ? 2.5 : 1.75;
 export const DIGESTION_MINIMUM          = 0.15;
 export const DIGESTION_CURVE            = 1.5;     // > 1: in-between digestion is bad at both foods
 export const IGNORE_FOOD_EFFICIENCY     = 0.3;     // food worse than this is ignored unless starving
@@ -43,7 +48,7 @@ export function bodySize( mass: number ): number
 // how well a body of this size handles a plant type (meat: always 1)
 export function sizeDietFactor( size: number, type: number ): number
 {
-    if ( type === 2 ) return 1;
+    if (( type === 2 ) || !TWO_PLANT_TYPES ) return 1;
     return ( type === PLANT_TYPE_WARM ) ? 1 - SIZE_DIET_EFFECT * size : 1 + SIZE_DIET_EFFECT * size;
 }
 
@@ -102,7 +107,7 @@ export function pairRandom( a: number, b: number ): number
 // how well digestion d (0..1) handles a plant type; meat (type 2) is always 1
 export function digestionEfficiency( digestion: number, type: number ): number
 {
-    if ( type === 2 ) return 1;
+    if (( type === 2 ) || !TWO_PLANT_TYPES ) return 1;
     const x = ( type === PLANT_TYPE_WARM ) ? digestion : 1 - digestion;
     return DIGESTION_MINIMUM + ( 1 - DIGESTION_MINIMUM ) * Math.pow( x, DIGESTION_CURVE );
 }

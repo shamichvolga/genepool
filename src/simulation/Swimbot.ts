@@ -1556,6 +1556,12 @@ _position.copyFrom( position );
 	}
 
 	this.getBrightness      = function() { return _brightness;      }
+
+	// predators mate only with predators, herbivores with herbivores
+	this.sameDiet = function( other )
+	{
+	    return ( this.getPredatorLevel() > PREDATOR_LEVEL_THRESHOLD ) === ( other.getPredatorLevel() > PREDATOR_LEVEL_THRESHOLD );
+	}
 	this.getAttractionCriterion = function() { return _brain.getAttractionCriterion(); }
 	this.getChoosiness      = function() { return _choosiness;      }
 
@@ -2374,6 +2380,7 @@ let partAccelerationY = -strokeForceY;
                 &&  ( babeFactor > TOO_UGLY_TO_CHOOSE )
                 &&  ( nearbySwimbotArray[o].getAge() > YOUNG_AGE_DURATION )
                 &&  ( nearbySwimbotArray[o].getEnergy() > STARVING )
+                &&  nearbySwimbotArray[o].sameDiet( this )
                 &&  nearbySwimbotArray[o].acceptsMate( this ))
                 {
                     //console.log( "ok" );
@@ -2408,7 +2415,8 @@ let partAccelerationY = -strokeForceY;
             for (let o=0; o<numNearbySwimbots; o++)
             {
                 let index = ( seenIndices !== null ) ? seenIndices[o] : nearbySwimbotArray[o].getIndex();
-                if ( index === _chosenMateIndex )
+                // (a mate that turned predator / herbivore meanwhile is given up)
+                if (( index === _chosenMateIndex ) && nearbySwimbotArray[o].sameDiet( this ))
                 {
                     ICanStillSeeYou = true;
                     _chosenMate = nearbySwimbotArray[o];

@@ -145,6 +145,7 @@
                             <button id = "predatorToggleButton"   class = "basicButton" onClick = "genePool.toggleSwimbotPredator( genePool.getSelectedSwimbotID() );" title = "herbivore → predator → strong predator → herbivore" >predator ⟳</button>
                             <button id = "eternalSwimbotButton"   class = "basicButton" onClick = "toggleEternalSwimbot( genePool.getSelectedSwimbotID() );" title = "never dies of age or hunger, cannot be eaten" >immortal ⟳</button>
                             <button id = "killSwimbotButton"      class = "basicButton" onClick = "genePool.killSwimbot( genePool.getSelectedSwimbotID() );" >kill</button>
+                            <button id = "feedSwimbotButton"      class = "basicButton" onClick = "genePool.feedSwimbot( genePool.getSelectedSwimbotID() );" title = "+100 energy" >feed</button>
                             <button id = "tweakGenesButton"       class = "basicButton" onClick = "openTweakGenesPanel( genePool.getSelectedSwimbotID() ); genePool.setViewMode( ViewTrackingMode.SELECTED );" >tweak genes</button>
                             <button id = "saveGenesButton"        class = "basicButton" onClick = "downloadSwimbotGenes( genePool.getSelectedSwimbotID() );" >save genes</button>
                             <button id = "loadGenesButton"        class = "basicButton" onClick = "document.getElementById('loadSwimbotFile').click();" >load genes…</button>

@@ -1,6 +1,6 @@
 import { geneAverage, convertOldGenes, GENE_LAYOUT_VERSION, setTrait, gaussian, thermalWidthToGene, GENES_PREDATOR, GENES_THERMAL_OPTIMUM, GENES_THERMAL_WIDTH, GENES_DIGESTION, GENES_BRIGHTNESS, GENES_CHOOSINESS } from "./EcologyGenes";
 import { environment, PLANT_TYPE_WARM, PLANT_TYPE_COLD } from "./Environment";
-import { IGNORE_FOOD_EFFICIENCY, preyVisibility } from "./Ecology";
+import { IGNORE_FOOD_EFFICIENCY, preyVisibility, TWO_PLANT_TYPES } from "./Ecology";
 import { INTERLEAVED_STEP, PERCEPTION_CHECK, DIET_SWITCH_RATE, CLASSIC_NUM_SWIMBOTS, CLASSIC_NUM_FOODBITS, GARDEN_RADIUS, PREDATOR_INTRODUCTION_STEP, PREDATOR_INTRODUCTION_FRACTION, ENVIRONMENT_SEEDS_PER_PERIOD, PLANT_CELL_CAPACITY, PLANT_PARENT_SEED_FRACTION, PLANT_SEED_MIN_DISTANCE, PLANT_SEED_MAX_DISTANCE } from "./Parameters";
 
 import { BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_PREY } from "./Brain";
@@ -550,7 +550,7 @@ export function GenePool()
 
             _numSwimbots = INITIAL_NUM_SWIMBOTS;
             _numFoodBits = INITIAL_NUM_FOODBITS;
-            globalTweakers.numFoodTypes = 2;
+            globalTweakers.numFoodTypes = TWO_PLANT_TYPES ? 2 : 1;
             this.setFoodToEnvironment();
         }
         else
@@ -1019,6 +1019,7 @@ if ( mode === SimulationStartMode.SPECIES )
 	// the plant type that suits a place better is chosen more often
 	this.choosePlantTypeAt = function( x, y )
 	{
+	    if ( !TWO_PLANT_TYPES ) return PLANT_TYPE_WARM;     // one food for everybody (green)
 	    const t    = environment.temperatureAt( x, y );
 	    const warm = environment.plantSuitability( PLANT_TYPE_WARM, t );
 	    const cold = environment.plantSuitability( PLANT_TYPE_COLD, t );
@@ -1035,6 +1036,7 @@ if ( mode === SimulationStartMode.SPECIES )
 	    const cell = environment.plantCellIndex( x, y );
 	    if ( environment.plantCount[0][ cell ] + environment.plantCount[1][ cell ] >= PLANT_CELL_CAPACITY ) return false;
 
+	    if ( !TWO_PLANT_TYPES ) return true;                // one food: grows anywhere there is room
 	    return gpRandom() < environment.plantSuitability( type, environment.temperatureAt( x, y ));
 	}
 
@@ -1201,7 +1203,7 @@ if ( mode === SimulationStartMode.SPECIES )
 	        {
 	            const other = _swimbots[ _st.seen[ s * SS.MAX_SEEN + k ] ];
 	            const babe = other.getAttractiveness( me );
-	            if (( babe > highest ) && ( babe > 0 ) && ( other.getAge() > YOUNG_AGE_DURATION ) && ( other.getEnergy() > STARVING ) && other.acceptsMate( me ))
+	            if (( babe > highest ) && ( babe > 0 ) && ( other.getAge() > YOUNG_AGE_DURATION ) && ( other.getEnergy() > STARVING ) && other.sameDiet( me ) && other.acceptsMate( me ))
 	            {
 	                highest = babe;
 	                best = other.getIndex();
@@ -1835,7 +1837,8 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 
                         assert( _potentialMate != null, "genepool: updateSwimbots: _potentialMate != null" );
 
-                        if ( _potentialMate.getAlive() )
+                        // predators and herbivores never have children together
+                        if ( _potentialMate.getAlive() && _potentialMate.sameDiet( _swimbots[s] ))
                         {
                             assert( _myGenotype    != null, "genepool: updateSwimbots: _myGenotype    != null" );
                             assert( _mateGenotype  != null, "genepool: updateSwimbots: _mateGenotype  != null" );
@@ -3005,7 +3008,7 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
         environment.setTime( _clock );
         _predatorsIntroduced = ( data.predatorsIntroduced !== undefined ) ? data.predatorsIntroduced : true;
         _seedDebt = 0;
-        globalTweakers.numFoodTypes = environment.active ? 2 : globalTweakers.numFoodTypes;
+        globalTweakers.numFoodTypes = environment.active ? ( TWO_PLANT_TYPES ? 2 : 1 ) : globalTweakers.numFoodTypes;
         _environmentImage = environment.active ? environment.makeImage() : null;
         _pool.setBackgroundImage( _environmentImage );
 
@@ -3292,6 +3295,16 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
 	    else                       next = 0.1;   // был сильный → обратно травоядный
 
 	    swimbot.applyPredatorLevel( next );
+	}
+
+	//------------------------------------------------------------
+	// feed: give the swimbot a good meal (up to its maximum energy)
+	//------------------------------------------------------------
+	this.feedSwimbot = function( ID )
+	{
+	    if (( ID === NULL_INDEX ) || !_swimbots[ ID ].getAlive() ) return;
+	    const swimbot = _swimbots[ ID ];
+	    swimbot.setEnergy( Math.min( swimbot.getMaxEnergy(), swimbot.getEnergy() + 100 ));
 	}
 
 	//------------------------------------

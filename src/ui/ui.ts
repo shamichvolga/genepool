@@ -1,3 +1,4 @@
+import { TWO_PLANT_TYPES } from "../simulation/Ecology";
 //--------------------------------------------------------------------------
 //                                                                        
 //    This file is part of GenePool Swimbots.                             
@@ -744,7 +745,7 @@ export function updateUI()
                     foodRows =
                         row( "likes temperature", swimbot.getThermalOptimum().toFixed(2) + " ± " + swimbot.getThermalWidth().toFixed(2) ) +
                         row( "temperature here",  here.toFixed(2) + " (suits " + percent( swimbot.getThermalFit() ) + ")" ) +
-                        row( "digests",           "green " + percent( swimbot.getDigestionEfficiency(0) ) + " · blue " + percent( swimbot.getDigestionEfficiency(1) ) ) +
+                        ( TWO_PLANT_TYPES ? row( "digests", "green " + percent( swimbot.getDigestionEfficiency(0) ) + " · blue " + percent( swimbot.getDigestionEfficiency(1) ) ) : "" ) +
                         row( "brightness",        swimbot.getBrightness().toFixed(2) + " (picky " + percent( swimbot.getChoosiness() ) + ")" );
                     if ( swimbot.getUsesNeuralBrain() )
                     {
