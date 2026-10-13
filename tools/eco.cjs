@@ -57,6 +57,7 @@ function ecoStats()
     const bins = new Map();   // eco-types: θ, d, b in 5 bins each
     let choosy = 0;
     let effort = 0, climate = 0, social = 0, brainDistance = 0, neural = 0;
+    const hungers = [];
     let fit = 0, width = 0, n = 0;
     const occupied = new Set();
     for ( const b of bots )
@@ -71,6 +72,7 @@ function ecoStats()
         {
             bs.push( b.getBrightness() ); backs.push( env.backgroundAt( p.x, p.y ) ); choosy += b.getChoosiness();
         }
+        hungers.push( b.getHungerThreshold() );
         if ( typeof b.getUsesNeuralBrain === "function" && b.getUsesNeuralBrain() )
         {
             neural ++;
@@ -123,10 +125,12 @@ function ecoStats()
         climate  : neural ? climate / neural : 0,
         social   : neural ? social / neural : 0,
         brain    : neural ? brainDistance / neural : 0,
+        hunger   : hungers.length ? hungers.reduce( ( a, b ) => a + b, 0 ) / hungers.length : 0,
+        hungerSd : hungers.length ? Math.sqrt( hungers.reduce( ( a, b ) => a + b * b, 0 ) / hungers.length - Math.pow( hungers.reduce( ( a, b ) => a + b, 0 ) / hungers.length, 2 )) : 0,
     };
 }
 
-const header = "step,alive,pred,warm,cold,meat,fit,w,cline_slope,cline_r2,d_corr,b_corr,choosy,eco_types,mate_isolation,size_corr,effort,climate,social,brain_change,occupied,species,eff_species,top_share,ms_step";
+const header = "step,alive,pred,warm,cold,meat,fit,w,cline_slope,cline_r2,d_corr,b_corr,choosy,eco_types,mate_isolation,size_corr,effort,climate,social,brain_change,hunger,hunger_sd,occupied,species,eff_species,top_share,ms_step";
 console.log( `seed=${SEED} steps=${STEPS} flat=${FLAT} set=${EXTRA || ""}` );
 console.log( header );
 const rows = [];
@@ -144,7 +148,7 @@ for ( let step = 1; step <= STEPS; step++ )
         const row = [ step, s.alive, s.predators, run.genePool.getNumFoodBitsOfType(0), run.genePool.getNumFoodBitsOfType(1), s.meat,
                       e.fit.toFixed( 2 ), e.width.toFixed( 3 ), e.slope.toFixed( 2 ), e.r2.toFixed( 2 ), e.dCorr.toFixed( 2 ),
                       e.bCorr.toFixed( 2 ), e.choosy.toFixed( 2 ), e.ecoTypes.toFixed( 1 ), e.isolation.toFixed( 2 ), e.sizeCorr.toFixed( 2 ),
-                      e.effort.toFixed( 2 ), e.climate.toFixed( 2 ), e.social.toFixed( 2 ), e.brain.toFixed( 3 ),
+                      e.effort.toFixed( 2 ), e.climate.toFixed( 2 ), e.social.toFixed( 2 ), e.brain.toFixed( 3 ), e.hunger.toFixed( 1 ), e.hungerSd.toFixed( 1 ),
                       e.occupied.toFixed( 2 ), s.species, s.effSpecies.toFixed( 1 ), s.topShare.toFixed( 2 ),
                       msPerStep.toFixed( 1 ) ].join( "," );
         rows.push( row );

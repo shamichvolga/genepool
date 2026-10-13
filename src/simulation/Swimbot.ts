@@ -2,7 +2,7 @@ import { setTrait, GENES_PREDATOR } from "./EcologyGenes";
 import { physicsPartA, physicsPartB } from "./PhysicsKernel";
 import * as SS from "./SharedState";
 import { think, sigmoid, NUM_INPUTS, NUM_HIDDEN, NUM_OUTPUTS, NUM_DRIVES, THINK_PERIOD, DRIVE_HYSTERESIS, EFFORT_MIN, EFFORT_RANGE, IN_BIAS, IN_HUNGER, IN_ENERGY, IN_AGE, IN_FIT, IN_TREND, IN_FOOD, IN_MATE, IN_THREAT, IN_PREY, IN_CROWD, IN_PREDATOR, OUT_FOOD, OUT_MATE, OUT_FLEE, OUT_HUNT, OUT_CLIMATE, OUT_SOCIAL, OUT_EFFORT,
-         IN_FOOD_SIDE, IN_FOOD_AHEAD, IN_NEAR_SIDE, IN_NEAR_AHEAD, IN_THREAT_SIDE, IN_THREAT_AHEAD, IN_KIN, IN_SEASON, OUT_STEER, STEER_MAX_DEGREES } from "./NeuralBrain";
+         IN_FOOD_SIDE, IN_FOOD_AHEAD, IN_NEAR_SIDE, IN_NEAR_AHEAD, IN_THREAT_SIDE, IN_THREAT_AHEAD, IN_KIN, IN_SEASON, IN_PREDATOR_NEAR, OUT_STEER, STEER_MAX_DEGREES } from "./NeuralBrain";
 import { NEURAL_BRAIN_ENABLED, CLIMATE_STEERING, SOCIAL_STEERING, CLIMATE_PROBE_DISTANCE } from "./Parameters";
 import { environment, PLANT_TYPE_WARM, PLANT_TYPE_COLD } from "./Environment";
 import { sizeSignature, SEARCH_IMAGE_LEARNING, SEARCH_IMAGE_GAIN, SEARCH_IMAGE_FORGETTING, bodySize, sizeDietFactor, climateFoodFactor, digestionEfficiency, thermalFit, thermalPeak, THERMAL_MISMATCH_DRAIN, THERMAL_FIT_UPDATE_PERIOD, THERMOMELANISM, mateAcceptance, pairRandom, KINESIS_PERIOD, KINESIS_TURN_CHANCE, KINESIS_MAX_TURN, EMERGENCY_THERMAL_FIT, EMERGENCY_PROBE_DISTANCE } from "./Ecology";
@@ -25,7 +25,7 @@ import { DEFAULT_FOOD_BIT_ENERGY, FoodBit } from "./FoodBit";
 import { Genotype } from "./Genotype";
 import { globalTweakers, gpRandom, simCounters } from "./Globals";
 import { NULL_INDEX, ONE, ONE_HALF, ONE_THIRD, PI_OVER_180, ZERO } from "./MathConstants";
-import { ATTACK_COOLDOWN, ATTACK_SUCCESS_CHANCE, ENVIRONMENT_ATTACK_SUCCESS_CHANCE, BASAL_METABOLISM, DEFAULT_SWIMBOT_HUNGER_THRESHOLD, FOOD_TYPE_OFFSET, OLD_AGE_DURATION, PREDATION_ENERGY_TRANSFER, PREDATOR_FLEE_RADIUS, PREDATOR_LEVEL_THRESHOLD, PREY_SCAN_COOLDOWN, PREY_SCAN_RADIUS_GROWTH, PREY_SCAN_RADIUS_MAX_SCALE, SWIMBOT_MAX_ENERGY, SWIMBOT_SELECT_RADIUS_SCALAR, YOUNG_AGE_DURATION } from "./Parameters";
+import { PREY_BODY_ENERGY, ATTACK_COOLDOWN, ATTACK_SUCCESS_CHANCE, ENVIRONMENT_ATTACK_SUCCESS_CHANCE, BASAL_METABOLISM, DEFAULT_SWIMBOT_HUNGER_THRESHOLD, FOOD_TYPE_OFFSET, OLD_AGE_DURATION, PREDATION_ENERGY_TRANSFER, PREDATOR_FLEE_RADIUS, PREDATOR_LEVEL_THRESHOLD, PREY_SCAN_COOLDOWN, PREY_SCAN_RADIUS_GROWTH, PREY_SCAN_RADIUS_MAX_SCALE, SWIMBOT_MAX_ENERGY, SWIMBOT_SELECT_RADIUS_SCALAR, YOUNG_AGE_DURATION } from "./Parameters";
 import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
 import { SwimbotRenderer } from "./SwimbotRenderer";
 import { ATTRACTION_BIG, ATTRACTION_CLOSEST, ATTRACTION_COLORFUL, ATTRACTION_CROOKED, ATTRACTION_HYPER, ATTRACTION_LONG, ATTRACTION_NO_COLOR, ATTRACTION_RANDOM, ATTRACTION_SHORT, ATTRACTION_SIMILAR_COLOR, ATTRACTION_SIMILAR_HYPER, ATTRACTION_SIMILAR_LENGTH, ATTRACTION_SIMILAR_SIZE, ATTRACTION_SIMILAR_STRAIGHT, ATTRACTION_SMALL, ATTRACTION_STILL, ATTRACTION_STRAIGHT, CONTINUAL_ENERGY_DRAIN, ENERGY_EFFICIENCY_MEASUREMENT_PERIOD, ENERGY_USED_UP_SWIMMING, GENITAL_INDEX, MAX_PARTS, MOUTH_INDEX, NULL_PART, Phenotype, ROOT_PART, STARVING, STARVING_TIMER_DELTA, SWIMBOT_GENITAL_LENGTH, SWIMBOT_MOUTH_LENGTH, SWIMBOT_VIEW_RADIUS, TIMER_DELTA_INCREASE_RATE, WALL_BOUNCE } from "./SwimbotTypes";
@@ -135,6 +135,7 @@ var    flopperYV = 0;
 	let _comfort            = -ONE;   // last "how good is it here" (for kinesis)
 	let _comfortTrend       = ZERO;   // +1 it got better here, -1 worse
 	let _averageColor       = null;   // cached by getAverageColor (reset with a new phenotype)
+	let _baseHungerThreshold = DEFAULT_SWIMBOT_HUNGER_THRESHOLD;   // the pool's setting
 
 	//-----------------------------------------------------------------------
 	// neural brain (stage 6, see NeuralBrain.ts)
@@ -155,6 +156,9 @@ var    flopperYV = 0;
 	let _seenPrey           = false;
 	let _numSeen            = 0;
 	let _nearestSeen        = NULL_INDEX;   // the nearest swimbot in sight (for the brain)
+	let _threatCloseness    = ZERO;         // 0 far .. 1 touching: the hunting predator in sight
+	let _predatorCloseness  = ZERO;         // the same for any predator
+	let _calmPredator       = null;         // a predator in sight that is not hunting (neural brain)
 	let _seenFoodX          = ZERO;         // where the food bit in sight is
 	let _seenFoodY          = ZERO;
 	let _steer              = ZERO;         // brain: turn while searching (radians)
@@ -895,6 +899,8 @@ _position.copyFrom( position );
 		_comfortTrend   = ZERO;
 		_steer          = ZERO;
 		_nearestSeen    = NULL_INDEX;
+		_threatCloseness = _predatorCloseness = ZERO;
+		_calmPredator   = null;
 		_brain.setGoal( -1 );
 		//_maximumLifeSpan    = DEFAULT_MAXIMUM_LIFESPAN;
 
@@ -964,7 +970,10 @@ _position.copyFrom( position );
         _embryology = embryology;
 
         _brain.initialize();
-        _brain.setHungerThreshold( DEFAULT_SWIMBOT_HUNGER_THRESHOLD );
+        // the pool's hunger setting (was always the default 50, even after the
+        // slider moved) times this swimbot's inherited factor
+        _baseHungerThreshold = globalTweakers.hungerThreshold;
+        _brain.setHungerThreshold( _baseHungerThreshold * this.getHungerFactor() );
         _brain.setPredatorLevel( this.getPredatorLevel() );
         _brain.setEnergyLevel( _energy );
         _brain.update();
@@ -974,6 +983,9 @@ _position.copyFrom( position );
 	//-----------------------------------
     this.setHungerThreshold = function(t)
     {
+        // the pool's setting t, times this swimbot's own (inherited) factor
+        _baseHungerThreshold = t;
+        t = t * this.getHungerFactor();
         _brain.setHungerThreshold(t);
     }
 
@@ -1083,6 +1095,9 @@ _position.copyFrom( position );
         _comfort        = -ONE;
         this.updateThermalFit();
         this.writeStaticPerception();
+
+        // the inherited hunger threshold (environment pool; classic pools: the setting)
+        _brain.setHungerThreshold( _baseHungerThreshold * this.getHungerFactor() );
 
         //-----------------------------------------------------
         // the predator gene may have changed (zap, gene tweak)
@@ -1304,11 +1319,12 @@ _position.copyFrom( position );
         }
         else if ( _brain.getState() === BRAIN_STATE_FLEEING_PREDATOR )
         {
-            if (( _nearestPredator != null ) && ( _nearestPredator.getAlive() ))
+            const danger = ( _nearestPredator != null ) ? _nearestPredator : _calmPredator;
+            if (( danger != null ) && ( danger.getAlive() ))
             {
                 // swim directly away from the predator
                 _directionToGoal.set( _position );
-                _directionToGoal.subtract( _nearestPredator.getPosition() );
+                _directionToGoal.subtract( danger.getPosition() );
                 _directionToGoal.normalize();
             }
         }
@@ -1468,7 +1484,7 @@ _position.copyFrom( position );
 	{
 	    const hunger    = _brain.getHungerThreshold();
 	    const predator  = this.getPredatorLevel() > PREDATOR_LEVEL_THRESHOLD;
-	    const threat    = ( _nearestPredator != null );
+	    const threat    = ( _nearestPredator != null ) || ( _calmPredator != null );
 	    const x         = _nnInputs;
 
 	    x[ IN_BIAS     ] = ONE;
@@ -1479,7 +1495,8 @@ _position.copyFrom( position );
 	    x[ IN_TREND    ] = _comfortTrend;
 	    x[ IN_FOOD     ] = _seenFood ? ONE : ZERO;
 	    x[ IN_MATE     ] = ( _numSeen > 0 ) ? ONE : ZERO;
-	    x[ IN_THREAT   ] = threat ? ONE : ZERO;
+	    x[ IN_THREAT   ] = _threatCloseness;                // 0 none/far .. 1 very close
+	    x[ IN_PREDATOR_NEAR ] = _predatorCloseness;
 	    x[ IN_PREY     ] = _seenPrey ? ONE : ZERO;
 	    x[ IN_CROWD    ] = Math.min( ONE, _numSeen / 10 );
 	    x[ IN_PREDATOR ] = predator ? ONE : ZERO;
@@ -1509,7 +1526,7 @@ _position.copyFrom( position );
 	    }
 	    if ( threat )
 	    {
-	        const p = _nearestPredator.getPosition();
+	        const p = (( _nearestPredator != null ) ? _nearestPredator : _calmPredator ).getPosition();
 	        toward( p.x, p.y, IN_THREAT_SIDE, IN_THREAT_AHEAD );
 	    }
 	    x[ IN_SEASON ] = environment.active ? environment.seasonPhase() : ZERO;
@@ -1645,6 +1662,7 @@ _position.copyFrom( position );
 	}
 
 	this.getBrightness      = function() { return _brightness;      }
+	this.getHungerFactor    = function() { return ( environment.active && ( _phenotype.hungerFactor !== undefined )) ? _phenotype.hungerFactor : ONE; }
 
 	// predators mate only with predators, herbivores with herbivores
 	this.sameDiet = function( other )
@@ -2334,7 +2352,8 @@ let partAccelerationY = -strokeForceY;
 	    let preyPosition = new Vector2D();
 	    preyPosition.set( _chosenPrey.getPosition() );
 
-	    let energyFromPrey = _chosenPrey.getEnergy() * PREDATION_ENERGY_TRANSFER;
+	    // the prey's energy (a part) and its body
+	    let energyFromPrey = _chosenPrey.getEnergy() * PREDATION_ENERGY_TRANSFER + _chosenPrey.getPhenotypeMass() * PREY_BODY_ENERGY;
 
 	    this.learnSearchImage( _chosenPrey );
 	    _chosenPrey.die();
@@ -2366,7 +2385,7 @@ let partAccelerationY = -strokeForceY;
 	//--------------------------------------------
 	// setEnvironmentalStimuli
 	//--------------------------------------------
-	this.setEnvironmentalStimuli = function( numNearbySwimbots, nearbySwimbotArray, foodBitWasFound, theFoodBit, preyWasFound, thePrey, theNearestPredator, mateChoice = undefined, seenIndices = null, seenBase = 0 )
+	this.setEnvironmentalStimuli = function( numNearbySwimbots, nearbySwimbotArray, foodBitWasFound, theFoodBit, preyWasFound, thePrey, theNearestPredator, mateChoice = undefined, seenIndices = null, seenBase = 0, anyPredator = null )
     {
         //------------------------------------------------------------
         // predator threat (herbivores only - genepool only passes
@@ -2384,13 +2403,28 @@ let partAccelerationY = -strokeForceY;
         _nearestSeen = ( numNearbySwimbots > 0 ) ? (( seenIndices !== null ) ? seenIndices[ seenBase ] : nearbySwimbotArray[0].getIndex() ) : NULL_INDEX;
 
 
-        if (( theNearestPredator != null )
-        &&  ( theNearestPredator.getPosition().getDistanceTo( _position ) < PREDATOR_FLEE_RADIUS ))
+        //------------------------------------------------------------
+        // danger: a hunting predator close enough makes me flee (classic
+        // brain). The neural brain also weighs how close it is, and may
+        // keep away from a calm predator too.
+        //------------------------------------------------------------
+        _threatCloseness   = ZERO;
+        _predatorCloseness = ZERO;
+        if ( theNearestPredator != null )
         {
-            _nearestPredator = theNearestPredator;
+            const distance = theNearestPredator.getPosition().getDistanceTo( _position );
+            _threatCloseness = Math.max( ZERO, ONE - distance / SWIMBOT_VIEW_RADIUS );
+            if ( distance < PREDATOR_FLEE_RADIUS ) { _nearestPredator = theNearestPredator; }
         }
-
         _brain.setNearbyPredatorThreat( _nearestPredator != null );
+
+        if ( anyPredator != null )
+        {
+            _predatorCloseness = Math.max( ZERO, ONE - anyPredator.getPosition().getDistanceTo( _position ) / SWIMBOT_VIEW_RADIUS );
+            // the neural brain may flee from it: flee away from the nearest one
+            if ( _neural && ( _nearestPredator == null )) { _calmPredator = anyPredator; } else { _calmPredator = null; }
+        }
+        else { _calmPredator = null; }
 
         //------------------------------------------------------------
         // if hunting, choose the prey that was found

@@ -205,6 +205,9 @@ let testNoEel = true;
         let splinedRange            = MAX_SPLINED           - MIN_SPLINED;
         let endCapSplineRange       = MAX_END_CAP_SPLINE    - MIN_END_CAP_SPLINE;
         phenotype.hungerThresholdRatio = 0.1 + geneAverage( genotype, GENES_HUNGER ) * 0.9;
+        // the swimbot's own hunger threshold = the pool's setting x 0.5 .. 2
+        // (gene 1/3 = exactly the setting); used in the environment pool
+        phenotype.hungerFactor     = 0.5 + 1.5 * geneAverage( genotype, GENES_HUNGER );
 
 
         // predator level and hunger live in the ecology gene block (EcologyGenes.ts)

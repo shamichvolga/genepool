@@ -28,7 +28,7 @@ export const IN_FIT         = 4;    // how well the temperature suits me, 0..1
 export const IN_TREND       = 5;    // getting better (+1) or worse (-1) here
 export const IN_FOOD        = 6;    // food in sight
 export const IN_MATE        = 7;    // possible mate in sight
-export const IN_THREAT      = 8;    // a hunting predator in sight
+export const IN_THREAT      = 8;    // a hunting predator in sight: 0 far .. 1 very close
 export const IN_PREY        = 9;    // prey or meat in sight
 export const IN_CROWD       = 10;   // how many others around (0..1)
 export const IN_PREDATOR    = 11;   // I am a predator
@@ -41,7 +41,8 @@ export const IN_THREAT_SIDE = 16;   // the hunting predator in sight
 export const IN_THREAT_AHEAD= 17;
 export const IN_KIN         = 18;   // how alike (color) the nearest swimbot is, 0..1
 export const IN_SEASON      = 19;   // -1 winter .. +1 summer
-export const NUM_INPUTS     = 20;
+export const IN_PREDATOR_NEAR = 20; // any predator (also a calm one): 0 far .. 1 very close
+export const NUM_INPUTS     = 21;
 
 //------------------------------------------------------------
 // outputs
@@ -94,8 +95,9 @@ export function innateBrain(): Float32Array
         io( OUT_FOOD,    IN_HUNGER,  4 );      // hungry -> eat
         io( OUT_MATE,    IN_HUNGER, -4 );      // fed    -> mate
         io( OUT_HUNT,    IN_HUNGER,  4 );      // hungry predator -> hunt
-        io( OUT_FLEE,    IN_THREAT, 10 );      // a hunting predator in sight beats everything
-        io( OUT_FLEE,    IN_BIAS,   -5 );
+        io( OUT_FLEE,    IN_THREAT, 10 );      // a hunting predator: flee when it comes within ~2/3 of the view
+        io( OUT_FLEE,    IN_PREDATOR_NEAR, 4 ); // any predator very close: flee too
+        io( OUT_FLEE,    IN_BIAS,   -3 );
         io( OUT_CLIMATE, IN_BIAS,    2 );      // follow the temperature more when it doesn't suit me
         io( OUT_CLIMATE, IN_FIT,    -3 );
         io( OUT_EFFORT,  IN_BIAS,    0.92 );   // effort 1.0 = classic swimming

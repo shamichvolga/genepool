@@ -145,6 +145,7 @@ export function Phenotype()
 	this.digestion          = 0.5;
 	this.brightness         = 0.5;
 	this.choosiness         = 0;
+	this.hungerFactor       = 1;
 	for (let p=0; p<MAX_PARTS; p++)
 	{
 		this.parts[p] = new Part(); 

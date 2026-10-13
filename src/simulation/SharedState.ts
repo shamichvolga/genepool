@@ -165,6 +165,7 @@ export class SharedState
     readonly seenFood     : Int32Array;     // chosen food bit, -1 = none
     readonly seenPrey     : Int32Array;     // chosen prey, -1 = none
     readonly seenThreat   : Int32Array;     // nearest hunting predator, -1 = none
+    readonly seenPredator : Int32Array;     // nearest predator of any mood, -1 = none
     readonly seenMate     : Int32Array;     // chosen mate, -1 = none, -2 = not chosen here (main thread does it)
     readonly socialX      : Float64Array;   // sum of offsets to the swimbots seen
     readonly socialY      : Float64Array;
@@ -250,6 +251,7 @@ export class SharedState
         this.seenFood   = new Int32Array( make( "seenFood",   n * 4 ));
         this.seenPrey   = new Int32Array( make( "seenPrey",   n * 4 ));
         this.seenThreat = new Int32Array( make( "seenThreat", n * 4 ));
+        this.seenPredator = new Int32Array( make( "seenPredator", n * 4 ));
         this.seenMate   = new Int32Array( make( "seenMate",   n * 4 ));
         this.socialX    = f64( "socialX", n );
         this.socialY    = f64( "socialY", n );

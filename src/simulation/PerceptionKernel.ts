@@ -342,33 +342,33 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
     //------------------------------------------------------------------
     // the nearest hunting predator (herbivores only)
     //------------------------------------------------------------------
-    let threat = -1;
+    // (all predators within view count, not only the nearest few swimbots:
+    //  in a crowd a predator was easily "not seen")
+    let threat = -1, anyPredator = -1;
     if ( !iAmPredator )
     {
-        let nearestPredatorDistance = Infinity;
-        for (let i = 0; i < numSeen; i++)
+        let threatDistance = Infinity, anyDistance = Infinity;
+        for (let i = 0; i < numNearby; i++)
         {
-            const o = st.seen[ seenBase + i ];
+            const o = nearby[i];
             if ( alive[o] === 0 ) continue;
             if ( predator[o] <= PREDATOR_LEVEL_THRESHOLD ) continue;
-
-            // a fed predator is no danger: flee only from a hunting one
-            const state = st.brainState[o];
-            if (( state !== BRAIN_STATE_LOOKING_FOR_PREY ) && ( state !== BRAIN_STATE_PURSUING_PREY )) continue;
 
             const gx = myGenitalX - genitalX[o];
             const gy = myGenitalY - genitalY[o];
             const distance = Math.sqrt( gx * gx + gy * gy );
             if ( distance > viewRadius ) continue;
 
-            if ( distance < nearestPredatorDistance )
-            {
-                nearestPredatorDistance = distance;
-                threat = o;
-            }
+            if ( distance < anyDistance ) { anyDistance = distance; anyPredator = o; }
+
+            // the danger is a hunting predator (a fed one is calmer)
+            const state = st.brainState[o];
+            if (( state !== BRAIN_STATE_LOOKING_FOR_PREY ) && ( state !== BRAIN_STATE_PURSUING_PREY )) continue;
+            if ( distance < threatDistance ) { threatDistance = distance; threat = o; }
         }
     }
-    st.seenThreat[s] = threat;
+    st.seenThreat[s]   = threat;
+    st.seenPredator[s] = anyPredator;
 
     //------------------------------------------------------------------
     // a mate (when looking for one, by similar color): the most similar

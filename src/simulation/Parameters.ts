@@ -63,6 +63,9 @@ export const SWIMBOT_MAX_ENERGY            = MAX_SWIMBOT_HUNGER_THRESHOLD;
 
 // Какая доля энергии жертвы достаётся хищнику (1.0 = вся; в природе 0.1–0.3).
 export const PREDATION_ENERGY_TRANSFER     = 0.3;
+// a kill also gives the prey's body: energy per unit of body mass
+// (a typical prey of mass ~400 gives ~50 more; before, a kill gave only 10-20)
+export const PREY_BODY_ENERGY              = 0.12;
 
 // "Радар" хищника: пока голодный хищник не видит добычу, радиус поиска
 // постепенно растёт от обычного радиуса зрения до (обычный * MAX_SCALE).
@@ -127,7 +130,7 @@ export const PLANT_SEED_MIN_DISTANCE       = 300;
 export const PLANT_SEED_MAX_DISTANCE       = 600;
 
 // Травоядный убегает, если хищник ближе этого расстояния.
-export const PREDATOR_FLEE_RADIUS          = 150.0;
+export const PREDATOR_FLEE_RADIUS          = 250.0;   // (was 150: prey noticed hunters too late)
 
 
 //---------------------------------------------------------------------------

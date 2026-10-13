@@ -1,4 +1,4 @@
-import { geneAverage, convertOldGenes, GENE_LAYOUT_VERSION, setTrait, gaussian, thermalWidthToGene, GENES_PREDATOR, GENES_THERMAL_OPTIMUM, GENES_THERMAL_WIDTH, GENES_DIGESTION, GENES_BRIGHTNESS, GENES_CHOOSINESS } from "./EcologyGenes";
+import { geneAverage, convertOldGenes, GENE_LAYOUT_VERSION, setTrait, gaussian, thermalWidthToGene, GENES_PREDATOR, GENES_THERMAL_OPTIMUM, GENES_THERMAL_WIDTH, GENES_DIGESTION, GENES_BRIGHTNESS, GENES_CHOOSINESS, GENES_HUNGER } from "./EcologyGenes";
 import { environment, PLANT_TYPE_WARM, PLANT_TYPE_COLD } from "./Environment";
 import { IGNORE_FOOD_EFFICIENCY, preyVisibility, TWO_PLANT_TYPES } from "./Ecology";
 import { INTERLEAVED_STEP, PERCEPTION_CHECK, DIET_SWITCH_RATE, CLASSIC_NUM_SWIMBOTS, CLASSIC_NUM_FOODBITS, GARDEN_RADIUS, PREDATOR_INTRODUCTION_STEP, PREDATOR_INTRODUCTION_FRACTION, ENVIRONMENT_SEEDS_PER_PERIOD, PLANT_CELL_CAPACITY, PLANT_PARENT_SEED_FRACTION, PLANT_SEED_MIN_DISTANCE, PLANT_SEED_MAX_DISTANCE } from "./Parameters";
@@ -974,6 +974,8 @@ if ( mode === SimulationStartMode.SPECIES )
 	    const brightness = Math.min( 1, Math.max( 0, ( shown - ( 1 - BRIGHTNESS_FROM_GENES ) * theta ) / BRIGHTNESS_FROM_GENES ));
 	    setTrait( genotype, GENES_BRIGHTNESS,      brightness,                  0.02 );
 	    setTrait( genotype, GENES_CHOOSINESS,      0.2 + 0.4 * gpRandom(),      0.02 );
+	    // hunger threshold factor around 1 (gene 1/3), a little different for each founder
+	    setTrait( genotype, GENES_HUNGER,          1 / 3 + gaussian() * 0.06,   0 );
 	}
 
 	//------------------------------------------------------------------------
@@ -2078,6 +2080,8 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 	    const foodOkay   = ( f >= 0 ) && _foodBits[f].getAlive();
 	    const preyOkay   = ( p >= 0 ) && _swimbots[p].getAlive();
 	    const threatOkay = ( t >= 0 ) && _swimbots[t].getAlive();
+	    const a = _st.seenPredator[s];
+	    const anyPredator = (( a >= 0 ) && _swimbots[a].getAlive() ) ? _swimbots[a] : null;
 
 	    if ( preyOkay ) { me.notifyTargetFound(); }
 
@@ -2089,7 +2093,7 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 	                                foodOkay, foodOkay ? _foodBits[f] : null,
 	                                preyOkay, preyOkay ? _swimbots[p] : null,
 	                                threatOkay ? _swimbots[t] : null,
-	                                mateChoice, _st.seen, base );
+	                                mateChoice, _st.seen, base, anyPredator );
 	}
 
 	this.updateSwimbots = function()
