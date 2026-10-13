@@ -1966,15 +1966,26 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 	        if ( !b.getAlive() ) continue;
 
 	        b.finishStep();
-	        syncSwimbotPosition(s);
-	        if ( !b.getAlive() ) continue;              // died of old age or hunger just now
+
+	        // positions straight from the physics numbers (= the swimbot's own, just copied)
+	        const k = s * SS.BOT_STRIDE, B = _st.bots;
+	        _botX    [s] = B[ k + SS.B_POS_X     ];
+	        _botY    [s] = B[ k + SS.B_POS_Y     ];
+	        _genitalX[s] = B[ k + SS.B_GENITAL_X ];
+	        _genitalY[s] = B[ k + SS.B_GENITAL_Y ];
+	        if ( _botAlive[s] === 0 ) continue;         // died of old age or hunger just now
 
 	        if ( b.getIsLookingForSensoryInput() )
 	        {
 	            b.updateScanRadius();
 	            _st.sensing[s] = 1;
 	        }
-	        this.writePerceptionInputs(s);
+	        _st.mouthX    [s] = B[ k + SS.B_MOUTH_X ];
+	        _st.mouthY    [s] = B[ k + SS.B_MOUTH_Y ];
+	        _st.energy    [s] = B[ k + SS.B_ENERGY  ];
+	        _st.scanRadius[s] = b.getDynamicScanRadius();
+	        _st.brainState[s] = b.getBrainState();
+	        _st.age       [s] = b.getAge();
 	    }
 
 	    t = phaseTime( 2, t );
