@@ -82,9 +82,9 @@ export class ParallelRunner
         {
             const st = this.st;
             this.run( TASK_PERCEPTION, list, n );
-            const outputs = [ st.seenCount.slice(), st.seen.slice(), st.seenFood.slice(), st.seenPrey.slice(), st.seenThreat.slice(), st.socialX.slice(), st.socialY.slice() ];
+            const outputs = [ st.seenCount.slice(), st.seen.slice(), st.seenFood.slice(), st.seenPrey.slice(), st.seenThreat.slice(), st.seenMate.slice(), st.socialX.slice(), st.socialY.slice() ];
             this.perceptionHere( list, n );
-            const again = [ st.seenCount, st.seen, st.seenFood, st.seenPrey, st.seenThreat, st.socialX, st.socialY ];
+            const again = [ st.seenCount, st.seen, st.seenFood, st.seenPrey, st.seenThreat, st.seenMate, st.socialX, st.socialY ];
             for (let k = 0; k < outputs.length; k++) { this.compare( outputs[k], again[k] ); }
             return;
         }
