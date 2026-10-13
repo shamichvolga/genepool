@@ -1,7 +1,8 @@
 import { setTrait, GENES_PREDATOR } from "./EcologyGenes";
 import { physicsPartA, physicsPartB } from "./PhysicsKernel";
 import * as SS from "./SharedState";
-import { think, sigmoid, NUM_INPUTS, NUM_HIDDEN, NUM_OUTPUTS, NUM_DRIVES, THINK_PERIOD, DRIVE_HYSTERESIS, EFFORT_MIN, EFFORT_RANGE, IN_BIAS, IN_HUNGER, IN_ENERGY, IN_AGE, IN_FIT, IN_TREND, IN_FOOD, IN_MATE, IN_THREAT, IN_PREY, IN_CROWD, IN_PREDATOR, OUT_FOOD, OUT_MATE, OUT_FLEE, OUT_HUNT, OUT_CLIMATE, OUT_SOCIAL, OUT_EFFORT } from "./NeuralBrain";
+import { think, sigmoid, NUM_INPUTS, NUM_HIDDEN, NUM_OUTPUTS, NUM_DRIVES, THINK_PERIOD, DRIVE_HYSTERESIS, EFFORT_MIN, EFFORT_RANGE, IN_BIAS, IN_HUNGER, IN_ENERGY, IN_AGE, IN_FIT, IN_TREND, IN_FOOD, IN_MATE, IN_THREAT, IN_PREY, IN_CROWD, IN_PREDATOR, OUT_FOOD, OUT_MATE, OUT_FLEE, OUT_HUNT, OUT_CLIMATE, OUT_SOCIAL, OUT_EFFORT,
+         IN_FOOD_SIDE, IN_FOOD_AHEAD, IN_NEAR_SIDE, IN_NEAR_AHEAD, IN_THREAT_SIDE, IN_THREAT_AHEAD, IN_KIN, IN_SEASON, OUT_STEER, STEER_MAX_DEGREES } from "./NeuralBrain";
 import { NEURAL_BRAIN_ENABLED, CLIMATE_STEERING, SOCIAL_STEERING, CLIMATE_PROBE_DISTANCE } from "./Parameters";
 import { environment, PLANT_TYPE_WARM, PLANT_TYPE_COLD } from "./Environment";
 import { sizeSignature, SEARCH_IMAGE_LEARNING, SEARCH_IMAGE_GAIN, SEARCH_IMAGE_FORGETTING, bodySize, sizeDietFactor, climateFoodFactor, digestionEfficiency, thermalFit, thermalPeak, THERMAL_MISMATCH_DRAIN, THERMAL_FIT_UPDATE_PERIOD, THERMOMELANISM, mateAcceptance, pairRandom, KINESIS_PERIOD, KINESIS_TURN_CHANCE, KINESIS_MAX_TURN, EMERGENCY_THERMAL_FIT, EMERGENCY_PROBE_DISTANCE } from "./Ecology";
@@ -153,6 +154,10 @@ var    flopperYV = 0;
 	let _seenFood           = false;
 	let _seenPrey           = false;
 	let _numSeen            = 0;
+	let _nearestSeen        = NULL_INDEX;   // the nearest swimbot in sight (for the brain)
+	let _seenFoodX          = ZERO;         // where the food bit in sight is
+	let _seenFoodY          = ZERO;
+	let _steer              = ZERO;         // brain: turn while searching (radians)
 
 	//-----------------------------------------------------------------------
 	// Body part state lives in flat number arrays, which is much faster than
@@ -888,6 +893,8 @@ _position.copyFrom( position );
 		_climateWeight  = ZERO;
 		_socialWeight   = ZERO;
 		_comfortTrend   = ZERO;
+		_steer          = ZERO;
+		_nearestSeen    = NULL_INDEX;
 		_brain.setGoal( -1 );
 		//_maximumLifeSpan    = DEFAULT_MAXIMUM_LIFESPAN;
 
@@ -1346,6 +1353,14 @@ _position.copyFrom( position );
                 _directionToGoal.x += CLIMATE_STEERING * _climateWeight * _climateDirX + SOCIAL_STEERING * _socialWeight * _socialDirX;
                 _directionToGoal.y += CLIMATE_STEERING * _climateWeight * _climateDirY + SOCIAL_STEERING * _socialWeight * _socialDirY;
                 _directionToGoal.normalize();
+
+                // the brain may also turn the swimbot a little, left or right
+                if ( _steer !== ZERO )
+                {
+                    const c = Math.cos( _steer * 0.1 ), sn = Math.sin( _steer * 0.1 );   // (a tenth per step: a smooth turn)
+                    const gx = _directionToGoal.x, gy = _directionToGoal.y;
+                    _directionToGoal.setXY( gx * c - gy * sn, gx * sn + gy * c );
+                }
             }
         }
 
@@ -1469,6 +1484,36 @@ _position.copyFrom( position );
 	    x[ IN_CROWD    ] = Math.min( ONE, _numSeen / 10 );
 	    x[ IN_PREDATOR ] = predator ? ONE : ZERO;
 
+	    // directions, as the swimbot sees them (heading as in the physics)
+	    const radian   = _angle * PI_OVER_180;
+	    const headingX = Math.sin( radian ), headingY = Math.cos( radian );
+	    const toward = ( tx, ty, sideIndex, aheadIndex ) =>
+	    {
+	        let dx = tx - _position.x, dy = ty - _position.y;
+	        const length = Math.sqrt( dx * dx + dy * dy );
+	        if ( length <= ZERO ) { x[ sideIndex ] = ZERO; x[ aheadIndex ] = ZERO; return; }
+	        dx /= length; dy /= length;
+	        x[ aheadIndex ] = dx * headingX + dy * headingY;
+	        x[ sideIndex  ] = dx * headingY - dy * headingX;
+	    };
+	    const st = _shared;
+	    x[ IN_FOOD_SIDE ] = x[ IN_FOOD_AHEAD ] = x[ IN_NEAR_SIDE ] = x[ IN_NEAR_AHEAD ] = ZERO;
+	    x[ IN_THREAT_SIDE ] = x[ IN_THREAT_AHEAD ] = x[ IN_KIN ] = ZERO;
+	    if ( _seenFood ) { toward( _seenFoodX, _seenFoodY, IN_FOOD_SIDE, IN_FOOD_AHEAD ); }
+	    if (( _nearestSeen !== NULL_INDEX ) && ( st !== null ))
+	    {
+	        toward( st.botX[ _nearestSeen ], st.botY[ _nearestSeen ], IN_NEAR_SIDE, IN_NEAR_AHEAD );
+	        const mine = this.getAverageColor();
+	        const difference = ( Math.abs( st.colorR[ _nearestSeen ] - mine.red ) + Math.abs( st.colorG[ _nearestSeen ] - mine.green ) + Math.abs( st.colorB[ _nearestSeen ] - mine.blue )) * ONE_THIRD;
+	        x[ IN_KIN ] = ONE - difference;
+	    }
+	    if ( threat )
+	    {
+	        const p = _nearestPredator.getPosition();
+	        toward( p.x, p.y, IN_THREAT_SIDE, IN_THREAT_AHEAD );
+	    }
+	    x[ IN_SEASON ] = environment.active ? environment.seasonPhase() : ZERO;
+
 	    think( _genotype.getBrain(), x, _nnHidden, _nnNewHidden, _nnOutputs );
 
 	    //------------------------------------------------------
@@ -1491,6 +1536,7 @@ _position.copyFrom( position );
 	    // how to move
 	    //------------------------------------------------------
 	    _effort        = EFFORT_MIN + EFFORT_RANGE * sigmoid( _nnOutputs[ OUT_EFFORT ] );
+	    _steer         = Math.tanh( _nnOutputs[ OUT_STEER ] ) * STEER_MAX_DEGREES * PI_OVER_180;
 	    _socialWeight  = Math.tanh( _nnOutputs[ OUT_SOCIAL ] );
 	    _climateWeight = environment.active ? sigmoid( _nnOutputs[ OUT_CLIMATE ] ) : ZERO;
 
@@ -2334,6 +2380,8 @@ let partAccelerationY = -strokeForceY;
         _seenFood = foodBitWasFound && ( theFoodBit != null ) && ( theFoodBit.getType() !== 2 );
         _seenPrey = ( preyWasFound && ( thePrey != null )) || ( foodBitWasFound && ( theFoodBit != null ) && ( theFoodBit.getType() === 2 ));
         _numSeen  = numNearbySwimbots;
+        if ( _seenFood ) { const p = theFoodBit.getPosition(); _seenFoodX = p.x; _seenFoodY = p.y; }
+        _nearestSeen = ( numNearbySwimbots > 0 ) ? (( seenIndices !== null ) ? seenIndices[ seenBase ] : nearbySwimbotArray[0].getIndex() ) : NULL_INDEX;
 
 
         if (( theNearestPredator != null )

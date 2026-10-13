@@ -151,6 +151,9 @@ export class Environment
 
     setTime( step: number ): void { this.time = step; }
 
+    // -1 (deep winter) .. +1 (high summer)
+    seasonPhase(): number { return Math.sin( 2 * Math.PI * this.time / SEASON_PERIOD ); }
+
     // the season now (the warm part of the year is "summer")
     seasonName(): string
     {

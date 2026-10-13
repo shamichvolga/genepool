@@ -32,7 +32,16 @@ export const IN_THREAT      = 8;    // a hunting predator in sight
 export const IN_PREY        = 9;    // prey or meat in sight
 export const IN_CROWD       = 10;   // how many others around (0..1)
 export const IN_PREDATOR    = 11;   // I am a predator
-export const NUM_INPUTS     = 12;
+// where things are, seen from the swimbot (side: -1 left .. +1 right, ahead: -1 behind .. +1 ahead)
+export const IN_FOOD_SIDE   = 12;   // the food bit it is after
+export const IN_FOOD_AHEAD  = 13;
+export const IN_NEAR_SIDE   = 14;   // the nearest swimbot in sight
+export const IN_NEAR_AHEAD  = 15;
+export const IN_THREAT_SIDE = 16;   // the hunting predator in sight
+export const IN_THREAT_AHEAD= 17;
+export const IN_KIN         = 18;   // how alike (color) the nearest swimbot is, 0..1
+export const IN_SEASON      = 19;   // -1 winter .. +1 summer
+export const NUM_INPUTS     = 20;
 
 //------------------------------------------------------------
 // outputs
@@ -44,7 +53,8 @@ export const OUT_HUNT       = 3;
 export const OUT_CLIMATE    = 4;    // how strongly to follow the better temperature
 export const OUT_SOCIAL     = 5;    // + swim towards the others, - keep away
 export const OUT_EFFORT     = 6;    // how hard to swim (faster, but costs energy)
-export const NUM_OUTPUTS    = 7;
+export const OUT_STEER      = 7;    // while searching: turn left (-) or right (+)
+export const NUM_OUTPUTS    = 8;
 export const NUM_DRIVES     = 4;
 
 export const NUM_HIDDEN     = 6;
@@ -67,6 +77,7 @@ export const THINK_PERIOD           = 5;      // steps between thoughts (spread 
 export const DRIVE_HYSTERESIS       = 0.3;    // the current goal gets this bonus (no dithering)
 export const EFFORT_MIN             = 0.5;
 export const EFFORT_RANGE           = 0.7;    // effort = 0.5 .. 1.2
+export const STEER_MAX_DEGREES      = 60;     // the largest turn the steering output can ask for
 
 //------------------------------------------------------------
 // the innate brain = the classic Gene Pool behavior
