@@ -134,6 +134,9 @@ export function GenePool()
 	let _startTime		        = ZERO;
 	let _seconds		        = ZERO;
     let _gardenOfEdenRadius     = ZERO;
+    const MATING_RECORD_SIZE = 2048;
+    const _matingRecord      = new Float64Array( MATING_RECORD_SIZE * 2 );   // preferred temperatures of both parents
+    let _matingCount         = 0;
     let _gardens             = [];      // environment: one starting garden per biome type
     let _predatorsIntroduced = false;
     let _seedDebt            = 0;       // fractional seeds carried to the next step
@@ -503,6 +506,7 @@ export function GenePool()
         _predatorsIntroduced = false;
         _seedDebt = 0;
         _environmentImage = null;
+        _matingCount = 0;
 
         if ( environment.active )
         {
@@ -1085,6 +1089,13 @@ if ( mode === SimulationStartMode.SPECIES )
 	}
 
 	this.getEnvironment = function() { return environment; }
+
+	// the preferred temperatures of the parents of the latest births
+	this.getRecentMatings = function()
+	{
+	    const n = Math.min( _matingCount, MATING_RECORD_SIZE );
+	    return { count: _matingCount, a: _matingRecord.slice( 0, n ), b: _matingRecord.slice( MATING_RECORD_SIZE, MATING_RECORD_SIZE + n ) };
+	}
 
 	//-------------------------------------
 	this.randomizeNeighborhood = function()
@@ -1815,6 +1826,11 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
                                 let initialAngle = getRandomAngleInDegrees();
                                 _swimbots[ newBornSwimbotIndex ].create( newBornSwimbotIndex, 0, _vectorUtility, initialAngle, energyToOffspring, _childGenotype, _embryology )
                                 syncSwimbot( newBornSwimbotIndex );
+
+                                // remember who mated with whom (for measuring how species separate)
+                                _matingRecord[ _matingCount % MATING_RECORD_SIZE ] = _swimbots[s].getThermalOptimum();
+                                _matingRecord[ _matingCount % MATING_RECORD_SIZE + MATING_RECORD_SIZE ] = _potentialMate.getThermalOptimum();
+                                _matingCount ++;
 
                                 //--------------------------------------------------
                                 // add the new swimbot to the family tree

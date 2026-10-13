@@ -83,6 +83,23 @@ function ecoStats()
         occupied.add( Math.floor( p.x / 500 ) + "," + Math.floor( p.y / 500 ) );
     }
     const cells = Math.ceil( ( sb.POOL_RIGHT - sb.POOL_LEFT ) / 500 ) * Math.ceil( ( sb.POOL_BOTTOM - sb.POOL_TOP ) / 500 );
+    // mating isolation: how much more alike in preferred temperature are
+    // the parents of recent births than two random swimbots (0 = random, 1 = identical)
+    let isolation = 0;
+    if ( typeof run.genePool.getRecentMatings === "function" && n > 10 )
+    {
+        const m = run.genePool.getRecentMatings();
+        if ( m.a.length > 20 )
+        {
+            let mates = 0;
+            for ( let k = 0; k < m.a.length; k++ ) { mates += Math.abs( m.a[k] - m.b[k] ); }
+            mates /= m.a.length;
+            let random = 0;
+            for ( let k = 0; k < 2000; k++ ) { random += Math.abs( thetas[ Math.floor( Math.random() * n ) ] - thetas[ Math.floor( Math.random() * n ) ] ); }
+            random /= 2000;
+            isolation = random > 0 ? 1 - mates / random : 0;
+        }
+    }
     const cline = regression( ts, thetas );
     const dT    = regression( ts, ds );
     const bB    = regression( backs, bs );
@@ -98,6 +115,7 @@ function ecoStats()
         bCorr    : bB.r,
         choosy   : bs.length ? choosy / bs.length : 0,
         ecoTypes : n ? Math.exp( shannon ) : 0,
+        isolation,
         effort   : neural ? effort / neural : 0,
         climate  : neural ? climate / neural : 0,
         social   : neural ? social / neural : 0,
@@ -105,7 +123,7 @@ function ecoStats()
     };
 }
 
-const header = "step,alive,pred,warm,cold,meat,fit,w,cline_slope,cline_r2,d_corr,b_corr,choosy,eco_types,effort,climate,social,brain_change,occupied,species,eff_species,top_share,ms_step";
+const header = "step,alive,pred,warm,cold,meat,fit,w,cline_slope,cline_r2,d_corr,b_corr,choosy,eco_types,mate_isolation,effort,climate,social,brain_change,occupied,species,eff_species,top_share,ms_step";
 console.log( `seed=${SEED} steps=${STEPS} flat=${FLAT} set=${EXTRA || ""}` );
 console.log( header );
 const rows = [];
@@ -122,7 +140,7 @@ for ( let step = 1; step <= STEPS; step++ )
         const e = ecoStats();
         const row = [ step, s.alive, s.predators, run.genePool.getNumFoodBitsOfType(0), run.genePool.getNumFoodBitsOfType(1), s.meat,
                       e.fit.toFixed( 2 ), e.width.toFixed( 3 ), e.slope.toFixed( 2 ), e.r2.toFixed( 2 ), e.dCorr.toFixed( 2 ),
-                      e.bCorr.toFixed( 2 ), e.choosy.toFixed( 2 ), e.ecoTypes.toFixed( 1 ),
+                      e.bCorr.toFixed( 2 ), e.choosy.toFixed( 2 ), e.ecoTypes.toFixed( 1 ), e.isolation.toFixed( 2 ),
                       e.effort.toFixed( 2 ), e.climate.toFixed( 2 ), e.social.toFixed( 2 ), e.brain.toFixed( 3 ),
                       e.occupied.toFixed( 2 ), s.species, s.effSpecies.toFixed( 1 ), s.topShare.toFixed( 2 ),
                       msPerStep.toFixed( 1 ) ].join( "," );
