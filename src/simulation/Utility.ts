@@ -53,8 +53,7 @@ import { gpRandom } from "./Globals";
 	//-----------------------------------
 	export function assertInteger( value, string )
 	{
-		let isInteger = (typeof value === "number") && isFinite(value) && (Math.floor(value) === value);
-		if ( !isInteger )
+		if ( !Number.isInteger( value ))    // (a number, finite, whole)
 		{
 			alert( "assertInteger: value not an integer! - " + string );
 		} 

@@ -1612,6 +1612,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
         // advance clock...
         //--------------------
         _clock ++;
+        const stepStart = now();
 
         if ( environment.active )
         {
@@ -1628,6 +1629,8 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
         // update food
         //------------------
         this.updateFood();
+        _phaseTimes[5] += now() - stepStart;
+        _phaseTimes[6] += 1;
 
         _stepsThisSecond ++;
 	}
@@ -1909,6 +1912,8 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 	    const n    = list.length;
 	    this.writePerceptionParams();
 
+	    let t = now();
+
 	    // 1. decide
 	    for (let i = 0; i < n; i++)
 	    {
@@ -1916,8 +1921,11 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 	        if ( b.getAlive() ) { b.prepareStep(); }
 	    }
 
+	    t = phaseTime( 0, t );
+
 	    // 2. move (many threads)
 	    _runner.physics( list, n );
+	    t = phaseTime( 1, t );
 
 	    // 3. take the results back; get ready to look around
 	    for (let i = 0; i < n; i++)
@@ -1939,8 +1947,11 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 	        this.writePerceptionInputs(s);
 	    }
 
+	    t = phaseTime( 2, t );
+
 	    // 4. look around (many threads)
 	    _runner.perception( list, n );
+	    t = phaseTime( 3, t );
 
 	    // 5. act, one after the other
 	    for (let i = 0; i < n; i++)
@@ -1954,7 +1965,16 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 	        if ( _st.sensing[s] ) { this.applyPerception(s); }
 	        this.interact(s);
 	    }
+	    phaseTime( 4, t );
 	}
+
+	//------------------------------------------------------------------------
+	// how long the phases take (milliseconds, summed; for finding what is slow)
+	//------------------------------------------------------------------------
+	const _phaseTimes = new Float64Array( 8 );
+	function now() { return ( typeof performance !== "undefined" ) ? performance.now() : 0; }
+	function phaseTime( phase, since ) { const t = now(); _phaseTimes[ phase ] += t - since; return t; }
+	this.getPhaseTimes = function() { return _phaseTimes; }
 
 	// give a swimbot what the perception kernel found for it
 	this.applyPerception = function( s )
@@ -2163,15 +2183,16 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
         let s = NULL_INDEX;
         let t = NULL_INDEX;
 
+        // (_botAlive is fast to scan; it can lag behind right after a new
+        //  pool is made, so the swimbot itself confirms)
         let looking = true;
         while ( looking )
         {
             t++;
 
-            if ( ! _swimbots[t].getAlive() )
+            if (( _botAlive[t] === 0 ) && !_swimbots[t].getAlive() )
             {
                 s = t;
-                assert( s < MAX_SWIMBOTS, "s < MAX_SWIMBOTS" );
                 looking = false;
             }
 
