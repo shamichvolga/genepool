@@ -835,8 +835,7 @@ export function updateUI()
                 + speciesText()
                 + "<br>"
                 + "green plants: " + genePool.getNumFoodBitsOfType(0)
-                + "<br>"
-                + "blue plants: " + genePool.getNumFoodBitsOfType(1)
+                + ( TWO_PLANT_TYPES ? "<br>blue plants: " + genePool.getNumFoodBitsOfType(1) : "" )
                 + "<br>"
                 + "meat: " + genePool.getNumFoodBitsOfType(2);
             if (graphDataHTML !== _lastGraphDataHTML)
