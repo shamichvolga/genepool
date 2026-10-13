@@ -26,6 +26,27 @@ export const DIGESTION_MINIMUM          = 0.15;
 export const DIGESTION_CURVE            = 1.5;     // > 1: in-between digestion is bad at both foods
 export const IGNORE_FOOD_EFFICIENCY     = 0.3;     // food worse than this is ignored unless starving
 
+// Body size and diet: big bodies handle the (tough) cold plants better, small
+// bodies the warm ones. This ties the body form to the biome, so that one
+// "best body" can't spread everywhere. size = ln(mass) relative to a typical
+// swimbot (ln 370 ≈ 5.9), in units of 1.5, limited to -1..1.
+export const SIZE_DIET_EFFECT           = 0.35;
+const TYPICAL_LOG_MASS                  = 5.9;
+const LOG_MASS_SCALE                    = 1.5;
+
+export function bodySize( mass: number ): number
+{
+    const s = ( Math.log( Math.max( 1, mass )) - TYPICAL_LOG_MASS ) / LOG_MASS_SCALE;
+    return s < -1 ? -1 : ( s > 1 ? 1 : s );
+}
+
+// how well a body of this size handles a plant type (meat: always 1)
+export function sizeDietFactor( size: number, type: number ): number
+{
+    if ( type === 2 ) return 1;
+    return ( type === PLANT_TYPE_WARM ) ? 1 - SIZE_DIET_EFFECT * size : 1 + SIZE_DIET_EFFECT * size;
+}
+
 // body brightness b (step 2)
 export const THERMOMELANISM             = 0.06;    // dark bodies feel warmer: T_eff = T + 0.06 · (1 - 2b)
 export const PREY_DETECTION_MINIMUM     = 0.35;    // predator sees prey at R · (0.35 + 0.65 · |b - background|)

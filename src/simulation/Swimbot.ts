@@ -2,7 +2,7 @@ import { setTrait, GENES_PREDATOR } from "./EcologyGenes";
 import { think, sigmoid, NUM_INPUTS, NUM_HIDDEN, NUM_OUTPUTS, NUM_DRIVES, THINK_PERIOD, DRIVE_HYSTERESIS, EFFORT_MIN, EFFORT_RANGE, IN_BIAS, IN_HUNGER, IN_ENERGY, IN_AGE, IN_FIT, IN_TREND, IN_FOOD, IN_MATE, IN_THREAT, IN_PREY, IN_CROWD, IN_PREDATOR, OUT_FOOD, OUT_MATE, OUT_FLEE, OUT_HUNT, OUT_CLIMATE, OUT_SOCIAL, OUT_EFFORT } from "./NeuralBrain";
 import { NEURAL_BRAIN_ENABLED, CLIMATE_STEERING, SOCIAL_STEERING, CLIMATE_PROBE_DISTANCE } from "./Parameters";
 import { environment, PLANT_TYPE_WARM, PLANT_TYPE_COLD } from "./Environment";
-import { climateFoodFactor, digestionEfficiency, thermalFit, thermalPeak, THERMAL_MISMATCH_DRAIN, THERMAL_FIT_UPDATE_PERIOD, THERMOMELANISM, mateAcceptance, pairRandom, KINESIS_PERIOD, KINESIS_TURN_CHANCE, KINESIS_MAX_TURN, EMERGENCY_THERMAL_FIT, EMERGENCY_PROBE_DISTANCE } from "./Ecology";
+import { bodySize, sizeDietFactor, climateFoodFactor, digestionEfficiency, thermalFit, thermalPeak, THERMAL_MISMATCH_DRAIN, THERMAL_FIT_UPDATE_PERIOD, THERMOMELANISM, mateAcceptance, pairRandom, KINESIS_PERIOD, KINESIS_TURN_CHANCE, KINESIS_MAX_TURN, EMERGENCY_THERMAL_FIT, EMERGENCY_PROBE_DISTANCE } from "./Ecology";
 //--------------------------------------------------------------------------
 //
 //    This file is part of GenePool Swimbots.
@@ -889,8 +889,9 @@ _position.copyFrom( position );
         _brightness     = ( _phenotype.brightness     !== undefined ) ? _phenotype.brightness     : ONE_HALF;
         _choosiness     = ( _phenotype.choosiness     !== undefined ) ? _phenotype.choosiness     : ZERO;
         _thermalPeak    = thermalPeak( _thermalWidth );
-        _efficiencyWarm = digestionEfficiency( _digestion, PLANT_TYPE_WARM );
-        _efficiencyCold = digestionEfficiency( _digestion, PLANT_TYPE_COLD );
+        const size      = bodySize( _phenotype.mass );
+        _efficiencyWarm = digestionEfficiency( _digestion, PLANT_TYPE_WARM ) * sizeDietFactor( size, PLANT_TYPE_WARM );
+        _efficiencyCold = digestionEfficiency( _digestion, PLANT_TYPE_COLD ) * sizeDietFactor( size, PLANT_TYPE_COLD );
         _comfort        = -ONE;
         this.updateThermalFit();
 
