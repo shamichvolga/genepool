@@ -139,6 +139,12 @@ export function Phenotype()
 	this.mass               = ZERO;
 	this.preferredFoodType  = 0;
 	this.digestibleFoodType = 0;
+	this.predatorLevel      = 0;
+	this.thermalOptimum     = 0.5;   // ecology (stage 5)
+	this.thermalWidth       = 0.4;
+	this.digestion          = 0.5;
+	this.brightness         = 0.5;
+	this.choosiness         = 0;
 	for (let p=0; p<MAX_PARTS; p++)
 	{
 		this.parts[p] = new Part(); 

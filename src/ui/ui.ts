@@ -730,6 +730,29 @@ export function updateUI()
                 const isPredator = swimbot.getPredatorLevel() > PREDATOR_LEVEL_THRESHOLD;
                 const row = ( label, value ) => "<tr><td>" + label + "</td><td>" + value + "</td></tr>";
 
+                //------------------------------------------------------------
+                // food and climate: the environment pool shows the ecology
+                // traits, the classic pools the old food colors
+                //------------------------------------------------------------
+                let foodRows;
+                const environment = genePool.getEnvironment();
+                if ( environment.active )
+                {
+                    const position = swimbot.getPosition();
+                    const here     = environment.temperatureAt( position.x, position.y );
+                    const percent  = ( x ) => Math.round( x * 100 ) + "%";
+                    foodRows =
+                        row( "likes temperature", swimbot.getThermalOptimum().toFixed(2) + " ± " + swimbot.getThermalWidth().toFixed(2) ) +
+                        row( "temperature here",  here.toFixed(2) + " (suits " + percent( swimbot.getThermalFit() ) + ")" ) +
+                        row( "digests",           "green " + percent( swimbot.getDigestionEfficiency(0) ) + " · blue " + percent( swimbot.getDigestionEfficiency(1) ) );
+                }
+                else
+                {
+                    foodRows =
+                        row( "food preferred",    foodPreferenceText ) +
+                        row( "food digested best",foodTypeText );
+                }
+
                 let swimbotPanelHTML =
                     "<div class='swimbotKind " + ( isPredator ? "predator" : "herbivore" ) + "'>" +
                         "swimbot " + genePool.getSwimbotIndex(selectedSwimbot) + " · " +
@@ -745,8 +768,7 @@ export function updateUI()
                     row( "food eaten",        Math.floor(genePool.getSwimbotNumFoodBitsEaten(selectedSwimbot)) ) +
                     row( "prey eaten",        swimbot.getNumPreyEaten() ) +
                     row( "offspring",         Math.floor(genePool.getSwimbotNumOffspring(selectedSwimbot)) ) +
-                    row( "food preferred",    foodPreferenceText ) +
-                    row( "food digested best",foodTypeText ) +
+                    foodRows +
                     row( "attracted to",      genePool.getSwimbotAttractionDescription(selectedSwimbot) ) +
                     "</table>";
 

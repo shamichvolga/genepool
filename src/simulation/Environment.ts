@@ -7,6 +7,10 @@
 //         + 0.20 · biome offset (patches 2500–4000 units, soft 400–800 borders)
 //         + season (period 10 000 steps, stronger towards the poles)
 //
+// Background brightness B (0 = dark bottom .. 1 = light bottom): half the
+// temperature, half a random shade of each biome patch. Swimbots whose body
+// brightness matches the background are harder for predators to see.
+//
 // Why these numbers: see docs/БИОЛОГ_ЭТАП5.md (patches must be much larger than
 // how far a swimbot travels in its life, borders soft, changes slow).
 //------------------------------------------------------------------------------
@@ -42,7 +46,8 @@ export class Environment
 {
     private baseTemperature = new Float32Array( FIELD_SIZE * FIELD_SIZE );
     private biomeOfCell     = new Int8Array   ( FIELD_SIZE * FIELD_SIZE );
-    private biomeSeeds      : { x: number, y: number, type: number }[] = [];
+    private background      = new Float32Array( FIELD_SIZE * FIELD_SIZE );
+    private biomeSeeds      : { x: number, y: number, type: number, shade: number }[] = [];
     private time            = 0;
 
     // the environment rules (temperature, climate plants, digestion) apply
@@ -76,13 +81,36 @@ export class Environment
                     x    : POOL_LEFT + ( c + 0.2 + 0.6 * gpRandom() ) * width  / columns,
                     y    : POOL_TOP  + ( r + 0.2 + 0.6 * gpRandom() ) * height / rows,
                     type : Math.floor( gpRandom() * BIOME_OFFSETS.length ),
+                    shade: gpRandom(),
                 });
             }
         }
 
-        //------------------------------------------------------------
-        // base temperature in every cell
-        //------------------------------------------------------------
+        this.computeField();
+    }
+
+    //--------------------------------------------------------------------
+    // saving and loading: the map is rebuilt from its patch centers
+    //--------------------------------------------------------------------
+    getState()
+    {
+        return { active: this.active, seeds: this.biomeSeeds.map( s => ({ x: s.x, y: s.y, type: s.type, shade: s.shade })) };
+    }
+
+    setState( state ): void
+    {
+        this.active     = !!( state && state.active && state.seeds && state.seeds.length > 0 );
+        this.biomeSeeds = this.active ? state.seeds.map( s => ({ x: s.x, y: s.y, type: s.type, shade: ( s.shade !== undefined ) ? s.shade : 0.5 })) : [];
+        if ( this.active ) { this.computeField(); }
+    }
+
+    //--------------------------------------------------------------------
+    // base temperature in every cell, from the biome patch centers
+    //--------------------------------------------------------------------
+    private computeField(): void
+    {
+        const width  = POOL_RIGHT  - POOL_LEFT;
+        const height = POOL_BOTTOM - POOL_TOP;
         for ( let j = 0; j < FIELD_SIZE; j++ )
         {
             for ( let i = 0; i < FIELD_SIZE; i++ )
@@ -98,16 +126,18 @@ export class Environment
                 {
                     if ( distances[k] < nearest ) { nearest = distances[k]; nearestType = this.biomeSeeds[k].type; }
                 }
-                let weightSum = 0, offsetSum = 0;
+                let weightSum = 0, offsetSum = 0, shadeSum = 0;
                 for ( let k = 0; k < distances.length; k++ )
                 {
                     const w = Math.exp( -( distances[k] - nearest ) / BIOME_BORDER_SOFTNESS );
                     weightSum += w;
                     offsetSum += w * BIOME_OFFSETS[ this.biomeSeeds[k].type ];
+                    shadeSum  += w * this.biomeSeeds[k].shade;
                 }
 
-                const t = 0.5 + LATITUDE_STRENGTH * latitude + BIOME_STRENGTH * ( offsetSum / weightSum );
-                this.baseTemperature[ j * FIELD_SIZE + i ] = Math.min( 1, Math.max( 0, t ));
+                const t = Math.min( 1, Math.max( 0, 0.5 + LATITUDE_STRENGTH * latitude + BIOME_STRENGTH * ( offsetSum / weightSum )));
+                this.baseTemperature[ j * FIELD_SIZE + i ] = t;
+                this.background     [ j * FIELD_SIZE + i ] = 0.5 * t + 0.5 * ( shadeSum / weightSum );
                 this.biomeOfCell    [ j * FIELD_SIZE + i ] = nearestType;
             }
         }
@@ -144,6 +174,15 @@ export class Environment
         const amplitude = SEASON_AMPLITUDE_EQUATOR + ( SEASON_AMPLITUDE_POLES - SEASON_AMPLITUDE_EQUATOR ) * latitude;
         const t = base + amplitude * Math.sin( 2 * Math.PI * this.time / SEASON_PERIOD );
         return t < 0 ? 0 : ( t > 1 ? 1 : t );
+    }
+
+    // background brightness at a point (0 = dark .. 1 = light)
+    backgroundAt( x: number, y: number ): number
+    {
+        if ( !this.active || FLAT_ENVIRONMENT ) return 0.5;
+        const i = Math.min( FIELD_SIZE - 1, Math.max( 0, Math.floor( ( x - POOL_LEFT ) / ( POOL_RIGHT  - POOL_LEFT ) * FIELD_SIZE )));
+        const j = Math.min( FIELD_SIZE - 1, Math.max( 0, Math.floor( ( y - POOL_TOP  ) / ( POOL_BOTTOM - POOL_TOP  ) * FIELD_SIZE )));
+        return this.background[ j * FIELD_SIZE + i ];
     }
 
     // which biome type (0..4) a point belongs to
@@ -209,11 +248,14 @@ export class Environment
         const pixels  = context.createImageData( FIELD_SIZE, FIELD_SIZE );
         for ( let k = 0; k < FIELD_SIZE * FIELD_SIZE; k++ )
         {
-            // cold: deep blue-grey; hot: muted brown-olive (the pool keeps its calm look)
-            const t = ( this.active && !FLAT_ENVIRONMENT ) ? this.baseTemperature[k] : 0.5;
-            pixels.data[ k * 4     ] = 38 + t * 40;
-            pixels.data[ k * 4 + 1 ] = 52 + t * 18;
-            pixels.data[ k * 4 + 2 ] = 82 - t * 34;
+            // hue = temperature (cold: deep blue-grey; hot: muted brown-olive),
+            // lightness = background brightness (the pool keeps its calm look)
+            const on = this.active && !FLAT_ENVIRONMENT;
+            const t  = on ? this.baseTemperature[k] : 0.5;
+            const l  = 0.62 + 0.76 * ( on ? this.background[k] : 0.5 );
+            pixels.data[ k * 4     ] = ( 38 + t * 40 ) * l;
+            pixels.data[ k * 4 + 1 ] = ( 52 + t * 18 ) * l;
+            pixels.data[ k * 4 + 2 ] = ( 82 - t * 34 ) * l;
             pixels.data[ k * 4 + 3 ] = 255;
         }
         context.putImageData( pixels, 0, 0 );

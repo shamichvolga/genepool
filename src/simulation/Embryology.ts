@@ -1,4 +1,5 @@
-import { geneAverage, thermalWidthOf, GENES_HUNGER, GENES_PREDATOR, GENES_THERMAL_OPTIMUM, GENES_DIGESTION } from "./EcologyGenes";
+import { geneAverage, thermalWidthOf, GENES_HUNGER, GENES_PREDATOR, GENES_THERMAL_OPTIMUM, GENES_DIGESTION, GENES_BRIGHTNESS, GENES_CHOOSINESS } from "./EcologyGenes";
+import { environment } from "./Environment";
 //--------------------------------------------------------------------------
 //                                                                        
 //    This file is part of GenePool Swimbots.                             
@@ -51,6 +52,7 @@ export const MIN_PHASE             =  -1.0;
 export const MAX_PHASE             =   1.0;	
 export const MIN_COLOR             =   ZERO;
 export const MAX_COLOR             =   ONE;
+const BRIGHTNESS_COLOR_SHARE        =   0.6;    // how much the brightness gene decides the body color
 export const MIN_BRANCH_PERIOD     =   1;
 export const MAX_BRANCH_PERIOD     =   4;	
 export const MIN_BRANCH_ANGLE      =  -90.0;
@@ -209,6 +211,8 @@ let testNoEel = true;
         phenotype.thermalOptimum   = geneAverage( genotype, GENES_THERMAL_OPTIMUM );
         phenotype.thermalWidth     = thermalWidthOf( genotype );
         phenotype.digestion        = geneAverage( genotype, GENES_DIGESTION );
+        phenotype.brightness       = geneAverage( genotype, GENES_BRIGHTNESS );
+        phenotype.choosiness       = geneAverage( genotype, GENES_CHOOSINESS );
 
         // Legacy/binary compatibility for other code that may still look for isPredator
         phenotype.isPredator       = phenotype.predatorLevel > PREDATOR_LEVEL_THRESHOLD;
@@ -320,6 +324,26 @@ let testNoEel = true;
                 _categoryValues[c].endRed     = 0;
                 _categoryValues[c].endGreen   = 0;
                 _categoryValues[c].endBlue    = 0;
+            }
+        }
+        //------------------------------------------------------------------
+        // environment: the body brightness gene shows in the colors (the
+        // colors move towards a grey of that brightness), so swimbots that
+        // choose a mate of similar color also choose similar brightness
+        //------------------------------------------------------------------
+        else if ( environment.active )
+        {
+            const grey = phenotype.brightness;
+            const k    = BRIGHTNESS_COLOR_SHARE;
+            for (let c = 0; c < NUM_CATEGORIES; c++)
+            {
+                const v = _categoryValues[c];
+                v.startRed   = v.startRed   * ( 1 - k ) + grey * k;
+                v.startGreen = v.startGreen * ( 1 - k ) + grey * k;
+                v.startBlue  = v.startBlue  * ( 1 - k ) + grey * k;
+                v.endRed     = v.endRed     * ( 1 - k ) + grey * k;
+                v.endGreen   = v.endGreen   * ( 1 - k ) + grey * k;
+                v.endBlue    = v.endBlue    * ( 1 - k ) + grey * k;
             }
         }
 

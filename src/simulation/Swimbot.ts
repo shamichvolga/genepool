@@ -1,4 +1,6 @@
 import { setTrait, GENES_PREDATOR } from "./EcologyGenes";
+import { environment, PLANT_TYPE_WARM, PLANT_TYPE_COLD } from "./Environment";
+import { climateFoodFactor, digestionEfficiency, thermalFit, thermalPeak, THERMAL_MISMATCH_DRAIN, THERMAL_FIT_UPDATE_PERIOD, THERMOMELANISM, mateAcceptance, pairRandom, KINESIS_PERIOD, KINESIS_TURN_CHANCE, KINESIS_MAX_TURN, EMERGENCY_THERMAL_FIT, EMERGENCY_PROBE_DISTANCE } from "./Ecology";
 //--------------------------------------------------------------------------
 //
 //    This file is part of GenePool Swimbots.
@@ -111,6 +113,21 @@ var    flopperYV = 0;
 	let _scanCooldown       = 0;
 	let _eternal            = false;
 	let _basalMetabolism    = ZERO;  // energy per step just to stay alive (grows with body mass)
+
+	//-----------------------------------------------------------------------
+	// ecology (stage 5): how this swimbot copes with the temperature and the
+	// two kinds of plants (see Ecology.ts)
+	//-----------------------------------------------------------------------
+	let _thermalOptimum     = ONE_HALF;
+	let _thermalWidth       = 0.4;
+	let _thermalPeak        = ONE;
+	let _digestion          = ONE_HALF;
+	let _efficiencyWarm     = ONE;
+	let _efficiencyCold     = ONE;
+	let _brightness         = ONE_HALF;  // body brightness: camouflage and mating signal
+	let _choosiness         = ZERO;
+	let _thermalFit         = ONE;    // 0..1, how well the place suits me (updated every few steps)
+	let _comfort            = -ONE;   // last "how good is it here" (for kinesis)
 
 	//-----------------------------------------------------------------------
 	// Body part state lives in flat number arrays, which is much faster than
@@ -831,6 +848,20 @@ _position.copyFrom( position );
         _basalMetabolism = BASAL_METABOLISM * Math.pow( _phenotype.mass, 0.75 );
 
         //-----------------------------------------------------
+        // ecology traits
+        //-----------------------------------------------------
+        _thermalOptimum = ( _phenotype.thermalOptimum !== undefined ) ? _phenotype.thermalOptimum : ONE_HALF;
+        _thermalWidth   = ( _phenotype.thermalWidth   !== undefined ) ? _phenotype.thermalWidth   : 0.4;
+        _digestion      = ( _phenotype.digestion      !== undefined ) ? _phenotype.digestion      : ONE_HALF;
+        _brightness     = ( _phenotype.brightness     !== undefined ) ? _phenotype.brightness     : ONE_HALF;
+        _choosiness     = ( _phenotype.choosiness     !== undefined ) ? _phenotype.choosiness     : ZERO;
+        _thermalPeak    = thermalPeak( _thermalWidth );
+        _efficiencyWarm = digestionEfficiency( _digestion, PLANT_TYPE_WARM );
+        _efficiencyCold = digestionEfficiency( _digestion, PLANT_TYPE_COLD );
+        _comfort        = -ONE;
+        this.updateThermalFit();
+
+        //-----------------------------------------------------
         // the predator gene may have changed (zap, gene tweak)
         //-----------------------------------------------------
         _brain.setPredatorLevel( this.getPredatorLevel() );
@@ -1105,6 +1136,11 @@ _position.copyFrom( position );
 	//----------------------------------------
 	this.wanderFocus = function()
 	{
+	    if ( environment.active && ( ( _age + _index ) % KINESIS_PERIOD === 0 ))
+	    {
+	        this.kinesis();
+	    }
+
 	    let length = _directionToGoal.getMagnitude();
 
 	    if ( length === ZERO )
@@ -1127,6 +1163,91 @@ _position.copyFrom( position );
 
 
 
+	//------------------------------------------------------------------------
+	// kinesis ("run and tumble", like bacteria): now and then compare how good
+	// it is here with how good it was; if it got worse, maybe turn. If the
+	// temperature is really wrong, look around and head for the best way.
+	//------------------------------------------------------------------------
+	this.kinesis = function()
+	{
+	    this.updateThermalFit();
+
+	    if ( _thermalFit < EMERGENCY_THERMAL_FIT )
+	    {
+	        let length = _directionToGoal.getMagnitude();
+	        let dx = ( length > ZERO ) ? _directionToGoal.x / length : ONE;
+	        let dy = ( length > ZERO ) ? _directionToGoal.y / length : ZERO;
+	        let bestFit = -ONE, bestX = dx, bestY = dy;
+
+	        for (let k = 0; k < 4; k++)
+	        {
+	            const fit = thermalFit( this.feltTemperature( _position.x + dx * EMERGENCY_PROBE_DISTANCE,
+	                                                          _position.y + dy * EMERGENCY_PROBE_DISTANCE ), _thermalOptimum, _thermalWidth );
+	            if ( fit > bestFit ) { bestFit = fit; bestX = dx; bestY = dy; }
+	            const t = dx; dx = -dy; dy = t;   // turn 90 degrees
+	        }
+
+	        _directionToGoal.setXY( bestX, bestY );
+	        _comfort = -ONE;
+	        return;
+	    }
+
+	    const cell = environment.plantCellIndex( _position.x, _position.y );
+	    const food = ( environment.plantCount[ PLANT_TYPE_WARM ][ cell ] * _efficiencyWarm
+	                 + environment.plantCount[ PLANT_TYPE_COLD ][ cell ] * _efficiencyCold ) / 6;
+	    const comfort = ( 0.05 + _thermalFit * _thermalPeak ) * ( 0.05 + food );
+
+	    if (( _comfort >= ZERO ) && ( comfort < _comfort ) && ( gpRandom() < KINESIS_TURN_CHANCE ))
+	    {
+	        const turn = ( -ONE + 2 * gpRandom() ) * KINESIS_MAX_TURN * PI_OVER_180;
+	        const c = Math.cos( turn ), sn = Math.sin( turn );
+	        const x = _directionToGoal.x, y = _directionToGoal.y;
+	        _directionToGoal.setXY( x * c - y * sn, x * sn + y * c );
+	    }
+
+	    _comfort = comfort;
+	}
+
+	//------------------------------------------------------------------------
+	this.updateThermalFit = function()
+	{
+	    _thermalFit = environment.active
+	        ? thermalFit( this.feltTemperature( _position.x, _position.y ), _thermalOptimum, _thermalWidth )
+	        : ONE;
+	}
+
+	// the temperature as this swimbot feels it: dark bodies warm up a little more
+	this.feltTemperature = function( x, y )
+	{
+	    return environment.temperatureAt( x, y ) + THERMOMELANISM * ( ONE - 2 * _brightness );
+	}
+
+	//------------------------------------------------------------------------
+	// does this swimbot accept the suitor as a mate? The more different their
+	// brightness and the choosier I am, the less likely (fixed for a pair)
+	//------------------------------------------------------------------------
+	this.acceptsMate = function( suitor )
+	{
+	    if ( !environment.active ) return true;
+	    const db = Math.abs( suitor.getBrightness() - _brightness );
+	    return pairRandom( suitor.getIndex(), _index ) < mateAcceptance( db, _choosiness );
+	}
+
+	this.getBrightness      = function() { return _brightness;      }
+	this.getChoosiness      = function() { return _choosiness;      }
+
+	this.getDigestionEfficiency = function( type )
+	{
+	    if ( type === 2 ) return ONE;
+	    return ( type === PLANT_TYPE_WARM ) ? _efficiencyWarm : _efficiencyCold;
+	}
+
+	this.getThermalFit      = function() { return _thermalFit;      }
+	this.getThermalOptimum  = function() { return _thermalOptimum;  }
+	this.getThermalWidth    = function() { return _thermalWidth;    }
+	this.getDigestion       = function() { return _digestion;       }
+	this.getComfort         = function() { return _comfort;         }
+
 	//----------------------------------------
 	// update physics
 	//----------------------------------------
@@ -1146,6 +1267,15 @@ _position.copyFrom( position );
         // energy is always slowly draining
         //---------------------------------------------
         _energy -= CONTINUAL_ENERGY_DRAIN + _basalMetabolism;
+
+        //---------------------------------------------
+        // living at the wrong temperature costs energy
+        //---------------------------------------------
+        if ( environment.active )
+        {
+            if ( ( _age + _index ) % THERMAL_FIT_UPDATE_PERIOD === 0 ) { this.updateThermalFit(); }
+            _energy -= THERMAL_MISMATCH_DRAIN * ( ONE - _thermalFit );
+        }
 
         //---------------------------------------------
         // when energy hits zero, that means death
@@ -1722,6 +1852,17 @@ let partAccelerationY = -strokeForceY;
                 }
             }
 
+            //----------------------------------------------------------------------
+            // with the environment on: digestion and climate decide how much
+            // of the food's energy I actually get
+            //----------------------------------------------------------------------
+            if ( environment.active )
+            {
+                energyFromFoodBit = _chosenFoodBit.getEnergy()
+                                  * this.getDigestionEfficiency( _chosenFoodBit.getType() )
+                                  * climateFoodFactor( _thermalFit, _thermalPeak );
+            }
+
             _energy += energyFromFoodBit;
 
             _numFoodBitsEaten ++;
@@ -1895,7 +2036,8 @@ let partAccelerationY = -strokeForceY;
                 if (( babeFactor > highestBabeFactor )
                 &&  ( babeFactor > TOO_UGLY_TO_CHOOSE )
                 &&  ( nearbySwimbotArray[o].getAge() > YOUNG_AGE_DURATION )
-                &&  ( nearbySwimbotArray[o].getEnergy() > STARVING ))
+                &&  ( nearbySwimbotArray[o].getEnergy() > STARVING )
+                &&  nearbySwimbotArray[o].acceptsMate( this ))
                 {
                     //console.log( "ok" );
                     highestBabeFactor = babeFactor;

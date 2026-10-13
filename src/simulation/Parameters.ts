@@ -91,6 +91,17 @@ export const PREDATOR_INTRODUCTION_STEP    = 20000;
 export const PREDATOR_INTRODUCTION_FRACTION = 0.05;
 export const GARDEN_RADIUS                 = 1200;
 
+// the classic presets keep the original numbers (they don't use the environment)
+export const CLASSIC_NUM_SWIMBOTS          = 1000;
+export const CLASSIC_NUM_FOODBITS          = 1000;
+
+// plants in the environment (see GenePool.regrowFoodEnvironment)
+export const ENVIRONMENT_SEEDS_PER_PERIOD  = WORLD_AREA_FACTOR;   // seeds per "food growth delay" steps
+export const PLANT_CELL_CAPACITY           = 6;                   // plants per 250 x 250 cell at most
+export const PLANT_PARENT_SEED_FRACTION    = 0.7;                 // the rest is "seed rain" anywhere
+export const PLANT_SEED_MIN_DISTANCE       = 300;
+export const PLANT_SEED_MAX_DISTANCE       = 600;
+
 // Травоядный убегает, если хищник ближе этого расстояния.
 export const PREDATOR_FLEE_RADIUS          = 150.0;
 

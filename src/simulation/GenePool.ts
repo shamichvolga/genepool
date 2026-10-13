@@ -1,4 +1,8 @@
-import { setTrait, GENES_PREDATOR } from "./EcologyGenes";
+import { convertOldGenes, GENE_LAYOUT_VERSION, setTrait, gaussian, thermalWidthToGene, GENES_PREDATOR, GENES_THERMAL_OPTIMUM, GENES_THERMAL_WIDTH, GENES_DIGESTION, GENES_BRIGHTNESS, GENES_CHOOSINESS } from "./EcologyGenes";
+import { environment, PLANT_TYPE_WARM, PLANT_TYPE_COLD } from "./Environment";
+import { IGNORE_FOOD_EFFICIENCY, preyVisibility } from "./Ecology";
+import { CLASSIC_NUM_SWIMBOTS, CLASSIC_NUM_FOODBITS, GARDEN_RADIUS, PREDATOR_INTRODUCTION_STEP, PREDATOR_INTRODUCTION_FRACTION, ENVIRONMENT_SEEDS_PER_PERIOD, PLANT_CELL_CAPACITY, PLANT_PARENT_SEED_FRACTION, PLANT_SEED_MIN_DISTANCE, PLANT_SEED_MAX_DISTANCE } from "./Parameters";
+
 import { BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_PREY } from "./Brain";
 import { Camera } from "./Camera";
 import { Embryology } from "./Embryology";
@@ -130,6 +134,11 @@ export function GenePool()
 	let _startTime		        = ZERO;
 	let _seconds		        = ZERO;
     let _gardenOfEdenRadius     = ZERO;
+    let _gardens             = [];      // environment: one starting garden per biome type
+    let _predatorsIntroduced = false;
+    let _seedDebt            = 0;       // fractional seeds carried to the next step
+    let _environmentImage    = null;    // picture of the temperature map (drawn behind the pool)
+    const STARVING_FOOD_CHOICE = 15;   // below this energy a swimbot eats anything
 	let _levelOfDetail	        = SWIMBOT_LEVEL_OF_DETAIL_LOW;
 	let _previousTime           = ZERO;
 	let _frameRate              = ZERO;
@@ -170,6 +179,7 @@ export function GenePool()
     let _botAlive       = new Uint8Array  ( MAX_SWIMBOTS );    // kept exact: see notifySwimbotDeathTime
     let _botEternal     = new Uint8Array  ( MAX_SWIMBOTS );
     let _botPredator    = new Float64Array( MAX_SWIMBOTS );    // predator level 0..1
+    let _botBrightness  = new Float64Array( MAX_SWIMBOTS );    // body brightness 0..1 (camouflage)
     let _botMass        = new Float64Array( MAX_SWIMBOTS );
     let _foodX          = new Float64Array( MAX_FOODBITS );
     let _foodY          = new Float64Array( MAX_FOODBITS );
@@ -310,6 +320,7 @@ export function GenePool()
         _botAlive   [s] = swimbot.getAlive() ? 1 : 0;
         _botEternal [s] = swimbot.isEternal() ? 1 : 0;
         _botPredator[s] = swimbot.getPredatorLevel();
+        _botBrightness[s] = swimbot.getBrightness();
         _botMass    [s] = swimbot.getPhenotypeMass();
     }
 
@@ -482,15 +493,39 @@ export function GenePool()
         this.setOffspringEnergyRatio( DEFAULT_CHILD_ENERGY_RATIO        );
         this.setMaximumSwimbotAge   ( DEFAULT_MAXIMUM_AGE               );
 
-        // do this stuff after doing the stuff above:
-        _numSwimbots = INITIAL_NUM_SWIMBOTS;
-        _numFoodBits = INITIAL_NUM_FOODBITS;
+        //-------------------------------------------------------------------
+        // The "random" pool lives in the new environment (temperature map,
+        // warm and cold plants, several gardens) and fills the big world.
+        // The classic presets keep the original rules and numbers.
+        //-------------------------------------------------------------------
+        environment.active = ( mode === SimulationStartMode.RANDOM );
+        environment.setTime(0);
+        _predatorsIntroduced = false;
+        _seedDebt = 0;
+        _environmentImage = null;
 
-        //-----------------------------------
-        // default
-        //-----------------------------------
-        globalTweakers.numFoodTypes = 1;
-        this.randomizeFood();
+        if ( environment.active )
+        {
+            environment.generate();
+            _gardens = environment.gardenCenters();
+            this.setGardenOfEdenRadius( GARDEN_RADIUS );
+            _camera.setScale( POOL_WIDTH );   // show the whole world with all its gardens
+
+            _numSwimbots = INITIAL_NUM_SWIMBOTS;
+            _numFoodBits = INITIAL_NUM_FOODBITS;
+            globalTweakers.numFoodTypes = 2;
+            this.setFoodToEnvironment();
+        }
+        else
+        {
+            _numSwimbots = CLASSIC_NUM_SWIMBOTS;
+            _numFoodBits = CLASSIC_NUM_FOODBITS;
+            globalTweakers.numFoodTypes = 1;
+            this.randomizeFood();
+        }
+
+        _environmentImage = environment.active ? environment.makeImage() : null;
+        _pool.setBackgroundImage( _environmentImage );
 
         //console.log( "startSimulation: setOffspringEnergyRatio to default: " + DEFAULT_CHILD_ENERGY_RATIO );
 
@@ -760,10 +795,21 @@ if ( mode === SimulationStartMode.SPECIES )
             }
 
             //-------------------------------------------------------------------
-            // start with mostly herbivores: predators are a small minority
-            // (gene 51 is the predator gene)
+            // environment: each swimbot starts in one of the gardens (one per
+            // biome type), roughly adapted to the local temperature and plants;
+            // everybody is a herbivore (predators appear later, see simulateStep)
             //-------------------------------------------------------------------
-            if ( mode === SimulationStartMode.RANDOM )
+            if ( environment.active )
+            {
+                const garden = _gardens[ i % _gardens.length ];
+                initialPosition.setToRandomLocationInDisk( garden, _gardenOfEdenRadius );
+                this.setEcologyGenesForPlace( _myGenotype, initialPosition.x, initialPosition.y );
+                setTrait( _myGenotype, GENES_PREDATOR, gpRandom() * PREDATOR_LEVEL_THRESHOLD * 0.8 );
+            }
+            //-------------------------------------------------------------------
+            // start with mostly herbivores: predators are a small minority
+            //-------------------------------------------------------------------
+            else if ( mode === SimulationStartMode.RANDOM )
             {
                 let thresholdGeneValue = PREDATOR_LEVEL_THRESHOLD * 255;
                 let predatorGeneValue = ( gpRandom() < INITIAL_PREDATOR_FRACTION )
@@ -868,6 +914,161 @@ if ( mode === SimulationStartMode.SPECIES )
 	{
 	    _gardenOfEdenRadius = r;
 	}
+
+	//------------------------------------------------------------------------
+	// founders get a temperature preference near the local temperature,
+	// a moderate tolerance, and digestion suited to the local plants
+	//------------------------------------------------------------------------
+	this.setEcologyGenesForPlace = function( genotype, x, y )
+	{
+	    const t     = environment.temperatureAt( x, y );
+	    const warm  = environment.plantSuitability( PLANT_TYPE_WARM, t );
+	    const cold  = environment.plantSuitability( PLANT_TYPE_COLD, t );
+	    const theta = Math.min( 1, Math.max( 0, t + gaussian() * 0.1 ));
+	    const width = 0.10 + gpRandom() * 0.15;
+	    const digestion = Math.min( 1, Math.max( 0, warm / ( warm + cold + 1e-9 ) + gaussian() * 0.15 ));
+
+	    setTrait( genotype, GENES_THERMAL_OPTIMUM, theta,                       0.02 );
+	    setTrait( genotype, GENES_THERMAL_WIDTH,   thermalWidthToGene( width ), 0.02 );
+	    setTrait( genotype, GENES_DIGESTION,       digestion,                   0.02 );
+
+	    const brightness = Math.min( 1, Math.max( 0, environment.backgroundAt( x, y ) + gaussian() * 0.15 ));
+	    setTrait( genotype, GENES_BRIGHTNESS,      brightness,                  0.02 );
+	    setTrait( genotype, GENES_CHOOSINESS,      0.2 + 0.4 * gpRandom(),      0.02 );
+	}
+
+	//------------------------------------------------------------------------
+	// the starting food in the environment: most of it in the gardens, the rest
+	// anywhere; each plant type only where the temperature suits it
+	//------------------------------------------------------------------------
+	this.setFoodToEnvironment = function()
+	{
+	    environment.clearPlantCounts();
+	    let placed = 0;
+
+	    for (let attempt = 0; ( placed < _numFoodBits ) && ( attempt < _numFoodBits * 50 ); attempt++)
+	    {
+	        if ( placed < _numFoodBits * 0.6 )
+	        {
+	            const garden = _gardens[ placed % _gardens.length ];
+	            _vectorUtility.setToRandomLocationInDisk( garden, _gardenOfEdenRadius * 1.3 );
+	        }
+	        else
+	        {
+	            this.randomPointInPool( _vectorUtility );
+	        }
+
+	        const type = this.choosePlantTypeAt( _vectorUtility.x, _vectorUtility.y );
+	        if ( !this.plantCanGrowAt( _vectorUtility.x, _vectorUtility.y, type )) continue;
+
+	        _foodBits[ placed ].initialize( placed );
+	        _foodBits[ placed ].setType( type );
+	        _foodBits[ placed ].setPosition( _vectorUtility );
+	        environment.plantCount[ type ][ environment.plantCellIndex( _vectorUtility.x, _vectorUtility.y ) ] ++;
+	        placed ++;
+	    }
+
+	    _numFoodBits = placed;
+	}
+
+	this.randomPointInPool = function( v )
+	{
+	    v.x = POOL_LEFT + FOOD_BIT_BOUNDARY_MARGIN + gpRandom() * ( POOL_WIDTH  - FOOD_BIT_BOUNDARY_MARGIN * 2 );
+	    v.y = POOL_TOP  + FOOD_BIT_BOUNDARY_MARGIN + gpRandom() * ( POOL_HEIGHT - FOOD_BIT_BOUNDARY_MARGIN * 2 );
+	}
+
+	// the plant type that suits a place better is chosen more often
+	this.choosePlantTypeAt = function( x, y )
+	{
+	    const t    = environment.temperatureAt( x, y );
+	    const warm = environment.plantSuitability( PLANT_TYPE_WARM, t );
+	    const cold = environment.plantSuitability( PLANT_TYPE_COLD, t );
+	    return ( gpRandom() * ( warm + cold ) < warm ) ? PLANT_TYPE_WARM : PLANT_TYPE_COLD;
+	}
+
+	// a seed takes root with a chance = how well its type suits the temperature,
+	// and only where the place is not already crowded
+	this.plantCanGrowAt = function( x, y, type )
+	{
+	    if (( x < POOL_LEFT + FOOD_BIT_BOUNDARY_MARGIN ) || ( x > POOL_RIGHT  - FOOD_BIT_BOUNDARY_MARGIN )) return false;
+	    if (( y < POOL_TOP  + FOOD_BIT_BOUNDARY_MARGIN ) || ( y > POOL_BOTTOM - FOOD_BIT_BOUNDARY_MARGIN )) return false;
+
+	    const cell = environment.plantCellIndex( x, y );
+	    if ( environment.plantCount[0][ cell ] + environment.plantCount[1][ cell ] >= PLANT_CELL_CAPACITY ) return false;
+
+	    return gpRandom() < environment.plantSuitability( type, environment.temperatureAt( x, y ));
+	}
+
+	//------------------------------------------------------------------------
+	// plants in the environment: a steady number of seeds per step (like the
+	// classic pool, scaled with the world). Most seeds fall 300-600 units from
+	// a parent plant of the same type; the rest are "seed rain" anywhere, so
+	// that no region stays empty for good.
+	//------------------------------------------------------------------------
+	this.regrowFoodEnvironment = function( numType0FoodBits, numType1FoodBits )
+	{
+	    _seedDebt += ENVIRONMENT_SEEDS_PER_PERIOD / globalTweakers.foodRegenerationPeriod;
+
+	    while ( _seedDebt >= 1 )
+	    {
+	        _seedDebt -= 1;
+
+	        for (let attempt = 0; attempt < 12; attempt++)
+	        {
+	            let type;
+	            const parent = ( gpRandom() < PLANT_PARENT_SEED_FRACTION ) ? this.findRandomLivingPlant() : null;
+
+	            if ( parent !== null )
+	            {
+	                type = parent.getType();
+	                const distance = PLANT_SEED_MIN_DISTANCE + gpRandom() * ( PLANT_SEED_MAX_DISTANCE - PLANT_SEED_MIN_DISTANCE );
+	                const angle    = gpRandom() * PI2;
+	                _vectorUtility.x = parent.getPosition().x + distance * Math.cos( angle );
+	                _vectorUtility.y = parent.getPosition().y + distance * Math.sin( angle );
+	            }
+	            else
+	            {
+	                this.randomPointInPool( _vectorUtility );
+	                type = this.choosePlantTypeAt( _vectorUtility.x, _vectorUtility.y );
+	            }
+
+	            if (( type === PLANT_TYPE_WARM ) && ( numType0FoodBits >= MAX_FOODBITS_PER_TYPE )) continue;
+	            if (( type === PLANT_TYPE_COLD ) && ( numType1FoodBits >= MAX_FOODBITS_PER_TYPE )) continue;
+	            if ( !this.plantCanGrowAt( _vectorUtility.x, _vectorUtility.y, type )) continue;
+	            if (( parent !== null ) && _obstacle.getObstruction( parent.getPosition(), _vectorUtility )) continue;
+
+	            const child = this.findLowestDeadFoodBitInArray();
+	            if ( child === NULL_INDEX ) return;
+
+	            _foodBits[ child ].initialize( child );
+	            _foodBits[ child ].setType( type );
+	            _foodBits[ child ].setEnergy( globalTweakers.foodBitEnergy );
+	            _foodBits[ child ].setPosition( _vectorUtility );
+	            environment.plantCount[ type ][ environment.plantCellIndex( _vectorUtility.x, _vectorUtility.y ) ] ++;
+	            if ( type === PLANT_TYPE_WARM ) { numType0FoodBits ++; } else { numType1FoodBits ++; }
+	            break;
+	        }
+	    }
+	}
+
+	//------------------------------------------------------------------------
+	// predators appear some time after the start: a few swimbots become
+	// predators (in the environment pool everybody starts as a herbivore)
+	//------------------------------------------------------------------------
+	this.introducePredators = function()
+	{
+	    _predatorsIntroduced = true;
+	    for (let i = 0; i < _aliveSwimbotIndices.length; i++)
+	    {
+	        const s = _aliveSwimbotIndices[i];
+	        if ( _swimbots[s].getAlive() && !_swimbots[s].isEternal() && ( gpRandom() < PREDATOR_INTRODUCTION_FRACTION ))
+	        {
+	            _swimbots[s].applyPredatorLevel( 0.75 + 0.25 * gpRandom() );
+	        }
+	    }
+	}
+
+	this.getEnvironment = function() { return environment; }
 
 	//-------------------------------------
 	this.randomizeNeighborhood = function()
@@ -1285,6 +1486,12 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
         // advance clock...
         //--------------------
         _clock ++;
+
+        if ( environment.active )
+        {
+            environment.setTime( _clock );
+            if ( !_predatorsIntroduced && ( _clock >= PREDATOR_INTRODUCTION_STEP )) { this.introducePredators(); }
+        }
 
         //----------------------
         // update swimbots...
@@ -1843,6 +2050,10 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
         //------------------------------------------------------
         // find the closest food bit using spatial grid
         //------------------------------------------------------
+        const environmentOn    = environment.active;
+        const myEfficiencyWarm = environmentOn ? me.getDigestionEfficiency( PLANT_TYPE_WARM ) : ONE;
+        const myEfficiencyCold = environmentOn ? me.getDigestionEfficiency( PLANT_TYPE_COLD ) : ONE;
+        const iAmStarving      = me.getEnergy() < STARVING_FOOD_CHOICE;
         let foundFoodBit = false;
         let smallestDistanceSquared = Number.MAX_SAFE_INTEGER;
 
@@ -1874,6 +2085,11 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
                 // Predators don't eat plants
                 okay = false;
             }
+            else if ( environmentOn )
+            {
+                // the environment: any plant, but poorly digestible ones only when starving
+                if ((( foodType === PLANT_TYPE_WARM ) ? myEfficiencyWarm : myEfficiencyCold ) < IGNORE_FOOD_EFFICIENCY && !iAmStarving) okay = false;
+            }
             else if (globalTweakers.numFoodTypes === 2)
             {
                 if (foodType != preferredFoodType)
@@ -1889,6 +2105,22 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
             const mx = myMouthPosition.x - _foodX[f];
             const my = myMouthPosition.y - _foodY[f];
             let viewDistanceSquared = mx * mx + my * my;
+
+            // in the environment, better food counts as nearer:
+            // value = efficiency / distance, i.e. compare distance² / efficiency²
+            if ( environmentOn && ( foodType !== 2 ))
+            {
+                if ( viewDistanceSquared >= viewRadiusSquared ) continue;
+                const e = ( foodType === PLANT_TYPE_WARM ) ? myEfficiencyWarm : myEfficiencyCold;
+                const scaled = viewDistanceSquared / ( e * e );
+                if ( scaled < smallestDistanceSquared && foodBit.getAlive() && !_obstacle.getObstruction( myMouthPosition, foodBit.getPosition() ))
+                {
+                    smallestDistanceSquared = scaled;
+                    _chosenFoodBit = foodBit;
+                    foundFoodBit = true;
+                }
+                continue;
+            }
 
             if ( viewDistanceSquared < viewRadiusSquared && viewDistanceSquared < smallestDistanceSquared && foodBit.getAlive() )
             {
@@ -1945,6 +2177,9 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
                 let distance = Math.sqrt( px * px + py * py );
 
                 if (distance > preyViewRadius) continue;
+
+                // camouflage: prey that matches the background is seen only up close
+                if ( environmentOn && distance > preyViewRadius * preyVisibility( _botBrightness[o], environment.backgroundAt( _botX[o], _botY[o] ))) continue;
 
                 const candidate = _swimbots[o];
 
@@ -2032,6 +2267,8 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 	{
         let numType0FoodBits = 0;
         let numType1FoodBits = 0;
+        const counting = environment.active;
+        if ( counting ) { environment.clearPlantCounts(); }
 
         //-------------------------------------------------
         // general update for all food bits; meat rots
@@ -2051,6 +2288,18 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
             {
                 _foodBits[f].kill();
             }
+
+            if ( counting && ( type !== 2 ) && _foodBits[f].getAlive() )
+            {
+                const position = _foodBits[f].getPosition();
+                environment.plantCount[ type ][ environment.plantCellIndex( position.x, position.y ) ] ++;
+            }
+        }
+
+        if ( environment.active )
+        {
+            this.regrowFoodEnvironment( numType0FoodBits, numType1FoodBits );
+            return;
         }
 
         if ( !LOCAL_PLANT_GROWTH )
@@ -2437,6 +2686,19 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 	//--------------------------------
     this.setPoolData = function( data )
     {
+        //------------------------------------------------------------
+        // the environment first (swimbots check the temperature when
+        // they are created); pools saved before stage 5 have none
+        //------------------------------------------------------------
+        environment.setState( data.environment );
+        _clock = ( typeof data.clock === "number" ) ? data.clock : 0;
+        environment.setTime( _clock );
+        _predatorsIntroduced = ( data.predatorsIntroduced !== undefined ) ? data.predatorsIntroduced : true;
+        _seedDebt = 0;
+        globalTweakers.numFoodTypes = environment.active ? 2 : globalTweakers.numFoodTypes;
+        _environmentImage = environment.active ? environment.makeImage() : null;
+        _pool.setBackgroundImage( _environmentImage );
+
         //console.log( "loading pool file:" );
         //console.log( data );
 
@@ -2496,7 +2758,9 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
             swimbotPosition.setXY( data.swimbotArray[s].x, data.swimbotArray[s].y );
 
             let loadedGenotype = new Genotype();
-            loadedGenotype.setGenes( data.swimbotArray[s].genes );
+            let genes = data.swimbotArray[s].genes.slice();
+            if ( !data.geneLayout ) { convertOldGenes( genes ); }
+            loadedGenotype.setGenes( genes );
 
             //this seems to be glitched - I must explore why
             //console.log( "s = " + s + "; id = " + id );
@@ -2504,7 +2768,7 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 
             _swimbots[ id ].create
             (
-                s,
+                id,
                 //id, //this seems to be glitched - I must explore why
                 data.swimbotArray[s].age,
                 swimbotPosition,
@@ -2600,10 +2864,7 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 		//---------------------------------
         setSelectedSwimbot( NULL_INDEX );
 
-		//---------------------------------
-		// set clock to 0
-		//---------------------------------
-		_clock = 0;
+		// (the clock was restored at the top: the seasons go on where they were)
     }
 
     //--------------------------------------
@@ -3989,7 +4250,11 @@ for (let g=0; g<NUM_GENES; g++)
             "obstacleEnd1X"             : _obstacle.getEnd1Position().x,
             "obstacleEnd1Y"             : _obstacle.getEnd1Position().y,
             "obstacleEnd2X"             : _obstacle.getEnd2Position().x,
-            "obstacleEnd2Y"             : _obstacle.getEnd2Position().y
+            "obstacleEnd2Y"             : _obstacle.getEnd2Position().y,
+            "geneLayout"                : GENE_LAYOUT_VERSION,
+            "environment"               : environment.getState(),
+            "clock"                     : _clock,
+            "predatorsIntroduced"       : _predatorsIntroduced
         }
 
         return poolData;

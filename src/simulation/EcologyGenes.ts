@@ -17,6 +17,8 @@ export const GENES_THERMAL_WIDTH   = [ 124, 125 ];             // tolerance w
 export const GENES_DIGESTION       = [ 126, 127, 128 ];        // 0 = digests cold plants (B) best, 1 = warm plants (A)
 export const GENES_PREDATOR        = [ 129, 130 ];             // predator level 0..1 (was gene 51)
 export const GENES_HUNGER          = [ 131 ];                  // hunger (was gene 50; not used yet)
+export const GENES_BRIGHTNESS      = [ 132, 133, 134 ];        // body brightness b: camouflage + mating signal
+export const GENES_CHOOSINESS      = [ 135, 136 ];             // how picky about a mate's brightness
 
 export const ECOLOGY_GENES_FIRST   = 120;
 export const ECOLOGY_GENES_LAST    = 139;
@@ -61,6 +63,25 @@ export function thermalWidthOf( genotype ): number
 export function thermalWidthToGene( w: number ): number
 {
     return ( w - THERMAL_WIDTH_MIN ) / ( THERMAL_WIDTH_MAX - THERMAL_WIDTH_MIN );
+}
+
+//------------------------------------------------------------
+// Saved pools from before stage 5 kept the predator level in gene 51 and the
+// hunger in gene 50. Move them into this block; the ecology traits get
+// neutral values (likes 0.5, broad tolerance, digests both plants).
+//------------------------------------------------------------
+export const GENE_LAYOUT_VERSION = 2;
+
+export function convertOldGenes( genes: number[] ): void
+{
+    const predator = genes[51], hunger = genes[50];
+    for ( const g of GENES_PREDATOR        ) { genes[g] = predator; }
+    for ( const g of GENES_HUNGER          ) { genes[g] = hunger;   }
+    for ( const g of GENES_THERMAL_OPTIMUM ) { genes[g] = 128;      }
+    for ( const g of GENES_THERMAL_WIDTH   ) { genes[g] = 255;      }
+    for ( const g of GENES_DIGESTION       ) { genes[g] = 128;      }
+    for ( const g of GENES_BRIGHTNESS      ) { genes[g] = 128;      }
+    for ( const g of GENES_CHOOSINESS      ) { genes[g] = 0;        }
 }
 
 //------------------------------------------------------------

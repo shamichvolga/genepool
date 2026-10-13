@@ -122,6 +122,9 @@ const POOL_BOUNDARY_MARGIN      = 1200.0;
 		return _center;
 	}
 
+	let _backgroundImage = null;
+	this.setBackgroundImage = function( image ) { _backgroundImage = image; }
+
 	//------------------------------------------------
 	// render
 	//------------------------------------------------
@@ -134,6 +137,13 @@ const POOL_BOUNDARY_MARGIN      = 1200.0;
 
         canvas.fillStyle = POOL_COLOR;		
         canvas.fillRect( POOL_LEFT, POOL_TOP, POOL_WIDTH, POOL_HEIGHT );
+
+        // the temperature map of the environment (cold = blue, warm = brown)
+        if ( _backgroundImage !== null )
+        {
+            canvas.imageSmoothingEnabled = true;
+            canvas.drawImage( _backgroundImage, POOL_LEFT, POOL_TOP, POOL_WIDTH, POOL_HEIGHT );
+        }
 
 
 		//------------------------------------------------------------
