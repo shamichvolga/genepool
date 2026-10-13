@@ -16,6 +16,11 @@
 //------------------------------------------------------------------------------
 const MARGIN_CELLS = 16;  // room for items outside the pool walls
 
+// where the grid's arrays come from: by default plain memory; the shared
+// state passes an allocator so worker threads can read the same grid
+export type GridAllocator = ( name: string, bytes: number ) => ArrayBufferLike;
+const plainMemory: GridAllocator = ( name, bytes ) => new ArrayBuffer( bytes );
+
 export class UniformGrid
 {
     readonly cellSize   : number;
@@ -28,23 +33,28 @@ export class UniformGrid
     private  cellOfItem : Int32Array;
     private  sorted     : Int32Array;
     private  extras     : Int32Array;
-    private  numExtras  = 0;
+    private  meta       : Int32Array;   // [0] = number of extras
     private  isExtra    : Uint8Array;   // 1 = moved to extras since the rebuild
 
-    constructor( cellSize: number, left: number, top: number, right: number, bottom: number, capacity: number )
+    constructor( cellSize: number, left: number, top: number, right: number, bottom: number, capacity: number, alloc: GridAllocator = plainMemory )
     {
         this.cellSize   = cellSize;
         this.minCellX   = Math.floor( left   / cellSize ) - MARGIN_CELLS;
         this.minCellY   = Math.floor( top    / cellSize ) - MARGIN_CELLS;
         this.cols       = Math.floor( right  / cellSize ) + MARGIN_CELLS - this.minCellX + 1;
         this.rows       = Math.floor( bottom / cellSize ) + MARGIN_CELLS - this.minCellY + 1;
-        this.cellStart  = new Int32Array( this.cols * this.rows + 1 );
-        this.cellCount  = new Int32Array( this.cols * this.rows );
-        this.cellOfItem = new Int32Array( capacity );
-        this.sorted     = new Int32Array( capacity );
-        this.extras     = new Int32Array( capacity );
-        this.isExtra    = new Uint8Array( capacity );
+        const cells = this.cols * this.rows;
+        this.cellStart  = new Int32Array( alloc( "cellStart",  ( cells + 1 ) * 4 ));
+        this.cellCount  = new Int32Array( alloc( "cellCount",  cells * 4 ));
+        this.cellOfItem = new Int32Array( alloc( "cellOfItem", capacity * 4 ));
+        this.sorted     = new Int32Array( alloc( "sorted",     capacity * 4 ));
+        this.extras     = new Int32Array( alloc( "extras",     capacity * 4 ));
+        this.isExtra    = new Uint8Array( alloc( "isExtra",    capacity ));
+        this.meta       = new Int32Array( alloc( "meta",       4 * 4 ));
     }
+
+    private get numExtras(): number  { return this.meta[0]; }
+    private set numExtras( n: number ) { this.meta[0] = n; }
 
     //--------------------------------------------------------------------
     // column / row of a coordinate (clamped to the grid)
@@ -108,7 +118,8 @@ export class UniformGrid
     {
         if ( this.isExtra[ item ] ) return;
         this.isExtra[ item ] = 1;
-        this.extras[ this.numExtras ++ ] = item;
+        this.extras[ this.numExtras ] = item;
+        this.numExtras = this.numExtras + 1;
     }
 
     //--------------------------------------------------------------------
@@ -137,7 +148,8 @@ export class UniformGrid
             }
         }
 
-        for ( let e = 0; e < this.numExtras; e++ )
+        const numExtras = this.numExtras;
+        for ( let e = 0; e < numExtras; e++ )
         {
             out[ n ++ ] = this.extras[e];
         }

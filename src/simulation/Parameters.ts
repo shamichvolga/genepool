@@ -101,6 +101,9 @@ export const GARDEN_RADIUS                 = 1200;
 // the predators going. Here it is explicit, after predators were introduced.
 export const DIET_SWITCH_RATE              = 0.004;
 
+// stage 7 test switch: compare the perception kernel with the old code
+export const PERCEPTION_CHECK              = false;
+
 // neural brain (stage 6): used in the environment ("random") pool
 export const NEURAL_BRAIN_ENABLED          = true;
 export const CLIMATE_STEERING              = 1.0;    // pull towards a better temperature (x brain output)

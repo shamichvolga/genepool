@@ -11,7 +11,10 @@
 // simulation objects on purpose (workers import it too).
 //------------------------------------------------------------------------------
 import { MAX_PARTS } from "./SwimbotTypes";
-import { MAX_SWIMBOTS } from "./Parameters";
+import { MAX_FOODBITS, MAX_SWIMBOTS } from "./Parameters";
+import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
+import { GridAllocator, UniformGrid } from "./UniformGrid";
+import { BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS } from "./Brain";
 
 //------------------------------------------------------------
 // per swimbot numbers
@@ -70,7 +73,21 @@ export const PART_STRIDE = MAX_PARTS * PS;
 // shared parameters (same for all swimbots)
 //------------------------------------------------------------
 export const PARAM_MAX_LIFESPAN = 0;
-export const NUM_PARAMS         = 8;
+export const PARAM_ENV_ACTIVE   = 1;    // 1 = environment rules on (the "random" pool)
+export const PARAM_FOOD_TYPES   = 2;    // globalTweakers.numFoodTypes
+export const PARAM_OBSTACLE_X1  = 3;
+export const PARAM_OBSTACLE_Y1  = 4;
+export const PARAM_OBSTACLE_X2  = 5;
+export const PARAM_OBSTACLE_Y2  = 6;
+export const PARAM_ENV_FIELDS   = 7;    // 1 = the maps vary (environment on and not the flat control)
+export const NUM_PARAMS         = 16;
+
+export const MAX_SEEN           = BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS;
+export const BACKGROUND_SIZE    = 256;  // = Environment FIELD_SIZE
+
+// the neighbour grids (same sizes as GenePool's)
+export const SWIMBOT_GRID_CELL  = 200;
+export const FOOD_GRID_CELL     = 150;
 
 export class SharedState
 {
@@ -90,6 +107,49 @@ export class SharedState
     readonly partMoment   : Float64Array;
     readonly partParent   : Int32Array;
     readonly params       : Float64Array;
+
+    //--------------------------------------------------------
+    // what perception reads (one number per swimbot slot)
+    //--------------------------------------------------------
+    readonly botX         : Float64Array;   // body center
+    readonly botY         : Float64Array;
+    readonly genitalX     : Float64Array;
+    readonly genitalY     : Float64Array;
+    readonly mouthX       : Float64Array;
+    readonly mouthY       : Float64Array;
+    readonly predator     : Float64Array;   // predator level 0..1
+    readonly mass         : Float64Array;
+    readonly brightness   : Float64Array;
+    readonly energy       : Float64Array;
+    readonly scanRadius   : Float64Array;   // how far a predator looks for prey
+    readonly effWarm      : Float64Array;   // digestion of warm / cold plants
+    readonly effCold      : Float64Array;
+    readonly preferred    : Float64Array;   // preferred food type (classic pools)
+    readonly alive        : Uint8Array;
+    readonly eternal      : Uint8Array;
+    readonly sensing      : Uint8Array;     // 1 = perceives this step
+    readonly brainState   : Int8Array;
+
+    readonly foodX        : Float64Array;
+    readonly foodY        : Float64Array;
+    readonly foodType     : Uint8Array;     // 0, 1 = plants, 2 = meat
+    readonly foodAlive    : Uint8Array;
+
+    readonly background   : Float32Array;   // environment: brightness of the bottom
+
+    readonly swimbotGrid  : UniformGrid;
+    readonly foodGrid     : UniformGrid;
+
+    //--------------------------------------------------------
+    // what perception writes
+    //--------------------------------------------------------
+    readonly seenCount    : Int32Array;     // how many swimbots seen (<= MAX_SEEN)
+    readonly seen         : Int32Array;     // MAX_SEEN per swimbot, nearest first
+    readonly seenFood     : Int32Array;     // chosen food bit, -1 = none
+    readonly seenPrey     : Int32Array;     // chosen prey, -1 = none
+    readonly seenThreat   : Int32Array;     // nearest hunting predator, -1 = none
+    readonly socialX      : Float64Array;   // sum of offsets to the swimbots seen
+    readonly socialY      : Float64Array;
 
     // the raw buffers, to hand them to worker threads
     readonly buffers      : { [ name: string ]: ArrayBufferLike };
@@ -123,6 +183,46 @@ export class SharedState
         this.partMoment    = f64( "partMoment",    partCount );
         this.partParent    = new Int32Array( make( "partParent", partCount * 4 ));
         this.params        = f64( "params",        NUM_PARAMS );
+
+        const u8  = ( name: string, count: number ) => new Uint8Array( make( name, count ));
+        const n = maxSwimbots;
+        this.botX       = f64( "botX", n );
+        this.botY       = f64( "botY", n );
+        this.genitalX   = f64( "genitalX", n );
+        this.genitalY   = f64( "genitalY", n );
+        this.mouthX     = f64( "mouthX", n );
+        this.mouthY     = f64( "mouthY", n );
+        this.predator   = f64( "predator", n );
+        this.mass       = f64( "mass", n );
+        this.brightness = f64( "brightness", n );
+        this.energy     = f64( "energy", n );
+        this.scanRadius = f64( "scanRadius", n );
+        this.effWarm    = f64( "effWarm", n );
+        this.effCold    = f64( "effCold", n );
+        this.preferred  = f64( "preferred", n );
+        this.alive      = u8 ( "alive", n );
+        this.eternal    = u8 ( "eternal", n );
+        this.sensing    = u8 ( "sensing", n );
+        this.brainState = new Int8Array( make( "brainState", n ));
+
+        this.foodX      = f64( "foodX", MAX_FOODBITS );
+        this.foodY      = f64( "foodY", MAX_FOODBITS );
+        this.foodType   = u8 ( "foodType", MAX_FOODBITS );
+        this.foodAlive  = u8 ( "foodAlive", MAX_FOODBITS );
+
+        this.background = new Float32Array( make( "background", BACKGROUND_SIZE * BACKGROUND_SIZE * 4 ));
+
+        const allocator = ( prefix: string ): GridAllocator => ( name, bytes ) => make( prefix + name, bytes );
+        this.swimbotGrid = new UniformGrid( SWIMBOT_GRID_CELL, POOL_LEFT, POOL_TOP, POOL_RIGHT, POOL_BOTTOM, n,            allocator( "swimbotGrid." ));
+        this.foodGrid    = new UniformGrid( FOOD_GRID_CELL,    POOL_LEFT, POOL_TOP, POOL_RIGHT, POOL_BOTTOM, MAX_FOODBITS, allocator( "foodGrid." ));
+
+        this.seenCount  = new Int32Array( make( "seenCount",  n * 4 ));
+        this.seen       = new Int32Array( make( "seen",       n * MAX_SEEN * 4 ));
+        this.seenFood   = new Int32Array( make( "seenFood",   n * 4 ));
+        this.seenPrey   = new Int32Array( make( "seenPrey",   n * 4 ));
+        this.seenThreat = new Int32Array( make( "seenThreat", n * 4 ));
+        this.socialX    = f64( "socialX", n );
+        this.socialY    = f64( "socialY", n );
     }
 }
 

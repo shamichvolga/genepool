@@ -186,6 +186,9 @@ export class Environment
         return t < 0 ? 0 : ( t > 1 ? 1 : t );
     }
 
+    // copy the bottom brightness map (for the perception threads)
+    copyBackgroundTo( target: Float32Array ): void { target.set( this.background ); }
+
     // background brightness at a point (0 = dark .. 1 = light)
     backgroundAt( x: number, y: number ): number
     {

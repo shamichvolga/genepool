@@ -1,7 +1,7 @@
 import { geneAverage, convertOldGenes, GENE_LAYOUT_VERSION, setTrait, gaussian, thermalWidthToGene, GENES_PREDATOR, GENES_THERMAL_OPTIMUM, GENES_THERMAL_WIDTH, GENES_DIGESTION, GENES_BRIGHTNESS, GENES_CHOOSINESS } from "./EcologyGenes";
 import { environment, PLANT_TYPE_WARM, PLANT_TYPE_COLD } from "./Environment";
 import { IGNORE_FOOD_EFFICIENCY, preyVisibility } from "./Ecology";
-import { DIET_SWITCH_RATE, CLASSIC_NUM_SWIMBOTS, CLASSIC_NUM_FOODBITS, GARDEN_RADIUS, PREDATOR_INTRODUCTION_STEP, PREDATOR_INTRODUCTION_FRACTION, ENVIRONMENT_SEEDS_PER_PERIOD, PLANT_CELL_CAPACITY, PLANT_PARENT_SEED_FRACTION, PLANT_SEED_MIN_DISTANCE, PLANT_SEED_MAX_DISTANCE } from "./Parameters";
+import { PERCEPTION_CHECK, DIET_SWITCH_RATE, CLASSIC_NUM_SWIMBOTS, CLASSIC_NUM_FOODBITS, GARDEN_RADIUS, PREDATOR_INTRODUCTION_STEP, PREDATOR_INTRODUCTION_FRACTION, ENVIRONMENT_SEEDS_PER_PERIOD, PLANT_CELL_CAPACITY, PLANT_PARENT_SEED_FRACTION, PLANT_SEED_MIN_DISTANCE, PLANT_SEED_MAX_DISTANCE } from "./Parameters";
 
 import { BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_PREY } from "./Brain";
 import { Camera } from "./Camera";
@@ -16,6 +16,9 @@ import { DEFAULT_CHILD_ENERGY_RATIO, DEFAULT_FOOD_REGENERATION_PERIOD, DEFAULT_G
 import { PhyloTree } from "./PhyloTree";
 import { POOL_BOTTOM, POOL_HEIGHT, POOL_LEFT, POOL_RIGHT, POOL_TOP, POOL_WIDTH, Pool } from "./Pool";
 import { UniformGrid } from "./UniformGrid";
+import * as SS from "./SharedState";
+import { perceive, PerceptionScratch } from "./PerceptionKernel";
+import { FLAT_ENVIRONMENT } from "./Environment";
 import { Swimbot } from "./Swimbot";
 import { ATTRACTION_SIMILAR_COLOR, NUM_ATTRACTIONS, SWIMBOT_VIEW_RADIUS } from "./SwimbotTypes";
 import { Touch, TouchState } from "./Touch";
@@ -176,20 +179,26 @@ export function GenePool()
     // Fast neighbour search: swimbot positions are copied into plain number
     // arrays, and two grids (swimbots, food) are rebuilt from them every step.
     //--------------------------------------------------------------------------
-    let _swimbotGrid    = new UniformGrid( 200, POOL_LEFT, POOL_TOP, POOL_RIGHT, POOL_BOTTOM, MAX_SWIMBOTS );
-    let _foodBitGrid    = new UniformGrid( 150, POOL_LEFT, POOL_TOP, POOL_RIGHT, POOL_BOTTOM, MAX_FOODBITS );
-    let _botX           = new Float64Array( MAX_SWIMBOTS );  // body center
-    let _botY           = new Float64Array( MAX_SWIMBOTS );
-    let _genitalX       = new Float64Array( MAX_SWIMBOTS );
-    let _genitalY       = new Float64Array( MAX_SWIMBOTS );
-    let _botAlive       = new Uint8Array  ( MAX_SWIMBOTS );    // kept exact: see notifySwimbotDeathTime
-    let _botEternal     = new Uint8Array  ( MAX_SWIMBOTS );
-    let _botPredator    = new Float64Array( MAX_SWIMBOTS );    // predator level 0..1
-    let _botBrightness  = new Float64Array( MAX_SWIMBOTS );    // body brightness 0..1 (camouflage)
-    let _botMass        = new Float64Array( MAX_SWIMBOTS );
-    let _foodX          = new Float64Array( MAX_FOODBITS );
-    let _foodY          = new Float64Array( MAX_FOODBITS );
-    let _foodType       = new Uint8Array  ( MAX_FOODBITS );    // 0, 1 = plants, 2 = meat
+    // (stage 7: these arrays and grids live in the shared state, so that
+    //  worker threads can read them; see SharedState.ts)
+    const _st           = SS.sharedState();
+    let _swimbotGrid    = _st.swimbotGrid;
+    let _foodBitGrid    = _st.foodGrid;
+    let _botX           = _st.botX;         // body center
+    let _botY           = _st.botY;
+    let _genitalX       = _st.genitalX;
+    let _genitalY       = _st.genitalY;
+    let _botAlive       = _st.alive;        // kept exact: see notifySwimbotDeathTime
+    let _botEternal     = _st.eternal;
+    let _botPredator    = _st.predator;     // predator level 0..1
+    let _botBrightness  = _st.brightness;   // body brightness 0..1 (camouflage)
+    let _botMass        = _st.mass;
+    let _foodX          = _st.foodX;
+    let _foodY          = _st.foodY;
+    let _foodType       = _st.foodType;     // 0, 1 = plants, 2 = meat
+    const _perceptionScratch = new PerceptionScratch( MAX_SWIMBOTS, MAX_FOODBITS );
+    let _perceptionMismatches = 0;          // PERCEPTION_CHECK: kernel and old code disagreed
+    let _perceptionChecks     = 0;
     let _gridResult     = new Int32Array( MAX_SWIMBOTS * 2 );  // scratch for grid queries
     let _foodGridResult = new Int32Array( MAX_FOODBITS * 2 );
     let _nearbyIndices  = new Int32Array( MAX_SWIMBOTS );      // swimbots within search radius
@@ -515,6 +524,7 @@ export function GenePool()
         if ( environment.active )
         {
             environment.generate();
+            environment.copyBackgroundTo( _st.background );
             _gardens = environment.gardenCenters();
             this.setGardenOfEdenRadius( GARDEN_RADIUS );
             _camera.setScale( POOL_WIDTH );   // show the whole world with all its gardens
@@ -1098,6 +1108,67 @@ if ( mode === SimulationStartMode.SPECIES )
 	}
 
 	this.getEnvironment = function() { return environment; }
+
+	//------------------------------------------------------------------------
+	// stage 7: fill the shared arrays that perception reads, from the objects
+	//------------------------------------------------------------------------
+	this.writePerceptionParams = function()
+	{
+	    const P = _st.params;
+	    P[ SS.PARAM_MAX_LIFESPAN ] = globalTweakers.maximumLifeSpan;
+	    P[ SS.PARAM_ENV_ACTIVE   ] = environment.active ? 1 : 0;
+	    P[ SS.PARAM_ENV_FIELDS   ] = ( environment.active && !FLAT_ENVIRONMENT ) ? 1 : 0;
+	    P[ SS.PARAM_FOOD_TYPES   ] = globalTweakers.numFoodTypes;
+	    P[ SS.PARAM_OBSTACLE_X1  ] = _obstacle.getEnd1Position().x;
+	    P[ SS.PARAM_OBSTACLE_Y1  ] = _obstacle.getEnd1Position().y;
+	    P[ SS.PARAM_OBSTACLE_X2  ] = _obstacle.getEnd2Position().x;
+	    P[ SS.PARAM_OBSTACLE_Y2  ] = _obstacle.getEnd2Position().y;
+	}
+
+	this.writePerceptionInputs = function( s )
+	{
+	    const b = _swimbots[s];
+	    const mouth = b.getMouthPosition();
+	    _st.mouthX    [s] = mouth.x;
+	    _st.mouthY    [s] = mouth.y;
+	    _st.energy    [s] = b.getEnergy();
+	    _st.scanRadius[s] = b.getDynamicScanRadius();
+	    _st.effWarm   [s] = b.getDigestionEfficiency( PLANT_TYPE_WARM );
+	    _st.effCold   [s] = b.getDigestionEfficiency( PLANT_TYPE_COLD );
+	    _st.preferred [s] = b.getPreferredFoodType();
+	    _st.brainState[s] = b.getBrainState();
+	}
+
+	//------------------------------------------------------------------------
+	// PERCEPTION_CHECK: run the kernel on exactly the state the old code just
+	// saw, and count any difference
+	//------------------------------------------------------------------------
+	this.checkPerceptionKernel = function( s, food, prey, threat, socialX, socialY )
+	{
+	    this.writePerceptionParams();
+	    for (let o = 0; o < MAX_SWIMBOTS; o++)
+	    {
+	        if ( _swimbots[o].getAlive() || _botAlive[o] ) { this.writePerceptionInputs(o); }
+	    }
+	    for (let f = 0; f < MAX_FOODBITS; f++) { _st.foodAlive[f] = _foodBits[f].getAlive() ? 1 : 0; }
+
+	    perceive( s, _st, _perceptionScratch );
+	    _perceptionChecks ++;
+
+	    let same = ( _st.seenCount[s] === _numNearbySwimbots )
+	            && ( _st.seenFood[s]   === food )
+	            && ( _st.seenPrey[s]   === ( prey   ? prey.getIndex()   : -1 ))
+	            && ( _st.seenThreat[s] === ( threat ? threat.getIndex() : -1 ))
+	            && ( _st.socialX[s]    === socialX )
+	            && ( _st.socialY[s]    === socialY );
+	    for (let i = 0; same && i < _numNearbySwimbots; i++)
+	    {
+	        if ( _st.seen[ s * SS.MAX_SEEN + i ] !== _nearbySwimbotsArray[i].getIndex() ) { same = false; }
+	    }
+	    if ( !same ) { _perceptionMismatches ++; }
+	}
+
+	this.getPerceptionMismatches = function() { return { checks: _perceptionChecks, mismatches: _perceptionMismatches }; }
 
 	// the preferred temperatures of the parents of the latest births
 	this.getRecentMatings = function()
@@ -2304,6 +2375,11 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
             me.notifyTargetFound();
         }
 
+        if ( PERCEPTION_CHECK )
+        {
+            this.checkPerceptionKernel( s, foundFoodBit ? _chosenFoodBit.getIndex() : -1, chosenPrey, nearestPredator, socialX, socialY );
+        }
+
         me.setEnvironmentalStimuli(
 
             _numNearbySwimbots,
@@ -2748,6 +2824,7 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
         // they are created); pools saved before stage 5 have none
         //------------------------------------------------------------
         environment.setState( data.environment );
+        if ( environment.active ) { environment.copyBackgroundTo( _st.background ); }
         _clock = ( typeof data.clock === "number" ) ? data.clock : 0;
         environment.setTime( _clock );
         _predatorsIntroduced = ( data.predatorsIntroduced !== undefined ) ? data.predatorsIntroduced : true;
