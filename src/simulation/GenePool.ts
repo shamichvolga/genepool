@@ -1,7 +1,7 @@
-import { convertOldGenes, GENE_LAYOUT_VERSION, setTrait, gaussian, thermalWidthToGene, GENES_PREDATOR, GENES_THERMAL_OPTIMUM, GENES_THERMAL_WIDTH, GENES_DIGESTION, GENES_BRIGHTNESS, GENES_CHOOSINESS } from "./EcologyGenes";
+import { geneAverage, convertOldGenes, GENE_LAYOUT_VERSION, setTrait, gaussian, thermalWidthToGene, GENES_PREDATOR, GENES_THERMAL_OPTIMUM, GENES_THERMAL_WIDTH, GENES_DIGESTION, GENES_BRIGHTNESS, GENES_CHOOSINESS } from "./EcologyGenes";
 import { environment, PLANT_TYPE_WARM, PLANT_TYPE_COLD } from "./Environment";
 import { IGNORE_FOOD_EFFICIENCY, preyVisibility } from "./Ecology";
-import { CLASSIC_NUM_SWIMBOTS, CLASSIC_NUM_FOODBITS, GARDEN_RADIUS, PREDATOR_INTRODUCTION_STEP, PREDATOR_INTRODUCTION_FRACTION, ENVIRONMENT_SEEDS_PER_PERIOD, PLANT_CELL_CAPACITY, PLANT_PARENT_SEED_FRACTION, PLANT_SEED_MIN_DISTANCE, PLANT_SEED_MAX_DISTANCE } from "./Parameters";
+import { DIET_SWITCH_RATE, CLASSIC_NUM_SWIMBOTS, CLASSIC_NUM_FOODBITS, GARDEN_RADIUS, PREDATOR_INTRODUCTION_STEP, PREDATOR_INTRODUCTION_FRACTION, ENVIRONMENT_SEEDS_PER_PERIOD, PLANT_CELL_CAPACITY, PLANT_PARENT_SEED_FRACTION, PLANT_SEED_MIN_DISTANCE, PLANT_SEED_MAX_DISTANCE } from "./Parameters";
 
 import { BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_PREY } from "./Brain";
 import { Camera } from "./Camera";
@@ -1083,7 +1083,12 @@ if ( mode === SimulationStartMode.SPECIES )
 
 	        for (let k = 0; k < perGroup && k < byDistance.length; k++)
 	        {
-	            _swimbots[ byDistance[k].s ].applyPredatorLevel( 0.75 + 0.25 * gpRandom() );
+	            const swimbot = _swimbots[ byDistance[k].s ];
+	            swimbot.applyPredatorLevel( 0.75 + 0.25 * gpRandom() );
+
+	            // a well-fed start: they can look for a mate at once (the first
+	            // predators of the old pool also started at the hunger threshold)
+	            swimbot.setEnergy( Math.max( swimbot.getEnergy(), 2 * globalTweakers.hungerThreshold ));
 	        }
 	    }
 	}
@@ -1795,6 +1800,13 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
                                 assert( _childGenotype != null, "_childGenotype != null" );
 
                                 _childGenotype.setAsOffspring( _myGenotype, _mateGenotype );
+
+                                // rarely, the child switches diet (see DIET_SWITCH_RATE)
+                                if ( environment.active && _predatorsIntroduced && ( gpRandom() < DIET_SWITCH_RATE ))
+                                {
+                                    const wasPredator = geneAverage( _childGenotype, GENES_PREDATOR ) > PREDATOR_LEVEL_THRESHOLD;
+                                    setTrait( _childGenotype, GENES_PREDATOR, wasPredator ? 0.3 * gpRandom() : 0.75 + 0.25 * gpRandom() );
+                                }
 
                                 //------------------------------------------------
                                 // collect energy from parents for child energy

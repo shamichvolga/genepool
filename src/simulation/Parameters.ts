@@ -80,6 +80,10 @@ export const PREY_MAX_MASS_RATIO           = 1.0;
 // не может кусать снова (переваривает или приходит в себя после промаха),
 // а жертва после промаха бросается бежать.
 export const ATTACK_SUCCESS_CHANCE         = 0.25;
+// in the environment pool prey hides (camouflage) and the world is big;
+// tests (tools/predators.cjs): at 0.25 and 0.4 predators dwindle to a few,
+// at 0.6 they hold on with real predator-prey cycles
+export const ENVIRONMENT_ATTACK_SUCCESS_CHANCE = 0.5;
 export const ATTACK_COOLDOWN               = 60;
 
 // Доля хищников в стартовой популяции (у остальных ген хищности низкий).
@@ -90,6 +94,12 @@ export const INITIAL_PREDATOR_FRACTION     = 0.1;
 export const PREDATOR_INTRODUCTION_STEP    = 20000;
 export const PREDATOR_INTRODUCTION_FRACTION = 0.05;
 export const GARDEN_RADIUS                 = 1200;
+
+// Now and then a newborn switches diet (herbivore <-> predator), like a big
+// mutation. In the old pool this happened by accident (the predator gene was
+// a body gene with big mutation jumps, ~0.4% of births), and it was what kept
+// the predators going. Here it is explicit, after predators were introduced.
+export const DIET_SWITCH_RATE              = 0.004;
 
 // neural brain (stage 6): used in the environment ("random") pool
 export const NEURAL_BRAIN_ENABLED          = true;
