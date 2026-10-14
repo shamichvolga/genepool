@@ -43,6 +43,7 @@ const scenarios = {
     C7:   { label: "return nutrients from decayed meat to plant growth", overrides: { NUTRIENT_CYCLE_ENABLED: "true" } },
     C8:   { label: "body-mass and breadth effects on thrust, drag, and swimming cost", overrides: { BODY_HYDRODYNAMICS_ENABLED: "true" } },
     C9:   { label: "body-mass-dependent inertia in body temperature; no internal heat source", overrides: { BODY_TEMPERATURE_INERTIA_ENABLED: "true" } },
+    C10:  { label: "size-dependent maintenance cost: mass^0.75 at 0.000008 per step", overrides: { BASAL_METABOLISM: "0.000008" } },
 };
 if ( !scenarios[ SCENARIO ] ) throw new Error( `unknown scenario ${SCENARIO}; choose ${Object.keys(scenarios).join(", ")}` );
 const FLAT = SCENARIO === "C0" || arg( "flat", "0" ) === "1";
