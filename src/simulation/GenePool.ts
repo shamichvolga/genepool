@@ -1,5 +1,6 @@
 import { geneAverage, convertOldGenes, GENE_LAYOUT_VERSION, setTrait, gaussian, thermalWidthToGene, GENES_PREDATOR, GENES_THERMAL_OPTIMUM, GENES_THERMAL_WIDTH, GENES_DIGESTION, GENES_BRIGHTNESS, GENES_CHOOSINESS, GENES_HUNGER, GENES_AUTOTOMY_BITE, GENES_AUTOTOMY_THREAT, GENES_AUTOTOMY_AMOUNT, GENES_AUTOTOMY_WHICH } from "./EcologyGenes";
 import { environment, PLANT_TYPE_WARM, PLANT_TYPE_COLD } from "./Environment";
+import { petriStartZone } from "./Petri";
 import { IGNORE_FOOD_EFFICIENCY, preyVisibility, TWO_PLANT_TYPES } from "./Ecology";
 import { INTERLEAVED_STEP, PERCEPTION_CHECK, DIET_SWITCH_RATE, CLASSIC_NUM_SWIMBOTS, CLASSIC_NUM_FOODBITS, GARDEN_RADIUS, ENVIRONMENT_SEEDS_PER_PERIOD, PLANT_CELL_CAPACITY, PLANT_PARENT_SEED_FRACTION, PLANT_SEED_MIN_DISTANCE, PLANT_SEED_MAX_DISTANCE } from "./Parameters";
 
@@ -532,7 +533,8 @@ export function GenePool()
         // warm and cold plants, several gardens) and fills the big world.
         // The classic presets keep the original rules and numbers.
         //-------------------------------------------------------------------
-        environment.active = ( mode === SimulationStartMode.RANDOM );
+        const petri = ( mode === SimulationStartMode.PETRI );
+        environment.active = ( mode === SimulationStartMode.RANDOM ) || petri;
         environment.setTime(0);
         _seedDebt = 0;
         _environmentImage = null;
@@ -540,9 +542,9 @@ export function GenePool()
 
         if ( environment.active )
         {
-            environment.generate();
+            environment.generate( petri );
             environment.copyBackgroundTo( _st.background );
-            _gardens = environment.gardenCenters();
+            _gardens = petri ? [ _poolCenter ] : environment.gardenCenters();
             this.setGardenOfEdenRadius( GARDEN_RADIUS );
             _camera.setScale( POOL_WIDTH );   // show the whole world with all its gardens
 
@@ -837,9 +839,19 @@ if ( mode === SimulationStartMode.SPECIES )
             //-------------------------------------------------------------------
             if ( environment.active )
             {
-                const garden = _gardens[ i % _gardens.length ];
-                initialPosition.setToRandomLocationInDisk( garden, _gardenOfEdenRadius );
-                this.setEcologyGenesForPlace( _myGenotype, initialPosition.x, initialPosition.y );
+                if ( petri )
+                {
+                    // everybody starts in the middle (mildest) zone, adapted to it only
+                    this.randomPointInZone( initialPosition, petriStartZone( environment.petri.zones ));
+                    this.setEcologyGenesForPlace( _myGenotype, initialPosition.x, initialPosition.y );
+                    this.narrowFounderTolerance( _myGenotype, initialPosition.x, initialPosition.y );
+                }
+                else
+                {
+                    const garden = _gardens[ i % _gardens.length ];
+                    initialPosition.setToRandomLocationInDisk( garden, _gardenOfEdenRadius );
+                    this.setEcologyGenesForPlace( _myGenotype, initialPosition.x, initialPosition.y );
+                }
                 const bornPredator = gpRandom() < INITIAL_PREDATOR_FRACTION;
                 setTrait( _myGenotype, GENES_PREDATOR, bornPredator ? 0.7 + 0.3 * gpRandom() : gpRandom() * PREDATOR_LEVEL_THRESHOLD * 0.8 );
             }
@@ -995,7 +1007,7 @@ if ( mode === SimulationStartMode.SPECIES )
 
 	    for (let attempt = 0; ( placed < _numFoodBits ) && ( attempt < _numFoodBits * 50 ); attempt++)
 	    {
-	        if ( placed < _numFoodBits * 0.6 )
+	        if (( placed < _numFoodBits * 0.6 ) && !environment.petri )
 	        {
 	            const garden = _gardens[ placed % _gardens.length ];
 	            _vectorUtility.setToRandomLocationInDisk( garden, _gardenOfEdenRadius * 1.3 );
@@ -1016,6 +1028,25 @@ if ( mode === SimulationStartMode.SPECIES )
 	    }
 
 	    _numFoodBits = placed;
+	}
+
+	// petri: a random point inside zone z (the whole zone, not just a garden)
+	this.randomPointInZone = function( v, z )
+	{
+	    for (let attempt = 0; attempt < 200; attempt++)
+	    {
+	        this.randomPointInPool( v );
+	        if ( environment.zoneAt( v.x, v.y ) === z ) return;
+	    }
+	    v.setXY( _poolCenter.x, _poolCenter.y );
+	}
+
+	// petri: founders know only their own zone (exact temperature, narrow tolerance)
+	this.narrowFounderTolerance = function( genotype, x, y )
+	{
+	    const t = environment.temperatureAt( x, y );
+	    setTrait( genotype, GENES_THERMAL_OPTIMUM, Math.min( 1, Math.max( 0, t + gaussian() * 0.02 )), 0.01 );
+	    setTrait( genotype, GENES_THERMAL_WIDTH,   thermalWidthToGene( 0.05 + gpRandom() * 0.05 ),    0.01 );
 	}
 
 	this.randomPointInPool = function( v )

@@ -13,7 +13,8 @@ export const SimulationStartMode =
     BARRIER      : 7,
     EMPTY        : 8,
     FILE         : 9,
-    SPECIES      : 10
+    SPECIES      : 10,
+    PETRI        : 11      // "petri": zones of rising temperature, life starts in the mildest one
 };
 
 export const CameraNavigationAction = 

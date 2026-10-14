@@ -1,5 +1,6 @@
 import { TWO_PLANT_TYPES } from "../simulation/Ecology";
 import { WORLD_SCALE } from "../simulation/World";
+import { drawPetriPreview, petriSettings, PETRI_LAYOUTS } from "../simulation/Petri";
 //--------------------------------------------------------------------------
 //                                                                        
 //    This file is part of GenePool Swimbots.                             
@@ -1073,4 +1074,49 @@ function speciesText()
         _speciesText = "species (by body): " + result.species + ", largest " + Math.round( result.largestShare * 100 ) + "%";
     }
     return _speciesText;
+}
+
+
+//----------------------------------------------------------
+// "petri" pool: read the settings typed in the panel, start
+//----------------------------------------------------------
+function readPetriSettings()
+{
+    const zones    = parseInt( ( document.getElementById( "petriZones" ) as HTMLInputElement ).value, 10 );
+    const softness = parseFloat( ( document.getElementById( "petriSoftness" ) as HTMLInputElement ).value );
+    petriSettings.zones    = Math.min( 12, Math.max( 2, isFinite( zones ) ? zones : 7 ));
+    petriSettings.softness = Math.min( 1, Math.max( 0, isFinite( softness ) ? softness : 0.1 ));
+}
+
+export function showPetriPicture()
+{
+    readPetriSettings();
+    const canvas = document.getElementById( "petriPicture" ) as HTMLCanvasElement;
+    if ( canvas ) { drawPetriPreview( canvas, petriSettings.zones, petriSettings.layout, petriSettings.softness ); }
+    const name = document.getElementById( "petriLayoutName" );
+    if ( name ) { name.innerHTML = "shape: " + PETRI_LAYOUTS[ petriSettings.layout ] + " · " + petriSettings.zones + " zones (click the picture to change the shape)"; }
+}
+
+export function nextPetriLayout()
+{
+    petriSettings.layout = ( petriSettings.layout + 1 ) % PETRI_LAYOUTS.length;
+    showPetriPicture();
+}
+
+export function startPetri()
+{
+    readPetriSettings();
+    showPetriPicture();
+    choosePoolToLoad( SimulationStartMode.PETRI );
+    switchToChosenPresetPool();
+}
+
+export function setupPetriPanel()
+{
+    for ( const id of [ "petriZones", "petriSoftness" ] )
+    {
+        const input = document.getElementById( id );
+        if ( input ) { input.addEventListener( "input", showPetriPicture ); }
+    }
+    showPetriPicture();
 }

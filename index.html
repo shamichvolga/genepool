@@ -105,6 +105,15 @@
                         <button id = "pool8Button" class = "basicButton" onClick = "choosePoolToLoad( SimulationStartMode.EMPTY        ); requestToLoadPoolFromPreset();" >empty</button>
                     </div>
 
+                    <div class = "gpHeading">petri: life starts in the mildest zone and must conquer the others</div>
+                    <div id = "petriPanel">
+                        <button id = "petriButton" class = "basicButton" onClick = "startPetri();" title = "start a 'petri' pool with these settings" >petri</button>
+                        <label title = "how many zones (2-12)">zones <input id = "petriZones" type = "number" min = "2" max = "12" value = "7" ></label>
+                        <canvas id = "petriPicture" width = "44" height = "44" title = "the shape of the zones: click to change" onClick = "nextPetriLayout();"></canvas>
+                        <label title = "border between zones: 0 = sharp, 1 = soft (as wide as a zone)">border <input id = "petriSoftness" type = "number" min = "0" max = "1" step = "0.05" value = "0.1" ></label>
+                    </div>
+                    <div id = "petriLayoutName" class = "gpNote">stripes</div>
+
                     <div class = "gpHeading">world size (starts a new random pool)</div>
                     <div id = "worldSizePanel" class = "gpGrid4">
                         <button id = "world1Button" class = "basicButton" onClick = "setWorldSize(1);" title = "8000 × 8000, about 500 swimbots"     >small</button>

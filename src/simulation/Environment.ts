@@ -16,6 +16,7 @@
 //------------------------------------------------------------------------------
 import { gpRandom } from "./Globals";
 import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
+import { petriLevel, petriPosition, petriTemperature, petriSettings } from "./Petri";
 
 // Control experiment "no environment": set to true and the map is flat
 // (T = 0.5 everywhere, plants grow anywhere) while all other rules stay.
@@ -54,6 +55,10 @@ export class Environment
     // only in the "random" pool; the classic presets keep the old rules
     active                  = false;
 
+    // the "petri" pool: zones instead of biome patches (null = normal map)
+    petri : { zones: number, layout: number, softness: number } | null = null;
+    private zoneOfCell      = new Int8Array( FIELD_SIZE * FIELD_SIZE );
+
     readonly plantColumns   = Math.ceil( ( POOL_RIGHT  - POOL_LEFT ) / PLANT_CELL_SIZE );
     readonly plantRows      = Math.ceil( ( POOL_BOTTOM - POOL_TOP  ) / PLANT_CELL_SIZE );
     readonly plantCount     = [ new Int32Array( this.plantColumns * this.plantRows ),     // warm plants per cell
@@ -62,8 +67,11 @@ export class Environment
     //--------------------------------------------------------------------
     // make a new map (uses the simulation's random numbers)
     //--------------------------------------------------------------------
-    generate(): void
+    generate( petri = false ): void
     {
+        this.petri = petri ? { zones: petriSettings.zones, layout: petriSettings.layout, softness: petriSettings.softness } : null;
+        if ( this.petri ) { this.biomeSeeds = []; this.computePetriField(); return; }
+
         //------------------------------------------------------------
         // biome patch centers on a jittered grid, random biome types
         //------------------------------------------------------------
@@ -94,14 +102,45 @@ export class Environment
     //--------------------------------------------------------------------
     getState()
     {
-        return { active: this.active, seeds: this.biomeSeeds.map( s => ({ x: s.x, y: s.y, type: s.type, shade: s.shade })) };
+        return { active: this.active, petri: this.petri, seeds: this.biomeSeeds.map( s => ({ x: s.x, y: s.y, type: s.type, shade: s.shade })) };
     }
 
     setState( state ): void
     {
+        this.petri = ( state && state.petri ) ? state.petri : null;
+        if ( state && state.active && this.petri ) { this.active = true; this.biomeSeeds = []; this.computePetriField(); return; }
         this.active     = !!( state && state.active && state.seeds && state.seeds.length > 0 );
         this.biomeSeeds = this.active ? state.seeds.map( s => ({ x: s.x, y: s.y, type: s.type, shade: ( s.shade !== undefined ) ? s.shade : 0.5 })) : [];
         if ( this.active ) { this.computeField(); }
+    }
+
+    //--------------------------------------------------------------------
+    // the "petri" pool: temperature by zone (see Petri.ts), no seasons
+    //--------------------------------------------------------------------
+    private computePetriField(): void
+    {
+        const p = this.petri;
+        for ( let j = 0; j < FIELD_SIZE; j++ )
+        {
+            for ( let i = 0; i < FIELD_SIZE; i++ )
+            {
+                const level = petriLevel( petriPosition( ( i + 0.5 ) / FIELD_SIZE, ( j + 0.5 ) / FIELD_SIZE, p.layout ), p.zones, p.softness );
+                const t = petriTemperature( level, p.zones );
+                const k = j * FIELD_SIZE + i;
+                this.baseTemperature[k] = t;
+                this.background     [k] = 0.25 + 0.5 * t;
+                this.zoneOfCell     [k] = Math.round( level );
+                this.biomeOfCell    [k] = 0;
+            }
+        }
+    }
+
+    // which petri zone a point is in (0 .. zones-1)
+    zoneAt( x: number, y: number ): number
+    {
+        const i = Math.min( FIELD_SIZE - 1, Math.max( 0, Math.floor( ( x - POOL_LEFT ) / ( POOL_RIGHT  - POOL_LEFT ) * FIELD_SIZE )));
+        const j = Math.min( FIELD_SIZE - 1, Math.max( 0, Math.floor( ( y - POOL_TOP  ) / ( POOL_BOTTOM - POOL_TOP  ) * FIELD_SIZE )));
+        return this.zoneOfCell[ j * FIELD_SIZE + i ];
     }
 
     //--------------------------------------------------------------------
@@ -184,7 +223,7 @@ export class Environment
                    + ( f[ j1 * FIELD_SIZE + i0 ] * ( 1 - ax ) + f[ j1 * FIELD_SIZE + i1 ] * ax ) * ay;
 
         const latitude  = Math.abs( this.latitude( y ));
-        const amplitude = SEASON_AMPLITUDE_EQUATOR + ( SEASON_AMPLITUDE_POLES - SEASON_AMPLITUDE_EQUATOR ) * latitude;
+        const amplitude = this.petri ? 0 : SEASON_AMPLITUDE_EQUATOR + ( SEASON_AMPLITUDE_POLES - SEASON_AMPLITUDE_EQUATOR ) * latitude;
         const t = base + amplitude * Math.sin( 2 * Math.PI * this.time / SEASON_PERIOD );
         return t < 0 ? 0 : ( t > 1 ? 1 : t );
     }

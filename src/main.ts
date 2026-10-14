@@ -173,6 +173,7 @@ function startGenePool()
 
     startBackgroundMetronome();
     ui.showWorldSize();
+    ui.setupPetriPanel();
 }
 
 if ( document.readyState === "complete" )
