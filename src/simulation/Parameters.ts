@@ -186,8 +186,8 @@ export const BASAL_METABOLISM              = 0;   // ЭКСПЕРИМЕНТ: п�
 // and the energy dissipated while swimming. Disabled in ordinary simulations.
 export const BODY_HYDRODYNAMICS_ENABLED    = false;
 
-// C9 experiment: internal temperature approaches local water temperature;
-// body mass changes the equilibration rate, not the eventual temperature.
+// C9 experiment: internal temperature approaches the local felt-temperature
+// signal; body mass and width change the equilibration rate, not its endpoint.
 export const BODY_TEMPERATURE_INERTIA_ENABLED = false;
 
 

@@ -1791,6 +1791,7 @@ _position.copyFrom( position );
 	this.updateBodyTemperature = function()
 	{
 	    const ambient = this.feltTemperature( _position.x, _position.y );
+	    const meanBodyWidth = _sumPartLengths > ZERO ? _phenotype.mass / _sumPartLengths : ZERO;
 	    if ( !BODY_TEMPERATURE_INERTIA_ENABLED )
 	    {
 	        _bodyTemperature = ambient;
@@ -1800,12 +1801,11 @@ _position.copyFrom( position );
 
 	    if ( !_bodyTemperatureInitialized )
 	    {
-	        _bodyTemperature = ambient;
+	        _bodyTemperature = advanceBodyTemperature( ambient, ambient, _phenotype.mass, meanBodyWidth );
 	        _bodyTemperatureInitialized = true;
 	    }
 	    else
 	    {
-	        const meanBodyWidth = _sumPartLengths > ZERO ? _phenotype.mass / _sumPartLengths : ZERO;
 	        _bodyTemperature = advanceBodyTemperature( _bodyTemperature, ambient, _phenotype.mass, meanBodyWidth );
 	    }
 	}

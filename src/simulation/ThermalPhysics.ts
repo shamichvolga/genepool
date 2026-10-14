@@ -8,12 +8,13 @@ function clamp( value: number, min: number, max: number ): number
 }
 
 // A simple Newton-style heat exchange model for this normalized, 2D world.
-// Body mass changes how quickly internal temperature approaches local water;
-// it cannot heat the animal or create a permanent difference from the water.
-export function advanceBodyTemperature( bodyTemperature: number, waterTemperature: number, bodyMass: number, meanBodyWidth: number ): number
+// Mass and width change how quickly internal temperature approaches the local
+// felt-temperature signal; this function does not produce heat on its own.
+export function advanceBodyTemperature( bodyTemperature: number, ambientTemperature: number, bodyMass: number, meanBodyWidth: number ): number
 {
-    if ( !Number.isFinite( bodyTemperature ) || !Number.isFinite( waterTemperature ) ) return waterTemperature;
-    if ( !( bodyMass > 0 ) || !( meanBodyWidth > 0 ) ) return clamp( waterTemperature, 0, 1 );
+    if ( !Number.isFinite( ambientTemperature ) ) return 0.5;
+    if ( !Number.isFinite( bodyTemperature ) ) return clamp( ambientTemperature, 0, 1 );
+    if ( !( bodyMass > 0 ) || !( meanBodyWidth > 0 ) ) return clamp( ambientTemperature, 0, 1 );
 
     // In this 2D simulation, mass × mean width is a rough 3D volume proxy.
     const relativeVolume = clamp(
@@ -23,5 +24,5 @@ export function advanceBodyTemperature( bodyTemperature: number, waterTemperatur
     );
     const exchangeRate = REFERENCE_EXCHANGE_RATE_PER_STEP * Math.pow( relativeVolume, -1 / 3 );
     const exchangeFraction = 1 - Math.exp( -exchangeRate );
-    return clamp( bodyTemperature + ( waterTemperature - bodyTemperature ) * exchangeFraction, 0, 1 );
+    return clamp( bodyTemperature + ( ambientTemperature - bodyTemperature ) * exchangeFraction, 0, 1 );
 }
