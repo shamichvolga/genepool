@@ -10,7 +10,7 @@ import { BRIGHTNESS_FROM_GENES, Embryology } from "./Embryology";
 import { FamilyTree } from "./FamilyTree";
 import { DEFAULT_FOOD_BIT_ENERGY, DEFAULT_FOOD_BIT_MAX_SPAWN_RADIUS, FOOD_BIT_BOUNDARY_MARGIN, FOOD_BIT_GRAB_RADIUS, FoodBit, MAX_FOOD_BIT_ENERGY, MAX_FOOD_BIT_MAX_SPAWN_RADIUS, MIN_FOOD_BIT_ENERGY, MIN_FOOD_BIT_MAX_SPAWN_RADIUS } from "./FoodBit";
 import { Genotype, NUM_GENES, PRESET_GENOTYPE_DARWIN, PRESET_GENOTYPE_DENNETT, PRESET_GENOTYPE_MENDEL, PRESET_GENOTYPE_TURING, PRESET_GENOTYPE_WILSON } from "./Genotype";
-import { CameraNavigationAction, NUM_GENES_USED, SimulationStartMode, globalTweakers, gpRandom, simCounters } from "./Globals";
+import { CameraNavigationAction, NUM_GENES_USED, SimulationStartMode, globalTweakers, gpRandom, resetSimulationCounters, simCounters } from "./Globals";
 import { BYTE_SIZE, MILLISECONDS_PER_SECOND, NULL_INDEX, ONE, ONE_HALF, PI2, ZERO } from "./MathConstants";
 import { Obstacle } from "./Obstacle";
 import { DEFAULT_CHILD_ENERGY_RATIO, DEFAULT_FOOD_REGENERATION_PERIOD, DEFAULT_GARDEN_OF_EDEN_RADIUS, DEFAULT_MAXIMUM_AGE, DEFAULT_SWIMBOT_HUNGER_THRESHOLD, FOOD_LOCAL_CAPACITY, FOOD_LOCAL_RADIUS, FOOD_RANDOM_SEED_CHANCE, FOOD_SPROUT_RATE, INITIAL_NUM_FOODBITS, INITIAL_NUM_SWIMBOTS, INITIAL_PREDATOR_FRACTION, LOCAL_PLANT_GROWTH, LOCAL_PLANT_SEED_RADIUS, MAX_CHILD_ENERGY_RATIO, MAX_FOODBITS, MAX_FOODBITS_PER_TYPE, MAX_FOOD_REGENERATION_PERIOD, MAX_MAXIMUM_AGE, MAX_SWIMBOTS, MAX_SWIMBOT_HUNGER_THRESHOLD, MEAT_DECAY_TIME, MIN_CHILD_ENERGY_RATIO, MIN_FOOD_REGENERATION_PERIOD, MIN_MAXIMUM_AGE, MIN_SWIMBOT_HUNGER_THRESHOLD, NON_REPRODUCING_JUNK_DNA_LIMIT, PREDATOR_LEVEL_THRESHOLD, PREY_MAX_MASS_RATIO, RENDER_SWIMBOT_AS_DOT, SWIMBOT_LEVEL_OF_DETAIL_DOT, SWIMBOT_LEVEL_OF_DETAIL_HIGH, SWIMBOT_LEVEL_OF_DETAIL_LOW, YOUNG_AGE_DURATION } from "./Parameters";
@@ -954,6 +954,7 @@ if ( mode === SimulationStartMode.SPECIES )
 		// reset clock to 0
 		//---------------------------------
 		_clock = 0;
+	    resetSimulationCounters();
 	}
 
 
@@ -1604,6 +1605,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
             if ( f === NULL_INDEX ) return;
             _foodBits[f].initialize( f );
             _foodBits[f].setType( 2 );
+            _foodBits[f].setAutotomyDecoy( true );
             _foodBits[f].setPosition( position );
             if ( i > 0 ) { _foodBits[f].randomizeSpawnPosition({ getPosition: function() { return position; } }); }
             _foodBits[f].setEnergy( energy / count );
@@ -1967,6 +1969,7 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
                                 let initialAngle = getRandomAngleInDegrees();
                                 _swimbots[ newBornSwimbotIndex ].create( newBornSwimbotIndex, 0, _vectorUtility, initialAngle, energyToOffspring, _childGenotype, _embryology )
                                 syncSwimbot( newBornSwimbotIndex );
+                                simCounters.births ++;
 
                                 // remember who mated with whom (for measuring how species separate)
                                 _matingRecord[ _matingCount % MATING_RECORD_SIZE ] = _swimbots[s].getThermalOptimum();
@@ -4813,8 +4816,7 @@ this.testPredation = function()
     // reset family tree and clock
     _familyTree.reset();
     _clock = 0;
-    simCounters.numDeadSwimbots = 0;
-    simCounters.attackCount = 0;
+    resetSimulationCounters();
 
     // --- helper to create swimbot with predator gene ---
     const setPredatorGene = function(genotype, value255) {

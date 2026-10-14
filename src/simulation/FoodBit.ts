@@ -36,6 +36,7 @@ export function FoodBit()
     let _index          = NULL_INDEX;
     let _age            = 0;
     let _maxSpawnRadius = DEFAULT_FOOD_BIT_MAX_SPAWN_RADIUS;
+    let _autotomyDecoy  = false;
 
     //--------------------------------------------------------
     // initialize
@@ -45,6 +46,7 @@ export function FoodBit()
         _index      = f;
         _age        = 0;
         _energy     = DEFAULT_FOOD_BIT_ENERGY;
+        _autotomyDecoy = false;
         _opacity    = ZERO;
         _position.x = POOL_LEFT + gpRandom() * POOL_WIDTH;
         _position.y = POOL_TOP  + gpRandom() * POOL_HEIGHT;
@@ -62,6 +64,8 @@ export function FoodBit()
 
         this.setColorAccordingToType();
 	}
+
+    this.setAutotomyDecoy = function( value ) { _autotomyDecoy = value === true; }
 
 
 
@@ -88,6 +92,7 @@ export function FoodBit()
         _opacity    = ZERO;
         _energy     = parentFoodBit.getEnergy();
         _type       = childType;
+        _autotomyDecoy = false;
 
         this.setColorAccordingToType();
 
@@ -218,6 +223,7 @@ export function FoodBit()
 	this.getPosition    = function() { return _position;    }
 	this.getEnergy      = function() { return _energy;      }
 	this.getType   = function() { return _type;   }
+	this.getAutotomyDecoy = function() { return _autotomyDecoy; }
 	this.getIndex       = function() { return _index;       }
 	this.getAge         = function() { return _age;         }
     this.getAlive       = function() { return ( _index != NULL_INDEX ); }

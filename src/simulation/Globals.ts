@@ -86,6 +86,37 @@ export var globalTweakers = new GlobalTweakers();
 //---------------------------------------------------------------
 // counters that several modules update
 //---------------------------------------------------------------
-export const simCounters = { numDeadSwimbots: 0, attackCount: 0 };
+export const simCounters = {
+    numDeadSwimbots: 0,
+    attackCount: 0,
+    births: 0,
+    plantMeals: 0,
+    meatMeals: 0,
+    autotomyThreatDrops: 0,
+    autotomyBiteDrops: 0,
+    autotomyDecoysEaten: 0,
+    failedAttacks: 0,
+    starvationDeaths: 0,
+    oldAgeDeaths: 0,
+    predationDeaths: 0,
+    otherDeaths: 0,
+};
+
+export function resetSimulationCounters(): void
+{
+    simCounters.numDeadSwimbots = 0;
+    simCounters.attackCount = 0;
+    simCounters.births = 0;
+    simCounters.plantMeals = 0;
+    simCounters.meatMeals = 0;
+    simCounters.autotomyThreatDrops = 0;
+    simCounters.autotomyBiteDrops = 0;
+    simCounters.autotomyDecoysEaten = 0;
+    simCounters.failedAttacks = 0;
+    simCounters.starvationDeaths = 0;
+    simCounters.oldAgeDeaths = 0;
+    simCounters.predationDeaths = 0;
+    simCounters.otherDeaths = 0;
+}
 
 

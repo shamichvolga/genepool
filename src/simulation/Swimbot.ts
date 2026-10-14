@@ -451,7 +451,8 @@ this.setParent = function( parent )
 	    const B = _shared.bots, b = _slot * SS.BOT_STRIDE;
 	    const deaths = B[ b + SS.B_DEATHS ];
 	    B[ b + SS.B_DEATHS ] = 0;
-	    for (let d = 0; d < deaths; d++) { this.die(); }
+	    for (let d = 0; d < deaths; d++)
+	        this.die( _age > globalTweakers.maximumLifeSpan ? "old_age" : "starvation" );
 	}
 
 	// the climate drain (between physics parts A and B)
@@ -569,7 +570,7 @@ this.setParent = function( parent )
             //----------------------------------
             if ( _age > globalTweakers.maximumLifeSpan )
             {
-                this.die();
+                this.die( "old_age" );
             }
             else
             {
@@ -1276,6 +1277,11 @@ _position.copyFrom( position );
 	//------------------------------------------------------------------------
 	this.decide = function( fastTargets = false )
 	{
+	    // Intentions are one-step decisions; never carry an unresolved action into
+	    // a different brain state or a newly selected target.
+	    _tryingToEat = false;
+	    _tryingToHunt = false;
+
 	    // In the phased step the targets (food bit, mate) are read from the
 	    // shared arrays: same numbers, but much faster than visiting their
 	    // objects. (The old interleaved step keeps reading the objects.)
@@ -1343,7 +1349,7 @@ _position.copyFrom( position );
                 let yy = ( fast ? st.foodY[f] : _chosenFoodBit.getPosition().y ) - _mouthPosition.y;
                 let distance = Math.sqrt( xx*xx + yy*yy );
 
-                if ( distance < SWIMBOT_MOUTH_LENGTH )
+                if ( distance < SWIMBOT_MOUTH_LENGTH + _chosenFoodBit.getBoundingRadius() )
                 {
                     _tryingToEat = true;
                     //console.log( "I'm trying to eat!" );
@@ -1381,7 +1387,15 @@ _position.copyFrom( position );
         //------------------------------------------
         else if ( _brain.getState() === BRAIN_STATE_PURSUING_PREY )
         {
-            if ( this.getChosenPreyIsValid() )
+            // A predator can take meat it touches while pursuing prey. Eating
+            // resolves this step, so it cannot also bite prey in this interaction.
+            if ( this.getChosenMeatIsValid()
+            &&   this.getMouthPosition().getDistanceTo( _chosenFoodBit.getPosition() )
+                    < SWIMBOT_MOUTH_LENGTH + _chosenFoodBit.getBoundingRadius() )
+            {
+                _tryingToEat = true;
+            }
+            else if ( this.getChosenPreyIsValid() )
             {
                 let biteDistance = SWIMBOT_MOUTH_LENGTH + _chosenPrey.getBoundingRadius() * ONE_HALF;
 
@@ -1400,7 +1414,8 @@ _position.copyFrom( position );
         {
             if ( this.getChosenMeatIsValid() )
             {
-                if ( this.getMouthPosition().getDistanceTo( _chosenFoodBit.getPosition() ) < SWIMBOT_MOUTH_LENGTH )
+                if ( this.getMouthPosition().getDistanceTo( _chosenFoodBit.getPosition() )
+                    < SWIMBOT_MOUTH_LENGTH + _chosenFoodBit.getBoundingRadius() )
                 {
                     _tryingToEat = true;
                 }
@@ -1838,7 +1853,7 @@ _position.copyFrom( position );
             // eternal swimbots don't starve to death
             if ( !_eternal )
             {
-                this.die();
+                this.die( "starvation" );
             }
         }
 
@@ -2226,6 +2241,28 @@ let partAccelerationY = -strokeForceY;
 	this.getIsTryingToHunt              = function() { return _tryingToHunt;                                }
 	this.getNumPreyEaten                = function() { return _numPreyEaten;                                }
 	this.getPhenotypeMass               = function() { return _phenotype.mass;                              }
+	this.getMorphologySummary           = function()
+	{
+	    const numParts = _phenotype.numParts;
+	    let widthSum = ZERO, maxWidth = ZERO, meanLength = ZERO, branchParts = 0;
+	    for (let p = 0; p < numParts; p++)
+	    {
+	        const part = _phenotype.parts[p];
+	        widthSum += part.width;
+	        meanLength += part.length;
+	        if ( part.width > maxWidth ) maxWidth = part.width;
+	        if ( part.branch ) branchParts ++;
+	    }
+	    return {
+	        numParts,
+	        mass       : _phenotype.mass,
+	        meanWidth  : numParts ? widthSum / numParts : ZERO,
+	        maxWidth,
+	        meanLength : numParts ? meanLength / numParts : ZERO,
+	        branchParts,
+	        branchFraction : numParts ? branchParts / numParts : ZERO,
+	    };
+	}
 	this.getHungerThreshold             = function() { return _brain.getHungerThreshold();                  }
 	this.getMaxEnergy                   = function() { return SWIMBOT_MAX_ENERGY;                           }
 	this.getMaxAge                      = function() { return globalTweakers.maximumLifeSpan;               }
@@ -2419,6 +2456,12 @@ let partAccelerationY = -strokeForceY;
             _energy += energyFromFoodBit;
 
             _numFoodBitsEaten ++;
+            if ( _chosenFoodBit.getType() === 2 )
+            {
+                simCounters.meatMeals ++;
+                if ( _chosenFoodBit.getAutotomyDecoy && _chosenFoodBit.getAutotomyDecoy() ) simCounters.autotomyDecoysEaten ++;
+            }
+            else { simCounters.plantMeals ++; }
 
             assert( _chosenFoodBit.getEnergy() >= ZERO, "Swimbot:eatChosenFoodBit: _chosenFoodBit.getEnergy() >= ZERO" );
 
@@ -2462,6 +2505,7 @@ let partAccelerationY = -strokeForceY;
 	    //-----------------------------------------------
 	    if ( gpRandom() > ( environment.active ? ENVIRONMENT_ATTACK_SUCCESS_CHANCE : ATTACK_SUCCESS_CHANCE ))
 	    {
+	        simCounters.failedAttacks ++;
 	        _chosenPrey.notifyAttackedBy( this );
 	        return;
 	    }
@@ -2473,6 +2517,7 @@ let partAccelerationY = -strokeForceY;
 	    const dropped = _chosenPrey.tryAutotomyOnBite();
 	    if ( dropped !== null )
 	    {
+	        simCounters.autotomyBiteDrops ++;
 	        _energy += Math.min( Math.max( ZERO, SWIMBOT_MAX_ENERGY - _energy ), dropped.energy );
 	        _chosenPrey.notifyAttackedBy( this );
 	        _numPartsEaten ++;
@@ -2484,7 +2529,7 @@ let partAccelerationY = -strokeForceY;
 	    let energyFromPrey = _chosenPrey.getEnergy() * PREDATION_ENERGY_TRANSFER + _chosenPrey.getPhenotypeMass() * PREY_BODY_ENERGY;
 
 	    this.learnSearchImage( _chosenPrey );
-	    _chosenPrey.die();
+	    _chosenPrey.die( "predation" );
 
 	    simCounters.attackCount ++;
 	    _numPreyEaten ++;
@@ -2551,7 +2596,11 @@ let partAccelerationY = -strokeForceY;
         &&  ( _threatCloseness >= ONE - AUTOTOMY_DECOY_SPAN * _phenotype.autotomyThreat ))
         {
             const dropped = this.autotomize();
-            if ( dropped !== null ) { _parent.spawnMeatWithEnergy( dropped.x, dropped.y, dropped.energy ); }
+            if ( dropped !== null )
+            {
+                _parent.spawnMeatWithEnergy( dropped.x, dropped.y, dropped.energy );
+                simCounters.autotomyThreatDrops ++;
+            }
         }
 
         if ( anyPredator != null )
@@ -3127,11 +3176,17 @@ let partAccelerationY = -strokeForceY;
 	//-----------------------
 	// die
 	//----------------------
-	this.die = function()
+	this.die = function( cause = "other" )
 	{
+	    if ( _alive )
+	    {
+	        simCounters.numDeadSwimbots ++;
+	        if ( cause === "starvation" ) simCounters.starvationDeaths ++;
+	        else if ( cause === "old_age" ) simCounters.oldAgeDeaths ++;
+	        else if ( cause === "predation" ) simCounters.predationDeaths ++;
+	        else simCounters.otherDeaths ++;
+	    }
         _alive = false;
-
-        simCounters.numDeadSwimbots ++;
 
 	    //assert( _index != NULL_INDEX, "Swimbot.js: this.die: _index != NULL_INDEX" )
 	    if ( _index != NULL_INDEX )

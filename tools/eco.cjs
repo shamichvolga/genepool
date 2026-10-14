@@ -13,6 +13,8 @@
 //   --flat 1 = control C0 (no temperature differences, plants grow anywhere)
 //------------------------------------------------------------------------------
 const fs = require( "fs" );
+const path = require( "path" );
+const { execFileSync } = require( "child_process" );
 const { createSimulation } = require( "./headless.cjs" );
 
 function arg( name, fallback )
@@ -26,6 +28,7 @@ const STEPS = parseInt( arg( "steps", "50000" ), 10 );
 const EVERY = parseInt( arg( "every", "5000" ), 10 );
 const FLAT  = arg( "flat", "0" ) === "1";
 const CSV   = arg( "csv", null );
+const META  = arg( "meta", CSV && /\.csv$/i.test( CSV ) ? CSV.replace( /\.csv$/i, ".json" ) : null );
 const EXTRA = arg( "set", null );   // e.g. --set "THERMAL_TRADE_OFF=0.3,PLANT_CELL_CAPACITY=8"
 
 const overrides = {};
@@ -35,6 +38,56 @@ if ( EXTRA ) for ( const kv of EXTRA.split( "," ) ) { const [ k, v ] = kv.split(
 const run = createSimulation( SEED, overrides );
 const sb  = run.sandbox;
 const env = sb.environment;
+const startedAt = new Date().toISOString();
+const runStartNs = process.hrtime.bigint();
+let stepsExecuted = 0;
+
+// Statistics must not consume the simulation's random stream. The old metric
+// used Math.random() from the simulation sandbox, so logging frequency changed
+// the world being measured.
+function makeRandom( seed )
+{
+    let a = seed >>> 0;
+    return function()
+    {
+        a = ( a + 0x6D2B79F5 ) >>> 0;
+        let t = a;
+        t = Math.imul( t ^ ( t >>> 15 ), t | 1 );
+        t ^= t + Math.imul( t ^ ( t >>> 7 ), t | 61 );
+        return ( ( t ^ ( t >>> 14 ) ) >>> 0 ) / 4294967296;
+    };
+}
+const statsRandom = makeRandom( ( SEED ^ 0x9E3779B9 ) >>> 0 );
+
+function distribution( values )
+{
+    if ( values.length === 0 ) return { mean: 0, p10: 0, p50: 0, p90: 0 };
+    let total = 0;
+    for ( const value of values ) total += value;
+    const sorted = values.slice().sort( ( a, b ) => a - b );
+    const quantile = ( p ) => sorted[ Math.floor(( sorted.length - 1 ) * p ) ];
+    return {
+        mean: total / values.length,
+        p10 : quantile( 0.10 ),
+        p50 : quantile( 0.50 ),
+        p90 : quantile( 0.90 ),
+    };
+}
+
+function gitMetadata()
+{
+    const root = path.resolve( __dirname, ".." );
+    try
+    {
+        const head = execFileSync( "git", [ "rev-parse", "HEAD" ], { cwd: root, encoding: "utf8" }).trim();
+        const dirty = execFileSync( "git", [ "status", "--porcelain" ], { cwd: root, encoding: "utf8" }).trim().length > 0;
+        return { head, dirty };
+    }
+    catch ( error )
+    {
+        return { head: null, dirty: null, error: String( error.message || error ) };
+    }
+}
 
 function regression( xs, ys )
 {
@@ -54,6 +107,8 @@ function ecoStats()
 {
     const bots = run.genePool.getSwimbots();
     const ts = [], thetas = [], ds = [], bs = [], backs = [], sizes = [];
+    const masses = [], widths = [], parts = [], branchFractions = [], energies = [];
+    const offspring = [], preyEaten = [], foodEaten = [];
     const bins = new Map();   // eco-types: θ, d, b in 5 bins each
     let choosy = 0;
     let effort = 0, climate = 0, social = 0, brainDistance = 0, neural = 0;
@@ -68,7 +123,14 @@ function ecoStats()
         // the local temperature without the season: use the map at time 0
         const t = env.temperatureAt( p.x, p.y );
         ts.push( t ); thetas.push( b.getThermalOptimum() ); ds.push( b.getDigestion() );
-        sizes.push( Math.log( b.getPhenotypeMass() ));
+        const morphology = ( typeof b.getMorphologySummary === "function" )
+                         ? b.getMorphologySummary()
+                         : { mass: b.getPhenotypeMass(), meanWidth: 0, numParts: b.getNumParts(), branchFraction: 0 };
+        sizes.push( Math.log( morphology.mass ));
+        masses.push( morphology.mass ); widths.push( morphology.meanWidth ); parts.push( morphology.numParts );
+        branchFractions.push( morphology.branchFraction ); energies.push( b.getEnergy() );
+        offspring.push( b.getNumOffspring() );
+        preyEaten.push( b.getNumPreyEaten() ); foodEaten.push( b.getNumFoodBitsEaten() );
         if ( typeof b.getBrightness === "function" )
         {
             bs.push( b.getBrightness() ); backs.push( env.backgroundAt( p.x, p.y ) ); choosy += b.getChoosiness();
@@ -104,7 +166,7 @@ function ecoStats()
             for ( let k = 0; k < m.a.length; k++ ) { mates += Math.abs( m.a[k] - m.b[k] ); }
             mates /= m.a.length;
             let random = 0;
-            for ( let k = 0; k < 2000; k++ ) { random += Math.abs( thetas[ Math.floor( Math.random() * n ) ] - thetas[ Math.floor( Math.random() * n ) ] ); }
+            for ( let k = 0; k < 2000; k++ ) { random += Math.abs( thetas[ Math.floor( statsRandom() * n ) ] - thetas[ Math.floor( statsRandom() * n ) ] ); }
             random /= 2000;
             isolation = random > 0 ? 1 - mates / random : 0;
         }
@@ -113,6 +175,10 @@ function ecoStats()
     const dT    = regression( ts, ds );
     const bB    = regression( backs, bs );
     const sT    = regression( ts, sizes );
+    const massDist = distribution( masses );
+    const widthDist = distribution( widths );
+    const partDist = distribution( parts );
+    const energyDist = distribution( energies );
     let shannon = 0;
     for ( const c of bins.values() ) { const q = c / n; shannon -= q * Math.log( q ); }
     return {
@@ -131,6 +197,20 @@ function ecoStats()
         climate  : neural ? climate / neural : 0,
         social   : neural ? social / neural : 0,
         brain    : neural ? brainDistance / neural : 0,
+        massMean : massDist.mean,
+        massP10  : massDist.p10,
+        massP50  : massDist.p50,
+        massP90  : massDist.p90,
+        widthMean: widthDist.mean,
+        widthP10 : widthDist.p10,
+        widthP50 : widthDist.p50,
+        widthP90 : widthDist.p90,
+        partsMean: partDist.mean,
+        branchesMean: branchFractions.reduce(( a, b ) => a + b, 0 ) / ( branchFractions.length || 1 ),
+        energyMean: energyDist.mean,
+        offspringAliveMean: offspring.reduce(( a, b ) => a + b, 0 ) / ( offspring.length || 1 ),
+        preyEatenAliveMean: preyEaten.reduce(( a, b ) => a + b, 0 ) / ( preyEaten.length || 1 ),
+        foodEatenAliveMean: foodEaten.reduce(( a, b ) => a + b, 0 ) / ( foodEaten.length || 1 ),
         hunger   : hungers.length ? hungers.reduce( ( a, b ) => a + b, 0 ) / hungers.length : 0,
         autoBite    : herbivores ? autoBite / herbivores : 0,
         autoThreat  : herbivores ? autoThreat / herbivores : 0,
@@ -139,7 +219,22 @@ function ecoStats()
     };
 }
 
-const header = "step,alive,pred,warm,cold,meat,fit,w,cline_slope,cline_r2,d_corr,b_corr,choosy,eco_types,mate_isolation,size_corr,effort,climate,social,brain_change,hunger,hunger_sd,autotomy_bite,autotomy_decoy,missing_parts,occupied,species,eff_species,top_share,ms_step";
+const eventKeys = [ "births", "plantMeals", "meatMeals", "attackCount", "failedAttacks", "autotomyThreatDrops", "autotomyBiteDrops", "autotomyDecoysEaten", "starvationDeaths", "oldAgeDeaths", "predationDeaths", "otherDeaths" ];
+let previousEvents = Object.fromEntries( eventKeys.map( key => [ key, sb.simCounters[ key ] || 0 ] ));
+function eventDeltas()
+{
+    const delta = {};
+    for ( const key of eventKeys )
+    {
+        const current = sb.simCounters[ key ] || 0;
+        delta[ key ] = current - previousEvents[ key ];
+        previousEvents[ key ] = current;
+    }
+    return delta;
+}
+
+const eventColumns = "births_interval,plant_meals_interval,meat_meals_interval,prey_kills_interval,failed_attacks_interval,autotomy_threat_drops_interval,autotomy_bite_drops_interval,autotomy_decoys_eaten_interval,starvation_deaths_interval,old_age_deaths_interval,predation_deaths_interval,other_deaths_interval";
+const header = "step,alive,pred,warm,cold,meat,fit,w,cline_slope,cline_r2,d_corr,b_corr,choosy,eco_types,mate_isolation,size_corr,effort,climate,social,brain_change,mass_mean,mass_p10,mass_p50,mass_p90,width_mean,width_p10,width_p50,width_p90,parts_mean,branch_fraction_mean,energy_mean,offspring_alive_mean,prey_eaten_alive_mean,food_eaten_alive_mean,hunger,hunger_sd,autotomy_bite,autotomy_decoy,missing_parts,occupied,species_gene_clusters,eff_species_gene_clusters,top_gene_cluster_share," + eventColumns + ",ms_step";
 console.log( `seed=${SEED} steps=${STEPS} flat=${FLAT} set=${EXTRA || ""}` );
 console.log( header );
 const rows = [];
@@ -148,18 +243,26 @@ let t0 = Date.now();
 for ( let step = 1; step <= STEPS; step++ )
 {
     run.genePool.update();
+    stepsExecuted ++;
 
     if ( step % EVERY === 0 )
     {
         const msPerStep = ( Date.now() - t0 ) / EVERY;   // simulation only, not the statistics
         const s = run.stats( run.genePool );
         const e = ecoStats();
+        const events = eventDeltas();
         const row = [ step, s.alive, s.predators, run.genePool.getNumFoodBitsOfType(0), run.genePool.getNumFoodBitsOfType(1), s.meat,
                       e.fit.toFixed( 2 ), e.width.toFixed( 3 ), e.slope.toFixed( 2 ), e.r2.toFixed( 2 ), e.dCorr.toFixed( 2 ),
                       e.bCorr.toFixed( 2 ), e.choosy.toFixed( 2 ), e.ecoTypes.toFixed( 1 ), e.isolation.toFixed( 2 ), e.sizeCorr.toFixed( 2 ),
-                      e.effort.toFixed( 2 ), e.climate.toFixed( 2 ), e.social.toFixed( 2 ), e.brain.toFixed( 3 ), e.hunger.toFixed( 1 ), e.hungerSd.toFixed( 1 ),
+                      e.effort.toFixed( 2 ), e.climate.toFixed( 2 ), e.social.toFixed( 2 ), e.brain.toFixed( 3 ),
+                      e.massMean.toFixed( 2 ), e.massP10.toFixed( 2 ), e.massP50.toFixed( 2 ), e.massP90.toFixed( 2 ),
+                      e.widthMean.toFixed( 3 ), e.widthP10.toFixed( 3 ), e.widthP50.toFixed( 3 ), e.widthP90.toFixed( 3 ),
+                      e.partsMean.toFixed( 2 ), e.branchesMean.toFixed( 3 ), e.energyMean.toFixed( 2 ),
+                      e.offspringAliveMean.toFixed( 3 ), e.preyEatenAliveMean.toFixed( 3 ), e.foodEatenAliveMean.toFixed( 3 ),
+                      e.hunger.toFixed( 1 ), e.hungerSd.toFixed( 1 ),
                       e.autoBite.toFixed( 3 ), e.autoThreat.toFixed( 3 ), e.autoMissing.toFixed( 3 ),
                       e.occupied.toFixed( 2 ), s.species, s.effSpecies.toFixed( 1 ), s.topShare.toFixed( 2 ),
+                      ...eventKeys.map( key => events[ key ] ),
                       msPerStep.toFixed( 1 ) ].join( "," );
         rows.push( row );
         console.log( row );
@@ -170,3 +273,32 @@ for ( let step = 1; step <= STEPS; step++ )
 
 if ( run.alerts.length > 0 ) console.log( `ALERTS (${run.alerts.length}), first: ${run.alerts[0]}` );
 if ( CSV ) fs.writeFileSync( CSV, header + "\n" + rows.join( "\n" ) + "\n" );
+if ( META )
+{
+    const git = gitMetadata();
+    const endedAt = new Date().toISOString();
+    const durationMs = Number( process.hrtime.bigint() - runStartNs ) / 1e6;
+    const metadata = {
+        schemaVersion: 1,
+        startedAt,
+        endedAt,
+        durationMs: Number( durationMs.toFixed( 1 )),
+        seed: SEED,
+        stepsRequested: STEPS,
+        stepsExecuted,
+        samplingInterval: EVERY,
+        stoppedEarly: stepsExecuted < STEPS,
+        flatEnvironment: FLAT,
+        overrides,
+        environmentActive: !!env.active,
+        plantTypes: sb.TWO_PLANT_TYPES ? 2 : 1,
+        pool: { width: sb.POOL_WIDTH, height: sb.POOL_HEIGHT },
+        git,
+        nodeVersion: process.version,
+        eventTotals: Object.fromEntries( eventKeys.map( key => [ key, sb.simCounters[ key ] || 0 ] )),
+        outputs: { csv: CSV ? path.resolve( CSV ) : null },
+        alerts: run.alerts,
+    };
+    fs.mkdirSync( path.dirname( path.resolve( META )), { recursive: true } );
+    fs.writeFileSync( META, JSON.stringify( metadata, null, 2 ) + "\n" );
+}
