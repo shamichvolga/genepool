@@ -13,6 +13,7 @@
 //------------------------------------------------------------------------------
 import { ONE, ONE_HALF, PI_OVER_180, ZERO } from "./MathConstants";
 import { OLD_AGE_DURATION, SWIMBOT_SELECT_RADIUS_SCALAR, YOUNG_AGE_DURATION } from "./Parameters";
+import { applyWaterDrag, bodyMotionFactors } from "./BodyPhysics";
 import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
 import { CONTINUAL_ENERGY_DRAIN, ENERGY_EFFICIENCY_MEASUREMENT_PERIOD, ENERGY_USED_UP_SWIMMING, GENITAL_INDEX, MAX_PARTS, MOUTH_INDEX, ROOT_PART, STARVING, STARVING_TIMER_DELTA, TIMER_DELTA_INCREASE_RATE, WALL_BOUNCE } from "./SwimbotTypes";
 import {
@@ -54,6 +55,7 @@ export function physicsPartA( s: number, st: SharedState ): void
     const frequency = B[ b + B_FREQUENCY ];
     const sumLengths= B[ b + B_SUM_LENGTHS ];
     const bodyMass  = B[ b + B_BODY_MASS ];
+    const motion    = bodyMotionFactors( bodyMass, sumLengths > ZERO ? bodyMass / sumLengths : ZERO );
     let energy      = B[ b + B_ENERGY ];
     let growth      = B[ b + B_GROWTH ];
     let timerDelta  = B[ b + B_TIMER_DELTA ];
@@ -229,7 +231,10 @@ export function physicsPartA( s: number, st: SharedState ): void
         const strokeForceX = pd[ i + N_X ] * strokeAmplitude;
         const strokeForceY = pd[ i + N_Y ] * strokeAmplitude;
 
-        energy -= Math.abs( strokeAmplitude ) * ENERGY_USED_UP_SWIMMING;
+        if ( motion.enabled )
+            energy -= Math.abs( strokeAmplitude ) * ENERGY_USED_UP_SWIMMING * motion.strokeCost;
+        else
+            energy -= Math.abs( strokeAmplitude ) * ENERGY_USED_UP_SWIMMING;
         if ( energy < ZERO ) { energy = ZERO; }
 
         const partVectorFromCenterX = pd[ i + M_X ] - posX;
@@ -240,8 +245,16 @@ export function physicsPartA( s: number, st: SharedState ): void
 
         if ( distance > ZERO )
         {
-            accelerationX += -strokeForceX;
-            accelerationY += -strokeForceY;
+            if ( motion.enabled )
+            {
+                accelerationX += -strokeForceX * motion.acceleration;
+                accelerationY += -strokeForceY * motion.acceleration;
+            }
+            else
+            {
+                accelerationX += -strokeForceX;
+                accelerationY += -strokeForceY;
+            }
 
             const partPerpendicularX =  partVectorFromCenterY;
             const partPerpendicularY = -partVectorFromCenterX;
@@ -252,6 +265,14 @@ export function physicsPartA( s: number, st: SharedState ): void
 
     let velX = B[ b + B_VEL_X ] + accelerationX;
     let velY = B[ b + B_VEL_Y ] + accelerationY;
+    if ( motion.enabled )
+    {
+        const drag = applyWaterDrag( velX, velY, bodyMass, motion.drag );
+        velX = drag.velocityX;
+        velY = drag.velocityY;
+        energy -= drag.energyCost;
+        if ( energy < ZERO ) { energy = ZERO; }
+    }
     const spin = B[ b + B_SPIN ] + torque;
     posX += velX;
     posY += velY;

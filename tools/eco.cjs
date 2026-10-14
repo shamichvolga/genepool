@@ -41,6 +41,7 @@ const scenarios = {
     C5:   { label: "add a pool-spanning barrier", overrides: { BARRIER_EXPERIMENT: "true" } },
     C6:   { label: "density-dependent local plant growth with fixed seed rain", overrides: { LOCAL_ENVIRONMENT_PLANT_GROWTH: "true" } },
     C7:   { label: "return nutrients from decayed meat to plant growth", overrides: { NUTRIENT_CYCLE_ENABLED: "true" } },
+    C8:   { label: "body-mass and breadth effects on thrust, drag, and swimming cost", overrides: { BODY_HYDRODYNAMICS_ENABLED: "true" } },
 };
 if ( !scenarios[ SCENARIO ] ) throw new Error( `unknown scenario ${SCENARIO}; choose ${Object.keys(scenarios).join(", ")}` );
 const FLAT = SCENARIO === "C0" || arg( "flat", "0" ) === "1";

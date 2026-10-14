@@ -182,6 +182,10 @@ export const MEAT_DECAY_TIME               = 2000;
 // (закон Клайбера). При 0.000025 для типичного бота это примерно столько же, сколько плавание.
 export const BASAL_METABOLISM              = 0;   // ЭКСПЕРИМЕНТ: попробуйте 0.000008 – 0.000025
 
+// C8 experiment: let body mass and breadth change thrust response, water drag,
+// and the energy dissipated while swimming. Disabled in ordinary simulations.
+export const BODY_HYDRODYNAMICS_ENABLED    = false;
+
 
 export const YOUNG_AGE_DURATION    = 1000;
 export const OLD_AGE_DURATION      = 1000;

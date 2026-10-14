@@ -1,5 +1,6 @@
 import { setTrait, GENES_PREDATOR } from "./EcologyGenes";
 import { physicsPartA, physicsPartB } from "./PhysicsKernel";
+import { applyWaterDrag, bodyMotionFactors } from "./BodyPhysics";
 import * as SS from "./SharedState";
 import { think, sigmoid, NUM_INPUTS, NUM_HIDDEN, NUM_OUTPUTS, NUM_DRIVES, THINK_PERIOD, DRIVE_HYSTERESIS, EFFORT_MIN, EFFORT_RANGE, IN_BIAS, IN_HUNGER, IN_ENERGY, IN_AGE, IN_FIT, IN_TREND, IN_FOOD, IN_MATE, IN_THREAT, IN_PREY, IN_CROWD, IN_PREDATOR, OUT_FOOD, OUT_MATE, OUT_FLEE, OUT_HUNT, OUT_CLIMATE, OUT_SOCIAL, OUT_EFFORT,
          IN_FOOD_SIDE, IN_FOOD_AHEAD, IN_NEAR_SIDE, IN_NEAR_AHEAD, IN_THREAT_SIDE, IN_THREAT_AHEAD, IN_KIN, IN_SEASON, IN_PREDATOR_NEAR, OUT_STEER, STEER_MAX_DEGREES } from "./NeuralBrain";
@@ -1884,6 +1885,7 @@ _position.copyFrom( position );
         //-----------------------------------------------------
 	    _acceleration.clear();
 	    _torque = ZERO;
+	    const motion = bodyMotionFactors( _phenotype.mass, _sumPartLengths > ZERO ? _phenotype.mass / _sumPartLengths : ZERO );
 
         //----------------------------------------
         // loop through parts...
@@ -1931,7 +1933,10 @@ _position.copyFrom( position );
 		    // hey: this might be more accurate to nature if
 		    // it were something like angle bend times mass.
             //--------------------------------------------------
-            _energy -= Math.abs( strokeAmplitude ) * ENERGY_USED_UP_SWIMMING;
+            if ( motion.enabled )
+                _energy -= Math.abs( strokeAmplitude ) * ENERGY_USED_UP_SWIMMING * motion.strokeCost;
+            else
+                _energy -= Math.abs( strokeAmplitude ) * ENERGY_USED_UP_SWIMMING;
 
             if ( _energy < ZERO )
             {
@@ -1976,8 +1981,8 @@ let partAccelerationX = partDirectionFromCenterX * dot;
 let partAccelerationY = partDirectionFromCenterY * dot;
 */
 
-let partAccelerationX = -strokeForceX;
-let partAccelerationY = -strokeForceY;
+let partAccelerationX = motion.enabled ? -strokeForceX * motion.acceleration : -strokeForceX;
+let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -strokeForceY;
 
                 //-------------------------------
                 // accumulate acceleration
@@ -2024,6 +2029,12 @@ let partAccelerationY = -strokeForceY;
         // apply linear and angular forces to velocity and spin
         //-----------------------------------------------------------------
         _velocity.add( _acceleration );
+        if ( motion.enabled )
+        {
+            const drag = applyWaterDrag( _velocity.x, _velocity.y, _phenotype.mass, motion.drag );
+            _velocity.setXY( drag.velocityX, drag.velocityY );
+            _energy = Math.max( ZERO, _energy - drag.energyCost );
+        }
         _spin += _torque;// * SPIN_SCALAR;
 //_spin *= SPIN_DECAY;
 
