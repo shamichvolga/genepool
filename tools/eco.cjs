@@ -42,6 +42,7 @@ const scenarios = {
     C6:   { label: "density-dependent local plant growth with fixed seed rain", overrides: { LOCAL_ENVIRONMENT_PLANT_GROWTH: "true" } },
     C7:   { label: "return nutrients from decayed meat to plant growth", overrides: { NUTRIENT_CYCLE_ENABLED: "true" } },
     C8:   { label: "body-mass and breadth effects on thrust, drag, and swimming cost", overrides: { BODY_HYDRODYNAMICS_ENABLED: "true" } },
+    C9:   { label: "body-mass-dependent inertia in body temperature; no internal heat source", overrides: { BODY_TEMPERATURE_INERTIA_ENABLED: "true" } },
 };
 if ( !scenarios[ SCENARIO ] ) throw new Error( `unknown scenario ${SCENARIO}; choose ${Object.keys(scenarios).join(", ")}` );
 const FLAT = SCENARIO === "C0" || arg( "flat", "0" ) === "1";
@@ -122,6 +123,7 @@ function ecoStats()
     const bots = run.genePool.getSwimbots();
     const ts = [], thetas = [], ds = [], bs = [], backs = [], sizes = [];
     const masses = [], widths = [], lengths = [], maxWidths = [], parts = [], branchParts = [], branchFractions = [], energies = [], speeds = [], swimEfficiencies = [];
+    const bodyTemperatures = [], ambientTemperatures = [], thermalLags = [], thermalLagMasses = [], thermalLagWidths = [];
     const offspring = [], preyEaten = [], foodEaten = [];
     const bins = new Map();   // eco-types: θ, d, b in 5 bins each
     let choosy = 0;
@@ -143,6 +145,13 @@ function ecoStats()
                              numParts: b.getNumParts(), branchParts: 0, branchFraction: 0 };
         sizes.push( Math.log( morphology.mass ));
         masses.push( morphology.mass ); widths.push( morphology.meanWidth ); lengths.push( morphology.meanLength );
+        const ambientTemperature = typeof b.getAmbientTemperature === "function" ? b.getAmbientTemperature() : t;
+        const bodyTemperature = typeof b.getBodyTemperature === "function" ? b.getBodyTemperature() : ambientTemperature;
+        ambientTemperatures.push( ambientTemperature );
+        bodyTemperatures.push( bodyTemperature );
+        thermalLags.push( Math.abs( bodyTemperature - ambientTemperature ));
+        thermalLagMasses.push( Math.log( Math.max( 1, morphology.mass )));
+        thermalLagWidths.push( morphology.meanWidth );
         maxWidths.push( morphology.maxWidth ); parts.push( morphology.numParts ); branchParts.push( morphology.branchParts );
         branchFractions.push( morphology.branchFraction ); energies.push( b.getEnergy() );
         speeds.push( typeof b.getSpeed === "function" ? b.getSpeed() : 0 );
@@ -213,6 +222,11 @@ function ecoStats()
     const energyDist = distribution( energies );
     const speedDist = distribution( speeds );
     const swimEfficiencyDist = distribution( swimEfficiencies );
+    const bodyTemperatureDist = distribution( bodyTemperatures );
+    const ambientTemperatureDist = distribution( ambientTemperatures );
+    const thermalLagDist = distribution( thermalLags );
+    const thermalLagMass = regression( thermalLagMasses, thermalLags );
+    const thermalLagWidth = regression( thermalLagWidths, thermalLags );
     const morphBins = new Map();
     for ( let i = 0; i < masses.length; i++ )
     {
@@ -283,6 +297,14 @@ function ecoStats()
         speedP50: speedDist.p50,
         speedP90: speedDist.p90,
         swimEnergyEfficiencyMean: swimEfficiencyDist.mean,
+        bodyTemperatureMean: bodyTemperatureDist.mean,
+        bodyTemperatureP10: bodyTemperatureDist.p10,
+        bodyTemperatureP50: bodyTemperatureDist.p50,
+        bodyTemperatureP90: bodyTemperatureDist.p90,
+        ambientTemperatureMean: ambientTemperatureDist.mean,
+        thermalLagAbsMean: thermalLagDist.mean,
+        thermalLagMassCorr: thermalLagMass.r,
+        thermalLagWidthCorr: thermalLagWidth.r,
         offspringAliveMean: offspring.reduce(( a, b ) => a + b, 0 ) / ( offspring.length || 1 ),
         preyEatenAliveMean: preyEaten.reduce(( a, b ) => a + b, 0 ) / ( preyEaten.length || 1 ),
         foodEatenAliveMean: foodEaten.reduce(( a, b ) => a + b, 0 ) / ( foodEaten.length || 1 ),
@@ -320,7 +342,7 @@ function eventDeltas()
 
 const eventColumns = "births_interval,local_plant_sprouts_interval,seed_rain_plant_sprouts_interval,nutrient_limited_seed_attempts_interval,meat_decay_events_interval,soil_nutrients_returned_interval,plant_meals_interval,meat_meals_interval,pursuit_meat_target_selections_interval,pursuit_meat_meals_interval,prey_kills_interval,failed_attacks_interval,autotomy_threat_drops_interval,autotomy_bite_drops_interval,autotomy_decoys_eaten_interval,starvation_deaths_interval,old_age_deaths_interval,predation_deaths_interval,other_deaths_interval";
 const pedigreeColumns = "pedigree_parents,pedigree_reproducing_parents,pedigree_offspring,pedigree_maturity_eligible,pedigree_matured_offspring,pedigree_maturity_survival,small_parent_matured_per_parent,medium_parent_matured_per_parent,large_parent_matured_per_parent";
-const header = "step,alive,pred,warm,cold,meat,fit,w,cline_slope,cline_r2,d_corr,b_corr,choosy,eco_types,mate_isolation,size_corr,effort,climate,social,brain_change,coarse_morphotype_bins,eff_coarse_morphotype_bins,mass_mean,mass_p10,mass_p50,mass_p90,width_mean,width_p10,width_p50,width_p90,length_mean,length_p10,length_p50,length_p90,max_width_mean,parts_mean,branch_parts_mean,branch_fraction_mean,energy_mean,speed_mean,speed_p10,speed_p50,speed_p90,swim_energy_efficiency_mean,offspring_alive_mean,prey_eaten_alive_mean,food_eaten_alive_mean," + pedigreeColumns + ",hunger,hunger_sd,autotomy_bite,autotomy_decoy,missing_parts,occupied,plant_cells_occupied,plant_cell_occupancy,plants_per_occupied_cell,soil_nutrient_cells,soil_nutrient_mean,soil_nutrient_p10,soil_nutrient_p50,soil_nutrient_p90,gene_clusters,eff_gene_clusters,top_gene_cluster_share," + eventColumns + ",ms_step";
+const header = "step,alive,pred,warm,cold,meat,fit,w,body_temp_mean,body_temp_p10,body_temp_p50,body_temp_p90,ambient_temp_mean,thermal_lag_abs_mean,thermal_lag_mass_corr,thermal_lag_width_corr,cline_slope,cline_r2,d_corr,b_corr,choosy,eco_types,mate_isolation,size_corr,effort,climate,social,brain_change,coarse_morphotype_bins,eff_coarse_morphotype_bins,mass_mean,mass_p10,mass_p50,mass_p90,width_mean,width_p10,width_p50,width_p90,length_mean,length_p10,length_p50,length_p90,max_width_mean,parts_mean,branch_parts_mean,branch_fraction_mean,energy_mean,speed_mean,speed_p10,speed_p50,speed_p90,swim_energy_efficiency_mean,offspring_alive_mean,prey_eaten_alive_mean,food_eaten_alive_mean," + pedigreeColumns + ",hunger,hunger_sd,autotomy_bite,autotomy_decoy,missing_parts,occupied,plant_cells_occupied,plant_cell_occupancy,plants_per_occupied_cell,soil_nutrient_cells,soil_nutrient_mean,soil_nutrient_p10,soil_nutrient_p50,soil_nutrient_p90,gene_clusters,eff_gene_clusters,top_gene_cluster_share," + eventColumns + ",ms_step";
 console.log( `scenario=${SCENARIO} seed=${SEED} steps=${STEPS} flat=${FLAT} set=${EXTRA || ""}` );
 console.log( header );
 const rows = [];
@@ -338,7 +360,11 @@ for ( let step = 1; step <= STEPS; step++ )
         const e = ecoStats();
         const events = eventDeltas();
         const row = [ step, s.alive, s.predators, run.genePool.getNumFoodBitsOfType(0), run.genePool.getNumFoodBitsOfType(1), s.meat,
-                      e.fit.toFixed( 2 ), e.width.toFixed( 3 ), e.slope.toFixed( 2 ), e.r2.toFixed( 2 ), e.dCorr.toFixed( 2 ),
+                      e.fit.toFixed( 2 ), e.width.toFixed( 3 ), e.bodyTemperatureMean.toFixed( 4 ),
+                      e.bodyTemperatureP10.toFixed( 4 ), e.bodyTemperatureP50.toFixed( 4 ), e.bodyTemperatureP90.toFixed( 4 ),
+                      e.ambientTemperatureMean.toFixed( 4 ), e.thermalLagAbsMean.toFixed( 5 ),
+                      e.thermalLagMassCorr.toFixed( 3 ), e.thermalLagWidthCorr.toFixed( 3 ),
+                      e.slope.toFixed( 2 ), e.r2.toFixed( 2 ), e.dCorr.toFixed( 2 ),
                       e.bCorr.toFixed( 2 ), e.choosy.toFixed( 2 ), e.ecoTypes.toFixed( 1 ), e.isolation.toFixed( 2 ), e.sizeCorr.toFixed( 2 ),
                       e.effort.toFixed( 2 ), e.climate.toFixed( 2 ), e.social.toFixed( 2 ), e.brain.toFixed( 3 ),
                       e.morphBins, e.effectiveMorphBins.toFixed( 1 ),
@@ -374,7 +400,7 @@ if ( META )
     const endedAt = new Date().toISOString();
     const durationMs = Number( process.hrtime.bigint() - runStartNs ) / 1e6;
     const metadata = {
-        schemaVersion: 6,
+        schemaVersion: 7,
         startedAt,
         endedAt,
         durationMs: Number( durationMs.toFixed( 1 )),
@@ -401,6 +427,12 @@ if ( META )
         morphologyMetrics: {
             type: "coarse bins from log mass, mean width, mean length, part count, and branch fraction; not biological species",
             widths: { logMass: 1, meanWidth: 2, meanLength: 10, partCount: 10, branchFraction: 0.5 },
+        },
+        thermalMetrics: {
+            unit: "normalized 0..1 temperature",
+            bodyTemperature: "internal state after optional mass- and width-dependent exchange with local felt temperature",
+            thermalLagAbsMean: "mean absolute difference between internal and local felt temperature",
+            thermalLagCorrelations: "correlation of log body mass and mean body width with absolute thermal lag; exploratory, not causal estimates",
         },
         outputs: { csv: CSV ? path.resolve( CSV ) : null },
         alerts: run.alerts,

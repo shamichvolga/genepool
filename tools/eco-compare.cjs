@@ -52,6 +52,7 @@ const metrics = [
 ];
 const nutrientMetrics = [ "soil_nutrient_cells", "soil_nutrient_mean", "soil_nutrient_p10", "soil_nutrient_p50", "soil_nutrient_p90" ];
 const performanceMetrics = [ "speed_mean", "speed_p10", "speed_p50", "speed_p90", "swim_energy_efficiency_mean" ];
+const thermalMetrics = [ "body_temp_mean", "body_temp_p10", "body_temp_p50", "body_temp_p90", "ambient_temp_mean", "thermal_lag_abs_mean", "thermal_lag_mass_corr", "thermal_lag_width_corr" ];
 
 function readRun( scenario, seed )
 {
@@ -103,6 +104,10 @@ function readRun( scenario, seed )
     {
         if ( index[ name ] !== undefined ) values[ name ] = Number( row[ index[ name ]] );
     }
+    for ( const name of thermalMetrics )
+    {
+        if ( index[ name ] !== undefined ) values[ name ] = Number( row[ index[ name ]] );
+    }
     return { scenario, seed, step: selectedStep, values, metadata, columns: header };
 }
 
@@ -134,8 +139,10 @@ for ( let i = 1; i < runs.length; i++ )
 
 const hasNutrientMetrics = runs.flat().every( run => nutrientMetrics.every( name => run.columns.includes( name )));
 const hasPerformanceMetrics = runs.flat().every( run => performanceMetrics.every( name => run.columns.includes( name )));
+const hasThermalMetrics = runs.flat().every( run => thermalMetrics.every( name => run.columns.includes( name )));
 const availableEventTotals = Object.keys( eventMap ).filter( column => runs.flat().every( run => run.columns.includes( column )));
-const metricNames = [...metrics, ...( hasNutrientMetrics ? nutrientMetrics : [] ), ...( hasPerformanceMetrics ? performanceMetrics : [] ), "plants",
+const metricNames = [...metrics, ...( hasNutrientMetrics ? nutrientMetrics : [] ), ...( hasPerformanceMetrics ? performanceMetrics : [] ),
+    ...( hasThermalMetrics ? thermalMetrics : [] ), "plants",
     ...availableEventTotals.map( x => x.replace( /_interval$/, "_total" ))];
 const scenarioSummary = {};
 for ( let i = 0; i < scenarios.length; i++ )
@@ -183,7 +190,8 @@ const csvRows = seeds.map(( seed, s ) =>
 fs.writeFileSync( outputBase + ".json", JSON.stringify( summary, null, 2 ) + "\n" );
 fs.writeFileSync( outputBase + ".csv", csvHeader + "\n" + csvRows.join( "\n" ) + "\n" );
 const digestMetrics = [ "alive", "plants", ...( hasNutrientMetrics ? [ "soil_nutrient_mean" ] : [] ), "eff_coarse_morphotype_bins", "pedigree_maturity_survival", "pedigree_matured_offspring", "births_total",
-    ...( hasNutrientMetrics ? [ "soil_nutrients_returned_total" ] : [] ), ...( hasPerformanceMetrics ? [ "speed_mean", "swim_energy_efficiency_mean" ] : [] ) ];
+    ...( hasNutrientMetrics ? [ "soil_nutrients_returned_total" ] : [] ), ...( hasPerformanceMetrics ? [ "speed_mean", "swim_energy_efficiency_mean" ] : [] ),
+    ...( hasThermalMetrics ? [ "body_temp_mean", "ambient_temp_mean", "thermal_lag_abs_mean", "thermal_lag_mass_corr", "thermal_lag_width_corr" ] : [] ) ];
 const digest = {
     outputJson: outputBase + ".json",
     outputCsv: outputBase + ".csv",

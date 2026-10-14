@@ -1,10 +1,11 @@
 import { setTrait, GENES_PREDATOR } from "./EcologyGenes";
 import { physicsPartA, physicsPartB } from "./PhysicsKernel";
 import { applyWaterDrag, bodyMotionFactors } from "./BodyPhysics";
+import { advanceBodyTemperature } from "./ThermalPhysics";
 import * as SS from "./SharedState";
 import { think, sigmoid, NUM_INPUTS, NUM_HIDDEN, NUM_OUTPUTS, NUM_DRIVES, THINK_PERIOD, DRIVE_HYSTERESIS, EFFORT_MIN, EFFORT_RANGE, IN_BIAS, IN_HUNGER, IN_ENERGY, IN_AGE, IN_FIT, IN_TREND, IN_FOOD, IN_MATE, IN_THREAT, IN_PREY, IN_CROWD, IN_PREDATOR, OUT_FOOD, OUT_MATE, OUT_FLEE, OUT_HUNT, OUT_CLIMATE, OUT_SOCIAL, OUT_EFFORT,
          IN_FOOD_SIDE, IN_FOOD_AHEAD, IN_NEAR_SIDE, IN_NEAR_AHEAD, IN_THREAT_SIDE, IN_THREAT_AHEAD, IN_KIN, IN_SEASON, IN_PREDATOR_NEAR, OUT_STEER, STEER_MAX_DEGREES } from "./NeuralBrain";
-import { NEURAL_BRAIN_ENABLED, CLIMATE_STEERING, SOCIAL_STEERING, CLIMATE_PROBE_DISTANCE } from "./Parameters";
+import { NEURAL_BRAIN_ENABLED, CLIMATE_STEERING, SOCIAL_STEERING, CLIMATE_PROBE_DISTANCE, BODY_TEMPERATURE_INERTIA_ENABLED } from "./Parameters";
 import { environment, PLANT_TYPE_WARM, PLANT_TYPE_COLD } from "./Environment";
 import { sizeSignature, SEARCH_IMAGE_LEARNING, SEARCH_IMAGE_GAIN, SEARCH_IMAGE_FORGETTING, bodySize, sizeDietFactor, climateFoodFactor, digestionEfficiency, thermalFit, thermalPeak, THERMAL_MISMATCH_DRAIN, THERMAL_FIT_UPDATE_PERIOD, THERMOMELANISM, mateAcceptance, pairRandom, KINESIS_PERIOD, KINESIS_TURN_CHANCE, KINESIS_MAX_TURN, EMERGENCY_THERMAL_FIT, EMERGENCY_PROBE_DISTANCE } from "./Ecology";
 //--------------------------------------------------------------------------
@@ -135,6 +136,8 @@ var    flopperYV = 0;
 	let _brightness         = ONE_HALF;  // body brightness: camouflage and mating signal
 	let _choosiness         = ZERO;
 	let _thermalFit         = ONE;    // 0..1, how well the place suits me (updated every few steps)
+	let _bodyTemperature    = ONE_HALF;
+	let _bodyTemperatureInitialized = false;
 	let _comfort            = -ONE;   // last "how good is it here" (for kinesis)
 	let _comfortTrend       = ZERO;   // +1 it got better here, -1 worse
 	let _averageColor       = null;   // cached by getAverageColor (reset with a new phenotype)
@@ -462,6 +465,7 @@ this.setParent = function( parent )
 	{
 	    if ( environment.active )
 	    {
+	        this.updateBodyTemperature();
 	        if ( ( _age + _index ) % THERMAL_FIT_UPDATE_PERIOD === 0 ) { this.updateThermalFit(); }
 	        _energy -= THERMAL_MISMATCH_DRAIN * ( ONE - _thermalFit );
 	    }
@@ -1780,15 +1784,46 @@ _position.copyFrom( position );
 	this.updateThermalFit = function()
 	{
 	    _thermalFit = environment.active
-	        ? thermalFit( this.feltTemperature( _position.x, _position.y ), _thermalOptimum, _thermalWidth )
+	        ? thermalFit( this.getBodyTemperature(), _thermalOptimum, _thermalWidth )
 	        : ONE;
 	}
 
-	// the temperature as this swimbot feels it: dark bodies warm up a little more
+	this.updateBodyTemperature = function()
+	{
+	    const ambient = this.feltTemperature( _position.x, _position.y );
+	    if ( !BODY_TEMPERATURE_INERTIA_ENABLED )
+	    {
+	        _bodyTemperature = ambient;
+	        _bodyTemperatureInitialized = false;
+	        return;
+	    }
+
+	    if ( !_bodyTemperatureInitialized )
+	    {
+	        _bodyTemperature = ambient;
+	        _bodyTemperatureInitialized = true;
+	    }
+	    else
+	    {
+	        const meanBodyWidth = _sumPartLengths > ZERO ? _phenotype.mass / _sumPartLengths : ZERO;
+	        _bodyTemperature = advanceBodyTemperature( _bodyTemperature, ambient, _phenotype.mass, meanBodyWidth );
+	    }
+	}
+
+	// Current water temperature as sensed by the existing pigmentation model.
 	this.feltTemperature = function( x, y )
 	{
 	    return environment.temperatureAt( x, y ) + THERMOMELANISM * ( ONE - 2 * _brightness );
 	}
+
+	this.getBodyTemperature = function()
+	{
+	    return BODY_TEMPERATURE_INERTIA_ENABLED && _bodyTemperatureInitialized
+	        ? _bodyTemperature
+	        : this.feltTemperature( _position.x, _position.y );
+	}
+
+	this.getAmbientTemperature = function()	{ return this.feltTemperature( _position.x, _position.y ); }
 
 	//------------------------------------------------------------------------
 	// does this swimbot accept the suitor as a mate? The more different their
@@ -1848,11 +1883,7 @@ _position.copyFrom( position );
         //---------------------------------------------
         // living at the wrong temperature costs energy
         //---------------------------------------------
-        if ( environment.active )
-        {
-            if ( ( _age + _index ) % THERMAL_FIT_UPDATE_PERIOD === 0 ) { this.updateThermalFit(); }
-            _energy -= THERMAL_MISMATCH_DRAIN * ( ONE - _thermalFit );
-        }
+	        this.applyClimateDrain();
 
         //---------------------------------------------
         // when energy hits zero, that means death
