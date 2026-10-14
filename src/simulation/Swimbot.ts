@@ -321,7 +321,9 @@ this.setParent = function( parent )
 	    _partsLost    = true;
 	    _regrowTimer  = AUTOTOMY_REGROW_DELAY;
 	    _partsDropped ++;
-	    return { energy: lost, x, y };
+	    // the part itself is food too, like a killed prey's body
+	    // (the same PREY_BODY_ENERGY per unit of mass), plus the energy it took
+	    return { energy: lost + droppedMass * PREY_BODY_ENERGY, x, y };
 	};
 
 	// bitten: maybe drop a part instead of dying (chance = gene)
