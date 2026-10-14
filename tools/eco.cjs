@@ -39,6 +39,7 @@ const scenarios = {
     C3:   { label: "halve biome patch spacing", overrides: { BIOME_SPACING: "2000" } },
     C4:   { label: "disable kinesis and social steering", overrides: { KINESIS_TURN_CHANCE: "0", SOCIAL_STEERING: "0" } },
     C5:   { label: "add a pool-spanning barrier", overrides: { BARRIER_EXPERIMENT: "true" } },
+    C6:   { label: "density-dependent local plant growth with fixed seed rain", overrides: { LOCAL_ENVIRONMENT_PLANT_GROWTH: "true" } },
 };
 if ( !scenarios[ SCENARIO ] ) throw new Error( `unknown scenario ${SCENARIO}; choose ${Object.keys(scenarios).join(", ")}` );
 const FLAT = SCENARIO === "C0" || arg( "flat", "0" ) === "1";
@@ -167,6 +168,13 @@ function ecoStats()
         occupied.add( Math.floor( p.x / 500 ) + "," + Math.floor( p.y / 500 ) );
     }
     const cells = Math.ceil( ( sb.POOL_RIGHT - sb.POOL_LEFT ) / 500 ) * Math.ceil( ( sb.POOL_BOTTOM - sb.POOL_TOP ) / 500 );
+    let plantCellsOccupied = 0, plantsInOccupiedCells = 0;
+    const plantCellCount = env.plantCount && env.plantCount[0] ? env.plantCount[0].length : 0;
+    for ( let cell = 0; cell < plantCellCount; cell++ )
+    {
+        const count = env.plantCount[0][cell] + env.plantCount[1][cell];
+        if ( count > 0 ) { plantCellsOccupied ++; plantsInOccupiedCells += count; }
+    }
     // mating isolation: how much more alike in preferred temperature are
     // the parents of recent births than two random swimbots (0 = random, 1 = identical)
     let isolation = 0;
@@ -223,6 +231,9 @@ function ecoStats()
         r2       : cline.r2,
         dCorr    : dT.r,
         occupied : occupied.size / cells,
+        plantCellsOccupied,
+        plantCellOccupancy : plantCellCount ? plantCellsOccupied / plantCellCount : 0,
+        plantsPerOccupiedCell : plantCellsOccupied ? plantsInOccupiedCells / plantCellsOccupied : 0,
         bCorr    : bB.r,
         choosy   : bs.length ? choosy / bs.length : 0,
         ecoTypes : n ? Math.exp( shannon ) : 0,
@@ -271,7 +282,7 @@ function ecoStats()
     };
 }
 
-const eventKeys = [ "births", "plantMeals", "meatMeals", "meatTargetsWhilePursuing", "meatMealsWhilePursuing", "attackCount", "failedAttacks", "autotomyThreatDrops", "autotomyBiteDrops", "autotomyDecoysEaten", "starvationDeaths", "oldAgeDeaths", "predationDeaths", "otherDeaths" ];
+const eventKeys = [ "births", "localPlantSprouts", "seedRainPlantSprouts", "plantMeals", "meatMeals", "meatTargetsWhilePursuing", "meatMealsWhilePursuing", "attackCount", "failedAttacks", "autotomyThreatDrops", "autotomyBiteDrops", "autotomyDecoysEaten", "starvationDeaths", "oldAgeDeaths", "predationDeaths", "otherDeaths" ];
 const eventCounters = sb.simCounters || {};
 let previousEvents = Object.fromEntries( eventKeys.map( key => [ key, eventCounters[ key ] || 0 ] ));
 function eventDeltas()
@@ -286,9 +297,9 @@ function eventDeltas()
     return delta;
 }
 
-const eventColumns = "births_interval,plant_meals_interval,meat_meals_interval,pursuit_meat_target_selections_interval,pursuit_meat_meals_interval,prey_kills_interval,failed_attacks_interval,autotomy_threat_drops_interval,autotomy_bite_drops_interval,autotomy_decoys_eaten_interval,starvation_deaths_interval,old_age_deaths_interval,predation_deaths_interval,other_deaths_interval";
+const eventColumns = "births_interval,local_plant_sprouts_interval,seed_rain_plant_sprouts_interval,plant_meals_interval,meat_meals_interval,pursuit_meat_target_selections_interval,pursuit_meat_meals_interval,prey_kills_interval,failed_attacks_interval,autotomy_threat_drops_interval,autotomy_bite_drops_interval,autotomy_decoys_eaten_interval,starvation_deaths_interval,old_age_deaths_interval,predation_deaths_interval,other_deaths_interval";
 const pedigreeColumns = "pedigree_parents,pedigree_reproducing_parents,pedigree_offspring,pedigree_maturity_eligible,pedigree_matured_offspring,pedigree_maturity_survival,small_parent_matured_per_parent,medium_parent_matured_per_parent,large_parent_matured_per_parent";
-const header = "step,alive,pred,warm,cold,meat,fit,w,cline_slope,cline_r2,d_corr,b_corr,choosy,eco_types,mate_isolation,size_corr,effort,climate,social,brain_change,coarse_morphotype_bins,eff_coarse_morphotype_bins,mass_mean,mass_p10,mass_p50,mass_p90,width_mean,width_p10,width_p50,width_p90,length_mean,length_p10,length_p50,length_p90,max_width_mean,parts_mean,branch_parts_mean,branch_fraction_mean,energy_mean,offspring_alive_mean,prey_eaten_alive_mean,food_eaten_alive_mean,hunger,hunger_sd,autotomy_bite,autotomy_decoy,missing_parts,occupied,gene_clusters,eff_gene_clusters,top_gene_cluster_share," + pedigreeColumns + "," + eventColumns + ",ms_step";
+const header = "step,alive,pred,warm,cold,meat,fit,w,cline_slope,cline_r2,d_corr,b_corr,choosy,eco_types,mate_isolation,size_corr,effort,climate,social,brain_change,coarse_morphotype_bins,eff_coarse_morphotype_bins,mass_mean,mass_p10,mass_p50,mass_p90,width_mean,width_p10,width_p50,width_p90,length_mean,length_p10,length_p50,length_p90,max_width_mean,parts_mean,branch_parts_mean,branch_fraction_mean,energy_mean,offspring_alive_mean,prey_eaten_alive_mean,food_eaten_alive_mean," + pedigreeColumns + ",hunger,hunger_sd,autotomy_bite,autotomy_decoy,missing_parts,occupied,plant_cells_occupied,plant_cell_occupancy,plants_per_occupied_cell,gene_clusters,eff_gene_clusters,top_gene_cluster_share," + eventColumns + ",ms_step";
 console.log( `scenario=${SCENARIO} seed=${SEED} steps=${STEPS} flat=${FLAT} set=${EXTRA || ""}` );
 console.log( header );
 const rows = [];
@@ -320,7 +331,8 @@ for ( let step = 1; step <= STEPS; step++ )
                       e.smallParentMaturedPerParent.toFixed( 3 ), e.mediumParentMaturedPerParent.toFixed( 3 ), e.largeParentMaturedPerParent.toFixed( 3 ),
                       e.hunger.toFixed( 1 ), e.hungerSd.toFixed( 1 ),
                       e.autoBite.toFixed( 3 ), e.autoThreat.toFixed( 3 ), e.autoMissing.toFixed( 3 ),
-                      e.occupied.toFixed( 2 ), s.species, s.effSpecies.toFixed( 1 ), s.topShare.toFixed( 2 ),
+                      e.occupied.toFixed( 2 ), e.plantCellsOccupied, e.plantCellOccupancy.toFixed( 3 ), e.plantsPerOccupiedCell.toFixed( 2 ),
+                      s.species, s.effSpecies.toFixed( 1 ), s.topShare.toFixed( 2 ),
                       ...eventKeys.map( key => events[ key ] ),
                       msPerStep.toFixed( 1 ) ].join( "," );
         rows.push( row );
@@ -338,7 +350,7 @@ if ( META )
     const endedAt = new Date().toISOString();
     const durationMs = Number( process.hrtime.bigint() - runStartNs ) / 1e6;
     const metadata = {
-        schemaVersion: 1,
+        schemaVersion: 4,
         startedAt,
         endedAt,
         durationMs: Number( durationMs.toFixed( 1 )),

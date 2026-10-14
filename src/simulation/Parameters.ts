@@ -137,6 +137,12 @@ export const CLASSIC_NUM_FOODBITS          = 1000;
 export const ENVIRONMENT_SEEDS_PER_PERIOD  = WORLD_AREA_FACTOR;   // seeds per "food growth delay" steps
 export const PLANT_CELL_CAPACITY           = 6;                   // plants per 250 x 250 cell at most
 export const PLANT_PARENT_SEED_FRACTION    = 0.7;                 // the rest is "seed rain" anywhere
+// Per-plant seed production per regeneration period. At the default density
+// (1000 plants per world-area unit) this matches the old 70% parent-seed rate.
+export const ENVIRONMENT_PLANT_SPREAD_RATE = 0.0007;
+// Research mode: local seed production grows with the number of parent plants.
+// A fixed seed-rain component remains, so plants can recolonize after extinction.
+export const LOCAL_ENVIRONMENT_PLANT_GROWTH = false;
 export const PLANT_SEED_MIN_DISTANCE       = 300;
 export const PLANT_SEED_MAX_DISTANCE       = 600;
 

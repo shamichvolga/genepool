@@ -119,6 +119,7 @@ export function FamilyTree()
         const count = _numNodes;
         const offspringByParent = new Array( count );
         for (let i = 0; i < count; i++) offspringByParent[i] = { total: 0, eligible: 0, matured: 0 };
+        const total = { parents: 0, reproducingParents: 0, offspring: 0, eligible: 0, matured: 0 };
 
         for (let childIndex = 0; childIndex < count; childIndex++)
         {
@@ -127,6 +128,7 @@ export function FamilyTree()
             const eligible = !child.alive || age >= maturityAge;
             const matured = age >= maturityAge;
             const parents = [ child.parent1Index, child.parent2Index ];
+            let validParents = 0;
             for (let p = 0; p < 2; p++)
             {
                 const parentIndex = parents[p];
@@ -135,7 +137,14 @@ export function FamilyTree()
                 summary.total ++;
                 if ( eligible ) summary.eligible ++;
                 if ( matured ) summary.matured ++;
+                validParents ++;
             }
+
+            // Aggregate totals count each child once; the phenotype groups
+            // below count parent-child links so both parents receive credit.
+            if ( validParents > 0 ) total.offspring ++;
+            if ( validParents > 0 && eligible ) total.eligible ++;
+            if ( validParents > 0 && matured ) total.matured ++;
         }
 
         const groups = {
@@ -143,7 +152,6 @@ export function FamilyTree()
             medium: { parents: 0, offspring: 0, eligible: 0, matured: 0 },
             large : { parents: 0, offspring: 0, eligible: 0, matured: 0 },
         };
-        const total = { parents: 0, reproducingParents: 0, offspring: 0, eligible: 0, matured: 0 };
         for (let parentIndex = 0; parentIndex < count; parentIndex++)
         {
             const parent = _nodes[ parentIndex ];
@@ -156,9 +164,6 @@ export function FamilyTree()
             group.eligible += children.eligible;
             group.matured += children.matured;
             total.parents ++;
-            total.offspring += children.total;
-            total.eligible += children.eligible;
-            total.matured += children.matured;
             if ( children.total > 0 ) total.reproducingParents ++;
         }
 

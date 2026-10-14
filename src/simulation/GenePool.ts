@@ -2,7 +2,7 @@ import { geneAverage, convertOldGenes, GENE_LAYOUT_VERSION, setTrait, gaussian, 
 import { environment, PLANT_TYPE_WARM, PLANT_TYPE_COLD } from "./Environment";
 import { petriStartZone } from "./Petri";
 import { IGNORE_FOOD_EFFICIENCY, preyVisibility, TWO_PLANT_TYPES } from "./Ecology";
-import { INTERLEAVED_STEP, PERCEPTION_CHECK, DIET_SWITCH_RATE, CLASSIC_NUM_SWIMBOTS, CLASSIC_NUM_FOODBITS, GARDEN_RADIUS, ENVIRONMENT_SEEDS_PER_PERIOD, PLANT_CELL_CAPACITY, PLANT_PARENT_SEED_FRACTION, PLANT_SEED_MIN_DISTANCE, PLANT_SEED_MAX_DISTANCE } from "./Parameters";
+import { INTERLEAVED_STEP, PERCEPTION_CHECK, DIET_SWITCH_RATE, CLASSIC_NUM_SWIMBOTS, CLASSIC_NUM_FOODBITS, GARDEN_RADIUS, ENVIRONMENT_PLANT_SPREAD_RATE, ENVIRONMENT_SEEDS_PER_PERIOD, LOCAL_ENVIRONMENT_PLANT_GROWTH, PLANT_CELL_CAPACITY, PLANT_PARENT_SEED_FRACTION, PLANT_SEED_MIN_DISTANCE, PLANT_SEED_MAX_DISTANCE } from "./Parameters";
 
 import { BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_PREY } from "./Brain";
 import { Camera } from "./Camera";
@@ -1089,7 +1089,17 @@ if ( mode === SimulationStartMode.SPECIES )
 	//------------------------------------------------------------------------
 	this.regrowFoodEnvironment = function( numType0FoodBits, numType1FoodBits )
 	{
-	    _seedDebt += ENVIRONMENT_SEEDS_PER_PERIOD / globalTweakers.foodRegenerationPeriod;
+	    let parentSeedChance = PLANT_PARENT_SEED_FRACTION;
+	    if ( LOCAL_ENVIRONMENT_PLANT_GROWTH )
+	    {
+	        const numPlants = numType0FoodBits + numType1FoodBits;
+	        const rainRate = ENVIRONMENT_SEEDS_PER_PERIOD * ( 1 - PLANT_PARENT_SEED_FRACTION );
+	        const localRate = numPlants * ENVIRONMENT_PLANT_SPREAD_RATE;
+	        const totalRate = rainRate + localRate;
+	        _seedDebt += totalRate / globalTweakers.foodRegenerationPeriod;
+	        parentSeedChance = totalRate > 0 ? localRate / totalRate : 0;
+	    }
+	    else { _seedDebt += ENVIRONMENT_SEEDS_PER_PERIOD / globalTweakers.foodRegenerationPeriod; }
 
 	    while ( _seedDebt >= 1 )
 	    {
@@ -1098,7 +1108,7 @@ if ( mode === SimulationStartMode.SPECIES )
 	        for (let attempt = 0; attempt < 12; attempt++)
 	        {
 	            let type;
-	            const parent = ( gpRandom() < PLANT_PARENT_SEED_FRACTION ) ? this.findRandomLivingPlant() : null;
+	            const parent = ( gpRandom() < parentSeedChance ) ? this.findRandomLivingPlant() : null;
 
 	            if ( parent !== null )
 	            {
@@ -1129,6 +1139,8 @@ if ( mode === SimulationStartMode.SPECIES )
 	            _foodBits[ child ].setPosition( _vectorUtility );
 	            environment.plantCount[ type ][ environment.plantCellIndex( _vectorUtility.x, _vectorUtility.y ) ] ++;
 	            if ( type === PLANT_TYPE_WARM ) { numType0FoodBits ++; } else { numType1FoodBits ++; }
+	            if ( parent !== null ) { simCounters.localPlantSprouts ++; }
+	            else { simCounters.seedRainPlantSprouts ++; }
 	            break;
 	        }
 	    }

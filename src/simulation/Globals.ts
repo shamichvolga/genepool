@@ -90,6 +90,8 @@ export const simCounters = {
     numDeadSwimbots: 0,
     attackCount: 0,
     births: 0,
+    localPlantSprouts: 0,
+    seedRainPlantSprouts: 0,
     plantMeals: 0,
     meatMeals: 0,
     autotomyThreatDrops: 0,
@@ -109,6 +111,8 @@ export function resetSimulationCounters(): void
     simCounters.numDeadSwimbots = 0;
     simCounters.attackCount = 0;
     simCounters.births = 0;
+    simCounters.localPlantSprouts = 0;
+    simCounters.seedRainPlantSprouts = 0;
     simCounters.plantMeals = 0;
     simCounters.meatMeals = 0;
     simCounters.autotomyThreatDrops = 0;
