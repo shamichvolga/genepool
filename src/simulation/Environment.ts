@@ -22,6 +22,15 @@ import { petriLevel, petriPosition, petriTemperature, petriSettings } from "./Pe
 // (T = 0.5 everywhere, plants grow anywhere) while all other rules stay.
 export const FLAT_ENVIRONMENT          = false;
 
+// Optional matter cycle experiment: meat rot returns nutrients to the same
+// plant cell, and each successful sprout consumes one nutrient unit.
+export const NUTRIENT_CYCLE_ENABLED              = false;
+export const INITIAL_SOIL_NUTRIENT_PER_CELL      = 3.0;
+export const SOIL_NUTRIENT_CAPACITY_PER_CELL     = 12.0;
+export const SOIL_NUTRIENT_PER_SPROUT            = 1.0;
+export const MEAT_DETRITUS_YIELD                 = 0.05;
+export const SOIL_NUTRIENT_DECAY_PER_STEP        = 0.00001;
+
 export const FIELD_SIZE                = 256;      // temperature grid: FIELD_SIZE x FIELD_SIZE cells
 export const PLANT_CELL_SIZE           = 250;      // plant counting grid (pool units)
 
@@ -63,6 +72,8 @@ export class Environment
     readonly plantRows      = Math.ceil( ( POOL_BOTTOM - POOL_TOP  ) / PLANT_CELL_SIZE );
     readonly plantCount     = [ new Int32Array( this.plantColumns * this.plantRows ),     // warm plants per cell
                                 new Int32Array( this.plantColumns * this.plantRows ) ];   // cold plants per cell
+    private soilNutrient     = new Float32Array( this.plantColumns * this.plantRows );
+    private nutrientUpdatedAt = new Int32Array( this.plantColumns * this.plantRows );
 
     //--------------------------------------------------------------------
     // make a new map (uses the simulation's random numbers)
@@ -189,6 +200,54 @@ export class Environment
     }
 
     setTime( step: number ): void { this.time = step; }
+
+    resetSoilNutrients( startingAmount: number ): void
+    {
+        const amount = Math.max( 0, Math.min( SOIL_NUTRIENT_CAPACITY_PER_CELL, startingAmount ));
+        this.soilNutrient.fill( amount );
+        this.nutrientUpdatedAt.fill( this.time );
+    }
+
+    private ageSoilNutrient( cell: number ): void
+    {
+        const elapsed = this.time - this.nutrientUpdatedAt[ cell ];
+        if ( elapsed <= 0 ) return;
+        if ( SOIL_NUTRIENT_DECAY_PER_STEP > 0 )
+        {
+            this.soilNutrient[ cell ] *= Math.exp( -SOIL_NUTRIENT_DECAY_PER_STEP * elapsed );
+        }
+        this.nutrientUpdatedAt[ cell ] = this.time;
+    }
+
+    returnMeatDetritusAt( x: number, y: number, meatEnergy: number ): number
+    {
+        if ( !NUTRIENT_CYCLE_ENABLED || !( meatEnergy > 0 )) return 0;
+        const cell = this.plantCellIndex( x, y );
+        this.ageSoilNutrient( cell );
+        const returned = Math.min(
+            Math.max( 0, SOIL_NUTRIENT_CAPACITY_PER_CELL - this.soilNutrient[ cell ] ),
+            meatEnergy * MEAT_DETRITUS_YIELD
+        );
+        this.soilNutrient[ cell ] += returned;
+        return returned;
+    }
+
+    takeSoilNutrientForSproutAt( x: number, y: number ): boolean
+    {
+        if ( !NUTRIENT_CYCLE_ENABLED ) return true;
+        const cell = this.plantCellIndex( x, y );
+        this.ageSoilNutrient( cell );
+        if ( this.soilNutrient[ cell ] < SOIL_NUTRIENT_PER_SPROUT ) return false;
+        this.soilNutrient[ cell ] -= SOIL_NUTRIENT_PER_SPROUT;
+        return true;
+    }
+
+    getSoilNutrientAtCell( cell: number ): number
+    {
+        if ( cell < 0 || cell >= this.soilNutrient.length ) return 0;
+        this.ageSoilNutrient( cell );
+        return this.soilNutrient[ cell ];
+    }
 
     // -1 (deep winter) .. +1 (high summer)
     seasonPhase(): number { return Math.sin( 2 * Math.PI * this.time / SEASON_PERIOD ); }

@@ -1,5 +1,5 @@
 import { geneAverage, convertOldGenes, GENE_LAYOUT_VERSION, setTrait, gaussian, thermalWidthToGene, GENES_PREDATOR, GENES_THERMAL_OPTIMUM, GENES_THERMAL_WIDTH, GENES_DIGESTION, GENES_BRIGHTNESS, GENES_CHOOSINESS, GENES_HUNGER, GENES_AUTOTOMY_BITE, GENES_AUTOTOMY_THREAT, GENES_AUTOTOMY_AMOUNT, GENES_AUTOTOMY_WHICH } from "./EcologyGenes";
-import { environment, PLANT_TYPE_WARM, PLANT_TYPE_COLD } from "./Environment";
+import { environment, INITIAL_SOIL_NUTRIENT_PER_CELL, NUTRIENT_CYCLE_ENABLED, PLANT_TYPE_WARM, PLANT_TYPE_COLD } from "./Environment";
 import { petriStartZone } from "./Petri";
 import { IGNORE_FOOD_EFFICIENCY, preyVisibility, TWO_PLANT_TYPES } from "./Ecology";
 import { INTERLEAVED_STEP, PERCEPTION_CHECK, DIET_SWITCH_RATE, CLASSIC_NUM_SWIMBOTS, CLASSIC_NUM_FOODBITS, GARDEN_RADIUS, ENVIRONMENT_PLANT_SPREAD_RATE, ENVIRONMENT_SEEDS_PER_PERIOD, LOCAL_ENVIRONMENT_PLANT_GROWTH, PLANT_CELL_CAPACITY, PLANT_PARENT_SEED_FRACTION, PLANT_SEED_MIN_DISTANCE, PLANT_SEED_MAX_DISTANCE } from "./Parameters";
@@ -543,6 +543,7 @@ export function GenePool()
         if ( environment.active )
         {
             environment.generate( petri );
+            environment.resetSoilNutrients( NUTRIENT_CYCLE_ENABLED ? INITIAL_SOIL_NUTRIENT_PER_CELL : 0 );
             environment.copyBackgroundTo( _st.background );
             _gardens = petri ? [ _poolCenter ] : environment.gardenCenters();
             this.setGardenOfEdenRadius( GARDEN_RADIUS );
@@ -1132,6 +1133,11 @@ if ( mode === SimulationStartMode.SPECIES )
 
 	            const child = this.findLowestDeadFoodBitInArray();
 	            if ( child === NULL_INDEX ) return;
+	            if ( NUTRIENT_CYCLE_ENABLED && !environment.takeSoilNutrientForSproutAt( _vectorUtility.x, _vectorUtility.y ))
+	            {
+	                simCounters.nutrientLimitedPlantSeeds ++;
+	                continue;
+	            }
 
 	            _foodBits[ child ].initialize( child );
 	            _foodBits[ child ].setType( type );
@@ -2695,6 +2701,12 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
             else if ( type === 1 ) { numType1FoodBits ++; }
             else if ( _foodBits[f].getAge() > MEAT_DECAY_TIME )
             {
+                simCounters.meatDecayEvents ++;
+                if ( counting && NUTRIENT_CYCLE_ENABLED )
+                {
+                    const position = _foodBits[f].getPosition();
+                    simCounters.nutrientsFromMeatDecay += environment.returnMeatDetritusAt( position.x, position.y, _foodBits[f].getEnergy() );
+                }
                 _foodBits[f].kill();
             }
 

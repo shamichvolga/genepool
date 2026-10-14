@@ -27,6 +27,9 @@ const eventMap = {
     births_interval: "births",
     local_plant_sprouts_interval: "localPlantSprouts",
     seed_rain_plant_sprouts_interval: "seedRainPlantSprouts",
+    nutrient_limited_seed_attempts_interval: "nutrientLimitedPlantSeeds",
+    meat_decay_events_interval: "meatDecayEvents",
+    soil_nutrients_returned_interval: "nutrientsFromMeatDecay",
     plant_meals_interval: "plantMeals",
     meat_meals_interval: "meatMeals",
     pursuit_meat_target_selections_interval: "meatTargetsWhilePursuing",
@@ -47,6 +50,7 @@ const metrics = [
     "coarse_morphotype_bins", "eff_coarse_morphotype_bins", "gene_clusters", "eff_gene_clusters", "top_gene_cluster_share",
     "mate_isolation", "pedigree_matured_offspring", "pedigree_maturity_survival", "mass_mean", "width_mean",
 ];
+const nutrientMetrics = [ "soil_nutrient_cells", "soil_nutrient_mean", "soil_nutrient_p10", "soil_nutrient_p50", "soil_nutrient_p90" ];
 
 function readRun( scenario, seed )
 {
@@ -90,7 +94,11 @@ function readRun( scenario, seed )
             .filter( r => Number( r[ index.step ]) <= selectedStep )
             .reduce(( sum, r ) => sum + Number( r[ index[ column ]] ), 0 );
     }
-    return { scenario, seed, step: selectedStep, values, metadata };
+    for ( const name of nutrientMetrics )
+    {
+        if ( index[ name ] !== undefined ) values[ name ] = Number( row[ index[ name ]] );
+    }
+    return { scenario, seed, step: selectedStep, values, metadata, columns: header };
 }
 
 function stats( values )
@@ -119,7 +127,10 @@ for ( let i = 1; i < runs.length; i++ )
     }
 }
 
-const metricNames = [...metrics, "plants", ...Object.keys( eventMap ).map( x => x.replace( /_interval$/, "_total" ))];
+const hasNutrientMetrics = runs.flat().every( run => nutrientMetrics.every( name => run.columns.includes( name )));
+const availableEventTotals = Object.keys( eventMap ).filter( column => runs.flat().every( run => run.columns.includes( column )));
+const metricNames = [...metrics, ...( hasNutrientMetrics ? nutrientMetrics : [] ), "plants",
+    ...availableEventTotals.map( x => x.replace( /_interval$/, "_total" ))];
 const scenarioSummary = {};
 for ( let i = 0; i < scenarios.length; i++ )
 {
@@ -165,7 +176,8 @@ const csvRows = seeds.map(( seed, s ) =>
 
 fs.writeFileSync( outputBase + ".json", JSON.stringify( summary, null, 2 ) + "\n" );
 fs.writeFileSync( outputBase + ".csv", csvHeader + "\n" + csvRows.join( "\n" ) + "\n" );
-const digestMetrics = [ "alive", "plants", "eff_coarse_morphotype_bins", "pedigree_maturity_survival", "pedigree_matured_offspring", "births_total" ];
+const digestMetrics = [ "alive", "plants", ...( hasNutrientMetrics ? [ "soil_nutrient_mean" ] : [] ), "eff_coarse_morphotype_bins", "pedigree_maturity_survival", "pedigree_matured_offspring", "births_total",
+    ...( hasNutrientMetrics ? [ "soil_nutrients_returned_total" ] : [] ) ];
 const digest = {
     outputJson: outputBase + ".json",
     outputCsv: outputBase + ".csv",
