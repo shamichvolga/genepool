@@ -107,7 +107,7 @@ function ecoStats()
 {
     const bots = run.genePool.getSwimbots();
     const ts = [], thetas = [], ds = [], bs = [], backs = [], sizes = [];
-    const masses = [], widths = [], parts = [], branchFractions = [], energies = [];
+    const masses = [], widths = [], lengths = [], maxWidths = [], parts = [], branchParts = [], branchFractions = [], energies = [];
     const offspring = [], preyEaten = [], foodEaten = [];
     const bins = new Map();   // eco-types: θ, d, b in 5 bins each
     let choosy = 0;
@@ -125,9 +125,11 @@ function ecoStats()
         ts.push( t ); thetas.push( b.getThermalOptimum() ); ds.push( b.getDigestion() );
         const morphology = ( typeof b.getMorphologySummary === "function" )
                          ? b.getMorphologySummary()
-                         : { mass: b.getPhenotypeMass(), meanWidth: 0, numParts: b.getNumParts(), branchFraction: 0 };
+                         : { mass: b.getPhenotypeMass(), meanWidth: 0, meanLength: 0, maxWidth: 0,
+                             numParts: b.getNumParts(), branchParts: 0, branchFraction: 0 };
         sizes.push( Math.log( morphology.mass ));
-        masses.push( morphology.mass ); widths.push( morphology.meanWidth ); parts.push( morphology.numParts );
+        masses.push( morphology.mass ); widths.push( morphology.meanWidth ); lengths.push( morphology.meanLength );
+        maxWidths.push( morphology.maxWidth ); parts.push( morphology.numParts ); branchParts.push( morphology.branchParts );
         branchFractions.push( morphology.branchFraction ); energies.push( b.getEnergy() );
         offspring.push( b.getNumOffspring() );
         preyEaten.push( b.getNumPreyEaten() ); foodEaten.push( b.getNumFoodBitsEaten() );
@@ -177,8 +179,30 @@ function ecoStats()
     const sT    = regression( ts, sizes );
     const massDist = distribution( masses );
     const widthDist = distribution( widths );
+    const lengthDist = distribution( lengths );
+    const maxWidthDist = distribution( maxWidths );
     const partDist = distribution( parts );
     const energyDist = distribution( energies );
+    const morphBins = new Map();
+    for ( let i = 0; i < masses.length; i++ )
+    {
+        const signature = [
+            Math.floor( Math.log( Math.max( 1, masses[i] )) ),
+            Math.floor( widths[i] / 2 ),
+            Math.floor( lengths[i] / 10 ),
+            Math.floor( parts[i] / 10 ),
+            Math.floor( branchFractions[i] * 2 ),
+        ].join( ":" );
+        morphBins.set( signature, ( morphBins.get( signature ) || 0 ) + 1 );
+    }
+    let morphShannon = 0;
+    for ( const count of morphBins.values() ) { const q = count / n; morphShannon -= q * Math.log( q ); }
+    const familyTree = run.genePool.getFamilyTree && run.genePool.getFamilyTree();
+    const emptyGroup = { maturedPerParent: 0 };
+    const pedigree = familyTree && typeof familyTree.getOffspringMaturitySummary === "function"
+        ? familyTree.getOffspringMaturitySummary( run.genePool.getTimeStep(), sb.YOUNG_AGE_DURATION || 1000 )
+        : { parents: 0, reproducingParents: 0, offspring: 0, eligible: 0, matured: 0, survival: 0,
+            small: emptyGroup, medium: emptyGroup, large: emptyGroup };
     let shannon = 0;
     for ( const c of bins.values() ) { const q = c / n; shannon -= q * Math.log( q ); }
     return {
@@ -197,6 +221,8 @@ function ecoStats()
         climate  : neural ? climate / neural : 0,
         social   : neural ? social / neural : 0,
         brain    : neural ? brainDistance / neural : 0,
+        morphBins: morphBins.size,
+        effectiveMorphBins: Math.exp( morphShannon ),
         massMean : massDist.mean,
         massP10  : massDist.p10,
         massP50  : massDist.p50,
@@ -205,12 +231,27 @@ function ecoStats()
         widthP10 : widthDist.p10,
         widthP50 : widthDist.p50,
         widthP90 : widthDist.p90,
+        lengthMean: lengthDist.mean,
+        lengthP10: lengthDist.p10,
+        lengthP50: lengthDist.p50,
+        lengthP90: lengthDist.p90,
+        maxWidthMean: maxWidthDist.mean,
         partsMean: partDist.mean,
+        branchPartsMean: branchParts.reduce(( a, b ) => a + b, 0 ) / ( branchParts.length || 1 ),
         branchesMean: branchFractions.reduce(( a, b ) => a + b, 0 ) / ( branchFractions.length || 1 ),
         energyMean: energyDist.mean,
         offspringAliveMean: offspring.reduce(( a, b ) => a + b, 0 ) / ( offspring.length || 1 ),
         preyEatenAliveMean: preyEaten.reduce(( a, b ) => a + b, 0 ) / ( preyEaten.length || 1 ),
         foodEatenAliveMean: foodEaten.reduce(( a, b ) => a + b, 0 ) / ( foodEaten.length || 1 ),
+        pedigreeParents: pedigree.parents,
+        pedigreeReproducingParents: pedigree.reproducingParents,
+        pedigreeOffspring: pedigree.offspring,
+        pedigreeMaturityEligible: pedigree.eligible,
+        pedigreeMaturedOffspring: pedigree.matured,
+        pedigreeMaturitySurvival: pedigree.survival,
+        smallParentMaturedPerParent: pedigree.small.maturedPerParent,
+        mediumParentMaturedPerParent: pedigree.medium.maturedPerParent,
+        largeParentMaturedPerParent: pedigree.large.maturedPerParent,
         hunger   : hungers.length ? hungers.reduce( ( a, b ) => a + b, 0 ) / hungers.length : 0,
         autoBite    : herbivores ? autoBite / herbivores : 0,
         autoThreat  : herbivores ? autoThreat / herbivores : 0,
@@ -220,13 +261,14 @@ function ecoStats()
 }
 
 const eventKeys = [ "births", "plantMeals", "meatMeals", "attackCount", "failedAttacks", "autotomyThreatDrops", "autotomyBiteDrops", "autotomyDecoysEaten", "starvationDeaths", "oldAgeDeaths", "predationDeaths", "otherDeaths" ];
-let previousEvents = Object.fromEntries( eventKeys.map( key => [ key, sb.simCounters[ key ] || 0 ] ));
+const eventCounters = sb.simCounters || {};
+let previousEvents = Object.fromEntries( eventKeys.map( key => [ key, eventCounters[ key ] || 0 ] ));
 function eventDeltas()
 {
     const delta = {};
     for ( const key of eventKeys )
     {
-        const current = sb.simCounters[ key ] || 0;
+        const current = eventCounters[ key ] || 0;
         delta[ key ] = current - previousEvents[ key ];
         previousEvents[ key ] = current;
     }
@@ -234,7 +276,8 @@ function eventDeltas()
 }
 
 const eventColumns = "births_interval,plant_meals_interval,meat_meals_interval,prey_kills_interval,failed_attacks_interval,autotomy_threat_drops_interval,autotomy_bite_drops_interval,autotomy_decoys_eaten_interval,starvation_deaths_interval,old_age_deaths_interval,predation_deaths_interval,other_deaths_interval";
-const header = "step,alive,pred,warm,cold,meat,fit,w,cline_slope,cline_r2,d_corr,b_corr,choosy,eco_types,mate_isolation,size_corr,effort,climate,social,brain_change,mass_mean,mass_p10,mass_p50,mass_p90,width_mean,width_p10,width_p50,width_p90,parts_mean,branch_fraction_mean,energy_mean,offspring_alive_mean,prey_eaten_alive_mean,food_eaten_alive_mean,hunger,hunger_sd,autotomy_bite,autotomy_decoy,missing_parts,occupied,species_gene_clusters,eff_species_gene_clusters,top_gene_cluster_share," + eventColumns + ",ms_step";
+const pedigreeColumns = "pedigree_parents,pedigree_reproducing_parents,pedigree_offspring,pedigree_maturity_eligible,pedigree_matured_offspring,pedigree_maturity_survival,small_parent_matured_per_parent,medium_parent_matured_per_parent,large_parent_matured_per_parent";
+const header = "step,alive,pred,warm,cold,meat,fit,w,cline_slope,cline_r2,d_corr,b_corr,choosy,eco_types,mate_isolation,size_corr,effort,climate,social,brain_change,coarse_morphotype_bins,eff_coarse_morphotype_bins,mass_mean,mass_p10,mass_p50,mass_p90,width_mean,width_p10,width_p50,width_p90,length_mean,length_p10,length_p50,length_p90,max_width_mean,parts_mean,branch_parts_mean,branch_fraction_mean,energy_mean,offspring_alive_mean,prey_eaten_alive_mean,food_eaten_alive_mean,hunger,hunger_sd,autotomy_bite,autotomy_decoy,missing_parts,occupied,gene_clusters,eff_gene_clusters,top_gene_cluster_share," + pedigreeColumns + "," + eventColumns + ",ms_step";
 console.log( `seed=${SEED} steps=${STEPS} flat=${FLAT} set=${EXTRA || ""}` );
 console.log( header );
 const rows = [];
@@ -255,10 +298,15 @@ for ( let step = 1; step <= STEPS; step++ )
                       e.fit.toFixed( 2 ), e.width.toFixed( 3 ), e.slope.toFixed( 2 ), e.r2.toFixed( 2 ), e.dCorr.toFixed( 2 ),
                       e.bCorr.toFixed( 2 ), e.choosy.toFixed( 2 ), e.ecoTypes.toFixed( 1 ), e.isolation.toFixed( 2 ), e.sizeCorr.toFixed( 2 ),
                       e.effort.toFixed( 2 ), e.climate.toFixed( 2 ), e.social.toFixed( 2 ), e.brain.toFixed( 3 ),
+                      e.morphBins, e.effectiveMorphBins.toFixed( 1 ),
                       e.massMean.toFixed( 2 ), e.massP10.toFixed( 2 ), e.massP50.toFixed( 2 ), e.massP90.toFixed( 2 ),
                       e.widthMean.toFixed( 3 ), e.widthP10.toFixed( 3 ), e.widthP50.toFixed( 3 ), e.widthP90.toFixed( 3 ),
-                      e.partsMean.toFixed( 2 ), e.branchesMean.toFixed( 3 ), e.energyMean.toFixed( 2 ),
+                      e.lengthMean.toFixed( 2 ), e.lengthP10.toFixed( 2 ), e.lengthP50.toFixed( 2 ), e.lengthP90.toFixed( 2 ),
+                      e.maxWidthMean.toFixed( 3 ), e.partsMean.toFixed( 2 ), e.branchPartsMean.toFixed( 2 ), e.branchesMean.toFixed( 3 ), e.energyMean.toFixed( 2 ),
                       e.offspringAliveMean.toFixed( 3 ), e.preyEatenAliveMean.toFixed( 3 ), e.foodEatenAliveMean.toFixed( 3 ),
+                      e.pedigreeParents, e.pedigreeReproducingParents, e.pedigreeOffspring, e.pedigreeMaturityEligible,
+                      e.pedigreeMaturedOffspring, e.pedigreeMaturitySurvival.toFixed( 3 ),
+                      e.smallParentMaturedPerParent.toFixed( 3 ), e.mediumParentMaturedPerParent.toFixed( 3 ), e.largeParentMaturedPerParent.toFixed( 3 ),
                       e.hunger.toFixed( 1 ), e.hungerSd.toFixed( 1 ),
                       e.autoBite.toFixed( 3 ), e.autoThreat.toFixed( 3 ), e.autoMissing.toFixed( 3 ),
                       e.occupied.toFixed( 2 ), s.species, s.effSpecies.toFixed( 1 ), s.topShare.toFixed( 2 ),
@@ -295,7 +343,16 @@ if ( META )
         pool: { width: sb.POOL_WIDTH, height: sb.POOL_HEIGHT },
         git,
         nodeVersion: process.version,
-        eventTotals: Object.fromEntries( eventKeys.map( key => [ key, sb.simCounters[ key ] || 0 ] )),
+        eventTotals: Object.fromEntries( eventKeys.map( key => [ key, eventCounters[ key ] || 0 ] )),
+        fitnessMetrics: {
+            offspringMaturityAge: sb.YOUNG_AGE_DURATION,
+            parentMassClasses: { small: "<300", medium: "300-699", large: ">=700" },
+            definition: "direct offspring alive or known to have survived to the age of first reproduction; younger living offspring are censored",
+        },
+        morphologyMetrics: {
+            type: "coarse bins from log mass, mean width, mean length, part count, and branch fraction; not biological species",
+            widths: { logMass: 1, meanWidth: 2, meanLength: 10, partCount: 10, branchFraction: 0.5 },
+        },
         outputs: { csv: CSV ? path.resolve( CSV ) : null },
         alerts: run.alerts,
     };

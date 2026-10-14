@@ -2263,6 +2263,25 @@ let partAccelerationY = -strokeForceY;
 	        branchFraction : numParts ? branchParts / numParts : ZERO,
 	    };
 	}
+	this.getEvolutionTraits = function()
+	{
+	    const morphology = this.getMorphologySummary();
+	    return {
+	        mass: morphology.mass,
+	        meanWidth: morphology.meanWidth,
+	        numParts: morphology.numParts,
+	        branchFraction: morphology.branchFraction,
+	        thermalOptimum: _thermalOptimum,
+	        thermalWidth: _thermalWidth,
+	        digestion: _digestion,
+	        brightness: _phenotype.brightness,
+	        predatorLevel: _phenotype.predatorLevel,
+	        hungerThreshold: _brain.getHungerThreshold(),
+	        autotomyBite: _phenotype.autotomyBite,
+	        autotomyThreat: _phenotype.autotomyThreat,
+	        effort: _effort,
+	    };
+	}
 	this.getHungerThreshold             = function() { return _brain.getHungerThreshold();                  }
 	this.getMaxEnergy                   = function() { return SWIMBOT_MAX_ENERGY;                           }
 	this.getMaxAge                      = function() { return globalTweakers.maximumLifeSpan;               }

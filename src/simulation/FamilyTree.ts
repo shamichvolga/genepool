@@ -29,7 +29,9 @@ export function FamilyTree()
                 
         this.birthTime  = 0;
         this.deathTime  = 0;
+        this.alive      = true;
         this.genes      = null; // Uint8Array - one byte per gene
+        this.evolutionTraits = null;
     }
 
     let _nodes = new Array();  
@@ -57,12 +59,13 @@ export function FamilyTree()
         if ( index > NULL_INDEX )
         {
             _nodes[ index ].deathTime = deathTime;
+            _nodes[ index ].alive = false;
         }
     }
     
     
     //-------------------------------------------------------------------------------------------
-    this.addNode = function( poolIndex, parent1PoolIndex, parent2PoolIndex, birthTime, genes )
+    this.addNode = function( poolIndex, parent1PoolIndex, parent2PoolIndex, birthTime, genes, evolutionTraits = null )
     {
         //calulate the proper parent indices based on.....
     
@@ -74,8 +77,10 @@ export function FamilyTree()
         _nodes[ _numNodes ].parent2Index        = getIndexFromPoolIndex( parent2PoolIndex );
         _nodes[ _numNodes ].birthTime           = birthTime;
         _nodes[ _numNodes ].deathTime           = 0;
+        _nodes[ _numNodes ].alive               = true;
         
         _nodes[ _numNodes ].genes = Uint8Array.from( genes );
+        _nodes[ _numNodes ].evolutionTraits = evolutionTraits;
 
         _latestNodeForPoolIndex.set( poolIndex, _numNodes );
         _numNodes ++;
@@ -103,4 +108,79 @@ export function FamilyTree()
     this.getNodeBirthTime           = function( index   ) { return _nodes[ index ].birthTime;           }
     this.getNodeDeathTime           = function( index   ) { return _nodes[ index ].deathTime;           }
     this.getNodeGenes               = function( index   ) { return _nodes[ index ].genes;               }
+    this.getNodeEvolutionTraits     = function( index   ) { return _nodes[ index ].evolutionTraits;     }
+    this.getNodeAlive               = function( index   ) { return _nodes[ index ].alive;               }
+
+    // Direct offspring which have reached the age of first reproduction are a
+    // useful early measure of inherited fitness. Young living offspring are
+    // censored until they reach maturity instead of being counted as failures.
+    this.getOffspringMaturitySummary = function( currentTime, maturityAge )
+    {
+        const count = _numNodes;
+        const offspringByParent = new Array( count );
+        for (let i = 0; i < count; i++) offspringByParent[i] = { total: 0, eligible: 0, matured: 0 };
+
+        for (let childIndex = 0; childIndex < count; childIndex++)
+        {
+            const child = _nodes[ childIndex ];
+            const age = Math.max( 0, ( child.alive ? currentTime : child.deathTime ) - child.birthTime );
+            const eligible = !child.alive || age >= maturityAge;
+            const matured = age >= maturityAge;
+            const parents = [ child.parent1Index, child.parent2Index ];
+            for (let p = 0; p < 2; p++)
+            {
+                const parentIndex = parents[p];
+                if ( parentIndex < 0 || parentIndex >= count || ( p === 1 && parentIndex === parents[0] )) continue;
+                const summary = offspringByParent[ parentIndex ];
+                summary.total ++;
+                if ( eligible ) summary.eligible ++;
+                if ( matured ) summary.matured ++;
+            }
+        }
+
+        const groups = {
+            small : { parents: 0, offspring: 0, eligible: 0, matured: 0 },
+            medium: { parents: 0, offspring: 0, eligible: 0, matured: 0 },
+            large : { parents: 0, offspring: 0, eligible: 0, matured: 0 },
+        };
+        const total = { parents: 0, reproducingParents: 0, offspring: 0, eligible: 0, matured: 0 };
+        for (let parentIndex = 0; parentIndex < count; parentIndex++)
+        {
+            const parent = _nodes[ parentIndex ];
+            const traits = parent.evolutionTraits;
+            if ( !traits || !( traits.mass > 0 )) continue;
+            const group = traits.mass < 300 ? groups.small : ( traits.mass < 700 ? groups.medium : groups.large );
+            const children = offspringByParent[ parentIndex ];
+            group.parents ++;
+            group.offspring += children.total;
+            group.eligible += children.eligible;
+            group.matured += children.matured;
+            total.parents ++;
+            total.offspring += children.total;
+            total.eligible += children.eligible;
+            total.matured += children.matured;
+            if ( children.total > 0 ) total.reproducingParents ++;
+        }
+
+        const summarize = ( group ) => ({
+            parents: group.parents,
+            offspring: group.offspring,
+            eligible: group.eligible,
+            matured: group.matured,
+            survival: group.eligible > 0 ? group.matured / group.eligible : 0,
+            maturedPerParent: group.parents > 0 ? group.matured / group.parents : 0,
+        });
+        return {
+            parents: total.parents,
+            reproducingParents: total.reproducingParents,
+            offspring: total.offspring,
+            eligible: total.eligible,
+            matured: total.matured,
+            survival: total.eligible > 0 ? total.matured / total.eligible : 0,
+            maturedPerParent: total.parents > 0 ? total.matured / total.parents : 0,
+            small: summarize( groups.small ),
+            medium: summarize( groups.medium ),
+            large: summarize( groups.large ),
+        };
+    }
 }

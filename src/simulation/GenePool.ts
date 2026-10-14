@@ -896,7 +896,7 @@ if ( mode === SimulationStartMode.SPECIES )
             //------------------------------------------------------------------------------------
             // add the new swimbot to the family tree
             //------------------------------------------------------------------------------------
-            _familyTree.addNode( i, NULL_INDEX, NULL_INDEX, _clock, this.getSwimbotGenes(i) );
+            _familyTree.addNode( i, NULL_INDEX, NULL_INDEX, _clock, this.getSwimbotGenes(i), this.getSwimbotEvolutionTraits(i) );
         }
 
         //--------------------------------------
@@ -1979,7 +1979,7 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
                                 //--------------------------------------------------
                                 // add the new swimbot to the family tree
                                 //--------------------------------------------------
-                                _familyTree.addNode( newBornSwimbotIndex, s, chosenMateIndex, _clock, this.getSwimbotGenes( newBornSwimbotIndex ) );
+                                _familyTree.addNode( newBornSwimbotIndex, s, chosenMateIndex, _clock, this.getSwimbotGenes( newBornSwimbotIndex ), this.getSwimbotEvolutionTraits( newBornSwimbotIndex ) );
 
                             }// if ( getJunkDnaDistance( _myGenotype, _mateGenotype ) > NON_REPRODUCING_JUNK_DNA_LIMIT )
                             else
@@ -4674,6 +4674,16 @@ for (let g=0; g<NUM_GENES; g++)
         let genotype = _swimbots[ ID ].getGenotype();
         return genotype.getGenes();
     }
+
+	this.getSwimbotEvolutionTraits = function( ID )
+	{
+	    const swimbot = _swimbots[ ID ];
+	    const position = swimbot.getPosition();
+	    return Object.assign(
+	        { birthTemperature: environment.active ? environment.temperatureAt( position.x, position.y ) : 0.5 },
+	        swimbot.getEvolutionTraits()
+	    );
+	}
 
 	//----------------------------------
 	this.getFamilyTree = function()
