@@ -2234,6 +2234,7 @@ let partAccelerationY = -strokeForceY;
 	this.getAngle                       = function() { return _angle;                                       }
 	this.getEnergyEfficiency            = function() { return _energyEfficiency;                            }
 	this.getPosition                    = function() { return _position;                                    }
+	this.getSpeed                       = function() { return _velocity.getMagnitude();                     }
 	this.getBoundingRadius              = function() { return _phenotype.sumPartLengths;                    }
 	this.getNumParts                    = function() { return _phenotype.numParts;                          }
 	this.getIsLookingForSensoryInput    = function() { return _readyforSensoryInputToBrain;                 }

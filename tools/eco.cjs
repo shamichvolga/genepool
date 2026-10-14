@@ -120,7 +120,7 @@ function ecoStats()
 {
     const bots = run.genePool.getSwimbots();
     const ts = [], thetas = [], ds = [], bs = [], backs = [], sizes = [];
-    const masses = [], widths = [], lengths = [], maxWidths = [], parts = [], branchParts = [], branchFractions = [], energies = [];
+    const masses = [], widths = [], lengths = [], maxWidths = [], parts = [], branchParts = [], branchFractions = [], energies = [], speeds = [], swimEfficiencies = [];
     const offspring = [], preyEaten = [], foodEaten = [];
     const bins = new Map();   // eco-types: θ, d, b in 5 bins each
     let choosy = 0;
@@ -144,6 +144,8 @@ function ecoStats()
         masses.push( morphology.mass ); widths.push( morphology.meanWidth ); lengths.push( morphology.meanLength );
         maxWidths.push( morphology.maxWidth ); parts.push( morphology.numParts ); branchParts.push( morphology.branchParts );
         branchFractions.push( morphology.branchFraction ); energies.push( b.getEnergy() );
+        speeds.push( typeof b.getSpeed === "function" ? b.getSpeed() : 0 );
+        swimEfficiencies.push( b.getEnergyEfficiency() );
         offspring.push( b.getNumOffspring() );
         preyEaten.push( b.getNumPreyEaten() ); foodEaten.push( b.getNumFoodBitsEaten() );
         if ( typeof b.getBrightness === "function" )
@@ -208,6 +210,8 @@ function ecoStats()
     const maxWidthDist = distribution( maxWidths );
     const partDist = distribution( parts );
     const energyDist = distribution( energies );
+    const speedDist = distribution( speeds );
+    const swimEfficiencyDist = distribution( swimEfficiencies );
     const morphBins = new Map();
     for ( let i = 0; i < masses.length; i++ )
     {
@@ -273,6 +277,11 @@ function ecoStats()
         branchPartsMean: branchParts.reduce(( a, b ) => a + b, 0 ) / ( branchParts.length || 1 ),
         branchesMean: branchFractions.reduce(( a, b ) => a + b, 0 ) / ( branchFractions.length || 1 ),
         energyMean: energyDist.mean,
+        speedMean: speedDist.mean,
+        speedP10: speedDist.p10,
+        speedP50: speedDist.p50,
+        speedP90: speedDist.p90,
+        swimEnergyEfficiencyMean: swimEfficiencyDist.mean,
         offspringAliveMean: offspring.reduce(( a, b ) => a + b, 0 ) / ( offspring.length || 1 ),
         preyEatenAliveMean: preyEaten.reduce(( a, b ) => a + b, 0 ) / ( preyEaten.length || 1 ),
         foodEatenAliveMean: foodEaten.reduce(( a, b ) => a + b, 0 ) / ( foodEaten.length || 1 ),
@@ -310,7 +319,7 @@ function eventDeltas()
 
 const eventColumns = "births_interval,local_plant_sprouts_interval,seed_rain_plant_sprouts_interval,nutrient_limited_seed_attempts_interval,meat_decay_events_interval,soil_nutrients_returned_interval,plant_meals_interval,meat_meals_interval,pursuit_meat_target_selections_interval,pursuit_meat_meals_interval,prey_kills_interval,failed_attacks_interval,autotomy_threat_drops_interval,autotomy_bite_drops_interval,autotomy_decoys_eaten_interval,starvation_deaths_interval,old_age_deaths_interval,predation_deaths_interval,other_deaths_interval";
 const pedigreeColumns = "pedigree_parents,pedigree_reproducing_parents,pedigree_offspring,pedigree_maturity_eligible,pedigree_matured_offspring,pedigree_maturity_survival,small_parent_matured_per_parent,medium_parent_matured_per_parent,large_parent_matured_per_parent";
-const header = "step,alive,pred,warm,cold,meat,fit,w,cline_slope,cline_r2,d_corr,b_corr,choosy,eco_types,mate_isolation,size_corr,effort,climate,social,brain_change,coarse_morphotype_bins,eff_coarse_morphotype_bins,mass_mean,mass_p10,mass_p50,mass_p90,width_mean,width_p10,width_p50,width_p90,length_mean,length_p10,length_p50,length_p90,max_width_mean,parts_mean,branch_parts_mean,branch_fraction_mean,energy_mean,offspring_alive_mean,prey_eaten_alive_mean,food_eaten_alive_mean," + pedigreeColumns + ",hunger,hunger_sd,autotomy_bite,autotomy_decoy,missing_parts,occupied,plant_cells_occupied,plant_cell_occupancy,plants_per_occupied_cell,soil_nutrient_cells,soil_nutrient_mean,soil_nutrient_p10,soil_nutrient_p50,soil_nutrient_p90,gene_clusters,eff_gene_clusters,top_gene_cluster_share," + eventColumns + ",ms_step";
+const header = "step,alive,pred,warm,cold,meat,fit,w,cline_slope,cline_r2,d_corr,b_corr,choosy,eco_types,mate_isolation,size_corr,effort,climate,social,brain_change,coarse_morphotype_bins,eff_coarse_morphotype_bins,mass_mean,mass_p10,mass_p50,mass_p90,width_mean,width_p10,width_p50,width_p90,length_mean,length_p10,length_p50,length_p90,max_width_mean,parts_mean,branch_parts_mean,branch_fraction_mean,energy_mean,speed_mean,speed_p10,speed_p50,speed_p90,swim_energy_efficiency_mean,offspring_alive_mean,prey_eaten_alive_mean,food_eaten_alive_mean," + pedigreeColumns + ",hunger,hunger_sd,autotomy_bite,autotomy_decoy,missing_parts,occupied,plant_cells_occupied,plant_cell_occupancy,plants_per_occupied_cell,soil_nutrient_cells,soil_nutrient_mean,soil_nutrient_p10,soil_nutrient_p50,soil_nutrient_p90,gene_clusters,eff_gene_clusters,top_gene_cluster_share," + eventColumns + ",ms_step";
 console.log( `scenario=${SCENARIO} seed=${SEED} steps=${STEPS} flat=${FLAT} set=${EXTRA || ""}` );
 console.log( header );
 const rows = [];
@@ -336,6 +345,7 @@ for ( let step = 1; step <= STEPS; step++ )
                       e.widthMean.toFixed( 3 ), e.widthP10.toFixed( 3 ), e.widthP50.toFixed( 3 ), e.widthP90.toFixed( 3 ),
                       e.lengthMean.toFixed( 2 ), e.lengthP10.toFixed( 2 ), e.lengthP50.toFixed( 2 ), e.lengthP90.toFixed( 2 ),
                       e.maxWidthMean.toFixed( 3 ), e.partsMean.toFixed( 2 ), e.branchPartsMean.toFixed( 2 ), e.branchesMean.toFixed( 3 ), e.energyMean.toFixed( 2 ),
+                      e.speedMean.toFixed( 4 ), e.speedP10.toFixed( 4 ), e.speedP50.toFixed( 4 ), e.speedP90.toFixed( 4 ), e.swimEnergyEfficiencyMean.toFixed( 5 ),
                       e.offspringAliveMean.toFixed( 3 ), e.preyEatenAliveMean.toFixed( 3 ), e.foodEatenAliveMean.toFixed( 3 ),
                       e.pedigreeParents, e.pedigreeReproducingParents, e.pedigreeOffspring, e.pedigreeMaturityEligible,
                       e.pedigreeMaturedOffspring, e.pedigreeMaturitySurvival.toFixed( 3 ),
@@ -363,7 +373,7 @@ if ( META )
     const endedAt = new Date().toISOString();
     const durationMs = Number( process.hrtime.bigint() - runStartNs ) / 1e6;
     const metadata = {
-        schemaVersion: 5,
+        schemaVersion: 6,
         startedAt,
         endedAt,
         durationMs: Number( durationMs.toFixed( 1 )),
