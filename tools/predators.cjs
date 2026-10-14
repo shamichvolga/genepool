@@ -19,7 +19,7 @@ const STEPS = parseInt( arg( "steps", "20000" ), 10 );
 const EVERY = parseInt( arg( "every", "1000" ), 10 );
 const EXTRA = arg( "set", null );
 
-const overrides = { PREDATOR_INTRODUCTION_STEP: "2000" };
+const overrides = {};
 if ( EXTRA ) for ( const kv of EXTRA.split( "," ) ) { const [ k, v ] = kv.split( "=" ); overrides[ k.trim() ] = v.trim(); }
 
 const run = createSimulation( SEED, overrides );

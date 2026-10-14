@@ -64,8 +64,9 @@ export const SWIMBOT_MAX_ENERGY            = MAX_SWIMBOT_HUNGER_THRESHOLD;
 // Какая доля энергии жертвы достаётся хищнику (1.0 = вся; в природе 0.1–0.3).
 export const PREDATION_ENERGY_TRANSFER     = 0.3;
 // a kill also gives the prey's body: energy per unit of body mass
-// (a typical prey of mass ~400 gives ~50 more; before, a kill gave only 10-20)
-export const PREY_BODY_ENERGY              = 0.12;
+// (typical prey ~400 -> +24; a kill gives ~40 in all, before only 10-20.
+//  0.12 with predators from the start: predators grew to 57% and the pool crashed)
+export const PREY_BODY_ENERGY              = 0.06;
 
 // autotomy (see Swimbot.autotomize): a dropped part grows back after this
 // many steps, if the swimbot has the energy it lost (it pays it again)
@@ -91,22 +92,22 @@ export const ATTACK_SUCCESS_CHANCE         = 0.25;
 // in the environment pool prey hides (camouflage) and the world is big;
 // tests (tools/predators.cjs): at 0.25 and 0.4 predators dwindle to a few,
 // at 0.6 they hold on with real predator-prey cycles
-export const ENVIRONMENT_ATTACK_SUCCESS_CHANCE = 0.5;
+export const ENVIRONMENT_ATTACK_SUCCESS_CHANCE = 0.35;   // (0.5 with predators from the start: too many predators)
 export const ATTACK_COOLDOWN               = 60;
 
 // Доля хищников в стартовой популяции (у остальных ген хищности низкий).
 export const INITIAL_PREDATOR_FRACTION     = 0.1;
 
-// In the "random" pool with environment, the start is herbivores only (in several
-// gardens, one per biome); at this step a few swimbots become predators.
-export const PREDATOR_INTRODUCTION_STEP    = 20000;
-export const PREDATOR_INTRODUCTION_FRACTION = 0.05;
+// (There is no scheduled "predators appear now" any more: predation is only a
+//  gene. About INITIAL_PREDATOR_FRACTION of the founders are born predators,
+//  and later predators come only from predator parents or from the rare diet
+//  mutation of a newborn, DIET_SWITCH_RATE.)
 export const GARDEN_RADIUS                 = 600 * WORLD_SCALE;   // (1200 in the normal world: same crowding in every size)
 
-// Now and then a newborn switches diet (herbivore <-> predator), like a big
-// mutation. In the old pool this happened by accident (the predator gene was
-// a body gene with big mutation jumps, ~0.4% of births), and it was what kept
-// the predators going. Here it is explicit, after predators were introduced.
+// Now and then a newborn switches diet (herbivore <-> predator): a big
+// mutation of the predator genes, inherited by its children. In the old pool
+// this happened by accident (the predator gene was a body gene with big
+// mutation jumps, ~0.4% of births). It never changes a grown-up swimbot.
 export const DIET_SWITCH_RATE              = 0.004;
 
 // stage 7 test switch: compare the perception kernel with the old code

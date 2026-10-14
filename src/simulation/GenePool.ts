@@ -1,7 +1,7 @@
 import { geneAverage, convertOldGenes, GENE_LAYOUT_VERSION, setTrait, gaussian, thermalWidthToGene, GENES_PREDATOR, GENES_THERMAL_OPTIMUM, GENES_THERMAL_WIDTH, GENES_DIGESTION, GENES_BRIGHTNESS, GENES_CHOOSINESS, GENES_HUNGER, GENES_AUTOTOMY_BITE, GENES_AUTOTOMY_THREAT, GENES_AUTOTOMY_AMOUNT, GENES_AUTOTOMY_WHICH } from "./EcologyGenes";
 import { environment, PLANT_TYPE_WARM, PLANT_TYPE_COLD } from "./Environment";
 import { IGNORE_FOOD_EFFICIENCY, preyVisibility, TWO_PLANT_TYPES } from "./Ecology";
-import { INTERLEAVED_STEP, PERCEPTION_CHECK, DIET_SWITCH_RATE, CLASSIC_NUM_SWIMBOTS, CLASSIC_NUM_FOODBITS, GARDEN_RADIUS, PREDATOR_INTRODUCTION_STEP, PREDATOR_INTRODUCTION_FRACTION, ENVIRONMENT_SEEDS_PER_PERIOD, PLANT_CELL_CAPACITY, PLANT_PARENT_SEED_FRACTION, PLANT_SEED_MIN_DISTANCE, PLANT_SEED_MAX_DISTANCE } from "./Parameters";
+import { INTERLEAVED_STEP, PERCEPTION_CHECK, DIET_SWITCH_RATE, CLASSIC_NUM_SWIMBOTS, CLASSIC_NUM_FOODBITS, GARDEN_RADIUS, ENVIRONMENT_SEEDS_PER_PERIOD, PLANT_CELL_CAPACITY, PLANT_PARENT_SEED_FRACTION, PLANT_SEED_MIN_DISTANCE, PLANT_SEED_MAX_DISTANCE } from "./Parameters";
 
 import { BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_PREY } from "./Brain";
 import { Camera } from "./Camera";
@@ -145,7 +145,6 @@ export function GenePool()
     const _matingRecord      = new Float64Array( MATING_RECORD_SIZE * 2 );   // preferred temperatures of both parents
     let _matingCount         = 0;
     let _gardens             = [];      // environment: one starting garden per biome type
-    let _predatorsIntroduced = false;
     let _seedDebt            = 0;       // fractional seeds carried to the next step
     let _environmentImage    = null;    // picture of the temperature map (drawn behind the pool)
     const STARVING_FOOD_CHOICE = 15;   // below this energy a swimbot eats anything
@@ -535,7 +534,6 @@ export function GenePool()
         //-------------------------------------------------------------------
         environment.active = ( mode === SimulationStartMode.RANDOM );
         environment.setTime(0);
-        _predatorsIntroduced = false;
         _seedDebt = 0;
         _environmentImage = null;
         _matingCount = 0;
@@ -833,15 +831,17 @@ if ( mode === SimulationStartMode.SPECIES )
 
             //-------------------------------------------------------------------
             // environment: each swimbot starts in one of the gardens (one per
-            // biome type), roughly adapted to the local temperature and plants;
-            // everybody is a herbivore (predators appear later, see simulateStep)
+            // biome type), roughly adapted to the local temperature and plants.
+            // Predation is in the genes: about 10% of the founders are born
+            // predators, the rest herbivores (as in the original random pool)
             //-------------------------------------------------------------------
             if ( environment.active )
             {
                 const garden = _gardens[ i % _gardens.length ];
                 initialPosition.setToRandomLocationInDisk( garden, _gardenOfEdenRadius );
                 this.setEcologyGenesForPlace( _myGenotype, initialPosition.x, initialPosition.y );
-                setTrait( _myGenotype, GENES_PREDATOR, gpRandom() * PREDATOR_LEVEL_THRESHOLD * 0.8 );
+                const bornPredator = gpRandom() < INITIAL_PREDATOR_FRACTION;
+                setTrait( _myGenotype, GENES_PREDATOR, bornPredator ? 0.7 + 0.3 * gpRandom() : gpRandom() * PREDATOR_LEVEL_THRESHOLD * 0.8 );
             }
             //-------------------------------------------------------------------
             // start with mostly herbivores: predators are a small minority
@@ -1097,42 +1097,6 @@ if ( mode === SimulationStartMode.SPECIES )
 	            environment.plantCount[ type ][ environment.plantCellIndex( _vectorUtility.x, _vectorUtility.y ) ] ++;
 	            if ( type === PLANT_TYPE_WARM ) { numType0FoodBits ++; } else { numType1FoodBits ++; }
 	            break;
-	        }
-	    }
-	}
-
-	//------------------------------------------------------------------------
-	// predators appear some time after the start (in the environment pool
-	// everybody starts as a herbivore). They appear in small groups, one per
-	// garden: lonely predators scattered over the big world never find a mate.
-	//------------------------------------------------------------------------
-	this.introducePredators = function()
-	{
-	    _predatorsIntroduced = true;
-
-	    const alive = _aliveSwimbotIndices.filter( s => _swimbots[s].getAlive() && !_swimbots[s].isEternal() );
-	    if ( alive.length === 0 ) return;
-
-	    const wanted  = Math.max( 10, Math.round( alive.length * PREDATOR_INTRODUCTION_FRACTION ));
-	    const perGroup = Math.ceil( wanted / Math.max( 1, _gardens.length ));
-
-	    for (let g = 0; g < Math.max( 1, _gardens.length ); g++)
-	    {
-	        // the group forms around a random swimbot: its nearest neighbors join
-	        const center = _swimbots[ alive[ Math.floor( gpRandom() * alive.length ) ] ].getPosition();
-	        const byDistance = alive
-	            .filter( s => _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD )
-	            .map( s => ({ s, d: _swimbots[s].getPosition().getDistanceTo( center ) }))
-	            .sort( ( a, b ) => a.d - b.d );
-
-	        for (let k = 0; k < perGroup && k < byDistance.length; k++)
-	        {
-	            const swimbot = _swimbots[ byDistance[k].s ];
-	            swimbot.applyPredatorLevel( 0.75 + 0.25 * gpRandom() );
-
-	            // a well-fed start: they can look for a mate at once (the first
-	            // predators of the old pool also started at the hunger threshold)
-	            swimbot.setEnergy( Math.max( swimbot.getEnergy(), 2 * globalTweakers.hungerThreshold ));
 	        }
 	    }
 	}
@@ -1718,7 +1682,6 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
         if ( environment.active )
         {
             environment.setTime( _clock );
-            if ( !_predatorsIntroduced && ( _clock >= PREDATOR_INTRODUCTION_STEP )) { this.introducePredators(); }
         }
 
         //----------------------
@@ -1937,7 +1900,7 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
                                 _childGenotype.setAsOffspring( _myGenotype, _mateGenotype );
 
                                 // rarely, the child switches diet (see DIET_SWITCH_RATE)
-                                if ( environment.active && _predatorsIntroduced && ( gpRandom() < DIET_SWITCH_RATE ))
+                                if ( environment.active && ( gpRandom() < DIET_SWITCH_RATE ))
                                 {
                                     const wasPredator = geneAverage( _childGenotype, GENES_PREDATOR ) > PREDATOR_LEVEL_THRESHOLD;
                                     setTrait( _childGenotype, GENES_PREDATOR, wasPredator ? 0.3 * gpRandom() : 0.75 + 0.25 * gpRandom() );
@@ -3093,7 +3056,6 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
         if ( environment.active ) { environment.copyBackgroundTo( _st.background ); }
         _clock = ( typeof data.clock === "number" ) ? data.clock : 0;
         environment.setTime( _clock );
-        _predatorsIntroduced = ( data.predatorsIntroduced !== undefined ) ? data.predatorsIntroduced : true;
         _seedDebt = 0;
         globalTweakers.numFoodTypes = environment.active ? ( TWO_PLANT_TYPES ? 2 : 1 ) : globalTweakers.numFoodTypes;
         _environmentImage = environment.active ? environment.makeImage() : null;
@@ -4665,8 +4627,7 @@ for (let g=0; g<NUM_GENES; g++)
             "obstacleEnd2Y"             : _obstacle.getEnd2Position().y,
             "geneLayout"                : GENE_LAYOUT_VERSION,
             "environment"               : environment.getState(),
-            "clock"                     : _clock,
-            "predatorsIntroduced"       : _predatorsIntroduced
+            "clock"                     : _clock
         }
 
         return poolData;

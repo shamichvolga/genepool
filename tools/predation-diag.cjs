@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 // Predator / prey check: how well-fed predators are, and how prey react.
 //   node tools/predation-diag.cjs [steps] [seed] [--set "NAME=value,..."]
-// Small world, predators from step 1000. Every 1000 steps:
+// Small world, predators from the start (born so). Every 1000 steps:
 //   predators, their mean energy, share above the hunger threshold (can mate),
 //   kills, mean energy gained per kill,
 //   herbivores near a hunting predator (< 300) and the share of them fleeing.
@@ -10,7 +10,7 @@ const { createSimulation } = require( "./headless.cjs" );
 const steps = parseInt( process.argv[2] || "8000", 10 );
 const seed  = parseInt( process.argv[3] || "1", 10 );
 const i = process.argv.indexOf( "--set" );
-const overrides = { WORLD_SCALE: 1, PREDATOR_INTRODUCTION_STEP: 1000 };
+const overrides = { WORLD_SCALE: 1 };
 if ( i > 0 ) for ( const kv of process.argv[ i + 1 ].split( "," )) { const [ k, v ] = kv.split( "=" ); overrides[ k ] = v; }
 
 const run = createSimulation( seed, overrides );
