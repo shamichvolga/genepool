@@ -404,6 +404,7 @@ export function obstacleCollision( s: number, st: SharedState ): void
 {
     const B = st.bots, b = s * BOT_STRIDE, P = st.params;
     const endRadius = P[ PARAM_OB_END_RADIUS ];
+    if ( endRadius <= ZERO ) return;
     let radius = B[ b + B_SUM_LENGTHS ] * ONE_HALF;
     if ( radius < endRadius ) { radius = endRadius; }
 

@@ -118,6 +118,11 @@ export const PERCEPTION_CHECK              = false;
 // which lets the moving and the looking run in several threads
 export const INTERLEAVED_STEP              = false;
 
+// Research controls used by tools/eco.cjs; disabled in normal simulations.
+export const RANDOM_MATING_CONTROL          = false;
+export const BARRIER_EXPERIMENT             = false;
+export const OBSTACLE_ENABLED               = true;
+
 // neural brain (stage 6): used in the environment ("random") pool
 export const NEURAL_BRAIN_ENABLED          = true;
 export const CLIMATE_STEERING              = 1.0;    // pull towards a better temperature (x brain output)

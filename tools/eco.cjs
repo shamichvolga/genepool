@@ -26,12 +26,23 @@ function arg( name, fallback )
 const SEED  = parseInt( arg( "seed", "1" ), 10 );
 const STEPS = parseInt( arg( "steps", "50000" ), 10 );
 const EVERY = parseInt( arg( "every", "5000" ), 10 );
-const FLAT  = arg( "flat", "0" ) === "1";
+const SCENARIO = arg( "scenario", "BASE" ).toUpperCase();
 const CSV   = arg( "csv", null );
 const META  = arg( "meta", CSV && /\.csv$/i.test( CSV ) ? CSV.replace( /\.csv$/i, ".json" ) : null );
 const EXTRA = arg( "set", null );   // e.g. --set "THERMAL_TRADE_OFF=0.3,PLANT_CELL_CAPACITY=8"
 
-const overrides = {};
+const scenarios = {
+    BASE: { label: "current environment and mating", overrides: {} },
+    C0:   { label: "flat temperature and unrestricted plant growth", overrides: { FLAT_ENVIRONMENT: "true" } },
+    C1:   { label: "remove thermal mismatch drain and generalist-width penalty", overrides: { THERMAL_MISMATCH_DRAIN: "0", THERMAL_TRADE_OFF: "0" } },
+    C2:   { label: "random mate choice without brightness-based mate rejection", overrides: { RANDOM_MATING_CONTROL: "true" } },
+    C3:   { label: "halve biome patch spacing", overrides: { BIOME_SPACING: "2000" } },
+    C4:   { label: "disable kinesis and social steering", overrides: { KINESIS_TURN_CHANCE: "0", SOCIAL_STEERING: "0" } },
+    C5:   { label: "add a pool-spanning barrier", overrides: { BARRIER_EXPERIMENT: "true" } },
+};
+if ( !scenarios[ SCENARIO ] ) throw new Error( `unknown scenario ${SCENARIO}; choose ${Object.keys(scenarios).join(", ")}` );
+const FLAT = SCENARIO === "C0" || arg( "flat", "0" ) === "1";
+const overrides = Object.assign( {}, scenarios[ SCENARIO ].overrides );
 if ( FLAT ) overrides.FLAT_ENVIRONMENT = "true";
 if ( EXTRA ) for ( const kv of EXTRA.split( "," ) ) { const [ k, v ] = kv.split( "=" ); overrides[ k.trim() ] = v.trim(); }
 
@@ -260,7 +271,7 @@ function ecoStats()
     };
 }
 
-const eventKeys = [ "births", "plantMeals", "meatMeals", "attackCount", "failedAttacks", "autotomyThreatDrops", "autotomyBiteDrops", "autotomyDecoysEaten", "starvationDeaths", "oldAgeDeaths", "predationDeaths", "otherDeaths" ];
+const eventKeys = [ "births", "plantMeals", "meatMeals", "meatTargetsWhilePursuing", "meatMealsWhilePursuing", "attackCount", "failedAttacks", "autotomyThreatDrops", "autotomyBiteDrops", "autotomyDecoysEaten", "starvationDeaths", "oldAgeDeaths", "predationDeaths", "otherDeaths" ];
 const eventCounters = sb.simCounters || {};
 let previousEvents = Object.fromEntries( eventKeys.map( key => [ key, eventCounters[ key ] || 0 ] ));
 function eventDeltas()
@@ -275,10 +286,10 @@ function eventDeltas()
     return delta;
 }
 
-const eventColumns = "births_interval,plant_meals_interval,meat_meals_interval,prey_kills_interval,failed_attacks_interval,autotomy_threat_drops_interval,autotomy_bite_drops_interval,autotomy_decoys_eaten_interval,starvation_deaths_interval,old_age_deaths_interval,predation_deaths_interval,other_deaths_interval";
+const eventColumns = "births_interval,plant_meals_interval,meat_meals_interval,pursuit_meat_target_selections_interval,pursuit_meat_meals_interval,prey_kills_interval,failed_attacks_interval,autotomy_threat_drops_interval,autotomy_bite_drops_interval,autotomy_decoys_eaten_interval,starvation_deaths_interval,old_age_deaths_interval,predation_deaths_interval,other_deaths_interval";
 const pedigreeColumns = "pedigree_parents,pedigree_reproducing_parents,pedigree_offspring,pedigree_maturity_eligible,pedigree_matured_offspring,pedigree_maturity_survival,small_parent_matured_per_parent,medium_parent_matured_per_parent,large_parent_matured_per_parent";
 const header = "step,alive,pred,warm,cold,meat,fit,w,cline_slope,cline_r2,d_corr,b_corr,choosy,eco_types,mate_isolation,size_corr,effort,climate,social,brain_change,coarse_morphotype_bins,eff_coarse_morphotype_bins,mass_mean,mass_p10,mass_p50,mass_p90,width_mean,width_p10,width_p50,width_p90,length_mean,length_p10,length_p50,length_p90,max_width_mean,parts_mean,branch_parts_mean,branch_fraction_mean,energy_mean,offspring_alive_mean,prey_eaten_alive_mean,food_eaten_alive_mean,hunger,hunger_sd,autotomy_bite,autotomy_decoy,missing_parts,occupied,gene_clusters,eff_gene_clusters,top_gene_cluster_share," + pedigreeColumns + "," + eventColumns + ",ms_step";
-console.log( `seed=${SEED} steps=${STEPS} flat=${FLAT} set=${EXTRA || ""}` );
+console.log( `scenario=${SCENARIO} seed=${SEED} steps=${STEPS} flat=${FLAT} set=${EXTRA || ""}` );
 console.log( header );
 const rows = [];
 let t0 = Date.now();
@@ -332,6 +343,8 @@ if ( META )
         endedAt,
         durationMs: Number( durationMs.toFixed( 1 )),
         seed: SEED,
+        scenario: SCENARIO,
+        scenarioDescription: scenarios[ SCENARIO ].label,
         stepsRequested: STEPS,
         stepsExecuted,
         samplingInterval: EVERY,

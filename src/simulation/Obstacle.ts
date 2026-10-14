@@ -101,6 +101,7 @@ export function Obstacle()
     let _testVector     = new Vector2D();
     let _collisionForce = new Vector2D();
     let _length         = ZERO;
+    let _enabled        = true;
 
     
     // set colors....
@@ -178,6 +179,7 @@ export function Obstacle()
 	//---------------------------------------------------
 	this.getCollision = function( testPosition, radius ) 
 	{
+	    if ( !_enabled ) return false;
 	    if ( radius < END_RADIUS )
 	    {
 	        radius = END_RADIUS;
@@ -225,8 +227,11 @@ export function Obstacle()
 	    params[ midX ] = _mid.x;   params[ midY ] = _mid.y;
 	    params[ length ] = _length;
 	    params[ perpX ] = _perp.x; params[ perpY ] = _perp.y;
-	    params[ endRadius ] = END_RADIUS;
+	    params[ endRadius ] = _enabled ? END_RADIUS : 0;
 	}
+
+	this.setEnabled = function( enabled ) { _enabled = enabled === true; }
+	this.getEnabled = function() { return _enabled; }
 
 	this.getCurrentCollisionForce = function() 
 	{
@@ -239,6 +244,7 @@ export function Obstacle()
 	//-------------------------------------------------------
 	this.getObstruction = function( p1, p2 ) 
 	{
+	    if ( !_enabled ) return false;
 	    return p1.getSegmentsCrossing( p1, p2, _end1.position, _end2.position );
     }
 
@@ -365,6 +371,7 @@ export function Obstacle()
 	//--------------------------------
 	this.render = function( camera )
 	{
+	    if ( !_enabled ) return;
         //--------------------------------------------
         // show main shaft
         //--------------------------------------------

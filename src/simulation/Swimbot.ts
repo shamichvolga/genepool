@@ -25,7 +25,7 @@ import { DEFAULT_FOOD_BIT_ENERGY, FoodBit } from "./FoodBit";
 import { Genotype } from "./Genotype";
 import { globalTweakers, gpRandom, simCounters } from "./Globals";
 import { NULL_INDEX, ONE, ONE_HALF, ONE_THIRD, PI_OVER_180, ZERO } from "./MathConstants";
-import { AUTOTOMY_REGROW_DELAY, AUTOTOMY_DECOY_SPAN, PREY_BODY_ENERGY, ATTACK_COOLDOWN, ATTACK_SUCCESS_CHANCE, ENVIRONMENT_ATTACK_SUCCESS_CHANCE, BASAL_METABOLISM, DEFAULT_SWIMBOT_HUNGER_THRESHOLD, FOOD_TYPE_OFFSET, OLD_AGE_DURATION, PREDATION_ENERGY_TRANSFER, PREDATOR_FLEE_RADIUS, PREDATOR_LEVEL_THRESHOLD, PREY_SCAN_COOLDOWN, PREY_SCAN_RADIUS_GROWTH, PREY_SCAN_RADIUS_MAX_SCALE, SWIMBOT_MAX_ENERGY, SWIMBOT_SELECT_RADIUS_SCALAR, YOUNG_AGE_DURATION } from "./Parameters";
+import { AUTOTOMY_REGROW_DELAY, AUTOTOMY_DECOY_SPAN, PREY_BODY_ENERGY, ATTACK_COOLDOWN, ATTACK_SUCCESS_CHANCE, ENVIRONMENT_ATTACK_SUCCESS_CHANCE, BASAL_METABOLISM, DEFAULT_SWIMBOT_HUNGER_THRESHOLD, FOOD_TYPE_OFFSET, OLD_AGE_DURATION, PREDATION_ENERGY_TRANSFER, PREDATOR_FLEE_RADIUS, PREDATOR_LEVEL_THRESHOLD, PREY_SCAN_COOLDOWN, PREY_SCAN_RADIUS_GROWTH, PREY_SCAN_RADIUS_MAX_SCALE, RANDOM_MATING_CONTROL, SWIMBOT_MAX_ENERGY, SWIMBOT_SELECT_RADIUS_SCALAR, YOUNG_AGE_DURATION } from "./Parameters";
 import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
 import { SwimbotRenderer } from "./SwimbotRenderer";
 import { ATTRACTION_BIG, ATTRACTION_CLOSEST, ATTRACTION_COLORFUL, ATTRACTION_CROOKED, ATTRACTION_HYPER, ATTRACTION_LONG, ATTRACTION_NO_COLOR, ATTRACTION_RANDOM, ATTRACTION_SHORT, ATTRACTION_SIMILAR_COLOR, ATTRACTION_SIMILAR_HYPER, ATTRACTION_SIMILAR_LENGTH, ATTRACTION_SIMILAR_SIZE, ATTRACTION_SIMILAR_STRAIGHT, ATTRACTION_SMALL, ATTRACTION_STILL, ATTRACTION_STRAIGHT, CONTINUAL_ENERGY_DRAIN, ENERGY_EFFICIENCY_MEASUREMENT_PERIOD, ENERGY_USED_UP_SWIMMING, GENITAL_INDEX, MAX_PARTS, MOUTH_INDEX, NULL_PART, Phenotype, ROOT_PART, STARVING, STARVING_TIMER_DELTA, SWIMBOT_GENITAL_LENGTH, SWIMBOT_MOUTH_LENGTH, SWIMBOT_VIEW_RADIUS, TIMER_DELTA_INCREASE_RATE, WALL_BOUNCE } from "./SwimbotTypes";
@@ -86,6 +86,7 @@ var    flopperYV = 0;
 	let _index              = NULL_INDEX;
 	let _chosenMateIndex    = NULL_INDEX;
 	let _chosenFoodBitIndex = NULL_INDEX;
+	let _lastPursuitMeatIndex = NULL_INDEX;
 	let _alive 	  		    = false;
 	let _tryingToMate       = false;
 	let _tryingToEat        = false;
@@ -954,6 +955,7 @@ this.setParent = function( parent )
         _index              = NULL_INDEX;
         _chosenMateIndex    = NULL_INDEX;
         _chosenFoodBitIndex = NULL_INDEX;
+        _lastPursuitMeatIndex = NULL_INDEX;
         _alive 	  		    = false;
         _tryingToMate       = false;
         _tryingToEat        = false;
@@ -1337,6 +1339,13 @@ _position.copyFrom( position );
         //-----------------------------
         _brain.setEnergyLevel( _energy );
         _brain.update();
+
+        if (( _brain.getState() === BRAIN_STATE_PURSUING_PREY ) && this.getChosenMeatIsValid() )
+        {
+            if ( _chosenFoodBitIndex !== _lastPursuitMeatIndex ) simCounters.meatTargetsWhilePursuing ++;
+            _lastPursuitMeatIndex = _chosenFoodBitIndex;
+        }
+        else if ( _brain.getState() !== BRAIN_STATE_PURSUING_PREY ) { _lastPursuitMeatIndex = NULL_INDEX; }
 
         //-------------------------------------
         // I wanna eat my chosen food bit...
@@ -1786,6 +1795,7 @@ _position.copyFrom( position );
 	//------------------------------------------------------------------------
 	this.acceptsMate = function( suitor )
 	{
+	    if ( RANDOM_MATING_CONTROL ) return true;
 	    if ( !environment.active ) return true;
 	    const db = Math.abs( suitor.getBrightness() - _brightness );
 	    return pairRandom( suitor.getIndex(), _index ) < mateAcceptance( db, _choosiness );
@@ -2478,6 +2488,7 @@ let partAccelerationY = -strokeForceY;
             if ( _chosenFoodBit.getType() === 2 )
             {
                 simCounters.meatMeals ++;
+                if ( _brain.getState() === BRAIN_STATE_PURSUING_PREY ) simCounters.meatMealsWhilePursuing ++;
                 if ( _chosenFoodBit.getAutotomyDecoy && _chosenFoodBit.getAutotomyDecoy() ) simCounters.autotomyDecoysEaten ++;
             }
             else { simCounters.plantMeals ++; }
@@ -2649,14 +2660,14 @@ let partAccelerationY = -strokeForceY;
         }
 
         //------------------------------------------------------------
-        // if looking for a food bit, choose the one that was found
-        // (a hunting predator with no prey in sight takes meat)
+        // Keep a meat target available while a predator pursues prey. If it
+        // reaches the meat, decide() gives the meal priority for that step.
         //------------------------------------------------------------
         _chosenFoodBit = null;
         _chosenFoodBitIndex = NULL_INDEX;
 
-        if (( _brain.getState() == BRAIN_STATE_LOOKING_FOR_PREY )
-        &&  ( _chosenPrey == null )
+        if ((( _brain.getState() == BRAIN_STATE_LOOKING_FOR_PREY )
+        ||   ( _brain.getState() == BRAIN_STATE_PURSUING_PREY ))
         &&  ( foodBitWasFound )
         &&  ( theFoodBit != null )
         &&  ( theFoodBit.getType() === 2 ))
@@ -2664,6 +2675,13 @@ let partAccelerationY = -strokeForceY;
             _chosenFoodBit = theFoodBit;
             _chosenFoodBitIndex = _chosenFoodBit.getIndex();
         }
+
+        if (( _brain.getState() === BRAIN_STATE_PURSUING_PREY ) && ( _chosenFoodBit != null ))
+        {
+            if ( _chosenFoodBitIndex !== _lastPursuitMeatIndex ) simCounters.meatTargetsWhilePursuing ++;
+            _lastPursuitMeatIndex = _chosenFoodBitIndex;
+        }
+        else { _lastPursuitMeatIndex = NULL_INDEX; }
 
         if (( _brain.getState() == BRAIN_STATE_LOOKING_FOR_FOOD )
         ||  ( _brain.getState() == BRAIN_STATE_PURSUING_FOOD ))
@@ -3240,6 +3258,7 @@ let partAccelerationY = -strokeForceY;
         _index              = NULL_INDEX;
         _chosenMateIndex    = NULL_INDEX;
         _chosenFoodBitIndex = NULL_INDEX;
+        _lastPursuitMeatIndex = NULL_INDEX;
         _alive 	  		    = false;
         _tryingToMate       = false;
         _tryingToEat        = false;
