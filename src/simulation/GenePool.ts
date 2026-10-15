@@ -1949,23 +1949,37 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 
                         assert( _potentialMate != null, "genepool: updateSwimbots: _potentialMate != null" );
 
-                        // predators and herbivores never have children together
-                        if ( _potentialMate.getAlive() && _potentialMate.sameDiet( _swimbots[s] ))
+                        if ( _potentialMate.getAlive() )
                         {
-                            assert( _myGenotype    != null, "genepool: updateSwimbots: _myGenotype    != null" );
-                            assert( _mateGenotype  != null, "genepool: updateSwimbots: _mateGenotype  != null" );
-
-                            //------------------------------------------------------------------------------
-                            // collect genes from me and my chosen mate and recombine them for the child
-                            //------------------------------------------------------------------------------
-                            _myGenotype = _swimbots[s].getGenotype();
-                            _mateGenotype = _potentialMate.getGenotype();
-
-                            //------------------------------------------------------------------------------
-                            // if the junk dna of each swimbot are similar enough...
-                            //------------------------------------------------------------------------------
-if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_JUNK_DNA_LIMIT )
+                            simCounters.reproductivePairAttempts ++;
+                            // Predators and herbivores never have children together.
+                            if ( !_potentialMate.sameDiet( _swimbots[s] ))
                             {
+                                simCounters.reproductiveDietMismatches ++;
+                            }
+                            else
+                            {
+                                assert( _myGenotype    != null, "genepool: updateSwimbots: _myGenotype    != null" );
+                                assert( _mateGenotype  != null, "genepool: updateSwimbots: _mateGenotype  != null" );
+
+                                //------------------------------------------------------------------------------
+                                // collect genes from me and my chosen mate and recombine them for the child
+                                //------------------------------------------------------------------------------
+                                _myGenotype = _swimbots[s].getGenotype();
+                                _mateGenotype = _potentialMate.getGenotype();
+
+                                //------------------------------------------------------------------------------
+                                // Junk DNA similarity is a direct reproductive barrier in this model.
+                                // Record the distribution and blocked share for later ecological analysis.
+                                //------------------------------------------------------------------------------
+                                const junkSimilarity = this.getJunkDnaSimilarity( _myGenotype, _mateGenotype );
+                                simCounters.reproductiveJunkChecks ++;
+                                simCounters.reproductiveJunkSimilaritySum += junkSimilarity;
+                                const similarityBin = Math.min( 9, Math.floor( junkSimilarity * 10 ));
+                                simCounters.reproductiveJunkSimilarityBins[ similarityBin ] ++;
+                                if ( junkSimilarity > NON_REPRODUCING_JUNK_DNA_LIMIT )
+                                {
+                                    simCounters.reproductiveJunkPasses ++;
 
                                 //-----------------------------------
                                 // recombine genes for the child
@@ -2026,12 +2040,13 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
                                 //--------------------------------------------------
                                 _familyTree.addNode( newBornSwimbotIndex, s, chosenMateIndex, _clock, this.getSwimbotGenes( newBornSwimbotIndex ), this.getSwimbotEvolutionTraits( newBornSwimbotIndex ) );
 
-                            }// if ( getJunkDnaDistance( _myGenotype, _mateGenotype ) > NON_REPRODUCING_JUNK_DNA_LIMIT )
-                            else
-                            {
-                                //console.log( "reproduction not possible because junk dna is too dissimilar!" );
+                                }
+                                else
+                                {
+                                    simCounters.reproductiveJunkBlocks ++;
+                                }
                             }
-                        }   //  if ( _potentialMate.getAlive() )
+                        }
                     }      //   if (( newBornSwimbotIndex != -1 ) &&  ( swimbot[s].getChosenMateIndex() != -1 ))
 
                     //------------------------------------------------------------------

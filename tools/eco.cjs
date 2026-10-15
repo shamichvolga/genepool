@@ -506,22 +506,28 @@ function ecoStats()
     };
 }
 
-const eventKeys = [ "births", "localPlantSprouts", "seedRainPlantSprouts", "nutrientLimitedPlantSeeds", "meatDecayEvents", "nutrientsFromMeatDecay", "plantMeals", "meatMeals", "meatTargetsWhilePursuing", "meatMealsWhilePursuing", "attackCount", "failedAttacks", "autotomyThreatDrops", "autotomyBiteDrops", "autotomyDecoysEaten", "starvationDeaths", "oldAgeDeaths", "predationDeaths", "otherDeaths", "selfCannibalismEvents", "selfCannibalismEnergy", "selfCannibalismMass", "preyTargetChoices", "preyTargetLiveChoices", "preyTargetMeatChoices", "preyTargetLiveDistanceSum", "preyTargetLiveRewardSum", "preyTargetMeatDistanceSum", "preyTargetMeatRewardSum", "preyTargetDistanceSum", "preyTargetRewardSum" ];
+const reproductiveJunkSimilarityBinKeys = Array.from({ length: 10 }, ( _, index ) => `reproductiveJunkSimilarityBin${index}`);
+const eventKeys = [ "births", "localPlantSprouts", "seedRainPlantSprouts", "nutrientLimitedPlantSeeds", "meatDecayEvents", "nutrientsFromMeatDecay", "plantMeals", "meatMeals", "meatTargetsWhilePursuing", "meatMealsWhilePursuing", "attackCount", "failedAttacks", "autotomyThreatDrops", "autotomyBiteDrops", "autotomyDecoysEaten", "starvationDeaths", "oldAgeDeaths", "predationDeaths", "otherDeaths", "selfCannibalismEvents", "selfCannibalismEnergy", "selfCannibalismMass", "preyTargetChoices", "preyTargetLiveChoices", "preyTargetMeatChoices", "preyTargetLiveDistanceSum", "preyTargetLiveRewardSum", "preyTargetMeatDistanceSum", "preyTargetMeatRewardSum", "preyTargetDistanceSum", "preyTargetRewardSum", "reproductivePairAttempts", "reproductiveDietMismatches", "reproductiveJunkChecks", "reproductiveJunkPasses", "reproductiveJunkBlocks", "reproductiveJunkSimilaritySum", ...reproductiveJunkSimilarityBinKeys ];
 const eventCounters = sb.simCounters || {};
-let previousEvents = Object.fromEntries( eventKeys.map( key => [ key, eventCounters[ key ] || 0 ] ));
+function eventCounterValue( key )
+{
+    const bin = key.match( /^reproductiveJunkSimilarityBin(\d+)$/ );
+    return bin ? (( eventCounters.reproductiveJunkSimilarityBins || [] )[ Number( bin[1] ) ] || 0 ) : ( eventCounters[ key ] || 0 );
+}
+let previousEvents = Object.fromEntries( eventKeys.map( key => [ key, eventCounterValue( key ) ] ));
 function eventDeltas()
 {
     const delta = {};
     for ( const key of eventKeys )
     {
-        const current = eventCounters[ key ] || 0;
+        const current = eventCounterValue( key );
         delta[ key ] = current - previousEvents[ key ];
         previousEvents[ key ] = current;
     }
     return delta;
 }
 
-const eventColumns = "births_interval,local_plant_sprouts_interval,seed_rain_plant_sprouts_interval,nutrient_limited_seed_attempts_interval,meat_decay_events_interval,soil_nutrients_returned_interval,plant_meals_interval,meat_meals_interval,pursuit_meat_target_selections_interval,pursuit_meat_meals_interval,prey_kills_interval,failed_attacks_interval,autotomy_threat_drops_interval,autotomy_bite_drops_interval,autotomy_decoys_eaten_interval,starvation_deaths_interval,old_age_deaths_interval,predation_deaths_interval,other_deaths_interval,self_feed_events_interval,self_feed_energy_interval,self_feed_mass_interval,prey_target_choices_interval,prey_target_live_choices_interval,prey_target_meat_choices_interval,prey_target_live_distance_sum_interval,prey_target_live_reward_sum_interval,prey_target_meat_distance_sum_interval,prey_target_meat_reward_sum_interval,prey_target_distance_sum_interval,prey_target_reward_sum_interval";
+const eventColumns = "births_interval,local_plant_sprouts_interval,seed_rain_plant_sprouts_interval,nutrient_limited_seed_attempts_interval,meat_decay_events_interval,soil_nutrients_returned_interval,plant_meals_interval,meat_meals_interval,pursuit_meat_target_selections_interval,pursuit_meat_meals_interval,prey_kills_interval,failed_attacks_interval,autotomy_threat_drops_interval,autotomy_bite_drops_interval,autotomy_decoys_eaten_interval,starvation_deaths_interval,old_age_deaths_interval,predation_deaths_interval,other_deaths_interval,self_feed_events_interval,self_feed_energy_interval,self_feed_mass_interval,prey_target_choices_interval,prey_target_live_choices_interval,prey_target_meat_choices_interval,prey_target_live_distance_sum_interval,prey_target_live_reward_sum_interval,prey_target_meat_distance_sum_interval,prey_target_meat_reward_sum_interval,prey_target_distance_sum_interval,prey_target_reward_sum_interval,reproductive_pair_attempts_interval,reproductive_diet_mismatches_interval,reproductive_junk_checks_interval,reproductive_junk_passes_interval,reproductive_junk_blocks_interval,reproductive_junk_similarity_sum_interval," + reproductiveJunkSimilarityBinKeys.map(( _, index ) => `reproductive_junk_similarity_bin_${index}_interval`).join( "," );
 const pedigreeColumns = "pedigree_parents,pedigree_reproducing_parents,pedigree_offspring,pedigree_maturity_eligible,pedigree_matured_offspring,pedigree_maturity_survival,small_parent_matured_per_parent,medium_parent_matured_per_parent,large_parent_matured_per_parent,low_choosiness_parents,low_choosiness_matured_per_parent,low_choosiness_maturity_survival,medium_choosiness_parents,medium_choosiness_matured_per_parent,medium_choosiness_maturity_survival,high_choosiness_parents,high_choosiness_matured_per_parent,high_choosiness_maturity_survival";
 const header = "step,alive,pred,warm,cold,meat,fit,w,body_temp_mean,body_temp_p10,body_temp_p50,body_temp_p90,ambient_temp_mean,thermal_lag_abs_mean,thermal_lag_mass_corr,thermal_lag_width_corr,cline_slope,cline_r2,d_corr,b_corr,choosy,eco_types,mate_isolation,mate_brightness_assortment,mating_sample_size,mating_brightness_gap_mean,mating_choosiness_mean,size_corr,effort,climate,social,brain_change,coarse_morphotype_bins,eff_coarse_morphotype_bins,mass_mean,mass_p10,mass_p50,mass_p90,width_mean,width_p10,width_p50,width_p90,length_mean,length_p10,length_p50,length_p90,max_width_mean,parts_mean,branch_parts_mean,branch_fraction_mean,energy_mean,speed_mean,speed_p10,speed_p50,speed_p90,swim_energy_efficiency_mean,offspring_alive_mean,prey_eaten_alive_mean,food_eaten_alive_mean," + pedigreeColumns + ",hunger,hunger_sd,autotomy_bite,autotomy_decoy,missing_parts,occupied,plant_cells_occupied,plant_cell_occupancy,plants_per_occupied_cell,soil_nutrient_cells,soil_nutrient_mean,soil_nutrient_p10,soil_nutrient_p50,soil_nutrient_p90,gene_clusters,eff_gene_clusters,top_gene_cluster_share,predator_target_value_weight_mean,predator_target_travel_weight_mean,predator_target_bait_bias_mean," + eventColumns + ",ms_step";
 console.log( `scenario=${SCENARIO} seed=${SEED} steps=${STEPS} flat=${FLAT} set=${EXTRA || ""}` );
@@ -592,7 +598,7 @@ if ( META )
     const endedAt = new Date().toISOString();
     const durationMs = Number( process.hrtime.bigint() - runStartNs ) / 1e6;
     const metadata = {
-        schemaVersion: 13,
+        schemaVersion: 14,
         startedAt,
         endedAt,
         durationMs: Number( durationMs.toFixed( 1 )),
@@ -610,7 +616,7 @@ if ( META )
         pool: { width: sb.POOL_WIDTH, height: sb.POOL_HEIGHT },
         git,
         nodeVersion: process.version,
-        eventTotals: Object.fromEntries( eventKeys.map( key => [ key, eventCounters[ key ] || 0 ] )),
+        eventTotals: Object.fromEntries( eventKeys.map( key => [ key, eventCounterValue( key ) ] )),
         fitnessMetrics: {
             offspringMaturityAge: sb.YOUNG_AGE_DURATION,
             parentMassClasses: { small: "<300", medium: "300-699", large: ">=700" },
@@ -637,6 +643,23 @@ if ( META )
             brightnessAssortment: "1 minus actual mean parental brightness difference divided by the mean difference among random pairs from the living population; descriptive, reported only with more than 20 recorded matings, not a species identifier",
             brightnessGap: "mean absolute brightness difference between actual parents",
             choosiness: "mean inherited brightness-acceptance trait of parents in the recorded pairs",
+        },
+        reproductiveCompatibilityMetrics: {
+            pairAttempt: "a living chosen mate while a pool slot is available for offspring; this is not every nearby candidate",
+            dietMismatch: "selected pair was blocked because predator and herbivore roles differ",
+            junkDnaThreshold: sb.NON_REPRODUCING_JUNK_DNA_LIMIT,
+            junkDnaSimilarity: "mean and ten-bin histogram among same-diet selected pairs evaluated for reproduction",
+            meanJunkDnaSimilarity: eventCounters.reproductiveJunkChecks
+                ? eventCounters.reproductiveJunkSimilaritySum / eventCounters.reproductiveJunkChecks
+                : null,
+            junkDnaSimilarityHistogram: reproductiveJunkSimilarityBinKeys.map(( key, index ) => ({
+                range: [ index / 10, ( index + 1 ) / 10 ],
+                count: eventCounterValue( key ),
+            })),
+            junkDnaBlockRate: eventCounters.reproductiveJunkChecks
+                ? eventCounters.reproductiveJunkBlocks / eventCounters.reproductiveJunkChecks
+                : null,
+            interpretation: "measures implemented mating barriers; does not by itself define a biological species or a stable reproductive group",
         },
         individualHistoryMetrics: {
             selection: `up to ${INDIVIDUAL_HISTORY_LIMIT} living organisms sampled deterministically from the initial population`,

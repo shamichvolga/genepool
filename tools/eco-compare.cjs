@@ -55,6 +55,16 @@ const eventMap = {
     prey_target_meat_reward_sum_interval: "preyTargetMeatRewardSum",
     prey_target_distance_sum_interval: "preyTargetDistanceSum",
     prey_target_reward_sum_interval: "preyTargetRewardSum",
+    reproductive_pair_attempts_interval: "reproductivePairAttempts",
+    reproductive_diet_mismatches_interval: "reproductiveDietMismatches",
+    reproductive_junk_checks_interval: "reproductiveJunkChecks",
+    reproductive_junk_passes_interval: "reproductiveJunkPasses",
+    reproductive_junk_blocks_interval: "reproductiveJunkBlocks",
+    reproductive_junk_similarity_sum_interval: "reproductiveJunkSimilaritySum",
+    ...Array.from({ length: 10 }, ( _, index ) => [
+        `reproductive_junk_similarity_bin_${index}_interval`,
+        `reproductiveJunkSimilarityBin${index}`,
+    ]).reduce(( result, [ column, event ]) => Object.assign( result, { [ column ]: event }), {}),
 };
 
 const metrics = [
@@ -220,6 +230,8 @@ fs.writeFileSync( outputBase + ".json", JSON.stringify( summary, null, 2 ) + "\n
 fs.writeFileSync( outputBase + ".csv", csvHeader + "\n" + csvRows.join( "\n" ) + "\n" );
 const digestMetrics = [ "alive", "plants", ...( hasNutrientMetrics ? [ "soil_nutrient_mean" ] : [] ), "eff_coarse_morphotype_bins", "pedigree_maturity_survival", "pedigree_matured_offspring", "mate_brightness_assortment", "mating_brightness_gap_mean", "mating_choosiness_mean", "mating_sample_size", "births_total",
     "self_feed_events_total", "self_feed_energy_total", "self_feed_mass_total", "prey_target_choices_total", "prey_target_live_choices_total", "prey_target_meat_choices_total", "prey_target_live_distance_sum_total", "prey_target_live_reward_sum_total", "prey_target_meat_distance_sum_total", "prey_target_meat_reward_sum_total", "prey_target_distance_sum_total", "prey_target_reward_sum_total",
+    "reproductive_pair_attempts_total", "reproductive_diet_mismatches_total", "reproductive_junk_checks_total", "reproductive_junk_passes_total", "reproductive_junk_blocks_total", "reproductive_junk_similarity_sum_total",
+    ...Array.from({ length: 10 }, ( _, index ) => `reproductive_junk_similarity_bin_${index}_total`),
     "low_choosiness_matured_per_parent", "medium_choosiness_matured_per_parent", "high_choosiness_matured_per_parent",
     ...( hasNutrientMetrics ? [ "soil_nutrients_returned_total" ] : [] ), ...( hasPerformanceMetrics ? [ "speed_mean", "swim_energy_efficiency_mean" ] : [] ),
     ...( hasThermalMetrics ? [ "body_temp_mean", "ambient_temp_mean", "thermal_lag_abs_mean", "thermal_lag_mass_corr", "thermal_lag_width_corr" ] : [] ) ];

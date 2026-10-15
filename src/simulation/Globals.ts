@@ -112,6 +112,13 @@ export const simCounters = {
     preyTargetMeatRewardSum: 0,
     preyTargetDistanceSum: 0,
     preyTargetRewardSum: 0,
+    reproductivePairAttempts: 0,
+    reproductiveDietMismatches: 0,
+    reproductiveJunkChecks: 0,
+    reproductiveJunkPasses: 0,
+    reproductiveJunkBlocks: 0,
+    reproductiveJunkSimilaritySum: 0,
+    reproductiveJunkSimilarityBins: new Array(10).fill(0),
     meatTargetsWhilePursuing: 0,
     meatMealsWhilePursuing: 0,
     failedAttacks: 0,
@@ -148,6 +155,13 @@ export function resetSimulationCounters(): void
     simCounters.preyTargetMeatRewardSum = 0;
     simCounters.preyTargetDistanceSum = 0;
     simCounters.preyTargetRewardSum = 0;
+    simCounters.reproductivePairAttempts = 0;
+    simCounters.reproductiveDietMismatches = 0;
+    simCounters.reproductiveJunkChecks = 0;
+    simCounters.reproductiveJunkPasses = 0;
+    simCounters.reproductiveJunkBlocks = 0;
+    simCounters.reproductiveJunkSimilaritySum = 0;
+    simCounters.reproductiveJunkSimilarityBins.fill( 0 );
     simCounters.meatTargetsWhilePursuing = 0;
     simCounters.meatMealsWhilePursuing = 0;
     simCounters.failedAttacks = 0;
