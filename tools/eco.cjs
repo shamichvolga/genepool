@@ -130,6 +130,15 @@ function ecoStats()
     const offspring = [], preyEaten = [], foodEaten = [];
     const preyValueWeights = [], preyTravelWeights = [], preyBaitBiases = [];
     const bins = new Map();   // eco-types: θ, d, b in 5 bins each
+    const biomeNames = sb.BIOME_NAMES || [ "cold", "cool", "mild", "warm", "hot" ];
+    const makeRegionGroup = () => ({ population: 0, predators: 0, mass: 0, energy: 0, speed: 0,
+        temperature: 0, thermalOptimum: 0, thermalWidth: 0, digestion: 0,
+        brightness: 0, choosiness: 0, offspring: 0 });
+    const regionGroups = new Map();
+    const regionNames = ( FLAT || !env.active ) ? [ "flat" ]
+        : env.petri ? Array.from({ length: env.petri.zones }, ( _, zone ) => `petri_zone_${zone}` )
+        : biomeNames;
+    for ( const regionName of regionNames ) regionGroups.set( regionName, makeRegionGroup() );
     let choosy = 0;
     let effort = 0, climate = 0, social = 0, brainDistance = 0, neural = 0;
     const hungers = [];
@@ -142,12 +151,35 @@ function ecoStats()
         const p = b.getPosition();
         // the local temperature without the season: use the map at time 0
         const t = env.temperatureAt( p.x, p.y );
+        const regionName = ( FLAT || !env.active ) ? "flat"
+            : ( env.petri && typeof env.zoneAt === "function" ) ? `petri_zone_${env.zoneAt( p.x, p.y )}`
+            : ( typeof env.biomeAt === "function" ) ? ( biomeNames[ env.biomeAt( p.x, p.y ) ] || "unknown_biome" )
+            : "unknown_region";
+        let region = regionGroups.get( regionName );
+        if ( !region )
+        {
+            region = makeRegionGroup();
+            regionGroups.set( regionName, region );
+        }
+        const isPredator = b.getPredatorLevel() > sb.PREDATOR_LEVEL_THRESHOLD;
+        region.population ++;
+        region.predators += isPredator ? 1 : 0;
+        region.energy += b.getEnergy();
+        region.speed += typeof b.getSpeed === "function" ? b.getSpeed() : 0;
+        region.temperature += t;
+        region.thermalOptimum += b.getThermalOptimum();
+        region.thermalWidth += b.getThermalWidth();
+        region.digestion += b.getDigestion();
+        region.brightness += b.getBrightness();
+        region.choosiness += b.getChoosiness();
+        region.offspring += b.getNumOffspring();
         ts.push( t ); thetas.push( b.getThermalOptimum() ); ds.push( b.getDigestion() );
         const morphology = ( typeof b.getMorphologySummary === "function" )
                          ? b.getMorphologySummary()
                          : { mass: b.getPhenotypeMass(), meanWidth: 0, meanLength: 0, maxWidth: 0,
                              numParts: b.getNumParts(), branchParts: 0, branchFraction: 0 };
         sizes.push( Math.log( morphology.mass ));
+        region.mass += morphology.mass;
         masses.push( morphology.mass ); widths.push( morphology.meanWidth ); lengths.push( morphology.meanLength );
         const ambientTemperature = typeof b.getAmbientTemperature === "function" ? b.getAmbientTemperature() : t;
         const bodyTemperature = typeof b.getBodyTemperature === "function" ? b.getBodyTemperature() : ambientTemperature;
@@ -275,6 +307,24 @@ function ecoStats()
         : { parents: 0, reproducingParents: 0, offspring: 0, eligible: 0, matured: 0, survival: 0,
             small: emptyGroup, medium: emptyGroup, large: emptyGroup };
     const chooserGroups = pedigree.choosiness || { low: emptyGroup, medium: emptyGroup, high: emptyGroup };
+    const populationByRegion = Array.from( regionGroups.entries() )
+        .sort(( a, b ) => a[0].localeCompare( b[0] ))
+        .map(([ name, group ]) => ({
+            region: name,
+            population: group.population,
+            predators: group.predators,
+            predatorFraction: group.population ? group.predators / group.population : 0,
+            meanMass: group.population ? group.mass / group.population : 0,
+            meanEnergy: group.population ? group.energy / group.population : 0,
+            meanSpeed: group.population ? group.speed / group.population : 0,
+            meanTemperature: group.population ? group.temperature / group.population : 0,
+            meanThermalOptimum: group.population ? group.thermalOptimum / group.population : 0,
+            meanThermalWidth: group.population ? group.thermalWidth / group.population : 0,
+            meanDigestion: group.population ? group.digestion / group.population : 0,
+            meanBrightness: group.population ? group.brightness / group.population : 0,
+            meanChoosiness: group.population ? group.choosiness / group.population : 0,
+            meanOffspring: group.population ? group.offspring / group.population : 0,
+        }));
     let shannon = 0;
     for ( const c of bins.values() ) { const q = c / n; shannon -= q * Math.log( q ); }
     return {
@@ -349,6 +399,7 @@ function ecoStats()
         pedigreeMaturityEligible: pedigree.eligible,
         pedigreeMaturedOffspring: pedigree.matured,
         pedigreeMaturitySurvival: pedigree.survival,
+        populationByRegion,
         smallParentMaturedPerParent: pedigree.small.maturedPerParent,
         mediumParentMaturedPerParent: pedigree.medium.maturedPerParent,
         largeParentMaturedPerParent: pedigree.large.maturedPerParent,
@@ -390,6 +441,7 @@ const header = "step,alive,pred,warm,cold,meat,fit,w,body_temp_mean,body_temp_p1
 console.log( `scenario=${SCENARIO} seed=${SEED} steps=${STEPS} flat=${FLAT} set=${EXTRA || ""}` );
 console.log( header );
 const rows = [];
+const populationByRegionSnapshots = [];
 let t0 = Date.now();
 
 for ( let step = 1; step <= STEPS; step++ )
@@ -402,6 +454,7 @@ for ( let step = 1; step <= STEPS; step++ )
         const msPerStep = ( Date.now() - t0 ) / EVERY;   // simulation only, not the statistics
         const s = run.stats( run.genePool );
         const e = ecoStats();
+        populationByRegionSnapshots.push({ step, regions: e.populationByRegion });
         const events = eventDeltas();
         const row = [ step, s.alive, s.predators, run.genePool.getNumFoodBitsOfType(0), run.genePool.getNumFoodBitsOfType(1), s.meat,
                       e.fit.toFixed( 2 ), e.width.toFixed( 3 ), e.bodyTemperatureMean.toFixed( 4 ),
@@ -450,7 +503,7 @@ if ( META )
     const endedAt = new Date().toISOString();
     const durationMs = Number( process.hrtime.bigint() - runStartNs ) / 1e6;
     const metadata = {
-        schemaVersion: 11,
+        schemaVersion: 12,
         startedAt,
         endedAt,
         durationMs: Number( durationMs.toFixed( 1 )),
@@ -485,12 +538,18 @@ if ( META )
             thermalLagAbsMean: "mean absolute difference between internal and local felt temperature",
             thermalLagCorrelations: "correlation of log body mass and mean body width with absolute thermal lag; exploratory, not causal estimates",
         },
+        populationRegionMetrics: {
+            grouping: FLAT || !env.active ? "flat" : ( env.petri ? "petri zone" : "nearest Voronoi biome" ),
+            fields: "population, predator fraction, mean mass, energy, speed, temperature, thermal optimum and width, digestion, brightness, choosiness, lifetime offspring",
+            means: "averages among living swimbots at each sampled step; empty groups report zero",
+        },
         matingMetrics: {
             sample: "the most recent up to 2048 successful births",
             brightnessAssortment: "1 minus actual mean parental brightness difference divided by the mean difference among random pairs from the living population; descriptive, reported only with more than 20 recorded matings, not a species identifier",
             brightnessGap: "mean absolute brightness difference between actual parents",
             choosiness: "mean inherited brightness-acceptance trait of parents in the recorded pairs",
         },
+        populationByBiomeOrZone: populationByRegionSnapshots,
         predatorTargetSelection: {
             enabled: !!sb.PREDATOR_TARGET_SELECTION_ENABLED,
             networkInputs: "prey distance, expected energy, attack chance, chase cost, nearby bait availability, bait distance and energy",

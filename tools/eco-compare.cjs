@@ -102,6 +102,9 @@ function readRun( scenario, seed )
         : lines[ lines.length - 1 ];
     if ( !row ) throw new Error( `${basename}: no sample at step ${requestedStep}` );
     const selectedStep = Number( row[ index.step ]);
+    const regionSnapshots = Array.isArray( metadata.populationByBiomeOrZone ) ? metadata.populationByBiomeOrZone : [];
+    const regionSnapshot = regionSnapshots.find( sample => sample.step === selectedStep );
+    const populationByRegion = regionSnapshot ? regionSnapshot.regions : [];
     const values = {};
     for ( const name of metrics )
     {
@@ -132,7 +135,7 @@ function readRun( scenario, seed )
     {
         if ( index[ name ] !== undefined ) values[ name ] = Number( row[ index[ name ]] );
     }
-    return { scenario, seed, step: selectedStep, values, metadata, columns: header };
+    return { scenario, seed, step: selectedStep, values, metadata, columns: header, populationByRegion };
 }
 
 function stats( values )
@@ -198,6 +201,8 @@ const summary = {
     note: "Paired seed differences describe this run set; they do not establish a species count or causation beyond the tested scenario change.",
     scenariosSummary: scenarioSummary,
     pairedDifferences,
+    populationByRegionAtStep: Object.fromEntries( scenarios.map(( scenario, i ) => [ scenario,
+        Object.fromEntries( seeds.map(( seed, s ) => [ seed, runs[i][s].populationByRegion ] )) ] )),
 };
 const csvHeader = [ "seed", "step", ...scenarios.flatMap( scenario => metricNames.map( name => `${scenario}_${name}` )),
     ...scenarios.slice( 1 ).flatMap( scenario => metricNames.map( name => `${scenario}_minus_${scenarios[0]}_${name}` )) ].join( "," );
