@@ -21,10 +21,10 @@ const steps = parseInt( arg( "steps", "50000" ), 10 );
 const every = parseInt( arg( "every", "5000" ), 10 );
 const outputDir = path.resolve( arg( "out", path.join( __dirname, "results", "ecology-matrix" ) ));
 const overrides = arg( "set", null );
-const scenarioNames = new Set([ "BASE", "C0", "C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8", "C9", "C10", "C11", "C12" ]);
+const scenarioNames = new Set([ "BASE", "C0", "C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8", "C9", "C10", "C11", "C12", "C13" ]);
 
 if ( scenarios.length === 0 || scenarios.some( x => !scenarioNames.has( x )))
-    throw new Error( "scenarios must be selected from BASE,C0,C1,C2,C3,C4,C5,C6,C7,C8,C9,C10,C11,C12" );
+    throw new Error( "scenarios must be selected from BASE,C0,C1,C2,C3,C4,C5,C6,C7,C8,C9,C10,C11,C12,C13" );
 if ( seeds.length === 0 || seeds.some( x => !Number.isFinite( x )))
     throw new Error( "seeds must be comma-separated integers" );
 if ( !( steps > 0 ) || !( every > 0 )) throw new Error( "steps and every must be positive integers" );

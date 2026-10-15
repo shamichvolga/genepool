@@ -31,6 +31,11 @@ export const SOIL_NUTRIENT_PER_SPROUT            = 1.0;
 export const MEAT_DETRITUS_YIELD                 = 0.05;
 export const SOIL_NUTRIENT_DECAY_PER_STEP        = 0.00001;
 
+// Optional seasonal availability pulse for the single plant food type.
+// The multiplier averages to 1 over a full season and is disabled by default.
+export const SEASONAL_PLANT_GROWTH_ENABLED       = false;
+export const SEASONAL_PLANT_GROWTH_AMPLITUDE     = 0.5;
+
 export const FIELD_SIZE                = 256;      // temperature grid: FIELD_SIZE x FIELD_SIZE cells
 export const PLANT_CELL_SIZE           = 250;      // plant counting grid (pool units)
 

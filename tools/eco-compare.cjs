@@ -73,6 +73,7 @@ const metrics = [
     "mate_isolation", "pedigree_matured_offspring", "pedigree_maturity_survival", "low_choosiness_parents", "low_choosiness_matured_per_parent", "low_choosiness_maturity_survival", "medium_choosiness_parents", "medium_choosiness_matured_per_parent", "medium_choosiness_maturity_survival", "high_choosiness_parents", "high_choosiness_matured_per_parent", "high_choosiness_maturity_survival", "mass_mean", "width_mean",
     "mate_brightness_assortment", "mating_sample_size", "mating_brightness_gap_mean", "mating_choosiness_mean",
     "predator_target_value_weight_mean", "predator_target_travel_weight_mean", "predator_target_bait_bias_mean",
+    "season_phase", "plant_growth_season_multiplier",
 ];
 const metricsDefaultingToZeroWhenAbsent = new Set([
     "predator_target_value_weight_mean", "predator_target_travel_weight_mean", "predator_target_bait_bias_mean",
@@ -228,7 +229,7 @@ const csvRows = seeds.map(( seed, s ) =>
 
 fs.writeFileSync( outputBase + ".json", JSON.stringify( summary, null, 2 ) + "\n" );
 fs.writeFileSync( outputBase + ".csv", csvHeader + "\n" + csvRows.join( "\n" ) + "\n" );
-const digestMetrics = [ "alive", "plants", ...( hasNutrientMetrics ? [ "soil_nutrient_mean" ] : [] ), "eff_coarse_morphotype_bins", "pedigree_maturity_survival", "pedigree_matured_offspring", "mate_brightness_assortment", "mating_brightness_gap_mean", "mating_choosiness_mean", "mating_sample_size", "births_total",
+const digestMetrics = [ "alive", "plants", ...( hasNutrientMetrics ? [ "soil_nutrient_mean" ] : [] ), "eff_coarse_morphotype_bins", "pedigree_maturity_survival", "pedigree_matured_offspring", "mate_brightness_assortment", "mating_brightness_gap_mean", "mating_choosiness_mean", "mating_sample_size", "season_phase", "plant_growth_season_multiplier", "births_total",
     "self_feed_events_total", "self_feed_energy_total", "self_feed_mass_total", "prey_target_choices_total", "prey_target_live_choices_total", "prey_target_meat_choices_total", "prey_target_live_distance_sum_total", "prey_target_live_reward_sum_total", "prey_target_meat_distance_sum_total", "prey_target_meat_reward_sum_total", "prey_target_distance_sum_total", "prey_target_reward_sum_total",
     "reproductive_pair_attempts_total", "reproductive_diet_mismatches_total", "reproductive_junk_checks_total", "reproductive_junk_passes_total", "reproductive_junk_blocks_total", "reproductive_junk_similarity_sum_total",
     ...Array.from({ length: 10 }, ( _, index ) => `reproductive_junk_similarity_bin_${index}_total`),
