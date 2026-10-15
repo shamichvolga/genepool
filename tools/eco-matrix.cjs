@@ -15,7 +15,7 @@ function arg( name, fallback )
     return ( i >= 0 && i + 1 < process.argv.length ) ? process.argv[ i + 1 ] : fallback;
 }
 
-const scenarios = arg( "scenarios", "BASE,C0,C1,C2,C3,C4,C5,C6,C7,C8,C9,C10,C11,C12" ).split( "," ).map( x => x.trim().toUpperCase() );
+const scenarios = arg( "scenarios", "BASE,C0,C1,C2,C3,C4,C5,C6,C7,C8,C9,C10,C11" ).split( "," ).map( x => x.trim().toUpperCase() );
 const seeds = arg( "seeds", "1,2,3,4,5" ).split( "," ).map( x => parseInt( x.trim(), 10 ) );
 const steps = parseInt( arg( "steps", "50000" ), 10 );
 const every = parseInt( arg( "every", "5000" ), 10 );
