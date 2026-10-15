@@ -1,8 +1,8 @@
-import { ecologyMutationRate, isEcologyGene, isMarkerGene, mutateEcologyGene, mutateMarkerGene } from "./EcologyGenes";
+import { ecologyMutationRate, isEcologyGene, isMarkerGene, isSelfFeedingGene, mutateEcologyGene, mutateMarkerGene } from "./EcologyGenes";
 import { gpRandom } from "./Globals";
-import { BRAIN_SIZE, founderBrain, inheritBrain, innateBrain, mutateBrain } from "./NeuralBrain";
+import { BRAIN_SIZE, founderBrain, inheritBrain, innateBrain, migrateLegacyBrainWeights, mutateBrain } from "./NeuralBrain";
 import { BYTE_SIZE, ONE_HALF } from "./MathConstants";
-import { CROSSOVER_RATE, MUTATION_RATE } from "./Parameters";
+import { CROSSOVER_RATE, MUTATION_RATE, SELF_CANNIBALISM_ENABLED } from "./Parameters";
 import { assert, assertInteger } from "./Utility";
 
 //const NUM_GENES = 100;
@@ -64,7 +64,12 @@ export function Genotype()
 
 	this.setBrain = function( weights )
 	{
-	    if (( weights == null ) || ( weights.length !== BRAIN_SIZE )) { _brain.set( innateBrain() ); return; }
+	    if ( weights == null ) { _brain.set( innateBrain() ); return; }
+	    if ( weights.length !== BRAIN_SIZE )
+	    {
+	        if ( !migrateLegacyBrainWeights( _brain, weights )) { _brain.set( innateBrain() ); }
+	        return;
+	    }
 	    for (let k = 0; k < BRAIN_SIZE; k++) { _brain[k] = Number( weights[k] ) || 0; }
 	}
 
@@ -84,7 +89,7 @@ export function Genotype()
 		}
 
 		// a random founder gets the innate brain with a little individual variation
-		founderBrain( _brain );
+		founderBrain( _brain, SELF_CANNIBALISM_ENABLED );
 	}
 
 	//------------------------------------------
@@ -353,7 +358,7 @@ g++; _genes[g] = 255;
 	this.setAsOffspring = function( parent_0, parent_1 )
 	{
 	    // the brain chromosome: whole neurons from either parent, small mutations
-	    inheritBrain( _brain, parent_0.getBrain(), parent_1.getBrain() );
+	    inheritBrain( _brain, parent_0.getBrain(), parent_1.getBrain(), SELF_CANNIBALISM_ENABLED );
 
 	    //console.log( parent_0 );
 	    //console.log( parent_1 );
@@ -423,7 +428,7 @@ g++; _genes[g] = 255;
             //-----------------------------------
             // mutation
             //-----------------------------------
-            if ( isEcologyGene(g) || isMarkerGene(g) )
+            if (( SELF_CANNIBALISM_ENABLED && isSelfFeedingGene(g) ) || isEcologyGene(g) || isMarkerGene(g) )
             {
                 // ecology genes and markers: small steps, no wrap-around
                 if ( gpRandom() < ecologyMutationRate(g) )
@@ -505,11 +510,12 @@ g++; _genes[g] = 255;
             if ( gpRandom() < amount )
             {
                 if      ( isMarkerGene(g)  ) { _genes[g] = mutateMarkerGene ( _genes[g] ); }
+                else if ( SELF_CANNIBALISM_ENABLED && isSelfFeedingGene(g) ) { _genes[g] = mutateEcologyGene( _genes[g] ); }
                 else if ( isEcologyGene(g) ) { _genes[g] = mutateEcologyGene( _genes[g] ); }
                 else                         { this.mutateGene(g); }
             }
         }
-        mutateBrain( _brain, amount );
+	    mutateBrain( _brain, amount, SELF_CANNIBALISM_ENABLED );
     }
 }
 

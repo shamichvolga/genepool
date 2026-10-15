@@ -1,5 +1,5 @@
 import { gpRandom } from "./Globals";
-import { OUT_FLEE, OUT_FOOD, OUT_HUNT, OUT_MATE } from "./NeuralBrain";
+import { OUT_FLEE, OUT_FOOD, OUT_HUNT, OUT_MATE, OUT_SELF_EAT } from "./NeuralBrain";
 import { ZERO } from "./MathConstants";
 import { PREDATOR_LEVEL_THRESHOLD } from "./Parameters";
 import { ATTRACTION_SIMILAR_COLOR } from "./SwimbotTypes";
@@ -17,7 +17,8 @@ export const BRAIN_STATE_PURSUING_FOOD       =  4;
 export const BRAIN_STATE_LOOKING_FOR_PREY    =  5;
 export const BRAIN_STATE_PURSUING_PREY       =  6;
 export const BRAIN_STATE_FLEEING_PREDATOR    =  7;
-export const NUM_BRAIN_STATES                =  8;
+export const BRAIN_STATE_SELF_FEED            =  8;
+export const NUM_BRAIN_STATES                =  9;
 
 //--------------------------------------------
 // perceiving
@@ -86,6 +87,11 @@ export function Brain()
         //----------------------------------------------------------------------
         if ( _goal >= 0 )
         {
+            if ( _goal === OUT_SELF_EAT )
+            {
+                _state = BRAIN_STATE_SELF_FEED;
+                return;
+            }
             if ( _goal === OUT_FLEE )
             {
                 _state = BRAIN_STATE_FLEEING_PREDATOR;

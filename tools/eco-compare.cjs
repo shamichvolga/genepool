@@ -43,6 +43,9 @@ const eventMap = {
     old_age_deaths_interval: "oldAgeDeaths",
     predation_deaths_interval: "predationDeaths",
     other_deaths_interval: "otherDeaths",
+    self_feed_events_interval: "selfCannibalismEvents",
+    self_feed_energy_interval: "selfCannibalismEnergy",
+    self_feed_mass_interval: "selfCannibalismMass",
 };
 
 const metrics = [
@@ -73,7 +76,9 @@ function readRun( scenario, seed )
         {
             if ( index[ column ] === undefined || metadata.eventTotals[ event ] === undefined ) continue;
             const total = lines.slice( 1 ).reduce(( sum, row ) => sum + Number( row[ index[ column ]] ), 0 );
-            if ( total !== metadata.eventTotals[ event ] ) throw new Error( `${basename}: ${column} does not match JSON event total` );
+            const expected = metadata.eventTotals[ event ];
+            const tolerance = Math.max( 1, Math.abs( total ), Math.abs( expected )) * 1e-9;
+            if ( Math.abs( total - expected ) > tolerance ) throw new Error( `${basename}: ${column} does not match JSON event total` );
         }
     }
 
@@ -190,6 +195,7 @@ const csvRows = seeds.map(( seed, s ) =>
 fs.writeFileSync( outputBase + ".json", JSON.stringify( summary, null, 2 ) + "\n" );
 fs.writeFileSync( outputBase + ".csv", csvHeader + "\n" + csvRows.join( "\n" ) + "\n" );
 const digestMetrics = [ "alive", "plants", ...( hasNutrientMetrics ? [ "soil_nutrient_mean" ] : [] ), "eff_coarse_morphotype_bins", "pedigree_maturity_survival", "pedigree_matured_offspring", "births_total",
+    "self_feed_events_total", "self_feed_energy_total", "self_feed_mass_total",
     ...( hasNutrientMetrics ? [ "soil_nutrients_returned_total" ] : [] ), ...( hasPerformanceMetrics ? [ "speed_mean", "swim_energy_efficiency_mean" ] : [] ),
     ...( hasThermalMetrics ? [ "body_temp_mean", "ambient_temp_mean", "thermal_lag_abs_mean", "thermal_lag_mass_corr", "thermal_lag_width_corr" ] : [] ) ];
 const digest = {

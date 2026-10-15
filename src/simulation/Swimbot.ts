@@ -1,11 +1,11 @@
-import { setTrait, GENES_PREDATOR } from "./EcologyGenes";
+import { setTrait, GENES_PREDATOR, GENES_SELF_FEED_WHICH, GENES_SELF_FEED_AMOUNT } from "./EcologyGenes";
 import { physicsPartA, physicsPartB } from "./PhysicsKernel";
 import { applyWaterDrag, bodyMotionFactors } from "./BodyPhysics";
 import { advanceBodyTemperature } from "./ThermalPhysics";
 import * as SS from "./SharedState";
-import { think, sigmoid, NUM_INPUTS, NUM_HIDDEN, NUM_OUTPUTS, NUM_DRIVES, THINK_PERIOD, DRIVE_HYSTERESIS, EFFORT_MIN, EFFORT_RANGE, IN_BIAS, IN_HUNGER, IN_ENERGY, IN_AGE, IN_FIT, IN_TREND, IN_FOOD, IN_MATE, IN_THREAT, IN_PREY, IN_CROWD, IN_PREDATOR, OUT_FOOD, OUT_MATE, OUT_FLEE, OUT_HUNT, OUT_CLIMATE, OUT_SOCIAL, OUT_EFFORT,
-         IN_FOOD_SIDE, IN_FOOD_AHEAD, IN_NEAR_SIDE, IN_NEAR_AHEAD, IN_THREAT_SIDE, IN_THREAT_AHEAD, IN_KIN, IN_SEASON, IN_PREDATOR_NEAR, OUT_STEER, STEER_MAX_DEGREES } from "./NeuralBrain";
-import { NEURAL_BRAIN_ENABLED, CLIMATE_STEERING, SOCIAL_STEERING, CLIMATE_PROBE_DISTANCE, BODY_TEMPERATURE_INERTIA_ENABLED } from "./Parameters";
+import { think, sigmoid, NUM_INPUTS, NUM_HIDDEN, NUM_OUTPUTS, DRIVE_OUTPUTS, THINK_PERIOD, DRIVE_HYSTERESIS, EFFORT_MIN, EFFORT_RANGE, IN_BIAS, IN_HUNGER, IN_ENERGY, IN_AGE, IN_FIT, IN_TREND, IN_FOOD, IN_MATE, IN_THREAT, IN_PREY, IN_CROWD, IN_PREDATOR, OUT_FOOD, OUT_MATE, OUT_FLEE, OUT_HUNT, OUT_CLIMATE, OUT_SOCIAL, OUT_EFFORT,
+         IN_FOOD_SIDE, IN_FOOD_AHEAD, IN_NEAR_SIDE, IN_NEAR_AHEAD, IN_THREAT_SIDE, IN_THREAT_AHEAD, IN_KIN, IN_SEASON, IN_PREDATOR_NEAR, OUT_STEER, OUT_SELF_EAT, STEER_MAX_DEGREES } from "./NeuralBrain";
+import { NEURAL_BRAIN_ENABLED, CLIMATE_STEERING, SOCIAL_STEERING, CLIMATE_PROBE_DISTANCE, BODY_TEMPERATURE_INERTIA_ENABLED, SELF_CANNIBALISM_ENABLED } from "./Parameters";
 import { environment, PLANT_TYPE_WARM, PLANT_TYPE_COLD } from "./Environment";
 import { sizeSignature, SEARCH_IMAGE_LEARNING, SEARCH_IMAGE_GAIN, SEARCH_IMAGE_FORGETTING, bodySize, sizeDietFactor, climateFoodFactor, digestionEfficiency, thermalFit, thermalPeak, THERMAL_MISMATCH_DRAIN, THERMAL_FIT_UPDATE_PERIOD, THERMOMELANISM, mateAcceptance, pairRandom, KINESIS_PERIOD, KINESIS_TURN_CHANCE, KINESIS_MAX_TURN, EMERGENCY_THERMAL_FIT, EMERGENCY_PROBE_DISTANCE } from "./Ecology";
 //--------------------------------------------------------------------------
@@ -21,7 +21,7 @@ import { sizeSignature, SEARCH_IMAGE_LEARNING, SEARCH_IMAGE_GAIN, SEARCH_IMAGE_F
 //
 // --------------------------------------------------------------------------
 import { SWIMBOT_DOT_RENDER_RADIUS } from "./Parameters";
-import { BRAIN_FOCUS_TARGET_SHIFT_STRENGTH, BRAIN_FOCUS_TARGET_SHIFT_THRESHOLD, BRAIN_SENSORY_UPDATE_PERIOD, BRAIN_STATE_FLEEING_PREDATOR, BRAIN_STATE_LOOKING_FOR_FOOD, BRAIN_STATE_LOOKING_FOR_MATE, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_FOOD, BRAIN_STATE_PURSUING_MATE, BRAIN_STATE_PURSUING_PREY, BRAIN_STATE_RESTING, BRAIN_WANDER_AMOUNT, Brain } from "./Brain";
+import { BRAIN_FOCUS_TARGET_SHIFT_STRENGTH, BRAIN_FOCUS_TARGET_SHIFT_THRESHOLD, BRAIN_SENSORY_UPDATE_PERIOD, BRAIN_STATE_FLEEING_PREDATOR, BRAIN_STATE_LOOKING_FOR_FOOD, BRAIN_STATE_LOOKING_FOR_MATE, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_FOOD, BRAIN_STATE_PURSUING_MATE, BRAIN_STATE_PURSUING_PREY, BRAIN_STATE_SELF_FEED, BRAIN_STATE_RESTING, BRAIN_WANDER_AMOUNT, Brain } from "./Brain";
 import { GREATEST_POSSIBLE_SWIMBOT_LENGTH, GREATEST_POSSIBLE_SWIMBOT_MASS } from "./Embryology";
 import { DEFAULT_FOOD_BIT_ENERGY, FoodBit } from "./FoodBit";
 import { Genotype } from "./Genotype";
@@ -146,6 +146,7 @@ var    flopperYV = 0;
 	let _autotomyLoss       = ZERO;   // the energy that went with it
 	let _regrowTimer        = 0;
 	let _partsDropped       = 0;      // how many times in its life
+	let _selfFeedCooldown   = 0;
 
 	//-----------------------------------------------------------------------
 	// neural brain (stage 6, see NeuralBrain.ts)
@@ -257,9 +258,10 @@ this.setParent = function( parent )
 	// dropped parts take the same share of my energy as of my body mass.
 	// Returns { energy, x, y } (where the parts were), or null.
 	//------------------------------------------------------------------------
-	this.autotomize = function()
+	this.autotomize = function( selfFeeding = false )
 	{
 	    if ( _partsLost || !environment.active ) return null;
+	    if ( selfFeeding && ( !SELF_CANNIBALISM_ENABLED || ( _energy >= SWIMBOT_MAX_ENERGY ))) return null;
 	    const n = _phenotype.numParts;
 	    if ( n <= 4 ) return null;
 	    this.syncPartObjects();
@@ -272,8 +274,10 @@ this.setParent = function( parent )
 	    for (let p = 2; p < n; p++) { if ( children[p] === 0 ) leaves.push(p); }
 	    if ( leaves.length === 0 ) return null;
 
-	    const leaf  = leaves[ Math.min( leaves.length - 1, Math.floor( _phenotype.autotomyWhich * leaves.length )) ];
-	    const limit = Math.min( n - 3, Math.max( 1, Math.round( _phenotype.autotomyAmount * ( n - 2 ))));
+	    const tissueWhich = selfFeeding ? _genotype.getGeneValue( GENES_SELF_FEED_WHICH[0] ) / 255 : _phenotype.autotomyWhich;
+	    const tissueAmount = selfFeeding ? _genotype.getGeneValue( GENES_SELF_FEED_AMOUNT[0] ) / 255 : _phenotype.autotomyAmount;
+	    const leaf  = leaves[ Math.min( leaves.length - 1, Math.floor( tissueWhich * leaves.length )) ];
+	    const limit = Math.min( n - 3, Math.max( 1, Math.round( tissueAmount * ( n - 2 ))));
 
 	    // climb from the leaf while the whole branch below stays within the limit
 	    const subtree = ( r ) =>
@@ -321,14 +325,31 @@ this.setParent = function( parent )
 
 	    this.processPhenotype();
 
-	    _energy      -= lost;
-	    _autotomyLoss = lost;
-	    _partsLost    = true;
-	    _regrowTimer  = AUTOTOMY_REGROW_DELAY;
+	    const tissueEnergy = droppedMass * PREY_BODY_ENERGY;
+	    if ( selfFeeding )
+	    {
+	        // The organism retains its existing reserve and digests part of the
+	        // removed tissue. The branch is permanently gone: no free regrowth.
+	        const gained = Math.min( SWIMBOT_MAX_ENERGY - _energy, tissueEnergy );
+	        _energy += gained;
+	        _partsLost = false;
+	        _autotomyLoss = ZERO;
+	        _regrowTimer = 0;
+	        simCounters.selfCannibalismEvents ++;
+	        simCounters.selfCannibalismEnergy += gained;
+	        simCounters.selfCannibalismMass += droppedMass;
+	    }
+	    else
+	    {
+	        _energy      -= lost;
+	        _autotomyLoss = lost;
+	        _partsLost    = true;
+	        _regrowTimer  = AUTOTOMY_REGROW_DELAY;
+	    }
 	    _partsDropped ++;
 	    // the part itself is food too, like a killed prey's body
 	    // (the same PREY_BODY_ENERGY per unit of mass), plus the energy it took
-	    return { energy: lost + droppedMass * PREY_BODY_ENERGY, x, y };
+	    return { energy: selfFeeding ? tissueEnergy : lost + tissueEnergy, x, y };
 	};
 
 	// bitten: maybe drop a part instead of dying (chance = gene)
@@ -342,6 +363,11 @@ this.setParent = function( parent )
 	{
 	    return { bite: _phenotype.autotomyBite, threat: _phenotype.autotomyThreat, amount: _phenotype.autotomyAmount,
 	             partsLost: _partsLost, regrowIn: _regrowTimer, timesDropped: _partsDropped };
+	};
+	this.canSelfFeed = function()
+	{
+	    return SELF_CANNIBALISM_ENABLED && environment.active && !_partsLost
+	        && ( _phenotype.numParts > 4 ) && ( _energy < SWIMBOT_MAX_ENERGY );
 	};
 	this.getNumPartsEaten = function() { return _numPartsEaten; }
 
@@ -994,7 +1020,7 @@ _position.copyFrom( position );
 		_growthScale        = ONE;
 
 		// whole body
-		_partsLost = false; _autotomyLoss = ZERO; _regrowTimer = 0; _partsDropped = 0;
+		_partsLost = false; _autotomyLoss = ZERO; _regrowTimer = 0; _partsDropped = 0; _selfFeedCooldown = 0;
 
 		// nothing learned yet
 		if ( _slot >= 0 ) { _shared.imageStrength[ _slot ] = ZERO; }
@@ -1345,6 +1371,13 @@ _position.copyFrom( position );
         _brain.setEnergyLevel( _energy );
         _brain.update();
 
+        if ( _selfFeedCooldown > 0 ) _selfFeedCooldown --;
+        if (( _brain.getState() === BRAIN_STATE_SELF_FEED ) && ( _selfFeedCooldown === 0 ))
+        {
+            this.autotomize( true );
+            _selfFeedCooldown = THINK_PERIOD;
+        }
+
         if (( _brain.getState() === BRAIN_STATE_PURSUING_PREY ) && this.getChosenMeatIsValid() )
         {
             if ( _chosenFoodBitIndex !== _lastPursuitMeatIndex ) simCounters.meatTargetsWhilePursuing ++;
@@ -1487,6 +1520,10 @@ _position.copyFrom( position );
                 _directionToGoal.subtract( _genitalPosition );
                 _directionToGoal.normalize();
             }
+        }
+        else if ( _brain.getState() === BRAIN_STATE_SELF_FEED )
+        {
+            _directionToGoal.clear();
         }
         else if ( _brain.getState() === BRAIN_STATE_PURSUING_FOOD )
         {
@@ -1683,8 +1720,9 @@ _position.copyFrom( position );
 	    //------------------------------------------------------
 	    const current = _brain.getGoal();
 	    let best = OUT_MATE, bestValue = -Infinity;
-	    for (let d = 0; d < NUM_DRIVES; d++)
+	    for ( const d of DRIVE_OUTPUTS )
 	    {
+            if (( d === OUT_SELF_EAT ) && !this.canSelfFeed() ) continue;
 	        if (( d === OUT_FLEE ) && ( !threat || predator )) continue;   // nothing to flee from
 	        if (( d === OUT_HUNT ) && !predator ) continue;                // only predators hunt
 	        if (( d === OUT_FOOD ) && predator ) continue;                 // predators don't eat plants
@@ -2422,6 +2460,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
         else if ( brainState ===  BRAIN_STATE_LOOKING_FOR_PREY   ) { return "looking for prey";     }
         else if ( brainState ===  BRAIN_STATE_PURSUING_PREY      ) { return "pursuing prey";        }
         else if ( brainState ===  BRAIN_STATE_FLEEING_PREDATOR   ) { return "fleeing predator";     }
+        else if ( brainState ===  BRAIN_STATE_SELF_FEED          ) { return "consuming own tissue";  }
 
         return "(no goal identified)";
     }

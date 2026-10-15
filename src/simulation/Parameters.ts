@@ -190,6 +190,10 @@ export const BODY_HYDRODYNAMICS_ENABLED    = false;
 // signal; body mass and width change the equilibration rate, not its endpoint.
 export const BODY_TEMPERATURE_INERTIA_ENABLED = false;
 
+// C11 experiment: allow the inherited neural brain to choose self-consumption.
+// Ordinary simulations keep this off; the behavior competes with the other drives.
+export const SELF_CANNIBALISM_ENABLED = false;
+
 
 export const YOUNG_AGE_DURATION    = 1000;
 export const OLD_AGE_DURATION      = 1000;

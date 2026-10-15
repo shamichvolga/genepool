@@ -25,6 +25,16 @@ export const GENES_AUTOTOMY_THREAT = [ 138 ];                  // drop one as a 
 export const GENES_AUTOTOMY_AMOUNT = [ 139 ];                  // how much of the body to drop
 export const GENES_AUTOTOMY_WHICH  = [ 140 ];                  // which limb (tail / side branch...)
 
+// C11: independent inherited choice of tissue for self-consumption. These
+// otherwise-unused loci are active only in that experiment.
+export const GENES_SELF_FEED_WHICH   = [ 160 ];
+export const GENES_SELF_FEED_AMOUNT  = [ 161 ];
+
+export function isSelfFeedingGene( g ): boolean
+{
+    return ( g === GENES_SELF_FEED_WHICH[0] ) || ( g === GENES_SELF_FEED_AMOUNT[0] );
+}
+
 export const ECOLOGY_GENES_FIRST   = 120;
 export const ECOLOGY_GENES_LAST    = 143;
 export const MARKER_GENES_FIRST    = 144;                      // neutral markers: change slowly, affect nothing,
