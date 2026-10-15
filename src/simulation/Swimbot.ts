@@ -2395,6 +2395,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	        thermalWidth: _thermalWidth,
 	        digestion: _digestion,
 	        brightness: _phenotype.brightness,
+	        choosiness: _choosiness,
 	        predatorLevel: _phenotype.predatorLevel,
 	        hungerThreshold: _brain.getHungerThreshold(),
 	        autotomyBite: _phenotype.autotomyBite,

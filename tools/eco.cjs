@@ -269,11 +269,12 @@ function ecoStats()
     let morphShannon = 0;
     for ( const count of morphBins.values() ) { const q = count / n; morphShannon -= q * Math.log( q ); }
     const familyTree = run.genePool.getFamilyTree && run.genePool.getFamilyTree();
-    const emptyGroup = { maturedPerParent: 0 };
+    const emptyGroup = { parents: 0, maturedPerParent: 0, survival: 0 };
     const pedigree = familyTree && typeof familyTree.getOffspringMaturitySummary === "function"
         ? familyTree.getOffspringMaturitySummary( run.genePool.getTimeStep(), sb.YOUNG_AGE_DURATION || 1000 )
         : { parents: 0, reproducingParents: 0, offspring: 0, eligible: 0, matured: 0, survival: 0,
             small: emptyGroup, medium: emptyGroup, large: emptyGroup };
+    const chooserGroups = pedigree.choosiness || { low: emptyGroup, medium: emptyGroup, high: emptyGroup };
     let shannon = 0;
     for ( const c of bins.values() ) { const q = c / n; shannon -= q * Math.log( q ); }
     return {
@@ -351,6 +352,15 @@ function ecoStats()
         smallParentMaturedPerParent: pedigree.small.maturedPerParent,
         mediumParentMaturedPerParent: pedigree.medium.maturedPerParent,
         largeParentMaturedPerParent: pedigree.large.maturedPerParent,
+        lowChoosinessParents: chooserGroups.low.parents,
+        lowChoosinessMaturedPerParent: chooserGroups.low.maturedPerParent,
+        lowChoosinessMaturitySurvival: chooserGroups.low.survival,
+        mediumChoosinessParents: chooserGroups.medium.parents,
+        mediumChoosinessMaturedPerParent: chooserGroups.medium.maturedPerParent,
+        mediumChoosinessMaturitySurvival: chooserGroups.medium.survival,
+        highChoosinessParents: chooserGroups.high.parents,
+        highChoosinessMaturedPerParent: chooserGroups.high.maturedPerParent,
+        highChoosinessMaturitySurvival: chooserGroups.high.survival,
         hunger   : hungers.length ? hungers.reduce( ( a, b ) => a + b, 0 ) / hungers.length : 0,
         autoBite    : herbivores ? autoBite / herbivores : 0,
         autoThreat  : herbivores ? autoThreat / herbivores : 0,
@@ -375,7 +385,7 @@ function eventDeltas()
 }
 
 const eventColumns = "births_interval,local_plant_sprouts_interval,seed_rain_plant_sprouts_interval,nutrient_limited_seed_attempts_interval,meat_decay_events_interval,soil_nutrients_returned_interval,plant_meals_interval,meat_meals_interval,pursuit_meat_target_selections_interval,pursuit_meat_meals_interval,prey_kills_interval,failed_attacks_interval,autotomy_threat_drops_interval,autotomy_bite_drops_interval,autotomy_decoys_eaten_interval,starvation_deaths_interval,old_age_deaths_interval,predation_deaths_interval,other_deaths_interval,self_feed_events_interval,self_feed_energy_interval,self_feed_mass_interval,prey_target_choices_interval,prey_target_live_choices_interval,prey_target_meat_choices_interval,prey_target_live_distance_sum_interval,prey_target_live_reward_sum_interval,prey_target_meat_distance_sum_interval,prey_target_meat_reward_sum_interval,prey_target_distance_sum_interval,prey_target_reward_sum_interval";
-const pedigreeColumns = "pedigree_parents,pedigree_reproducing_parents,pedigree_offspring,pedigree_maturity_eligible,pedigree_matured_offspring,pedigree_maturity_survival,small_parent_matured_per_parent,medium_parent_matured_per_parent,large_parent_matured_per_parent";
+const pedigreeColumns = "pedigree_parents,pedigree_reproducing_parents,pedigree_offspring,pedigree_maturity_eligible,pedigree_matured_offspring,pedigree_maturity_survival,small_parent_matured_per_parent,medium_parent_matured_per_parent,large_parent_matured_per_parent,low_choosiness_parents,low_choosiness_matured_per_parent,low_choosiness_maturity_survival,medium_choosiness_parents,medium_choosiness_matured_per_parent,medium_choosiness_maturity_survival,high_choosiness_parents,high_choosiness_matured_per_parent,high_choosiness_maturity_survival";
 const header = "step,alive,pred,warm,cold,meat,fit,w,body_temp_mean,body_temp_p10,body_temp_p50,body_temp_p90,ambient_temp_mean,thermal_lag_abs_mean,thermal_lag_mass_corr,thermal_lag_width_corr,cline_slope,cline_r2,d_corr,b_corr,choosy,eco_types,mate_isolation,mate_brightness_assortment,mating_sample_size,mating_brightness_gap_mean,mating_choosiness_mean,size_corr,effort,climate,social,brain_change,coarse_morphotype_bins,eff_coarse_morphotype_bins,mass_mean,mass_p10,mass_p50,mass_p90,width_mean,width_p10,width_p50,width_p90,length_mean,length_p10,length_p50,length_p90,max_width_mean,parts_mean,branch_parts_mean,branch_fraction_mean,energy_mean,speed_mean,speed_p10,speed_p50,speed_p90,swim_energy_efficiency_mean,offspring_alive_mean,prey_eaten_alive_mean,food_eaten_alive_mean," + pedigreeColumns + ",hunger,hunger_sd,autotomy_bite,autotomy_decoy,missing_parts,occupied,plant_cells_occupied,plant_cell_occupancy,plants_per_occupied_cell,soil_nutrient_cells,soil_nutrient_mean,soil_nutrient_p10,soil_nutrient_p50,soil_nutrient_p90,gene_clusters,eff_gene_clusters,top_gene_cluster_share,predator_target_value_weight_mean,predator_target_travel_weight_mean,predator_target_bait_bias_mean," + eventColumns + ",ms_step";
 console.log( `scenario=${SCENARIO} seed=${SEED} steps=${STEPS} flat=${FLAT} set=${EXTRA || ""}` );
 console.log( header );
@@ -413,6 +423,9 @@ for ( let step = 1; step <= STEPS; step++ )
                       e.pedigreeParents, e.pedigreeReproducingParents, e.pedigreeOffspring, e.pedigreeMaturityEligible,
                       e.pedigreeMaturedOffspring, e.pedigreeMaturitySurvival.toFixed( 3 ),
                       e.smallParentMaturedPerParent.toFixed( 3 ), e.mediumParentMaturedPerParent.toFixed( 3 ), e.largeParentMaturedPerParent.toFixed( 3 ),
+                      e.lowChoosinessParents, e.lowChoosinessMaturedPerParent.toFixed( 3 ), e.lowChoosinessMaturitySurvival.toFixed( 3 ),
+                      e.mediumChoosinessParents, e.mediumChoosinessMaturedPerParent.toFixed( 3 ), e.mediumChoosinessMaturitySurvival.toFixed( 3 ),
+                      e.highChoosinessParents, e.highChoosinessMaturedPerParent.toFixed( 3 ), e.highChoosinessMaturitySurvival.toFixed( 3 ),
                       e.hunger.toFixed( 1 ), e.hungerSd.toFixed( 1 ),
                       e.autoBite.toFixed( 3 ), e.autoThreat.toFixed( 3 ), e.autoMissing.toFixed( 3 ),
                       e.occupied.toFixed( 2 ), e.plantCellsOccupied, e.plantCellOccupancy.toFixed( 3 ), e.plantsPerOccupiedCell.toFixed( 2 ),
@@ -459,6 +472,7 @@ if ( META )
         fitnessMetrics: {
             offspringMaturityAge: sb.YOUNG_AGE_DURATION,
             parentMassClasses: { small: "<300", medium: "300-699", large: ">=700" },
+            parentChoosinessClasses: { low: "<1/3", medium: "1/3-2/3", high: ">=2/3" },
             definition: "direct offspring alive or known to have survived to the age of first reproduction; younger living offspring are censored",
         },
         morphologyMetrics: {

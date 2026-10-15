@@ -152,6 +152,11 @@ export function FamilyTree()
             medium: { parents: 0, offspring: 0, eligible: 0, matured: 0 },
             large : { parents: 0, offspring: 0, eligible: 0, matured: 0 },
         };
+        const choosinessGroups = {
+            low: { parents: 0, offspring: 0, eligible: 0, matured: 0 },
+            medium: { parents: 0, offspring: 0, eligible: 0, matured: 0 },
+            high: { parents: 0, offspring: 0, eligible: 0, matured: 0 },
+        };
         for (let parentIndex = 0; parentIndex < count; parentIndex++)
         {
             const parent = _nodes[ parentIndex ];
@@ -165,6 +170,16 @@ export function FamilyTree()
             group.matured += children.matured;
             total.parents ++;
             if ( children.total > 0 ) total.reproducingParents ++;
+
+            if ( Number.isFinite( traits.choosiness ))
+            {
+                const chooserGroup = traits.choosiness < 1 / 3 ? choosinessGroups.low
+                    : ( traits.choosiness < 2 / 3 ? choosinessGroups.medium : choosinessGroups.high );
+                chooserGroup.parents ++;
+                chooserGroup.offspring += children.total;
+                chooserGroup.eligible += children.eligible;
+                chooserGroup.matured += children.matured;
+            }
         }
 
         const summarize = ( group ) => ({
@@ -186,6 +201,11 @@ export function FamilyTree()
             small: summarize( groups.small ),
             medium: summarize( groups.medium ),
             large: summarize( groups.large ),
+            choosiness: {
+                low: summarize( choosinessGroups.low ),
+                medium: summarize( choosinessGroups.medium ),
+                high: summarize( choosinessGroups.high ),
+            },
         };
     }
 }
