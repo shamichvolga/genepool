@@ -1,4 +1,4 @@
-import { geneAverage, convertOldGenes, GENE_LAYOUT_VERSION, setTrait, gaussian, thermalWidthToGene, GENES_PREDATOR, GENES_THERMAL_OPTIMUM, GENES_THERMAL_WIDTH, GENES_DIGESTION, GENES_BRIGHTNESS, GENES_CHOOSINESS, GENES_HUNGER, GENES_AUTOTOMY_BITE, GENES_AUTOTOMY_THREAT, GENES_AUTOTOMY_AMOUNT, GENES_AUTOTOMY_WHICH } from "./EcologyGenes";
+import { geneAverage, convertOldGenes, GENE_LAYOUT_VERSION, setTrait, gaussian, thermalWidthToGene, preyTargetScore, GENES_PREDATOR, GENES_THERMAL_OPTIMUM, GENES_THERMAL_WIDTH, GENES_DIGESTION, GENES_BRIGHTNESS, GENES_CHOOSINESS, GENES_HUNGER, GENES_AUTOTOMY_BITE, GENES_AUTOTOMY_THREAT, GENES_AUTOTOMY_AMOUNT, GENES_AUTOTOMY_WHICH } from "./EcologyGenes";
 import { environment, INITIAL_SOIL_NUTRIENT_PER_CELL, NUTRIENT_CYCLE_ENABLED, PLANT_TYPE_WARM, PLANT_TYPE_COLD } from "./Environment";
 import { petriStartZone } from "./Petri";
 import { IGNORE_FOOD_EFFICIENCY, preyVisibility, TWO_PLANT_TYPES } from "./Ecology";
@@ -22,10 +22,12 @@ import { perceive, PerceptionScratch } from "./PerceptionKernel";
 import { physicsStep } from "./PhysicsKernel";
 import { FLAT_ENVIRONMENT } from "./Environment";
 import { Swimbot } from "./Swimbot";
-import { ATTRACTION_RANDOM, ATTRACTION_SIMILAR_COLOR, NUM_ATTRACTIONS, STARVING, SWIMBOT_VIEW_RADIUS } from "./SwimbotTypes";
+import { ATTRACTION_RANDOM, ATTRACTION_SIMILAR_COLOR, NUM_ATTRACTIONS, STARVING, SWIMBOT_MOUTH_LENGTH, SWIMBOT_VIEW_RADIUS } from "./SwimbotTypes";
 import { Touch, TouchState } from "./Touch";
 import { assert, getRandomAngleInDegrees } from "./Utility";
 import { Vector2D } from "./Vector2D";
+import { ATTACK_SUCCESS_CHANCE, ENVIRONMENT_ATTACK_SUCCESS_CHANCE, PREDATOR_TARGET_SELECTION_ENABLED, PREDATION_ENERGY_TRANSFER, PREY_BODY_ENERGY, PREY_SCAN_COOLDOWN, SWIMBOT_MAX_ENERGY } from "./Parameters";
+import { seedPredatorChoiceBrain } from "./NeuralBrain";
 import { ViewTracking, ViewTrackingMode } from "./ViewTracking";
 
 //------------------
@@ -887,6 +889,19 @@ if ( mode === SimulationStartMode.SPECIES )
                 //console.log( "geneValue = " + geneValue );
                 //_myGenotype.setGeneValue( foodNutritionGene, 0 );
                 //_myGenotype.setGeneValue( foodNutritionGene, 0 );
+            }
+
+            // C12 founders span the available prey-value/travel-cost strategies;
+            // selection and small inherited mutations shape them after startup.
+            if ( PREDATOR_TARGET_SELECTION_ENABLED )
+            {
+                // Reuse the already-seeded founder state rather than draw from
+                // the world RNG, so BASE and C12 start from identical worlds.
+                const founderKey = ( Math.floor( initialPosition.x * 16 )
+                    ^ Math.imul( Math.floor( initialPosition.y * 16 ), 0x45d9f3b )
+                    ^ Math.imul( i + 1, 0x27d4eb2d )
+                    ^ Math.floor(( initialAngle + 180 ) * 1000 )) >>> 0;
+                seedPredatorChoiceBrain( _myGenotype.getBrain(), founderKey );
             }
 
             //--------------------------------------------------
@@ -2118,6 +2133,15 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 	    _numNearbySwimbots = count;
 
 	    if ( me.getUsesNeuralBrain() ) { me.setSocialOffset( _st.socialX[s], _st.socialY[s] ); }
+	    me.setPredatorTargetSignals({
+	        preyDistance: _st.targetPreyDistance[s],
+	        preyReward: _st.targetPreyReward[s],
+	        preySuccess: _st.targetPreySuccess[s],
+	        preyChase: _st.targetPreyChase[s],
+	        baitPresent: _st.targetBaitPresent[s] === 1,
+	        baitDistance: _st.targetBaitDistance[s],
+	        baitReward: _st.targetBaitReward[s],
+	    });
 
 	    // (something may have been eaten since the look)
 	    const f = _st.seenFood[s];
@@ -2128,6 +2152,24 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
 	    const threatOkay = ( t >= 0 ) && _swimbots[t].getAlive();
 	    const a = _st.seenPredator[s];
 	    const anyPredator = (( a >= 0 ) && _swimbots[a].getAlive() ) ? _swimbots[a] : null;
+
+    const baitOkay = foodOkay && ( _foodBits[f].getType() === 2 );
+    if ( PREDATOR_TARGET_SELECTION_ENABLED && ( preyOkay || baitOkay ))
+	    {
+	        simCounters.preyTargetChoices ++;
+        if ( baitOkay && !preyOkay )
+        {
+            simCounters.preyTargetMeatChoices ++;
+            simCounters.preyTargetDistanceSum += _st.targetBaitDistance[s];
+            simCounters.preyTargetRewardSum += _st.targetBaitReward[s];
+        }
+        else
+        {
+            simCounters.preyTargetLiveChoices ++;
+            simCounters.preyTargetDistanceSum += _st.targetPreyDistance[s];
+            simCounters.preyTargetRewardSum += _st.targetPreyReward[s] * _st.targetPreySuccess[s];
+        }
+	    }
 
 	    if ( preyOkay ) { me.notifyTargetFound(); }
 
@@ -2195,6 +2237,7 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
             _foodX[f] = position.x;
             _foodY[f] = position.y;
             _foodType[f] = _foodBits[f].getType();
+	        _st.foodEnergy[f] = _foodBits[f].getEnergy();
 	    }
         _foodBitGrid.build( _aliveFoodBitIndices, _aliveFoodBitIndices.length, _foodX, _foodY );
 
@@ -2466,20 +2509,32 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
         const iAmStarving      = me.getEnergy() < STARVING_FOOD_CHOICE;
         let foundFoodBit = false;
         let smallestDistanceSquared = Number.MAX_SAFE_INTEGER;
+        let bestMeatScore = -Infinity;
+        const targetSignals = { preyDistance: 0, preyReward: 0, preySuccess: 0, preyChase: 0,
+                                baitPresent: false, baitDistance: 0, baitReward: 0 };
 
-        const numFoodInCells = _foodBitGrid.collect( myX, myY, viewRadius, _foodGridResult );
+        // The broad phase is centered on the body, so include the mouth's
+        // reach; meat itself is then range-checked from the mouth below.
+        const foodSearchRadius = viewRadius + SWIMBOT_MOUTH_LENGTH + FOOD_BIT_GRAB_RADIUS;
+        const numFoodInCells = _foodBitGrid.collect( myX, myY, foodSearchRadius, _foodGridResult );
 
         for (let k = 0; k < numFoodInCells; k++)
         {
             const f  = _foodGridResult[k];
 
-            // within the search radius of my body center?
             const fx = _foodX[f] - myX;
             const fy = _foodY[f] - myY;
-            if ( fx * fx + fy * fy >= viewRadiusSquared ) continue;
 
             const foodBit = _foodBits[f];
             const foodType = _foodType[f];
+            const mx = myMouthPosition.x - _foodX[f];
+            const my = myMouthPosition.y - _foodY[f];
+            const viewDistanceSquared = mx * mx + my * my;
+            if ( foodType === 2 )
+            {
+                if ( viewDistanceSquared >= viewRadiusSquared ) continue;
+            }
+            else if ( fx * fx + fy * fy >= viewRadiusSquared ) continue;
 
             let okay = true;
 
@@ -2510,12 +2565,29 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
 
             if (!okay) continue;
 
+            if ( foodType === 2 && foodBit.getAlive() && PREDATOR_TARGET_SELECTION_ENABLED )
+            {
+                const room = Math.max( 0, SWIMBOT_MAX_ENERGY - me.getEnergy() );
+                const reward = Math.min( room, foodBit.getEnergy() ) / SWIMBOT_MAX_ENERGY;
+                const distanceCost = Math.sqrt( viewDistanceSquared ) / Math.max( 1, viewRadius );
+                const chaseCost = Math.min( 1, Math.sqrt( viewDistanceSquared ) / Math.max( 0.05, me.getSpeed() ) / Math.max( 1, PREY_SCAN_COOLDOWN ));
+                const value = preyTargetScore( reward, chaseCost, me.getPreyValueWeight(),
+                                               me.getPreyTravelWeight(), me.getPreyBaitBias(), true );
+                if ( value > bestMeatScore && !_obstacle.getObstruction( myMouthPosition, foodBit.getPosition() ))
+                {
+                    bestMeatScore = value;
+                    smallestDistanceSquared = viewDistanceSquared;
+                    _chosenFoodBit = foodBit;
+                    foundFoodBit = true;
+                    targetSignals.baitPresent = true;
+                    targetSignals.baitDistance = distanceCost;
+                    targetSignals.baitReward = reward;
+                }
+                continue;
+            }
+
             // distance from my mouth (from the arrays; the food bit itself
             // is only looked at for the few that could be the closest)
-            const mx = myMouthPosition.x - _foodX[f];
-            const my = myMouthPosition.y - _foodY[f];
-            let viewDistanceSquared = mx * mx + my * my;
-
             // in the environment, better food counts as nearer:
             // value = efficiency / distance, i.e. compare distance² / efficiency²
             if ( environmentOn && ( foodType !== 2 ))
@@ -2558,6 +2630,7 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
         let chosenPrey = null;
         let bestPreyValue = -Infinity;
         let chosenPreyDistance = 0;
+        const attackChance = environmentOn ? ENVIRONMENT_ATTACK_SUCCESS_CHANCE : ATTACK_SUCCESS_CHANCE;
 
         // Читаем predatorLevel и mass через публичные геттеры Swimbot
         // (predatorLevel объявлен выше, чтобы не ловить Temporal Dead Zone)
@@ -2598,6 +2671,23 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
                 // Жёстко выбираем минимальную дистанцию среди видимых.
                 // Энергия добавляется только как микроприбавка, чтобы избежать тикового залипания при равных расстояниях.
                 let value = -distance + candidate.getEnergy() * 0.001;
+                if ( PREDATOR_TARGET_SELECTION_ENABLED )
+                {
+                    const room = Math.max( 0, SWIMBOT_MAX_ENERGY - me.getEnergy() );
+                    const potential = candidate.getEnergy() * PREDATION_ENERGY_TRANSFER + candidate.getPhenotypeMass() * PREY_BODY_ENERGY;
+                    const reward = Math.min( room, potential ) / SWIMBOT_MAX_ENERGY;
+                    const distanceCost = distance / Math.max( 1, preyViewRadius );
+                    const chaseCost = Math.min( 1, distance / Math.max( 0.05, me.getSpeed() ) / Math.max( 1, PREY_SCAN_COOLDOWN ));
+                    value = preyTargetScore( reward * attackChance, chaseCost, me.getPreyValueWeight(),
+                                             me.getPreyTravelWeight(), me.getPreyBaitBias(), false );
+                    if ( value > bestPreyValue )
+                    {
+                        targetSignals.preyDistance = distanceCost;
+                        targetSignals.preyReward = reward;
+                        targetSignals.preySuccess = attackChance;
+                        targetSignals.preyChase = chaseCost;
+                    }
+                }
 
 
 
@@ -2611,6 +2701,35 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
             }
 
 
+        }
+
+        if ( PREDATOR_TARGET_SELECTION_ENABLED )
+        {
+            const baitWins = foundFoodBit && ( _chosenFoodBit != null ) && ( _chosenFoodBit.getType() === 2 )
+                          && ( bestMeatScore > bestPreyValue );
+            if ( baitWins )
+            {
+                preyWasFound = false;
+                chosenPrey = null;
+                simCounters.preyTargetChoices ++;
+                simCounters.preyTargetMeatChoices ++;
+                simCounters.preyTargetDistanceSum += targetSignals.baitDistance;
+                simCounters.preyTargetRewardSum += targetSignals.baitReward;
+            }
+            else if ( preyWasFound )
+            {
+                // A live prey scored higher, so don't leave the lower-scoring
+                // meat target active alongside it.
+                if ( foundFoodBit && ( _chosenFoodBit != null ) && ( _chosenFoodBit.getType() === 2 ))
+                {
+                    foundFoodBit = false;
+                    _chosenFoodBit = null;
+                }
+                simCounters.preyTargetChoices ++;
+                simCounters.preyTargetLiveChoices ++;
+                simCounters.preyTargetDistanceSum += targetSignals.preyDistance;
+                simCounters.preyTargetRewardSum += targetSignals.preyReward * targetSignals.preySuccess;
+            }
         }
 
 
@@ -2662,6 +2781,7 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
             this.checkPerceptionKernel( s, foundFoodBit ? _chosenFoodBit.getIndex() : -1, chosenPrey, nearestPredator, socialX, socialY );
         }
 
+        me.setPredatorTargetSignals( targetSignals );
         me.setEnvironmentalStimuli(
 
             _numNearbySwimbots,

@@ -45,6 +45,7 @@ const scenarios = {
     C9:   { label: "body-mass-dependent inertia in body temperature; no internal heat source", overrides: { BODY_TEMPERATURE_INERTIA_ENABLED: "true" } },
     C10:  { label: "size-dependent maintenance cost: mass^0.75 at 0.000008 per step", overrides: { BASAL_METABOLISM: "0.000008" } },
     C11:  { label: "inherited neural choice to consume own body tissue", overrides: { SELF_CANNIBALISM_ENABLED: "true" } },
+    C12:  { label: "neural choice between live prey and meat by expected energy and pursuit cost", overrides: { PREDATOR_TARGET_SELECTION_ENABLED: "true" } },
 };
 if ( !scenarios[ SCENARIO ] ) throw new Error( `unknown scenario ${SCENARIO}; choose ${Object.keys(scenarios).join(", ")}` );
 const FLAT = SCENARIO === "C0" || arg( "flat", "0" ) === "1";
@@ -127,6 +128,7 @@ function ecoStats()
     const masses = [], widths = [], lengths = [], maxWidths = [], parts = [], branchParts = [], branchFractions = [], energies = [], speeds = [], swimEfficiencies = [];
     const bodyTemperatures = [], ambientTemperatures = [], thermalLags = [], thermalLagMasses = [], thermalLagWidths = [];
     const offspring = [], preyEaten = [], foodEaten = [];
+    const preyValueWeights = [], preyTravelWeights = [], preyBaitBiases = [];
     const bins = new Map();   // eco-types: θ, d, b in 5 bins each
     let choosy = 0;
     let effort = 0, climate = 0, social = 0, brainDistance = 0, neural = 0;
@@ -174,7 +176,13 @@ function ecoStats()
         {
             neural ++;
             effort += b.getEffort(); climate += b.getClimateWeight(); social += b.getSocialWeight();
-            brainDistance += sb.brainDistanceFromInnate( b.getGenotype().getBrain(), sb.SELF_CANNIBALISM_ENABLED );
+            brainDistance += sb.brainDistanceFromInnate( b.getGenotype().getBrain(), sb.SELF_CANNIBALISM_ENABLED, sb.PREDATOR_TARGET_SELECTION_ENABLED );
+        }
+        if ( sb.PREDATOR_TARGET_SELECTION_ENABLED && b.getPredatorLevel() > sb.PREDATOR_LEVEL_THRESHOLD )
+        {
+            preyValueWeights.push( b.getPreyValueWeight() );
+            preyTravelWeights.push( b.getPreyTravelWeight() );
+            preyBaitBiases.push( b.getPreyBaitBias() );
         }
         const bin = Math.min( 4, Math.floor( b.getThermalOptimum() * 5 )) + "," + Math.min( 4, Math.floor( b.getDigestion() * 5 ))
                   + "," + ( bs.length ? Math.min( 4, Math.floor( bs[ bs.length - 1 ] * 5 )) : 0 );
@@ -275,6 +283,9 @@ function ecoStats()
         climate  : neural ? climate / neural : 0,
         social   : neural ? social / neural : 0,
         brain    : neural ? brainDistance / neural : 0,
+        preyValueWeightMean: preyValueWeights.reduce(( a, b ) => a + b, 0 ) / ( preyValueWeights.length || 1 ),
+        preyTravelWeightMean: preyTravelWeights.reduce(( a, b ) => a + b, 0 ) / ( preyTravelWeights.length || 1 ),
+        preyBaitBiasMean: preyBaitBiases.reduce(( a, b ) => a + b, 0 ) / ( preyBaitBiases.length || 1 ),
         morphBins: morphBins.size,
         effectiveMorphBins: Math.exp( morphShannon ),
         massMean : massDist.mean,
@@ -327,7 +338,7 @@ function ecoStats()
     };
 }
 
-const eventKeys = [ "births", "localPlantSprouts", "seedRainPlantSprouts", "nutrientLimitedPlantSeeds", "meatDecayEvents", "nutrientsFromMeatDecay", "plantMeals", "meatMeals", "meatTargetsWhilePursuing", "meatMealsWhilePursuing", "attackCount", "failedAttacks", "autotomyThreatDrops", "autotomyBiteDrops", "autotomyDecoysEaten", "starvationDeaths", "oldAgeDeaths", "predationDeaths", "otherDeaths", "selfCannibalismEvents", "selfCannibalismEnergy", "selfCannibalismMass" ];
+const eventKeys = [ "births", "localPlantSprouts", "seedRainPlantSprouts", "nutrientLimitedPlantSeeds", "meatDecayEvents", "nutrientsFromMeatDecay", "plantMeals", "meatMeals", "meatTargetsWhilePursuing", "meatMealsWhilePursuing", "attackCount", "failedAttacks", "autotomyThreatDrops", "autotomyBiteDrops", "autotomyDecoysEaten", "starvationDeaths", "oldAgeDeaths", "predationDeaths", "otherDeaths", "selfCannibalismEvents", "selfCannibalismEnergy", "selfCannibalismMass", "preyTargetChoices", "preyTargetLiveChoices", "preyTargetMeatChoices", "preyTargetDistanceSum", "preyTargetRewardSum" ];
 const eventCounters = sb.simCounters || {};
 let previousEvents = Object.fromEntries( eventKeys.map( key => [ key, eventCounters[ key ] || 0 ] ));
 function eventDeltas()
@@ -342,9 +353,9 @@ function eventDeltas()
     return delta;
 }
 
-const eventColumns = "births_interval,local_plant_sprouts_interval,seed_rain_plant_sprouts_interval,nutrient_limited_seed_attempts_interval,meat_decay_events_interval,soil_nutrients_returned_interval,plant_meals_interval,meat_meals_interval,pursuit_meat_target_selections_interval,pursuit_meat_meals_interval,prey_kills_interval,failed_attacks_interval,autotomy_threat_drops_interval,autotomy_bite_drops_interval,autotomy_decoys_eaten_interval,starvation_deaths_interval,old_age_deaths_interval,predation_deaths_interval,other_deaths_interval,self_feed_events_interval,self_feed_energy_interval,self_feed_mass_interval";
+const eventColumns = "births_interval,local_plant_sprouts_interval,seed_rain_plant_sprouts_interval,nutrient_limited_seed_attempts_interval,meat_decay_events_interval,soil_nutrients_returned_interval,plant_meals_interval,meat_meals_interval,pursuit_meat_target_selections_interval,pursuit_meat_meals_interval,prey_kills_interval,failed_attacks_interval,autotomy_threat_drops_interval,autotomy_bite_drops_interval,autotomy_decoys_eaten_interval,starvation_deaths_interval,old_age_deaths_interval,predation_deaths_interval,other_deaths_interval,self_feed_events_interval,self_feed_energy_interval,self_feed_mass_interval,prey_target_choices_interval,prey_target_live_choices_interval,prey_target_meat_choices_interval,prey_target_distance_sum_interval,prey_target_reward_sum_interval";
 const pedigreeColumns = "pedigree_parents,pedigree_reproducing_parents,pedigree_offspring,pedigree_maturity_eligible,pedigree_matured_offspring,pedigree_maturity_survival,small_parent_matured_per_parent,medium_parent_matured_per_parent,large_parent_matured_per_parent";
-const header = "step,alive,pred,warm,cold,meat,fit,w,body_temp_mean,body_temp_p10,body_temp_p50,body_temp_p90,ambient_temp_mean,thermal_lag_abs_mean,thermal_lag_mass_corr,thermal_lag_width_corr,cline_slope,cline_r2,d_corr,b_corr,choosy,eco_types,mate_isolation,size_corr,effort,climate,social,brain_change,coarse_morphotype_bins,eff_coarse_morphotype_bins,mass_mean,mass_p10,mass_p50,mass_p90,width_mean,width_p10,width_p50,width_p90,length_mean,length_p10,length_p50,length_p90,max_width_mean,parts_mean,branch_parts_mean,branch_fraction_mean,energy_mean,speed_mean,speed_p10,speed_p50,speed_p90,swim_energy_efficiency_mean,offspring_alive_mean,prey_eaten_alive_mean,food_eaten_alive_mean," + pedigreeColumns + ",hunger,hunger_sd,autotomy_bite,autotomy_decoy,missing_parts,occupied,plant_cells_occupied,plant_cell_occupancy,plants_per_occupied_cell,soil_nutrient_cells,soil_nutrient_mean,soil_nutrient_p10,soil_nutrient_p50,soil_nutrient_p90,gene_clusters,eff_gene_clusters,top_gene_cluster_share," + eventColumns + ",ms_step";
+const header = "step,alive,pred,warm,cold,meat,fit,w,body_temp_mean,body_temp_p10,body_temp_p50,body_temp_p90,ambient_temp_mean,thermal_lag_abs_mean,thermal_lag_mass_corr,thermal_lag_width_corr,cline_slope,cline_r2,d_corr,b_corr,choosy,eco_types,mate_isolation,size_corr,effort,climate,social,brain_change,coarse_morphotype_bins,eff_coarse_morphotype_bins,mass_mean,mass_p10,mass_p50,mass_p90,width_mean,width_p10,width_p50,width_p90,length_mean,length_p10,length_p50,length_p90,max_width_mean,parts_mean,branch_parts_mean,branch_fraction_mean,energy_mean,speed_mean,speed_p10,speed_p50,speed_p90,swim_energy_efficiency_mean,offspring_alive_mean,prey_eaten_alive_mean,food_eaten_alive_mean," + pedigreeColumns + ",hunger,hunger_sd,autotomy_bite,autotomy_decoy,missing_parts,occupied,plant_cells_occupied,plant_cell_occupancy,plants_per_occupied_cell,soil_nutrient_cells,soil_nutrient_mean,soil_nutrient_p10,soil_nutrient_p50,soil_nutrient_p90,gene_clusters,eff_gene_clusters,top_gene_cluster_share,predator_target_value_weight_mean,predator_target_travel_weight_mean,predator_target_bait_bias_mean," + eventColumns + ",ms_step";
 console.log( `scenario=${SCENARIO} seed=${SEED} steps=${STEPS} flat=${FLAT} set=${EXTRA || ""}` );
 console.log( header );
 const rows = [];
@@ -385,6 +396,7 @@ for ( let step = 1; step <= STEPS; step++ )
                       e.soilNutrientCells, e.soilNutrientMean.toFixed( 4 ), e.soilNutrientP10.toFixed( 4 ),
                       e.soilNutrientP50.toFixed( 4 ), e.soilNutrientP90.toFixed( 4 ),
                       s.species, s.effSpecies.toFixed( 1 ), s.topShare.toFixed( 2 ),
+                      e.preyValueWeightMean.toFixed( 3 ), e.preyTravelWeightMean.toFixed( 3 ), e.preyBaitBiasMean.toFixed( 3 ),
                       ...eventKeys.map( key => events[ key ] ),
                       msPerStep.toFixed( 1 ) ].join( "," );
         rows.push( row );
@@ -402,7 +414,7 @@ if ( META )
     const endedAt = new Date().toISOString();
     const durationMs = Number( process.hrtime.bigint() - runStartNs ) / 1e6;
     const metadata = {
-        schemaVersion: 8,
+        schemaVersion: 10,
         startedAt,
         endedAt,
         durationMs: Number( durationMs.toFixed( 1 )),
@@ -435,6 +447,11 @@ if ( META )
             bodyTemperature: "internal state after optional mass- and width-dependent exchange with local felt temperature",
             thermalLagAbsMean: "mean absolute difference between internal and local felt temperature",
             thermalLagCorrelations: "correlation of log body mass and mean body width with absolute thermal lag; exploratory, not causal estimates",
+        },
+        predatorTargetSelection: {
+            enabled: !!sb.PREDATOR_TARGET_SELECTION_ENABLED,
+            networkInputs: "prey distance, expected energy, attack chance, chase cost, nearby bait availability, bait distance and energy",
+            outputs: "network-evolved weights on expected energy and pursuit cost, plus a bias between live prey and meat",
         },
         outputs: { csv: CSV ? path.resolve( CSV ) : null },
         alerts: run.alerts,

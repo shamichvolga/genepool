@@ -35,6 +35,12 @@ export function isSelfFeedingGene( g ): boolean
     return ( g === GENES_SELF_FEED_WHICH[0] ) || ( g === GENES_SELF_FEED_AMOUNT[0] );
 }
 
+export function preyTargetScore( reward: number, pursuitCost: number, rewardWeight: number,
+                                 travelWeight: number, baitBias = 0, isBait = false ): number
+{
+    return reward * rewardWeight - pursuitCost * travelWeight + ( isBait ? baitBias : -baitBias );
+}
+
 export const ECOLOGY_GENES_FIRST   = 120;
 export const ECOLOGY_GENES_LAST    = 143;
 export const MARKER_GENES_FIRST    = 144;                      // neutral markers: change slowly, affect nothing,

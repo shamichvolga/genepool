@@ -4,8 +4,8 @@ import { applyWaterDrag, bodyMotionFactors } from "./BodyPhysics";
 import { advanceBodyTemperature } from "./ThermalPhysics";
 import * as SS from "./SharedState";
 import { think, sigmoid, NUM_INPUTS, NUM_HIDDEN, NUM_OUTPUTS, DRIVE_OUTPUTS, THINK_PERIOD, DRIVE_HYSTERESIS, EFFORT_MIN, EFFORT_RANGE, IN_BIAS, IN_HUNGER, IN_ENERGY, IN_AGE, IN_FIT, IN_TREND, IN_FOOD, IN_MATE, IN_THREAT, IN_PREY, IN_CROWD, IN_PREDATOR, OUT_FOOD, OUT_MATE, OUT_FLEE, OUT_HUNT, OUT_CLIMATE, OUT_SOCIAL, OUT_EFFORT,
-         IN_FOOD_SIDE, IN_FOOD_AHEAD, IN_NEAR_SIDE, IN_NEAR_AHEAD, IN_THREAT_SIDE, IN_THREAT_AHEAD, IN_KIN, IN_SEASON, IN_PREDATOR_NEAR, OUT_STEER, OUT_SELF_EAT, STEER_MAX_DEGREES } from "./NeuralBrain";
-import { NEURAL_BRAIN_ENABLED, CLIMATE_STEERING, SOCIAL_STEERING, CLIMATE_PROBE_DISTANCE, BODY_TEMPERATURE_INERTIA_ENABLED, SELF_CANNIBALISM_ENABLED } from "./Parameters";
+         IN_FOOD_SIDE, IN_FOOD_AHEAD, IN_NEAR_SIDE, IN_NEAR_AHEAD, IN_THREAT_SIDE, IN_THREAT_AHEAD, IN_KIN, IN_SEASON, IN_PREDATOR_NEAR, IN_PREY_DISTANCE, IN_PREY_REWARD, IN_PREY_SUCCESS, IN_PREY_CHASE, IN_BAIT_PRESENT, IN_BAIT_DISTANCE, IN_BAIT_REWARD, OUT_STEER, OUT_SELF_EAT, OUT_PREY_VALUE, OUT_PREY_TRAVEL, OUT_PREY_BAIT, STEER_MAX_DEGREES } from "./NeuralBrain";
+import { NEURAL_BRAIN_ENABLED, CLIMATE_STEERING, SOCIAL_STEERING, CLIMATE_PROBE_DISTANCE, BODY_TEMPERATURE_INERTIA_ENABLED, SELF_CANNIBALISM_ENABLED, PREDATOR_TARGET_SELECTION_ENABLED } from "./Parameters";
 import { environment, PLANT_TYPE_WARM, PLANT_TYPE_COLD } from "./Environment";
 import { sizeSignature, SEARCH_IMAGE_LEARNING, SEARCH_IMAGE_GAIN, SEARCH_IMAGE_FORGETTING, bodySize, sizeDietFactor, climateFoodFactor, digestionEfficiency, thermalFit, thermalPeak, THERMAL_MISMATCH_DRAIN, THERMAL_FIT_UPDATE_PERIOD, THERMOMELANISM, mateAcceptance, pairRandom, KINESIS_PERIOD, KINESIS_TURN_CHANCE, KINESIS_MAX_TURN, EMERGENCY_THERMAL_FIT, EMERGENCY_PROBE_DISTANCE } from "./Ecology";
 //--------------------------------------------------------------------------
@@ -415,6 +415,28 @@ this.setParent = function( parent )
 	    st.colorR    [s] = color.red;
 	    st.colorG    [s] = color.green;
 	    st.colorB    [s] = color.blue;
+	    this.writeTargetChoiceState();
+	}
+
+	this.writeTargetChoiceState = function()
+	{
+	    if ( _slot < 0 ) return;
+	    const st = _shared, s = _slot;
+	    st.preyValueWeight [s] = sigmoid( _nnOutputs[ OUT_PREY_VALUE ] );
+	    st.preyTravelWeight[s] = sigmoid( _nnOutputs[ OUT_PREY_TRAVEL ] );
+	    st.preyBaitBias    [s] = Math.tanh( _nnOutputs[ OUT_PREY_BAIT ] );
+	}
+
+	this.setPredatorTargetSignals = function( signals )
+	{
+	    if ( !PREDATOR_TARGET_SELECTION_ENABLED || !signals ) return;
+	    _nnInputs[ IN_PREY_DISTANCE ] = signals.preyDistance || 0;
+	    _nnInputs[ IN_PREY_REWARD ] = signals.preyReward || 0;
+	    _nnInputs[ IN_PREY_SUCCESS ] = signals.preySuccess || 0;
+	    _nnInputs[ IN_PREY_CHASE ] = signals.preyChase || 0;
+	    _nnInputs[ IN_BAIT_PRESENT ] = signals.baitPresent ? ONE : ZERO;
+	    _nnInputs[ IN_BAIT_DISTANCE ] = signals.baitDistance || 0;
+	    _nnInputs[ IN_BAIT_REWARD ] = signals.baitReward || 0;
 	}
 
 	// copy the numbers the physics needs into the shared state
@@ -1027,7 +1049,10 @@ _position.copyFrom( position );
 
 		// the neural brain is used in the environment pool (stage 6)
 		_neural         = environment.active && NEURAL_BRAIN_ENABLED;
+		_nnInputs.fill( ZERO );
 		_nnHidden.fill( ZERO );
+		_nnNewHidden.fill( ZERO );
+		_nnOutputs.fill( ZERO );
 		_effort         = ONE;
 		_climateWeight  = ZERO;
 		_socialWeight   = ZERO;
@@ -1611,6 +1636,7 @@ _position.copyFrom( position );
 	this.prepareStep = function()
 	{
 	    this.decide( true );
+	    this.writeTargetChoiceState();
 	    this.applyClimateDrain();
 	    this.writePhysicsState();
 	}
@@ -2326,6 +2352,9 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	this.getNumFoodBitsEaten            = function() { return _numFoodBitsEaten;                            }
     this.getBrainState                  = function() { return _brain.getState();                            }
     this.getGenotype                    = function() { return _genotype;                                    }
+	this.getPreyValueWeight             = function() { return sigmoid( _nnOutputs[ OUT_PREY_VALUE ] ); }
+	this.getPreyTravelWeight            = function() { return sigmoid( _nnOutputs[ OUT_PREY_TRAVEL ] ); }
+	this.getPreyBaitBias                = function() { return Math.tanh( _nnOutputs[ OUT_PREY_BAIT ] ); }
 	this.getSelectRadius                = function() { return _selectRadius;                                }
 	this.getPreferredFoodType           = function() { return _phenotype.preferredFoodType;                 }
 	this.getDigestibleFoodType          = function() { return _phenotype.digestibleFoodType;                }
@@ -2734,6 +2763,14 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
             let preyIsValid = ( preyWasFound === true ) && ( thePrey != null );
 
             _brain.setFoundPrey( preyIsValid );
+
+            // In C12, a chosen meat target replaces the live-prey chase now;
+            // do not keep pursuing a target the chooser deliberately rejected.
+            if ( PREDATOR_TARGET_SELECTION_ENABLED && !preyIsValid
+            &&   foodBitWasFound && ( theFoodBit != null ) && ( theFoodBit.getType() === 2 ))
+            {
+                _brain.returnToSearchingForPrey();
+            }
 
             if ( preyIsValid )
             {

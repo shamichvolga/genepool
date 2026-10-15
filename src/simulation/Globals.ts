@@ -103,6 +103,11 @@ export const simCounters = {
     selfCannibalismEvents: 0,
     selfCannibalismEnergy: 0,
     selfCannibalismMass: 0,
+    preyTargetChoices: 0,
+    preyTargetLiveChoices: 0,
+    preyTargetMeatChoices: 0,
+    preyTargetDistanceSum: 0,
+    preyTargetRewardSum: 0,
     meatTargetsWhilePursuing: 0,
     meatMealsWhilePursuing: 0,
     failedAttacks: 0,
@@ -130,6 +135,11 @@ export function resetSimulationCounters(): void
     simCounters.selfCannibalismEvents = 0;
     simCounters.selfCannibalismEnergy = 0;
     simCounters.selfCannibalismMass = 0;
+    simCounters.preyTargetChoices = 0;
+    simCounters.preyTargetLiveChoices = 0;
+    simCounters.preyTargetMeatChoices = 0;
+    simCounters.preyTargetDistanceSum = 0;
+    simCounters.preyTargetRewardSum = 0;
     simCounters.meatTargetsWhilePursuing = 0;
     simCounters.meatMealsWhilePursuing = 0;
     simCounters.failedAttacks = 0;

@@ -224,6 +224,7 @@ export function Brain()
     this.setFoundPrey       = function(f) { _foundPrey    = f; };
     this.setPredatorLevel          = function(level) { _predatorLevel = level; };
     this.setNearbyPredatorThreat   = function(v)     { _nearbyPredatorThreat = v; };
+    this.returnToSearchingForPrey  = function()     { if ( _state === BRAIN_STATE_PURSUING_PREY ) _state = BRAIN_STATE_LOOKING_FOR_PREY; };
     this.setGoal                   = function(g)     { _goal = g; };
     this.getGoal                   = function()      { return _goal; };
 

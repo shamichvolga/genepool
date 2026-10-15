@@ -42,7 +42,14 @@ export const IN_THREAT_AHEAD= 17;
 export const IN_KIN         = 18;   // how alike (color) the nearest swimbot is, 0..1
 export const IN_SEASON      = 19;   // -1 winter .. +1 summer
 export const IN_PREDATOR_NEAR = 20; // any predator (also a calm one): 0 far .. 1 very close
-export const NUM_INPUTS     = 21;
+export const IN_PREY_DISTANCE = 21; // distance to the best visible live prey, / scan radius
+export const IN_PREY_REWARD   = 22; // expected energy from the live prey, 0..1
+export const IN_PREY_SUCCESS  = 23; // estimated chance of a successful attack, 0..1
+export const IN_PREY_CHASE    = 24; // estimated travel/time cost to reach live prey, 0..1
+export const IN_BAIT_PRESENT  = 25; // edible meat is visible
+export const IN_BAIT_DISTANCE = 26; // distance to the best visible meat, / view radius
+export const IN_BAIT_REWARD   = 27; // energy available from the meat, 0..1
+export const NUM_INPUTS       = 28;
 
 //------------------------------------------------------------
 // outputs
@@ -56,8 +63,12 @@ export const OUT_SOCIAL     = 5;    // + swim towards the others, - keep away
 export const OUT_EFFORT     = 6;    // how hard to swim (faster, but costs energy)
 export const OUT_STEER      = 7;    // while searching: turn left (-) or right (+)
 export const OUT_SELF_EAT   = 8;    // choose to metabolize a removable body branch
+export const OUT_PREY_VALUE = 9;    // how much expected energy matters when choosing a target
+export const OUT_PREY_TRAVEL= 10;   // how much pursuit distance/time matters
+export const OUT_PREY_BAIT  = 11;   // preference for available meat over live prey
 export const LEGACY_NUM_OUTPUTS = 8;
-export const NUM_OUTPUTS    = 9;
+export const CORE_NUM_OUTPUTS = 9;
+export const NUM_OUTPUTS    = 12;
 export const DRIVE_OUTPUTS  = [ OUT_FOOD, OUT_MATE, OUT_FLEE, OUT_HUNT, OUT_SELF_EAT ];
 export const NUM_DRIVES     = DRIVE_OUTPUTS.length;
 
@@ -66,37 +77,56 @@ export const NUM_HIDDEN     = 6;
 //------------------------------------------------------------
 // weight layout in the brain chromosome
 //------------------------------------------------------------
-const W_IO = 0;                                     // [output][input]
-const W_IH = W_IO + NUM_OUTPUTS * NUM_INPUTS;       // [hidden][input]
+const W_IO = 0;                                     // [core output][input]
+const W_IH = W_IO + CORE_NUM_OUTPUTS * NUM_INPUTS;  // [hidden][input]
 const W_HH = W_IH + NUM_HIDDEN  * NUM_INPUTS;       // [hidden][hidden] (memory)
-const W_HO = W_HH + NUM_HIDDEN  * NUM_HIDDEN;       // [output][hidden]
-export const BRAIN_SIZE = W_HO + NUM_OUTPUTS * NUM_HIDDEN;
+const W_HO = W_HH + NUM_HIDDEN  * NUM_HIDDEN;       // [core output][hidden]
+const CORE_BRAIN_SIZE = W_HO + CORE_NUM_OUTPUTS * NUM_HIDDEN;
+const EXTRA_OUTPUT_START = CORE_BRAIN_SIZE;          // new output neurons are appended, preserving saved layouts
+export const BRAIN_SIZE = CORE_BRAIN_SIZE + ( NUM_OUTPUTS - CORE_NUM_OUTPUTS ) * ( NUM_INPUTS + NUM_HIDDEN );
 
-// Previous saves and BASE runs use this eight-output network. Keep its weight
-// ordering and random draw count stable when the optional C11 action is off.
-const LEGACY_W_IO = 0;
-const LEGACY_W_IH = LEGACY_W_IO + LEGACY_NUM_OUTPUTS * NUM_INPUTS;
-const LEGACY_W_HH = LEGACY_W_IH + NUM_HIDDEN * NUM_INPUTS;
+// Older saves used 21 inputs and either 8 (pre-C11) or 9 (C11) outputs.
+// Keep both source layouts readable while new target-selection weights stay
+// out of the legacy part of the chromosome.
+const LEGACY_NUM_INPUTS = 21;
+const LEGACY_W_IH = LEGACY_NUM_OUTPUTS * LEGACY_NUM_INPUTS;
+const LEGACY_W_HH = LEGACY_W_IH + NUM_HIDDEN * LEGACY_NUM_INPUTS;
 const LEGACY_W_HO = LEGACY_W_HH + NUM_HIDDEN * NUM_HIDDEN;
 export const LEGACY_BRAIN_SIZE = LEGACY_W_HO + LEGACY_NUM_OUTPUTS * NUM_HIDDEN;
+const PRE_C12_W_IH = CORE_NUM_OUTPUTS * LEGACY_NUM_INPUTS;
+const PRE_C12_W_HH = PRE_C12_W_IH + NUM_HIDDEN * LEGACY_NUM_INPUTS;
+const PRE_C12_W_HO = PRE_C12_W_HH + NUM_HIDDEN * NUM_HIDDEN;
+const PRE_C12_BRAIN_SIZE = PRE_C12_W_HO + CORE_NUM_OUTPUTS * NUM_HIDDEN;
 
-function currentIndexForLegacyWeight( index: number ): number
+function copySavedNetwork( target: Float32Array, source: ArrayLike<number>, outputs: number,
+                           inputs: number, wIH: number, wHH: number, wHO: number ): void
 {
-    if ( index < LEGACY_W_IH ) return W_IO + index;
-    if ( index < LEGACY_W_HH ) return W_IH + index - LEGACY_W_IH;
-    if ( index < LEGACY_W_HO ) return W_HH + index - LEGACY_W_HH;
-    return W_HO + index - LEGACY_W_HO;
+    for ( let o = 0; o < outputs; o++ )
+    {
+        for ( let i = 0; i < inputs; i++ )
+            target[ W_IO + o * NUM_INPUTS + i ] = Number.isFinite( Number( source[ o * inputs + i ] )) ? Number( source[ o * inputs + i ] ) : 0;
+        for ( let h = 0; h < NUM_HIDDEN; h++ )
+            target[ W_HO + o * NUM_HIDDEN + h ] = Number.isFinite( Number( source[ wHO + o * NUM_HIDDEN + h ] )) ? Number( source[ wHO + o * NUM_HIDDEN + h ] ) : 0;
+    }
+    for ( let h = 0; h < NUM_HIDDEN; h++ )
+    {
+        for ( let i = 0; i < inputs; i++ )
+            target[ W_IH + h * NUM_INPUTS + i ] = Number.isFinite( Number( source[ wIH + h * inputs + i ] )) ? Number( source[ wIH + h * inputs + i ] ) : 0;
+        for ( let j = 0; j < NUM_HIDDEN; j++ )
+            target[ W_HH + h * NUM_HIDDEN + j ] = Number.isFinite( Number( source[ wHH + h * NUM_HIDDEN + j ] )) ? Number( source[ wHH + h * NUM_HIDDEN + j ] ) : 0;
+    }
 }
 
 export function migrateLegacyBrainWeights( target: Float32Array, source: ArrayLike<number> ): boolean
 {
-    if ( source == null || source.length !== LEGACY_BRAIN_SIZE ) return false;
+    if ( source == null ) return false;
+    if ( source.length === BRAIN_SIZE ) { target.set( source ); return true; }
     target.set( innateBrain() );
-    for ( let i = 0; i < LEGACY_BRAIN_SIZE; i++ )
-    {
-        const value = Number( source[i] );
-        target[ currentIndexForLegacyWeight( i ) ] = Number.isFinite( value ) ? value : 0;
-    }
+    if ( source.length === LEGACY_BRAIN_SIZE )
+        copySavedNetwork( target, source, LEGACY_NUM_OUTPUTS, LEGACY_NUM_INPUTS, LEGACY_W_IH, LEGACY_W_HH, LEGACY_W_HO );
+    else if ( source.length === PRE_C12_BRAIN_SIZE )
+        copySavedNetwork( target, source, CORE_NUM_OUTPUTS, LEGACY_NUM_INPUTS, PRE_C12_W_IH, PRE_C12_W_HH, PRE_C12_W_HO );
+    else return false;
     return true;
 }
 
@@ -144,17 +174,13 @@ export function founderBrain( out: Float32Array, includeExtended = false ): void
 {
     const innate = innateBrain();
     out.set( innate );
-    for ( let k = 0; k < LEGACY_BRAIN_SIZE; k++ )
-    {
-        const index = currentIndexForLegacyWeight( k );
-        out[index] = clampWeight( innate[index] + gaussian() * FOUNDER_BRAIN_NOISE );
-    }
+    forEachLegacyWeightIndex( index => { out[index] = clampWeight( innate[index] + gaussian() * FOUNDER_BRAIN_NOISE ); });
     if ( includeExtended )
     {
         // No innate trigger: founders get a broader random response pattern,
         // then inheritance and selection can shape when the action is useful.
         const extendedFounderNoise = FOUNDER_BRAIN_NOISE;
-        for ( let i = 0; i < NUM_INPUTS; i++ )
+        for ( let i = 0; i < LEGACY_NUM_INPUTS; i++ )
         {
             const index = W_IO + OUT_SELF_EAT * NUM_INPUTS + i;
             out[index] = clampWeight( gaussian() * extendedFounderNoise );
@@ -167,11 +193,35 @@ export function founderBrain( out: Float32Array, includeExtended = false ): void
     }
 }
 
+// Seed the new target-selection connections from the founder's existing
+// identity without consuming the shared simulation RNG. That keeps BASE and
+// C12 worlds identical at creation time while giving C12 founders variation.
+export function seedPredatorChoiceBrain( w: Float32Array, seed: number ): void
+{
+    let state = ( seed >>> 0 ) || 1;
+    const sample = () =>
+    {
+        state = ( Math.imul( state ^ ( state >>> 15 ), 0x2c1b3c6d ) + 0x297a2d39 ) >>> 0;
+        state ^= state >>> 12;
+        return ( state >>> 0 ) / 4294967296;
+    };
+    const noise = () => ( sample() * 2 - 1 ) * FOUNDER_BRAIN_NOISE;
+
+    for ( let o = OUT_PREY_VALUE; o < NUM_OUTPUTS; o++ )
+    {
+        const io = extraOutputInputIndex( o );
+        const ho = extraOutputHiddenIndex( o );
+        for ( let i = 0; i < NUM_INPUTS; i++ ) w[ io + i ] = clampWeight( noise() );
+        for ( let h = 0; h < NUM_HIDDEN; h++ ) w[ ho + h ] = clampWeight( noise() );
+    }
+}
+
 //------------------------------------------------------------
 // inheritance: each neuron (all its incoming weights) comes
 // from one parent, then a few weights mutate
 //------------------------------------------------------------
-export function inheritBrain( child: Float32Array, a: Float32Array, b: Float32Array, includeExtended = false ): void
+export function inheritBrain( child: Float32Array, a: Float32Array, b: Float32Array,
+                              includeExtended = false, includePredatorChoice = false ): void
 {
     child.set( innateBrain() );
     for ( let o = 0; o < LEGACY_NUM_OUTPUTS; o++ )
@@ -189,32 +239,71 @@ export function inheritBrain( child: Float32Array, a: Float32Array, b: Float32Ar
     if ( includeExtended )
     {
         const p = ( gpRandom() < 0.5 ) ? a : b;
-        copyRange( child, p, W_IO + OUT_SELF_EAT * NUM_INPUTS, NUM_INPUTS );
+        copyRange( child, p, W_IO + OUT_SELF_EAT * NUM_INPUTS, LEGACY_NUM_INPUTS );
         copyRange( child, p, W_HO + OUT_SELF_EAT * NUM_HIDDEN, NUM_HIDDEN );
     }
-    mutateBrain( child, BRAIN_MUTATION_RATE, includeExtended );
+    if ( includePredatorChoice )
+    {
+        for ( let o = OUT_PREY_VALUE; o < NUM_OUTPUTS; o++ )
+        {
+            const p = ( gpRandom() < 0.5 ) ? a : b;
+            copyRange( child, p, extraOutputInputIndex( o ), NUM_INPUTS );
+            copyRange( child, p, extraOutputHiddenIndex( o ), NUM_HIDDEN );
+        }
+    }
+    mutateBrain( child, BRAIN_MUTATION_RATE, includeExtended, includePredatorChoice );
 }
 
-export function mutateBrain( w: Float32Array, rate: number, includeExtended = false ): void
+export function mutateBrain( w: Float32Array, rate: number, includeExtended = false,
+                             includePredatorChoice = false ): void
 {
-    for ( let k = 0; k < LEGACY_BRAIN_SIZE; k++ )
-    {
-        const index = currentIndexForLegacyWeight( k );
-        if ( gpRandom() < rate ) { w[index] = clampWeight( w[index] + gaussian() * BRAIN_MUTATION_STEP ); }
-    }
+    const mutate = index => { if ( gpRandom() < rate ) w[index] = clampWeight( w[index] + gaussian() * BRAIN_MUTATION_STEP ); };
+    forEachLegacyWeightIndex( mutate );
     if ( includeExtended )
     {
-        for ( let i = 0; i < NUM_INPUTS; i++ )
+        for ( let i = 0; i < LEGACY_NUM_INPUTS; i++ )
         {
             const index = W_IO + OUT_SELF_EAT * NUM_INPUTS + i;
-            if ( gpRandom() < rate ) { w[index] = clampWeight( w[index] + gaussian() * BRAIN_MUTATION_STEP ); }
+            mutate( index );
         }
         for ( let h = 0; h < NUM_HIDDEN; h++ )
         {
             const index = W_HO + OUT_SELF_EAT * NUM_HIDDEN + h;
-            if ( gpRandom() < rate ) { w[index] = clampWeight( w[index] + gaussian() * BRAIN_MUTATION_STEP ); }
+            mutate( index );
         }
     }
+    if ( includePredatorChoice )
+    {
+        for ( let o = OUT_PREY_VALUE; o < NUM_OUTPUTS; o++ )
+        {
+            const io = extraOutputInputIndex( o );
+            const ho = extraOutputHiddenIndex( o );
+            for ( let i = 0; i < NUM_INPUTS; i++ ) mutate( io + i );
+            for ( let h = 0; h < NUM_HIDDEN; h++ ) mutate( ho + h );
+        }
+    }
+}
+
+function forEachLegacyWeightIndex( visit: ( index: number ) => void ): void
+{
+    for ( let o = 0; o < LEGACY_NUM_OUTPUTS; o++ )
+        for ( let i = 0; i < LEGACY_NUM_INPUTS; i++ ) visit( W_IO + o * NUM_INPUTS + i );
+    for ( let h = 0; h < NUM_HIDDEN; h++ )
+        for ( let i = 0; i < LEGACY_NUM_INPUTS; i++ ) visit( W_IH + h * NUM_INPUTS + i );
+    for ( let h = 0; h < NUM_HIDDEN; h++ )
+        for ( let j = 0; j < NUM_HIDDEN; j++ ) visit( W_HH + h * NUM_HIDDEN + j );
+    for ( let o = 0; o < LEGACY_NUM_OUTPUTS; o++ )
+        for ( let h = 0; h < NUM_HIDDEN; h++ ) visit( W_HO + o * NUM_HIDDEN + h );
+}
+
+function extraOutputInputIndex( output: number ): number
+{
+    return EXTRA_OUTPUT_START + ( output - CORE_NUM_OUTPUTS ) * ( NUM_INPUTS + NUM_HIDDEN );
+}
+
+function extraOutputHiddenIndex( output: number ): number
+{
+    return extraOutputInputIndex( output ) + NUM_INPUTS;
 }
 
 function copyRange( to: Float32Array, from: Float32Array, start: number, length: number ): void
@@ -246,9 +335,9 @@ export function think( w: Float32Array, inputs: Float64Array, hidden: Float64Arr
     for ( let o = 0; o < NUM_OUTPUTS; o++ )
     {
         let sum = 0;
-        const io = W_IO + o * NUM_INPUTS;
+        const io = ( o < CORE_NUM_OUTPUTS ) ? W_IO + o * NUM_INPUTS : extraOutputInputIndex( o );
         for ( let i = 0; i < NUM_INPUTS; i++ ) { sum += w[ io + i ] * inputs[i]; }
-        const ho = W_HO + o * NUM_HIDDEN;
+        const ho = ( o < CORE_NUM_OUTPUTS ) ? W_HO + o * NUM_HIDDEN : extraOutputHiddenIndex( o );
         for ( let h = 0; h < NUM_HIDDEN; h++ ) { sum += w[ ho + h ] * hidden[h]; }
         outputs[o] = sum;
     }
@@ -257,27 +346,33 @@ export function think( w: Float32Array, inputs: Float64Array, hidden: Float64Arr
 export function sigmoid( x: number ): number { return 1 / ( 1 + Math.exp( -x )); }
 
 // how far a brain has moved away from the innate one (mean absolute difference)
-export function brainDistanceFromInnate( w: Float32Array, includeExtended = false ): number
+export function brainDistanceFromInnate( w: Float32Array, includeExtended = false,
+                                         includePredatorChoice = false ): number
 {
     const innate = innateBrain();
-    let sum = 0;
-    for ( let k = 0; k < LEGACY_BRAIN_SIZE; k++ )
-    {
-        const index = currentIndexForLegacyWeight( k );
-        sum += Math.abs( w[index] - innate[index] );
-    }
+    let sum = 0, count = 0;
+    forEachLegacyWeightIndex( index => { sum += Math.abs( w[index] - innate[index] ); count ++; });
     if ( includeExtended )
     {
-        for ( let i = 0; i < NUM_INPUTS; i++ )
+        for ( let i = 0; i < LEGACY_NUM_INPUTS; i++ )
         {
             const index = W_IO + OUT_SELF_EAT * NUM_INPUTS + i;
-            sum += Math.abs( w[index] - innate[index] );
+            sum += Math.abs( w[index] - innate[index] ); count ++;
         }
         for ( let h = 0; h < NUM_HIDDEN; h++ )
         {
             const index = W_HO + OUT_SELF_EAT * NUM_HIDDEN + h;
-            sum += Math.abs( w[index] - innate[index] );
+            sum += Math.abs( w[index] - innate[index] ); count ++;
         }
     }
-    return sum / ( includeExtended ? BRAIN_SIZE : LEGACY_BRAIN_SIZE );
+    if ( includePredatorChoice )
+    {
+        for ( let o = OUT_PREY_VALUE; o < NUM_OUTPUTS; o++ )
+        {
+            const io = extraOutputInputIndex( o ), ho = extraOutputHiddenIndex( o );
+            for ( let i = 0; i < NUM_INPUTS; i++ ) { sum += Math.abs( w[ io + i ] - innate[ io + i ] ); count ++; }
+            for ( let h = 0; h < NUM_HIDDEN; h++ ) { sum += Math.abs( w[ ho + h ] - innate[ ho + h ] ); count ++; }
+        }
+    }
+    return count > 0 ? sum / count : 0;
 }

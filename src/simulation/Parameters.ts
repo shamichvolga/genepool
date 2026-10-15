@@ -194,6 +194,10 @@ export const BODY_TEMPERATURE_INERTIA_ENABLED = false;
 // Ordinary simulations keep this off; the behavior competes with the other drives.
 export const SELF_CANNIBALISM_ENABLED = false;
 
+// C12 experiment: inherited neural weights choose live prey or meat by
+// expected energy, attack chance and pursuit cost. Off in ordinary runs.
+export const PREDATOR_TARGET_SELECTION_ENABLED = false;
+
 
 export const YOUNG_AGE_DURATION    = 1000;
 export const OLD_AGE_DURATION      = 1000;

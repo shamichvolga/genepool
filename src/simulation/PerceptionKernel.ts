@@ -12,11 +12,13 @@ import { BRAIN_STATE_LOOKING_FOR_MATE, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE
 import { IGNORE_FOOD_EFFICIENCY, mateAcceptance, pairRandom, preyVisibility, searchImageFactor, sizeSignature } from "./Ecology";
 import { PLANT_TYPE_WARM } from "./Environment";
 import { ONE, ONE_THIRD } from "./MathConstants";
-import { PREDATOR_LEVEL_THRESHOLD, PREY_MAX_MASS_RATIO, YOUNG_AGE_DURATION } from "./Parameters";
+import { ATTACK_SUCCESS_CHANCE, ENVIRONMENT_ATTACK_SUCCESS_CHANCE, PREDATOR_LEVEL_THRESHOLD, PREY_MAX_MASS_RATIO, PREY_SCAN_COOLDOWN, SWIMBOT_MAX_ENERGY, PREDATION_ENERGY_TRANSFER, PREY_BODY_ENERGY, YOUNG_AGE_DURATION, PREDATOR_TARGET_SELECTION_ENABLED } from "./Parameters";
 import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
-import { ATTRACTION_SIMILAR_COLOR, STARVING, SWIMBOT_VIEW_RADIUS } from "./SwimbotTypes";
+import { ATTRACTION_SIMILAR_COLOR, STARVING, SWIMBOT_MOUTH_LENGTH, SWIMBOT_VIEW_RADIUS } from "./SwimbotTypes";
+import { FOOD_BIT_GRAB_RADIUS } from "./FoodBit";
+import { preyTargetScore } from "./EcologyGenes";
 import {
-    BACKGROUND_SIZE, MAX_SEEN, PARAM_ENV_ACTIVE, PARAM_ENV_FIELDS, PARAM_FOOD_TYPES, PARAM_OBSTACLE_X1, PARAM_OBSTACLE_X2,
+    BACKGROUND_SIZE, B_VEL_X, B_VEL_Y, BOT_STRIDE, MAX_SEEN, PARAM_ENV_ACTIVE, PARAM_ENV_FIELDS, PARAM_FOOD_TYPES, PARAM_OBSTACLE_X1, PARAM_OBSTACLE_X2,
     PARAM_OBSTACLE_Y1, PARAM_OBSTACLE_Y2, SharedState
 } from "./SharedState";
 
@@ -236,19 +238,35 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
     const twoFoodTypes     = st.params[ PARAM_FOOD_TYPES ] === 2;
     const preferredFoodType = st.preferred[s];
     const foodX = st.foodX, foodY = st.foodY, foodType = st.foodType, foodAlive = st.foodAlive;
+    const botOffset = s * BOT_STRIDE;
+    const swimSpeed = Math.max( 0.05, Math.hypot( st.bots[ botOffset + B_VEL_X ], st.bots[ botOffset + B_VEL_Y ] ));
 
     let chosenFood = -1;
     let smallestDistanceSquared = Number.MAX_SAFE_INTEGER;
-    const numFoodInCells = st.foodGrid.collect( myX, myY, viewRadius, sc.foodGridResult );
+    let bestMeatScore = -Infinity;
+    let baitFound = false;
+    let baitDistance = 0, baitReward = 0;
+    // Search far enough from the body center to include food touching the
+    // forward mouth, then apply the normal view-radius test from the mouth.
+    const foodSearchRadius = viewRadius + SWIMBOT_MOUTH_LENGTH + FOOD_BIT_GRAB_RADIUS;
+    const numFoodInCells = st.foodGrid.collect( myX, myY, foodSearchRadius, sc.foodGridResult );
 
     for (let k = 0; k < numFoodInCells; k++)
     {
         const f  = sc.foodGridResult[k];
         const fx = foodX[f] - myX;
         const fy = foodY[f] - myY;
-        if ( fx * fx + fy * fy >= viewRadiusSquared ) continue;
-
         const type = foodType[f];
+        const bodyDistanceSquared = fx * fx + fy * fy;
+        const mx = myMouthX - foodX[f];
+        const my = myMouthY - foodY[f];
+        const viewDistanceSquared = mx * mx + my * my;
+        if ( type === 2 )
+        {
+            if ( viewDistanceSquared >= viewRadiusSquared ) continue;
+        }
+        else if ( bodyDistanceSquared >= viewRadiusSquared ) continue;
+
         let okay = true;
 
         if ( type === 2 )
@@ -269,9 +287,24 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
         }
         if ( !okay ) continue;
 
-        const mx = myMouthX - foodX[f];
-        const my = myMouthY - foodY[f];
-        const viewDistanceSquared = mx * mx + my * my;
+        if ( type === 2 && foodAlive[f] === 1 && PREDATOR_TARGET_SELECTION_ENABLED )
+        {
+            const room = Math.max( 0, SWIMBOT_MAX_ENERGY - st.energy[s] );
+            const reward = Math.min( room, st.foodEnergy[f] ) / SWIMBOT_MAX_ENERGY;
+            const distanceCost = Math.sqrt( viewDistanceSquared ) / Math.max( 1, viewRadius );
+            const chaseCost = Math.min( 1, Math.sqrt( viewDistanceSquared ) / swimSpeed / Math.max( 1, PREY_SCAN_COOLDOWN ));
+            const score = preyTargetScore( reward, chaseCost, st.preyValueWeight[s],
+                                           st.preyTravelWeight[s], st.preyBaitBias[s], true );
+            if ( score > bestMeatScore && !obstructed( st, myMouthX, myMouthY, foodX[f], foodY[f] ))
+            {
+                bestMeatScore = score;
+                baitFound = true;
+                chosenFood = f;
+                baitDistance = distanceCost;
+                baitReward = reward;
+            }
+            continue;
+        }
 
         // in the environment, better food counts as nearer
         if ( environmentOn && ( type !== 2 ))
@@ -297,6 +330,9 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
         }
     }
     st.seenFood[s] = chosenFood;
+    st.targetBaitPresent[s] = baitFound ? 1 : 0;
+    st.targetBaitDistance[s] = baitDistance;
+    st.targetBaitReward[s] = baitReward;
 
     //------------------------------------------------------------------
     // prey (predators only): the nearest herbivore it can notice
@@ -307,6 +343,8 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
         const imageStrength = st.imageStrength[s];
         const imageR = st.imageR[s], imageG = st.imageG[s], imageB = st.imageB[s], imageSize = st.imageSize[s];
         let bestPreyValue = -Infinity;
+        let bestPreyReward = 0, bestPreyDistance = 0, bestPreySuccess = 0, bestPreyChase = 0;
+        const attackChance = environmentOn ? ENVIRONMENT_ATTACK_SUCCESS_CHANCE : ATTACK_SUCCESS_CHANCE;
         for (let i = 0; i < numNearby; i++)
         {
             const o = nearby[i];
@@ -329,13 +367,47 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
                 if ( distance > preyViewRadius * image * preyVisibility( st.brightness[o], backgroundAt( st, botX[o], botY[o] ))) continue;
             }
 
-            const value = -distance + st.energy[o] * 0.001;
+            let value = -distance + st.energy[o] * 0.001;
+            if ( PREDATOR_TARGET_SELECTION_ENABLED )
+            {
+                const room = Math.max( 0, SWIMBOT_MAX_ENERGY - st.energy[s] );
+                const potential = st.energy[o] * PREDATION_ENERGY_TRANSFER + st.mass[o] * PREY_BODY_ENERGY;
+                const reward = Math.min( room, potential ) / SWIMBOT_MAX_ENERGY;
+                const distanceCost = distance / Math.max( 1, preyViewRadius );
+                const chaseCost = Math.min( 1, distance / swimSpeed / Math.max( 1, PREY_SCAN_COOLDOWN ));
+                value = preyTargetScore( reward * attackChance, chaseCost, st.preyValueWeight[s],
+                                         st.preyTravelWeight[s], st.preyBaitBias[s], false );
+                if ( value > bestPreyValue )
+                {
+                    bestPreyReward = reward;
+                    bestPreyDistance = distanceCost;
+                    bestPreySuccess = attackChance;
+                    bestPreyChase = chaseCost;
+                }
+            }
             if ( value > bestPreyValue )
             {
                 bestPreyValue = value;
                 chosenPrey = o;
             }
         }
+        if ( PREDATOR_TARGET_SELECTION_ENABLED )
+        {
+            st.targetPreyReward[s] = bestPreyReward;
+            st.targetPreyDistance[s] = bestPreyDistance;
+            st.targetPreySuccess[s] = bestPreySuccess;
+            st.targetPreyChase[s] = bestPreyChase;
+            if ( bestMeatScore > bestPreyValue ) chosenPrey = -1;
+            else if ( chosenPrey >= 0 && chosenFood >= 0 && foodType[ chosenFood ] === 2 )
+            {
+                chosenFood = -1;
+                st.seenFood[s] = -1;
+            }
+        }
+    }
+    else
+    {
+        st.targetPreyReward[s] = st.targetPreyDistance[s] = st.targetPreySuccess[s] = st.targetPreyChase[s] = 0;
     }
     st.seenPrey[s] = chosenPrey;
 

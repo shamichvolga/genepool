@@ -146,11 +146,15 @@ export class SharedState
     readonly imageB       : Float64Array;
     readonly imageSize    : Float64Array;
     readonly imageStrength: Float64Array;
+    readonly preyValueWeight  : Float64Array;
+    readonly preyTravelWeight : Float64Array;
+    readonly preyBaitBias     : Float64Array;
 
     readonly foodX        : Float64Array;
     readonly foodY        : Float64Array;
     readonly foodType     : Uint8Array;     // 0, 1 = plants, 2 = meat
     readonly foodAlive    : Uint8Array;
+    readonly foodEnergy    : Float64Array;
 
     readonly background   : Float32Array;   // environment: brightness of the bottom
 
@@ -164,6 +168,13 @@ export class SharedState
     readonly seen         : Int32Array;     // MAX_SEEN per swimbot, nearest first
     readonly seenFood     : Int32Array;     // chosen food bit, -1 = none
     readonly seenPrey     : Int32Array;     // chosen prey, -1 = none
+    readonly targetPreyDistance : Float64Array;
+    readonly targetPreyReward   : Float64Array;
+    readonly targetPreySuccess  : Float64Array;
+    readonly targetPreyChase    : Float64Array;
+    readonly targetBaitPresent  : Uint8Array;
+    readonly targetBaitDistance : Float64Array;
+    readonly targetBaitReward   : Float64Array;
     readonly seenThreat   : Int32Array;     // nearest hunting predator, -1 = none
     readonly seenPredator : Int32Array;     // nearest predator of any mood, -1 = none
     readonly seenMate     : Int32Array;     // chosen mate, -1 = none, -2 = not chosen here (main thread does it)
@@ -234,11 +245,15 @@ export class SharedState
         this.imageB        = f64( "imageB", n );
         this.imageSize     = f64( "imageSize", n );
         this.imageStrength = f64( "imageStrength", n );
+        this.preyValueWeight  = f64( "preyValueWeight", n );
+        this.preyTravelWeight = f64( "preyTravelWeight", n );
+        this.preyBaitBias     = f64( "preyBaitBias", n );
 
         this.foodX      = f64( "foodX", MAX_FOODBITS );
         this.foodY      = f64( "foodY", MAX_FOODBITS );
         this.foodType   = u8 ( "foodType", MAX_FOODBITS );
         this.foodAlive  = u8 ( "foodAlive", MAX_FOODBITS );
+        this.foodEnergy = f64( "foodEnergy", MAX_FOODBITS );
 
         this.background = new Float32Array( make( "background", BACKGROUND_SIZE * BACKGROUND_SIZE * 4 ));
 
@@ -250,6 +265,13 @@ export class SharedState
         this.seen       = new Int32Array( make( "seen",       n * MAX_SEEN * 4 ));
         this.seenFood   = new Int32Array( make( "seenFood",   n * 4 ));
         this.seenPrey   = new Int32Array( make( "seenPrey",   n * 4 ));
+        this.targetPreyDistance = f64( "targetPreyDistance", n );
+        this.targetPreyReward = f64( "targetPreyReward", n );
+        this.targetPreySuccess = f64( "targetPreySuccess", n );
+        this.targetPreyChase = f64( "targetPreyChase", n );
+        this.targetBaitPresent = u8( "targetBaitPresent", n );
+        this.targetBaitDistance = f64( "targetBaitDistance", n );
+        this.targetBaitReward = f64( "targetBaitReward", n );
         this.seenThreat = new Int32Array( make( "seenThreat", n * 4 ));
         this.seenPredator = new Int32Array( make( "seenPredator", n * 4 ));
         this.seenMate   = new Int32Array( make( "seenMate",   n * 4 ));

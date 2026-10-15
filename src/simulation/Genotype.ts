@@ -2,7 +2,7 @@ import { ecologyMutationRate, isEcologyGene, isMarkerGene, isSelfFeedingGene, mu
 import { gpRandom } from "./Globals";
 import { BRAIN_SIZE, founderBrain, inheritBrain, innateBrain, migrateLegacyBrainWeights, mutateBrain } from "./NeuralBrain";
 import { BYTE_SIZE, ONE_HALF } from "./MathConstants";
-import { CROSSOVER_RATE, MUTATION_RATE, SELF_CANNIBALISM_ENABLED } from "./Parameters";
+import { CROSSOVER_RATE, MUTATION_RATE, PREDATOR_TARGET_SELECTION_ENABLED, SELF_CANNIBALISM_ENABLED } from "./Parameters";
 import { assert, assertInteger } from "./Utility";
 
 //const NUM_GENES = 100;
@@ -358,7 +358,8 @@ g++; _genes[g] = 255;
 	this.setAsOffspring = function( parent_0, parent_1 )
 	{
 	    // the brain chromosome: whole neurons from either parent, small mutations
-	    inheritBrain( _brain, parent_0.getBrain(), parent_1.getBrain(), SELF_CANNIBALISM_ENABLED );
+	    inheritBrain( _brain, parent_0.getBrain(), parent_1.getBrain(), SELF_CANNIBALISM_ENABLED,
+	                  PREDATOR_TARGET_SELECTION_ENABLED );
 
 	    //console.log( parent_0 );
 	    //console.log( parent_1 );
@@ -428,7 +429,8 @@ g++; _genes[g] = 255;
             //-----------------------------------
             // mutation
             //-----------------------------------
-            if (( SELF_CANNIBALISM_ENABLED && isSelfFeedingGene(g) ) || isEcologyGene(g) || isMarkerGene(g) )
+            if (( SELF_CANNIBALISM_ENABLED && isSelfFeedingGene(g) )
+            ||  isEcologyGene(g) || isMarkerGene(g) )
             {
                 // ecology genes and markers: small steps, no wrap-around
                 if ( gpRandom() < ecologyMutationRate(g) )
@@ -515,7 +517,7 @@ g++; _genes[g] = 255;
                 else                         { this.mutateGene(g); }
             }
         }
-	    mutateBrain( _brain, amount, SELF_CANNIBALISM_ENABLED );
+	    mutateBrain( _brain, amount, SELF_CANNIBALISM_ENABLED, PREDATOR_TARGET_SELECTION_ENABLED );
     }
 }
 
