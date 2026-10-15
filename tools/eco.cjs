@@ -205,7 +205,8 @@ function ecoStats()
     const soilNutrientDist = distribution( soilNutrients );
     // mating isolation: how much more alike in preferred temperature are
     // the parents of recent births than two random swimbots (0 = random, 1 = identical)
-    let isolation = 0;
+    let isolation = 0, mateBrightnessAssortment = 0, matingSampleSize = 0;
+    let matingBrightnessGapMean = 0, matingChoosinessMean = 0;
     if ( typeof run.genePool.getRecentMatings === "function" && n > 10 )
     {
         const m = run.genePool.getRecentMatings();
@@ -218,6 +219,22 @@ function ecoStats()
             for ( let k = 0; k < 2000; k++ ) { random += Math.abs( thetas[ Math.floor( statsRandom() * n ) ] - thetas[ Math.floor( statsRandom() * n ) ] ); }
             random /= 2000;
             isolation = random > 0 ? 1 - mates / random : 0;
+        }
+        const gaps = m.brightnessDifference || [];
+        const chooserLevels = m.choosinessMean || [];
+        if ( gaps.length > 0 && bs.length > 10 )
+        {
+            matingSampleSize = gaps.length;
+            matingBrightnessGapMean = distribution( gaps ).mean;
+            matingChoosinessMean = distribution( chooserLevels ).mean;
+            if ( gaps.length > 20 )
+            {
+                let randomGap = 0;
+                for ( let k = 0; k < 2000; k ++ )
+                    randomGap += Math.abs( bs[ Math.floor( statsRandom() * bs.length ) ] - bs[ Math.floor( statsRandom() * bs.length ) ] );
+                randomGap /= 2000;
+                mateBrightnessAssortment = randomGap > 0 ? 1 - matingBrightnessGapMean / randomGap : 0;
+            }
         }
     }
     const cline = regression( ts, thetas );
@@ -276,6 +293,10 @@ function ecoStats()
         soilNutrientP90: soilNutrientDist.p90,
         bCorr    : bB.r,
         choosy   : bs.length ? choosy / bs.length : 0,
+        mateBrightnessAssortment,
+        matingSampleSize,
+        matingBrightnessGapMean,
+        matingChoosinessMean,
         ecoTypes : n ? Math.exp( shannon ) : 0,
         isolation,
         sizeCorr : sT.r,
@@ -338,7 +359,7 @@ function ecoStats()
     };
 }
 
-const eventKeys = [ "births", "localPlantSprouts", "seedRainPlantSprouts", "nutrientLimitedPlantSeeds", "meatDecayEvents", "nutrientsFromMeatDecay", "plantMeals", "meatMeals", "meatTargetsWhilePursuing", "meatMealsWhilePursuing", "attackCount", "failedAttacks", "autotomyThreatDrops", "autotomyBiteDrops", "autotomyDecoysEaten", "starvationDeaths", "oldAgeDeaths", "predationDeaths", "otherDeaths", "selfCannibalismEvents", "selfCannibalismEnergy", "selfCannibalismMass", "preyTargetChoices", "preyTargetLiveChoices", "preyTargetMeatChoices", "preyTargetDistanceSum", "preyTargetRewardSum" ];
+const eventKeys = [ "births", "localPlantSprouts", "seedRainPlantSprouts", "nutrientLimitedPlantSeeds", "meatDecayEvents", "nutrientsFromMeatDecay", "plantMeals", "meatMeals", "meatTargetsWhilePursuing", "meatMealsWhilePursuing", "attackCount", "failedAttacks", "autotomyThreatDrops", "autotomyBiteDrops", "autotomyDecoysEaten", "starvationDeaths", "oldAgeDeaths", "predationDeaths", "otherDeaths", "selfCannibalismEvents", "selfCannibalismEnergy", "selfCannibalismMass", "preyTargetChoices", "preyTargetLiveChoices", "preyTargetMeatChoices", "preyTargetLiveDistanceSum", "preyTargetLiveRewardSum", "preyTargetMeatDistanceSum", "preyTargetMeatRewardSum", "preyTargetDistanceSum", "preyTargetRewardSum" ];
 const eventCounters = sb.simCounters || {};
 let previousEvents = Object.fromEntries( eventKeys.map( key => [ key, eventCounters[ key ] || 0 ] ));
 function eventDeltas()
@@ -353,9 +374,9 @@ function eventDeltas()
     return delta;
 }
 
-const eventColumns = "births_interval,local_plant_sprouts_interval,seed_rain_plant_sprouts_interval,nutrient_limited_seed_attempts_interval,meat_decay_events_interval,soil_nutrients_returned_interval,plant_meals_interval,meat_meals_interval,pursuit_meat_target_selections_interval,pursuit_meat_meals_interval,prey_kills_interval,failed_attacks_interval,autotomy_threat_drops_interval,autotomy_bite_drops_interval,autotomy_decoys_eaten_interval,starvation_deaths_interval,old_age_deaths_interval,predation_deaths_interval,other_deaths_interval,self_feed_events_interval,self_feed_energy_interval,self_feed_mass_interval,prey_target_choices_interval,prey_target_live_choices_interval,prey_target_meat_choices_interval,prey_target_distance_sum_interval,prey_target_reward_sum_interval";
+const eventColumns = "births_interval,local_plant_sprouts_interval,seed_rain_plant_sprouts_interval,nutrient_limited_seed_attempts_interval,meat_decay_events_interval,soil_nutrients_returned_interval,plant_meals_interval,meat_meals_interval,pursuit_meat_target_selections_interval,pursuit_meat_meals_interval,prey_kills_interval,failed_attacks_interval,autotomy_threat_drops_interval,autotomy_bite_drops_interval,autotomy_decoys_eaten_interval,starvation_deaths_interval,old_age_deaths_interval,predation_deaths_interval,other_deaths_interval,self_feed_events_interval,self_feed_energy_interval,self_feed_mass_interval,prey_target_choices_interval,prey_target_live_choices_interval,prey_target_meat_choices_interval,prey_target_live_distance_sum_interval,prey_target_live_reward_sum_interval,prey_target_meat_distance_sum_interval,prey_target_meat_reward_sum_interval,prey_target_distance_sum_interval,prey_target_reward_sum_interval";
 const pedigreeColumns = "pedigree_parents,pedigree_reproducing_parents,pedigree_offspring,pedigree_maturity_eligible,pedigree_matured_offspring,pedigree_maturity_survival,small_parent_matured_per_parent,medium_parent_matured_per_parent,large_parent_matured_per_parent";
-const header = "step,alive,pred,warm,cold,meat,fit,w,body_temp_mean,body_temp_p10,body_temp_p50,body_temp_p90,ambient_temp_mean,thermal_lag_abs_mean,thermal_lag_mass_corr,thermal_lag_width_corr,cline_slope,cline_r2,d_corr,b_corr,choosy,eco_types,mate_isolation,size_corr,effort,climate,social,brain_change,coarse_morphotype_bins,eff_coarse_morphotype_bins,mass_mean,mass_p10,mass_p50,mass_p90,width_mean,width_p10,width_p50,width_p90,length_mean,length_p10,length_p50,length_p90,max_width_mean,parts_mean,branch_parts_mean,branch_fraction_mean,energy_mean,speed_mean,speed_p10,speed_p50,speed_p90,swim_energy_efficiency_mean,offspring_alive_mean,prey_eaten_alive_mean,food_eaten_alive_mean," + pedigreeColumns + ",hunger,hunger_sd,autotomy_bite,autotomy_decoy,missing_parts,occupied,plant_cells_occupied,plant_cell_occupancy,plants_per_occupied_cell,soil_nutrient_cells,soil_nutrient_mean,soil_nutrient_p10,soil_nutrient_p50,soil_nutrient_p90,gene_clusters,eff_gene_clusters,top_gene_cluster_share,predator_target_value_weight_mean,predator_target_travel_weight_mean,predator_target_bait_bias_mean," + eventColumns + ",ms_step";
+const header = "step,alive,pred,warm,cold,meat,fit,w,body_temp_mean,body_temp_p10,body_temp_p50,body_temp_p90,ambient_temp_mean,thermal_lag_abs_mean,thermal_lag_mass_corr,thermal_lag_width_corr,cline_slope,cline_r2,d_corr,b_corr,choosy,eco_types,mate_isolation,mate_brightness_assortment,mating_sample_size,mating_brightness_gap_mean,mating_choosiness_mean,size_corr,effort,climate,social,brain_change,coarse_morphotype_bins,eff_coarse_morphotype_bins,mass_mean,mass_p10,mass_p50,mass_p90,width_mean,width_p10,width_p50,width_p90,length_mean,length_p10,length_p50,length_p90,max_width_mean,parts_mean,branch_parts_mean,branch_fraction_mean,energy_mean,speed_mean,speed_p10,speed_p50,speed_p90,swim_energy_efficiency_mean,offspring_alive_mean,prey_eaten_alive_mean,food_eaten_alive_mean," + pedigreeColumns + ",hunger,hunger_sd,autotomy_bite,autotomy_decoy,missing_parts,occupied,plant_cells_occupied,plant_cell_occupancy,plants_per_occupied_cell,soil_nutrient_cells,soil_nutrient_mean,soil_nutrient_p10,soil_nutrient_p50,soil_nutrient_p90,gene_clusters,eff_gene_clusters,top_gene_cluster_share,predator_target_value_weight_mean,predator_target_travel_weight_mean,predator_target_bait_bias_mean," + eventColumns + ",ms_step";
 console.log( `scenario=${SCENARIO} seed=${SEED} steps=${STEPS} flat=${FLAT} set=${EXTRA || ""}` );
 console.log( header );
 const rows = [];
@@ -378,7 +399,9 @@ for ( let step = 1; step <= STEPS; step++ )
                       e.ambientTemperatureMean.toFixed( 4 ), e.thermalLagAbsMean.toFixed( 5 ),
                       e.thermalLagMassCorr.toFixed( 3 ), e.thermalLagWidthCorr.toFixed( 3 ),
                       e.slope.toFixed( 2 ), e.r2.toFixed( 2 ), e.dCorr.toFixed( 2 ),
-                      e.bCorr.toFixed( 2 ), e.choosy.toFixed( 2 ), e.ecoTypes.toFixed( 1 ), e.isolation.toFixed( 2 ), e.sizeCorr.toFixed( 2 ),
+                      e.bCorr.toFixed( 2 ), e.choosy.toFixed( 2 ), e.ecoTypes.toFixed( 1 ), e.isolation.toFixed( 2 ),
+                      e.mateBrightnessAssortment.toFixed( 2 ), e.matingSampleSize, e.matingBrightnessGapMean.toFixed( 3 ), e.matingChoosinessMean.toFixed( 3 ),
+                      e.sizeCorr.toFixed( 2 ),
                       e.effort.toFixed( 2 ), e.climate.toFixed( 2 ), e.social.toFixed( 2 ), e.brain.toFixed( 3 ),
                       e.morphBins, e.effectiveMorphBins.toFixed( 1 ),
                       e.massMean.toFixed( 2 ), e.massP10.toFixed( 2 ), e.massP50.toFixed( 2 ), e.massP90.toFixed( 2 ),
@@ -414,7 +437,7 @@ if ( META )
     const endedAt = new Date().toISOString();
     const durationMs = Number( process.hrtime.bigint() - runStartNs ) / 1e6;
     const metadata = {
-        schemaVersion: 10,
+        schemaVersion: 11,
         startedAt,
         endedAt,
         durationMs: Number( durationMs.toFixed( 1 )),
@@ -447,6 +470,12 @@ if ( META )
             bodyTemperature: "internal state after optional mass- and width-dependent exchange with local felt temperature",
             thermalLagAbsMean: "mean absolute difference between internal and local felt temperature",
             thermalLagCorrelations: "correlation of log body mass and mean body width with absolute thermal lag; exploratory, not causal estimates",
+        },
+        matingMetrics: {
+            sample: "the most recent up to 2048 successful births",
+            brightnessAssortment: "1 minus actual mean parental brightness difference divided by the mean difference among random pairs from the living population; descriptive, reported only with more than 20 recorded matings, not a species identifier",
+            brightnessGap: "mean absolute brightness difference between actual parents",
+            choosiness: "mean inherited brightness-acceptance trait of parents in the recorded pairs",
         },
         predatorTargetSelection: {
             enabled: !!sb.PREDATOR_TARGET_SELECTION_ENABLED,

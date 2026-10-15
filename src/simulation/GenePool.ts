@@ -146,6 +146,8 @@ export function GenePool()
     let _gardenOfEdenRadius     = ZERO;
     const MATING_RECORD_SIZE = 2048;
     const _matingRecord      = new Float64Array( MATING_RECORD_SIZE * 2 );   // preferred temperatures of both parents
+    const _matingBrightnessDifference = new Float64Array( MATING_RECORD_SIZE );
+    const _matingChoosinessMean = new Float64Array( MATING_RECORD_SIZE );
     let _matingCount         = 0;
     let _gardens             = [];      // environment: one starting garden per biome type
     let _seedDebt            = 0;       // fractional seeds carried to the next step
@@ -1296,11 +1298,17 @@ if ( mode === SimulationStartMode.SPECIES )
 
 	this.getPerceptionMismatches = function() { return { checks: _perceptionChecks, mismatches: _perceptionMismatches }; }
 
-	// the preferred temperatures of the parents of the latest births
+	// inherited traits of the parents of the latest births
 	this.getRecentMatings = function()
 	{
 	    const n = Math.min( _matingCount, MATING_RECORD_SIZE );
-	    return { count: _matingCount, a: _matingRecord.slice( 0, n ), b: _matingRecord.slice( MATING_RECORD_SIZE, MATING_RECORD_SIZE + n ) };
+	    return {
+	        count: _matingCount,
+	        a: _matingRecord.slice( 0, n ),
+	        b: _matingRecord.slice( MATING_RECORD_SIZE, MATING_RECORD_SIZE + n ),
+	        brightnessDifference: _matingBrightnessDifference.slice( 0, n ),
+	        choosinessMean: _matingChoosinessMean.slice( 0, n ),
+	    };
 	}
 
 	//-------------------------------------
@@ -2005,9 +2013,12 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
                                 syncSwimbot( newBornSwimbotIndex );
                                 simCounters.births ++;
 
-                                // remember who mated with whom (for measuring how species separate)
-                                _matingRecord[ _matingCount % MATING_RECORD_SIZE ] = _swimbots[s].getThermalOptimum();
-                                _matingRecord[ _matingCount % MATING_RECORD_SIZE + MATING_RECORD_SIZE ] = _potentialMate.getThermalOptimum();
+                                // record successful parents for assortativity metrics
+                                const matingIndex = _matingCount % MATING_RECORD_SIZE;
+                                _matingRecord[ matingIndex ] = _swimbots[s].getThermalOptimum();
+                                _matingRecord[ matingIndex + MATING_RECORD_SIZE ] = _potentialMate.getThermalOptimum();
+                                _matingBrightnessDifference[matingIndex] = Math.abs( _swimbots[s].getBrightness() - _potentialMate.getBrightness() );
+                                _matingChoosinessMean[matingIndex] = ( _swimbots[s].getChoosiness() + _potentialMate.getChoosiness() ) * 0.5;
                                 _matingCount ++;
 
                                 //--------------------------------------------------
@@ -2160,12 +2171,16 @@ if ( this.getJunkDnaSimilarity( _myGenotype, _mateGenotype ) > NON_REPRODUCING_J
         if ( baitOkay && !preyOkay )
         {
             simCounters.preyTargetMeatChoices ++;
+            simCounters.preyTargetMeatDistanceSum += _st.targetBaitDistance[s];
+            simCounters.preyTargetMeatRewardSum += _st.targetBaitReward[s];
             simCounters.preyTargetDistanceSum += _st.targetBaitDistance[s];
             simCounters.preyTargetRewardSum += _st.targetBaitReward[s];
         }
         else
         {
             simCounters.preyTargetLiveChoices ++;
+            simCounters.preyTargetLiveDistanceSum += _st.targetPreyDistance[s];
+            simCounters.preyTargetLiveRewardSum += _st.targetPreyReward[s] * _st.targetPreySuccess[s];
             simCounters.preyTargetDistanceSum += _st.targetPreyDistance[s];
             simCounters.preyTargetRewardSum += _st.targetPreyReward[s] * _st.targetPreySuccess[s];
         }
@@ -2713,6 +2728,8 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
                 chosenPrey = null;
                 simCounters.preyTargetChoices ++;
                 simCounters.preyTargetMeatChoices ++;
+                simCounters.preyTargetMeatDistanceSum += targetSignals.baitDistance;
+                simCounters.preyTargetMeatRewardSum += targetSignals.baitReward;
                 simCounters.preyTargetDistanceSum += targetSignals.baitDistance;
                 simCounters.preyTargetRewardSum += targetSignals.baitReward;
             }
@@ -2727,6 +2744,8 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
                 }
                 simCounters.preyTargetChoices ++;
                 simCounters.preyTargetLiveChoices ++;
+                simCounters.preyTargetLiveDistanceSum += targetSignals.preyDistance;
+                simCounters.preyTargetLiveRewardSum += targetSignals.preyReward * targetSignals.preySuccess;
                 simCounters.preyTargetDistanceSum += targetSignals.preyDistance;
                 simCounters.preyTargetRewardSum += targetSignals.preyReward * targetSignals.preySuccess;
             }

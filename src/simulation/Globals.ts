@@ -106,6 +106,10 @@ export const simCounters = {
     preyTargetChoices: 0,
     preyTargetLiveChoices: 0,
     preyTargetMeatChoices: 0,
+    preyTargetLiveDistanceSum: 0,
+    preyTargetLiveRewardSum: 0,
+    preyTargetMeatDistanceSum: 0,
+    preyTargetMeatRewardSum: 0,
     preyTargetDistanceSum: 0,
     preyTargetRewardSum: 0,
     meatTargetsWhilePursuing: 0,
@@ -138,6 +142,10 @@ export function resetSimulationCounters(): void
     simCounters.preyTargetChoices = 0;
     simCounters.preyTargetLiveChoices = 0;
     simCounters.preyTargetMeatChoices = 0;
+    simCounters.preyTargetLiveDistanceSum = 0;
+    simCounters.preyTargetLiveRewardSum = 0;
+    simCounters.preyTargetMeatDistanceSum = 0;
+    simCounters.preyTargetMeatRewardSum = 0;
     simCounters.preyTargetDistanceSum = 0;
     simCounters.preyTargetRewardSum = 0;
     simCounters.meatTargetsWhilePursuing = 0;

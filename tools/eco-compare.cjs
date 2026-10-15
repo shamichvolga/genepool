@@ -49,6 +49,10 @@ const eventMap = {
     prey_target_choices_interval: "preyTargetChoices",
     prey_target_live_choices_interval: "preyTargetLiveChoices",
     prey_target_meat_choices_interval: "preyTargetMeatChoices",
+    prey_target_live_distance_sum_interval: "preyTargetLiveDistanceSum",
+    prey_target_live_reward_sum_interval: "preyTargetLiveRewardSum",
+    prey_target_meat_distance_sum_interval: "preyTargetMeatDistanceSum",
+    prey_target_meat_reward_sum_interval: "preyTargetMeatRewardSum",
     prey_target_distance_sum_interval: "preyTargetDistanceSum",
     prey_target_reward_sum_interval: "preyTargetRewardSum",
 };
@@ -57,10 +61,12 @@ const metrics = [
     "alive", "pred", "warm", "cold", "plant_cells_occupied", "plant_cell_occupancy", "plants_per_occupied_cell",
     "coarse_morphotype_bins", "eff_coarse_morphotype_bins", "gene_clusters", "eff_gene_clusters", "top_gene_cluster_share",
     "mate_isolation", "pedigree_matured_offspring", "pedigree_maturity_survival", "mass_mean", "width_mean",
+    "mate_brightness_assortment", "mating_sample_size", "mating_brightness_gap_mean", "mating_choosiness_mean",
     "predator_target_value_weight_mean", "predator_target_travel_weight_mean", "predator_target_bait_bias_mean",
 ];
 const metricsDefaultingToZeroWhenAbsent = new Set([
     "predator_target_value_weight_mean", "predator_target_travel_weight_mean", "predator_target_bait_bias_mean",
+    "mate_brightness_assortment", "mating_sample_size", "mating_brightness_gap_mean", "mating_choosiness_mean",
 ]);
 const nutrientMetrics = [ "soil_nutrient_cells", "soil_nutrient_mean", "soil_nutrient_p10", "soil_nutrient_p50", "soil_nutrient_p90" ];
 const performanceMetrics = [ "speed_mean", "speed_p10", "speed_p50", "speed_p90", "swim_energy_efficiency_mean" ];
@@ -207,8 +213,8 @@ const csvRows = seeds.map(( seed, s ) =>
 
 fs.writeFileSync( outputBase + ".json", JSON.stringify( summary, null, 2 ) + "\n" );
 fs.writeFileSync( outputBase + ".csv", csvHeader + "\n" + csvRows.join( "\n" ) + "\n" );
-const digestMetrics = [ "alive", "plants", ...( hasNutrientMetrics ? [ "soil_nutrient_mean" ] : [] ), "eff_coarse_morphotype_bins", "pedigree_maturity_survival", "pedigree_matured_offspring", "births_total",
-    "self_feed_events_total", "self_feed_energy_total", "self_feed_mass_total", "prey_target_choices_total", "prey_target_live_choices_total", "prey_target_meat_choices_total", "prey_target_distance_sum_total", "prey_target_reward_sum_total",
+const digestMetrics = [ "alive", "plants", ...( hasNutrientMetrics ? [ "soil_nutrient_mean" ] : [] ), "eff_coarse_morphotype_bins", "pedigree_maturity_survival", "pedigree_matured_offspring", "mate_brightness_assortment", "mating_brightness_gap_mean", "mating_choosiness_mean", "mating_sample_size", "births_total",
+    "self_feed_events_total", "self_feed_energy_total", "self_feed_mass_total", "prey_target_choices_total", "prey_target_live_choices_total", "prey_target_meat_choices_total", "prey_target_live_distance_sum_total", "prey_target_live_reward_sum_total", "prey_target_meat_distance_sum_total", "prey_target_meat_reward_sum_total", "prey_target_distance_sum_total", "prey_target_reward_sum_total",
     ...( hasNutrientMetrics ? [ "soil_nutrients_returned_total" ] : [] ), ...( hasPerformanceMetrics ? [ "speed_mean", "swim_energy_efficiency_mean" ] : [] ),
     ...( hasThermalMetrics ? [ "body_temp_mean", "ambient_temp_mean", "thermal_lag_abs_mean", "thermal_lag_mass_corr", "thermal_lag_width_corr" ] : [] ) ];
 const digest = {
