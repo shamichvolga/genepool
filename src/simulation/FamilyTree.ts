@@ -110,6 +110,7 @@ export function FamilyTree()
     this.getNodeGenes               = function( index   ) { return _nodes[ index ].genes;               }
     this.getNodeEvolutionTraits     = function( index   ) { return _nodes[ index ].evolutionTraits;     }
     this.getNodeAlive               = function( index   ) { return _nodes[ index ].alive;               }
+    this.getLatestNodeIndexForPoolIndex = function( poolIndex ) { return getIndexFromPoolIndex( poolIndex ); }
 
     // Direct offspring which have reached the age of first reproduction are a
     // useful early measure of inherited fitness. Young living offspring are

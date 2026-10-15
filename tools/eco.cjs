@@ -76,6 +76,92 @@ function makeRandom( seed )
     };
 }
 const statsRandom = makeRandom( ( SEED ^ 0x9E3779B9 ) >>> 0 );
+const historyRandom = makeRandom( ( SEED ^ 0xD1B54A35 ) >>> 0 );
+const INDIVIDUAL_HISTORY_LIMIT = 12;
+
+function initializeIndividualHistories()
+{
+    if ( !META ) return { familyTree: null, records: [] };
+    const familyTree = run.genePool.getFamilyTree && run.genePool.getFamilyTree();
+    if ( !familyTree || typeof familyTree.getLatestNodeIndexForPoolIndex !== "function" )
+        return { familyTree: null, records: [] };
+
+    const candidates = [];
+    const bots = run.genePool.getSwimbots();
+    for ( let poolIndex = 0; poolIndex < bots.length; poolIndex ++ )
+    {
+        const bot = bots[ poolIndex ];
+        if ( !bot || !bot.getAlive() ) continue;
+        const lineageNodeId = familyTree.getLatestNodeIndexForPoolIndex( poolIndex );
+        if ( lineageNodeId >= 0 ) candidates.push({ poolIndex, lineageNodeId });
+    }
+
+    // Deterministic sampling uses its own stream and cannot change the world or
+    // the random samples used by the aggregate metrics.
+    for ( let i = candidates.length - 1; i > 0; i -- )
+    {
+        const j = Math.floor( historyRandom() * ( i + 1 ));
+        [ candidates[i], candidates[j] ] = [ candidates[j], candidates[i] ];
+    }
+    const records = candidates.slice( 0, INDIVIDUAL_HISTORY_LIMIT ).map(( candidate, index ) => ({
+        sampleId: index + 1,
+        poolIndex: candidate.poolIndex,
+        lineageNodeId: candidate.lineageNodeId,
+        observations: [],
+        termination: null,
+    }));
+    return { familyTree, records };
+}
+
+function recordIndividualHistories( histories, step )
+{
+    const { familyTree, records } = histories;
+    if ( !familyTree || records.length === 0 ) return;
+    const bots = run.genePool.getSwimbots();
+    for ( const record of records )
+    {
+        if ( record.termination ) continue;
+        if ( !familyTree.getNodeAlive( record.lineageNodeId ) )
+        {
+            record.termination = {
+                reason: "death",
+                step: familyTree.getNodeDeathTime( record.lineageNodeId ),
+            };
+            continue;
+        }
+        const latestNodeId = familyTree.getLatestNodeIndexForPoolIndex( record.poolIndex );
+        if ( latestNodeId !== record.lineageNodeId )
+        {
+            record.termination = { reason: "pool_slot_reused", step };
+            continue;
+        }
+        const bot = bots[ record.poolIndex ];
+        if ( !bot || !bot.getAlive() )
+        {
+            record.termination = { reason: "death_time_unavailable", step };
+            continue;
+        }
+        const position = bot.getPosition();
+        record.observations.push({
+            step,
+            age: bot.getAge(),
+            energy: bot.getEnergy(),
+            mass: bot.getPhenotypeMass(),
+            speed: bot.getSpeed(),
+            x: position.x,
+            y: position.y,
+            thermalOptimum: bot.getThermalOptimum(),
+            thermalWidth: bot.getThermalWidth(),
+            digestion: bot.getDigestion(),
+            brightness: bot.getBrightness(),
+            choosiness: bot.getChoosiness(),
+            predatorLevel: bot.getPredatorLevel(),
+            offspring: bot.getNumOffspring(),
+            preyEaten: bot.getNumPreyEaten(),
+            foodEaten: bot.getNumFoodBitsEaten(),
+        });
+    }
+}
 
 function distribution( values )
 {
@@ -442,6 +528,8 @@ console.log( `scenario=${SCENARIO} seed=${SEED} steps=${STEPS} flat=${FLAT} set=
 console.log( header );
 const rows = [];
 const populationByRegionSnapshots = [];
+const individualHistories = initializeIndividualHistories();
+recordIndividualHistories( individualHistories, run.genePool.getTimeStep() );
 let t0 = Date.now();
 
 for ( let step = 1; step <= STEPS; step++ )
@@ -454,6 +542,7 @@ for ( let step = 1; step <= STEPS; step++ )
         const msPerStep = ( Date.now() - t0 ) / EVERY;   // simulation only, not the statistics
         const s = run.stats( run.genePool );
         const e = ecoStats();
+        recordIndividualHistories( individualHistories, step );
         populationByRegionSnapshots.push({ step, regions: e.populationByRegion });
         const events = eventDeltas();
         const row = [ step, s.alive, s.predators, run.genePool.getNumFoodBitsOfType(0), run.genePool.getNumFoodBitsOfType(1), s.meat,
@@ -503,7 +592,7 @@ if ( META )
     const endedAt = new Date().toISOString();
     const durationMs = Number( process.hrtime.bigint() - runStartNs ) / 1e6;
     const metadata = {
-        schemaVersion: 12,
+        schemaVersion: 13,
         startedAt,
         endedAt,
         durationMs: Number( durationMs.toFixed( 1 )),
@@ -549,6 +638,14 @@ if ( META )
             brightnessGap: "mean absolute brightness difference between actual parents",
             choosiness: "mean inherited brightness-acceptance trait of parents in the recorded pairs",
         },
+        individualHistoryMetrics: {
+            selection: `up to ${INDIVIDUAL_HISTORY_LIMIT} living organisms sampled deterministically from the initial population`,
+            sampling: "initial observation at step 0 and then at each CSV sampling step; these are snapshots, not continuous traces",
+            identity: "lineageNodeId remains stable when a pool slot is reused",
+            termination: "death time comes from the family tree; a replacement between samples is reported as pool_slot_reused",
+            fields: "age, energy, mass, speed, position, thermal traits, digestion, brightness, choosiness, predator level, offspring, prey eaten, food eaten",
+        },
+        individualHistories: individualHistories.records,
         populationByBiomeOrZone: populationByRegionSnapshots,
         predatorTargetSelection: {
             enabled: !!sb.PREDATOR_TARGET_SELECTION_ENABLED,
