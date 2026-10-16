@@ -25,6 +25,7 @@ const STATES = [ "resting", "looking for mate", "pursuing mate", "looking for fo
 
 const open = new Array( N ).fill( null );
 const ended = [];
+const switches = [];
 const meals = new Array( N ).fill( 0 );
 for ( let s = 0; s < N; s++ )
 {
@@ -64,6 +65,12 @@ for ( let step = 0; step < STEPS; step++ )
                 ( meals[s] > e.meals ) ? "ate" :
                 ( state !== PURSUING_FOOD ) ? ( "switched to " + ( STATES[ state ] || state )) :
                 ( target !== e.target ) ? (( st.liveFood[ e.target ] !== 1 ) ? "target eaten or gone" : "changed target" ) : null;
+            if ( finishedBy === "changed target" && switches.length < 20000 )
+            {
+                const od = Math.hypot( st.foodX[ e.target ] - mx, st.foodY[ e.target ] - my );
+                const nd = target >= 0 ? Math.hypot( st.foodX[ target ] - mx, st.foodY[ target ] - my ) : -1;
+                switches.push({ od, nd, persist: M[ m + sb.M_PERSIST ], ready: M[ m + sb.M_READY ], sensing: st.sensing[s], seen: st.seenFood[s], newTarget: target });
+            }
             if ( finishedBy )
             {
                 e.end = finishedBy; e.steps = now - e.start; ended.push( e ); open[s] = null;
@@ -108,6 +115,10 @@ const q = ( a, p ) => { if ( !a.length ) return "–"; const b = a.slice().sort(
 const failed = ended.filter( e => e.end !== "ate" ), ate = ended.filter( e => e.end === "ate" );
 const SIZE = [ [ 0, 300 ], [ 300, 600 ], [ 600, 900 ], [ 900, 9999 ] ];
 const bySize = SIZE.map( ( [ a, b ] ) => { const g = ended.filter( e => e.mass >= a && e.mass < b ); return { mass: a + "-" + b, episodes: g.length, ate_percent: g.length ? ( 100 * g.filter( e => e.end === "ate" ).length / g.length ).toFixed( 1 ) : "–", closest_median: q( g.map( e => e.closest ), 0.5 ) }; });
+const ratios = switches.filter( w => w.nd >= 0 ).map( w => w.nd / Math.max( 1, w.od )).sort( ( a, b ) => a - b );
+console.log( "SWITCHES", switches.length, "new/old distance p10 p50 p90:", ratios.length ? [ 0.1, 0.5, 0.9 ].map( p => ratios[ Math.floor( p * ratios.length ) ].toFixed( 2 )).join( " " ) : "-",
+             "old dist p50:", switches.map( w => w.od ).sort( ( a, b ) => a - b )[ Math.floor( switches.length / 2 ) ]?.toFixed( 0 ),
+             "new target -1:", switches.filter( w => w.newTarget < 0 ).length, "sample:", JSON.stringify( switches.slice( 0, 5 )));
 console.log( JSON.stringify({
     seed: SEED, measuredSteps: STEPS, afterWarmSteps: WARM,
     episodes: ended.length, endings: byEnd,

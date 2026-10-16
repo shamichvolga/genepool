@@ -39,7 +39,10 @@ export function bodyMotionFactors( mass: number, meanWidth: number ): BodyMotion
     return {
         enabled: true,
         acceleration: clamp( massScale * Math.sqrt( relativeBreadth ), 0.4, 2.2 ),
-        drag: clamp( massScale * relativeBreadth * relativeBreadth, 0.2, 4 ),
+        // (drag: by the breadth only - a narrow big body cruises cheaply, a
+        //  broad one is a slow "tank"; it was also x mass^-1/3, which left big
+        //  bodies only the costs)
+        drag: clamp( relativeBreadth * relativeBreadth, 0.2, 4 ),
         strokeCost: clamp( Math.pow( relativeMass, 1 / 3 ) * Math.sqrt( relativeBreadth ), 0.4, 2.2 ),
     };
 }

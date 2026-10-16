@@ -24,6 +24,9 @@ export const GENES_AUTOTOMY_BITE   = [ 137 ];                  // chance to drop
 export const GENES_AUTOTOMY_THREAT = [ 138 ];                  // drop one as a decoy when a hunter comes this close (0 = never)
 export const GENES_AUTOTOMY_AMOUNT = [ 139 ];                  // how much of the body to drop
 export const GENES_AUTOTOMY_WHICH  = [ 140 ];                  // which limb (tail / side branch...)
+export const GENES_PERSISTENCE     = [ 141 ];                  // how firmly the chosen food is kept
+export const GENES_INVESTMENT      = [ 142 ];                  // share of energy given to a child (INHERITED_INVESTMENT_ENABLED)
+export const GENES_SIZE_PICKINESS  = [ 143 ];                  // how much a mate's size counts (SIZE_ASSORTATIVE_MATING_ENABLED)
 
 // C11: independent inherited choice of tissue for self-consumption. These
 // otherwise-unused loci are active only in that experiment.

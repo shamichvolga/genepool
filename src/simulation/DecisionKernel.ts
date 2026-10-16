@@ -30,7 +30,7 @@ import { BRAIN_SIZE, NUM_HIDDEN, NUM_INPUTS, NUM_OUTPUTS, DRIVE_OUTPUTS, THINK_P
          IN_PREY_DISTANCE, IN_PREY_REWARD, IN_PREY_SUCCESS, IN_PREY_CHASE, IN_BAIT_PRESENT, IN_BAIT_DISTANCE, IN_BAIT_REWARD,
          OUT_FOOD, OUT_MATE, OUT_FLEE, OUT_HUNT, OUT_CLIMATE, OUT_SOCIAL, OUT_EFFORT, OUT_STEER, OUT_SELF_EAT, OUT_PREY_VALUE, OUT_PREY_TRAVEL, OUT_PREY_BAIT,
          think, sigmoid } from "./NeuralBrain";
-import { AUTOTOMY_DECOY_SPAN, CLIMATE_PROBE_DISTANCE, CLIMATE_STEERING, SOCIAL_STEERING, BODY_TEMPERATURE_INERTIA_ENABLED, SELF_CANNIBALISM_ENABLED,
+import { BITE_AT_CONTACT_ENABLED, CONTACT_EATING_ENABLED, AUTOTOMY_DECOY_SPAN, CLIMATE_PROBE_DISTANCE, CLIMATE_STEERING, SOCIAL_STEERING, BODY_TEMPERATURE_INERTIA_ENABLED, SELF_CANNIBALISM_ENABLED,
          PREDATOR_TARGET_SELECTION_ENABLED, PREDATOR_FLEE_RADIUS, PREDATOR_LEVEL_THRESHOLD, PREY_SCAN_COOLDOWN, PREY_SCAN_RADIUS_GROWTH,
          PREY_SCAN_RADIUS_MAX_SCALE, SWIMBOT_MAX_ENERGY } from "./Parameters";
 import { thermalFit, EMERGENCY_PROBE_DISTANCE, EMERGENCY_THERMAL_FIT, KINESIS_MAX_TURN, KINESIS_PERIOD, KINESIS_TURN_CHANCE,
@@ -38,7 +38,7 @@ import { thermalFit, EMERGENCY_PROBE_DISTANCE, EMERGENCY_THERMAL_FIT, KINESIS_MA
 import { advanceBodyTemperature } from "./ThermalPhysics";
 import { FIELD_SIZE, PLANT_CELL_SIZE, SEASON_PERIOD, SEASON_AMPLITUDE_EQUATOR, SEASON_AMPLITUDE_POLES } from "./Environment";
 import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
-import { SWIMBOT_GENITAL_LENGTH, SWIMBOT_MOUTH_LENGTH, SWIMBOT_VIEW_RADIUS } from "./SwimbotTypes";
+import { MAX_PARTS, SWIMBOT_GENITAL_LENGTH, SWIMBOT_MOUTH_LENGTH, SWIMBOT_VIEW_RADIUS } from "./SwimbotTypes";
 import { FOOD_BIT_GRAB_RADIUS } from "./FoodBit";
 
 const PI_OVER_180 = Math.PI / 180;
@@ -139,6 +139,43 @@ function updateBodyTemperature( st: SharedState, s: number ): void
 //------------------------------------------------------------------------------
 // little helpers on the rows
 //------------------------------------------------------------------------------
+const _touchBuffer = new Int32Array( 4096 );
+const EAT_RADIUS = SWIMBOT_MOUTH_LENGTH + FOOD_BIT_GRAB_RADIUS;
+
+// a food bit this swimbot can eat, touching its mouth (-1: none)
+function edibleFoodAtMouth( st: SharedState, s: number, mouthX: number, mouthY: number ): number
+{
+    const meatEater = isPredator( st, s );
+    const n = st.foodGrid.collect( mouthX, mouthY, EAT_RADIUS, _touchBuffer );
+    for (let i = 0; i < n; i++)
+    {
+        const f = _touchBuffer[i];
+        if ( st.liveFood[f] !== 1 ) continue;
+        if (( st.foodType[f] === 2 ) !== meatEater ) continue;
+        const dx = st.foodX[f] - mouthX, dy = st.foodY[f] - mouthY;
+        if ( dx * dx + dy * dy < EAT_RADIUS * EAT_RADIUS ) return f;
+    }
+    return -1;
+}
+
+// is the mouth at one of the body parts of swimbot p? (part ends and middles,
+// within the mouth length plus the part's width)
+function mouthTouchesBody( st: SharedState, p: number, mouthX: number, mouthY: number ): boolean
+{
+    const numParts = st.bots[ p * SS.BOT_STRIDE + SS.B_NUM_PARTS ];
+    const o = p * SS.PART_STRIDE, w = p * MAX_PARTS;
+    for (let k = 0; k < numParts; k++)
+    {
+        const i = o + k * SS.PS;
+        const reach = SWIMBOT_MOUTH_LENGTH + st.partWidth[ w + k ];
+        const ex = st.parts[ i + SS.P_X ] - mouthX, ey = st.parts[ i + SS.P_Y ] - mouthY;
+        if ( ex * ex + ey * ey < reach * reach ) return true;
+        const mx = st.parts[ i + SS.M_X ] - mouthX, my = st.parts[ i + SS.M_Y ] - mouthY;
+        if ( mx * mx + my * my < reach * reach ) return true;
+    }
+    return false;
+}
+
 function isPredator( st: SharedState, s: number ): boolean { return st.predator[s] > PREDATOR_LEVEL_THRESHOLD; }
 
 function foodIsMeatAndAlive( st: SharedState, f: number ): boolean
@@ -347,7 +384,7 @@ function canSelfFeed( st: SharedState, s: number ): boolean
 {
     const M = st.mind, m = s * SS.MIND_STRIDE;
     return SELF_CANNIBALISM_ENABLED && ( st.params[ SS.PARAM_ENV_ACTIVE ] === 1 ) && ( M[ m + SS.M_PARTS_LOST ] !== 1 )
-        && ( M[ m + SS.M_PHENO_PARTS ] > 4 ) && ( st.bots[ s * SS.BOT_STRIDE + SS.B_ENERGY ] < SWIMBOT_MAX_ENERGY );
+        && ( M[ m + SS.M_PHENO_PARTS ] > 4 ) && ( st.bots[ s * SS.BOT_STRIDE + SS.B_ENERGY ] < M[ m + SS.M_MAX_ENERGY ] );
 }
 
 //------------------------------------------------------------------------------
@@ -441,12 +478,20 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
         {
             M[ m + SS.M_TRY_EAT ] = 1;
         }
-        else if ( preyValid )
+        else if ( preyValid && ( M[ m + SS.M_HUNT_CD ] === 0 ))
         {
-            const p = prey * SS.BOT_STRIDE;
-            const biteDistance = SWIMBOT_MOUTH_LENGTH + B[ p + SS.B_SUM_LENGTHS ] * 0.5;
-            const xx = B[ p + SS.B_POS_X ] - mouthX, yy = B[ p + SS.B_POS_Y ] - mouthY;
-            if (( M[ m + SS.M_HUNT_CD ] === 0 ) && ( Math.sqrt( xx * xx + yy * yy ) < biteDistance )) { M[ m + SS.M_TRY_HUNT ] = 1; }
+            if ( BITE_AT_CONTACT_ENABLED )
+            {
+                // the mouth must be at one of the prey's body parts
+                if ( mouthTouchesBody( st, prey, mouthX, mouthY )) { M[ m + SS.M_TRY_HUNT ] = 1; }
+            }
+            else
+            {
+                const p = prey * SS.BOT_STRIDE;
+                const biteDistance = SWIMBOT_MOUTH_LENGTH + B[ p + SS.B_SUM_LENGTHS ] * 0.5;
+                const xx = B[ p + SS.B_POS_X ] - mouthX, yy = B[ p + SS.B_POS_Y ] - mouthY;
+                if ( Math.sqrt( xx * xx + yy * yy ) < biteDistance ) { M[ m + SS.M_TRY_HUNT ] = 1; }
+            }
         }
     }
     else if ( state === BRAIN_STATE_LOOKING_FOR_PREY )
@@ -457,6 +502,16 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
             const xx = st.foodX[f] - mouthX, yy = st.foodY[f] - mouthY;
             if ( Math.sqrt( xx * xx + yy * yy ) < SWIMBOT_MOUTH_LENGTH + FOOD_BIT_GRAB_RADIUS ) { M[ m + SS.M_TRY_EAT ] = 1; }
         }
+    }
+
+    //-------------------------------------------------
+    // the mouth touches something edible: eat it, whatever the brain is
+    // doing (fleeing, looking for a mate...), unless already full
+    //-------------------------------------------------
+    if ( CONTACT_EATING_ENABLED && ( M[ m + SS.M_TRY_EAT ] !== 1 ) && ( B[ b + SS.B_ENERGY ] < M[ m + SS.M_MAX_ENERGY ] ))
+    {
+        const touched = edibleFoodAtMouth( st, s, mouthX, mouthY );
+        if ( touched >= 0 ) { M[ m + SS.M_FOOD ] = touched; M[ m + SS.M_TRY_EAT ] = 1; }
     }
 
     //-------------------------------------------------
@@ -601,6 +656,8 @@ export function takeInLook( st: SharedState, s: number, counters: number ): void
     const M = st.mind, m = s * SS.MIND_STRIDE, B = st.bots, b = s * SS.BOT_STRIDE;
     const neural = M[ m + SS.M_NEURAL ] === 1;
     const count  = st.seenCount[s];
+    // (a bite decided at the start of the step stays on that food bit)
+    const eatingNow = ( M[ m + SS.M_TRY_EAT ] === 1 ) ? M[ m + SS.M_FOOD ] : -1;
     const base   = s * SS.MAX_SEEN;
 
     if ( neural )
@@ -774,6 +831,12 @@ export function takeInLook( st: SharedState, s: number, counters: number ): void
             M[ m + SS.M_FOUND_MATE ] = 0;
             M[ m + SS.M_MATE ] = -1;
         }
+    }
+
+    if (( eatingNow >= 0 ) && ( st.liveFood[ eatingNow ] === 1 ))
+    {
+        M[ m + SS.M_FOOD ] = eatingNow;
+        M[ m + SS.M_TRY_EAT ] = 1;
     }
 
     M[ m + SS.M_READY ] = 0;

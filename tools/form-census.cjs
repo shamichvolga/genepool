@@ -34,7 +34,10 @@ const SAMPLE = 20;   // steps between position / spin samples
 
 fs.mkdirSync( OUT, { recursive: true });
 
-const run = createSimulation( SEED, {} );
+// --set "NAME=value,NAME2=value": constants of the simulation for this run
+const overrides = {};
+for ( const kv of ( arg( "set", "" ) || "" ).split( "," ).filter( Boolean )) { const [ k, v ] = kv.split( "=" ); overrides[ k.trim() ] = v.trim(); }
+const run = createSimulation( SEED, overrides );
 const sb  = run.sandbox;
 const gp  = run.genePool;
 const st  = sb.sharedState();

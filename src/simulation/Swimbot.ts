@@ -1,4 +1,4 @@
-import { setTrait, GENES_PREDATOR, GENES_SELF_FEED_WHICH, GENES_SELF_FEED_AMOUNT } from "./EcologyGenes";
+import { geneAverage, GENES_PERSISTENCE, GENES_INVESTMENT, GENES_SIZE_PICKINESS, setTrait, GENES_PREDATOR, GENES_SELF_FEED_WHICH, GENES_SELF_FEED_AMOUNT } from "./EcologyGenes";
 import { physicsPartA, physicsPartB } from "./PhysicsKernel";
 import { applyWaterDrag, bodyMotionFactors } from "./BodyPhysics";
 import { advanceBodyTemperature } from "./ThermalPhysics";
@@ -6,7 +6,7 @@ import * as SS from "./SharedState";
 import { decideStep, neuralThink, takeInLook } from "./DecisionKernel";
 import { BRAIN_SIZE, think, sigmoid, NUM_INPUTS, NUM_HIDDEN, NUM_OUTPUTS, DRIVE_OUTPUTS, THINK_PERIOD, DRIVE_HYSTERESIS, EFFORT_MIN, EFFORT_RANGE, IN_BIAS, IN_HUNGER, IN_ENERGY, IN_AGE, IN_FIT, IN_TREND, IN_FOOD, IN_MATE, IN_THREAT, IN_PREY, IN_CROWD, IN_PREDATOR, OUT_FOOD, OUT_MATE, OUT_FLEE, OUT_HUNT, OUT_CLIMATE, OUT_SOCIAL, OUT_EFFORT,
          IN_FOOD_SIDE, IN_FOOD_AHEAD, IN_NEAR_SIDE, IN_NEAR_AHEAD, IN_THREAT_SIDE, IN_THREAT_AHEAD, IN_KIN, IN_SEASON, IN_PREDATOR_NEAR, IN_PREY_DISTANCE, IN_PREY_REWARD, IN_PREY_SUCCESS, IN_PREY_CHASE, IN_BAIT_PRESENT, IN_BAIT_DISTANCE, IN_BAIT_REWARD, OUT_STEER, OUT_SELF_EAT, OUT_PREY_VALUE, OUT_PREY_TRAVEL, OUT_PREY_BAIT, STEER_MAX_DEGREES } from "./NeuralBrain";
-import { NEURAL_BRAIN_ENABLED, CLIMATE_STEERING, SOCIAL_STEERING, CLIMATE_PROBE_DISTANCE, BODY_TEMPERATURE_INERTIA_ENABLED, SELF_CANNIBALISM_ENABLED, PREDATOR_TARGET_SELECTION_ENABLED } from "./Parameters";
+import { MASS_SCALED_STOMACH_ENABLED, SIZE_MATURITY_ENABLED, INHERITED_INVESTMENT_ENABLED, PLANT_STAGES_ENABLED, PLANT_SPROUT_AGE, PLANT_OLD_AGE, PLANT_STAGE_ENERGY, PREDATOR_GAPE_CURVE_ENABLED, NEURAL_BRAIN_ENABLED, CLIMATE_STEERING, SOCIAL_STEERING, CLIMATE_PROBE_DISTANCE, BODY_TEMPERATURE_INERTIA_ENABLED, SELF_CANNIBALISM_ENABLED, PREDATOR_TARGET_SELECTION_ENABLED } from "./Parameters";
 import { environment, PLANT_TYPE_WARM, PLANT_TYPE_COLD } from "./Environment";
 import { sizeSignature, SEARCH_IMAGE_LEARNING, SEARCH_IMAGE_GAIN, SEARCH_IMAGE_FORGETTING, bodySize, sizeDietFactor, climateFoodFactor, digestionEfficiency, thermalFit, thermalPeak, THERMAL_MISMATCH_DRAIN, THERMAL_FIT_UPDATE_PERIOD, THERMOMELANISM, mateAcceptance, pairRandom, KINESIS_PERIOD, KINESIS_TURN_CHANCE, KINESIS_MAX_TURN, EMERGENCY_THERMAL_FIT, EMERGENCY_PROBE_DISTANCE } from "./Ecology";
 //--------------------------------------------------------------------------
@@ -87,6 +87,8 @@ var    flopperYV = 0;
 	_M[ SS.M_THERMAL_OPT ] = _M[ SS.M_BODY_TEMP ] = 0.5;
 	_M[ SS.M_THERMAL_PEAK ] = 1;
 	_M[ SS.M_SCAN_RADIUS ] = SWIMBOT_VIEW_RADIUS;
+	_M[ SS.M_MAX_ENERGY ]  = SWIMBOT_MAX_ENERGY;
+	_M[ SS.M_MATURE_AGE ]  = YOUNG_AGE_DURATION;
 
 	// targets: the mind keeps their numbers, these give the objects
 	const indexOf        = function( thing ) { return ( thing == null ) ? NULL_INDEX : thing.getIndex(); }
@@ -267,6 +269,19 @@ this.setParent = function( parent )
 	this.getKernelEvents = function() { return _M[ _m + SS.M_EVENTS ]; }
 
 	//------------------------------------------------------------------------
+	// PLANT_STAGES_ENABLED: a sprout gives little, an old plant much; small
+	// bodies digest sprouts best, big bodies old plants (one plant, three ages)
+	//------------------------------------------------------------------------
+	this.plantStageFactor = function( plantAge )
+	{
+	    if ( !PLANT_STAGES_ENABLED ) return ONE;
+	    const size = bodySize( _phenotype.mass );                // -1 small .. +1 big
+	    if ( plantAge < PLANT_SPROUT_AGE ) return PLANT_STAGE_ENERGY[0] * Math.min( ONE, Math.max( 0.15, ONE - 0.35 * size ));
+	    if ( plantAge > PLANT_OLD_AGE    ) return PLANT_STAGE_ENERGY[2] * Math.min( ONE, Math.max( 0.15, ONE + 0.35 * size ));
+	    return PLANT_STAGE_ENERGY[1];
+	}
+
+	//------------------------------------------------------------------------
 	// One swimbot alone, through the same kernel (for tests and tools; the
 	// pool runs the kernel for everybody at once, see GenePool)
 	//------------------------------------------------------------------------
@@ -380,7 +395,7 @@ this.setParent = function( parent )
 	this.autotomize = function( selfFeeding = false )
 	{
 	    if ( _M[ _m + SS.M_PARTS_LOST ] || !environment.active ) return null;
-	    if ( selfFeeding && ( !SELF_CANNIBALISM_ENABLED || ( _B[ _b + SS.B_ENERGY ] >= SWIMBOT_MAX_ENERGY ))) return null;
+	    if ( selfFeeding && ( !SELF_CANNIBALISM_ENABLED || ( _B[ _b + SS.B_ENERGY ] >= _M[ _m + SS.M_MAX_ENERGY ] ))) return null;
 	    const n = _phenotype.numParts;
 	    if ( n <= 4 ) return null;
 	    this.syncPartObjects();
@@ -449,7 +464,7 @@ this.setParent = function( parent )
 	    {
 	        // The organism retains its existing reserve and digests part of the
 	        // removed tissue. The branch is permanently gone: no free regrowth.
-	        const gained = Math.min( SWIMBOT_MAX_ENERGY - _B[ _b + SS.B_ENERGY ], tissueEnergy );
+	        const gained = Math.min( _M[ _m + SS.M_MAX_ENERGY ] - _B[ _b + SS.B_ENERGY ], tissueEnergy );
 	        _B[ _b + SS.B_ENERGY ] += gained;
 	        _M[ _m + SS.M_PARTS_LOST ] = 0;
 	        _M[ _m + SS.M_AUTOTOMY_LOSS ] = ZERO;
@@ -486,7 +501,7 @@ this.setParent = function( parent )
 	this.canSelfFeed = function()
 	{
 	    return SELF_CANNIBALISM_ENABLED && environment.active && !_M[ _m + SS.M_PARTS_LOST ]
-	        && ( _phenotype.numParts > 4 ) && ( _B[ _b + SS.B_ENERGY ] < SWIMBOT_MAX_ENERGY );
+	        && ( _phenotype.numParts > 4 ) && ( _B[ _b + SS.B_ENERGY ] < _M[ _m + SS.M_MAX_ENERGY ] );
 	};
 	this.getNumPartsEaten = function() { return _numPartsEaten; }
 
@@ -1266,6 +1281,15 @@ _position.copyFrom( position );
         // what the decision kernel needs from the phenotype and the genes
         _M[ _m + SS.M_AUTOTOMY_THREAT ] = _phenotype.autotomyThreat || 0;
         _M[ _m + SS.M_PHENO_PARTS ]     = _phenotype.numParts;
+        _M[ _m + SS.M_PERSIST ]         = geneAverage( _genotype, GENES_PERSISTENCE );
+        _M[ _m + SS.M_INVEST ]          = 0.15 + 0.7 * geneAverage( _genotype, GENES_INVESTMENT );
+        _M[ _m + SS.M_SIZE_PICKY ]      = geneAverage( _genotype, GENES_SIZE_PICKINESS );
+        _M[ _m + SS.M_MATURE_AGE ]      = SIZE_MATURITY_ENABLED
+            ? YOUNG_AGE_DURATION * Math.min( 4, Math.max( 0.5, _phenotype.mass / 410 ))
+            : YOUNG_AGE_DURATION;
+        _M[ _m + SS.M_MAX_ENERGY ]      = MASS_SCALED_STOMACH_ENABLED
+            ? Math.max( 60, SWIMBOT_MAX_ENERGY * Math.pow( _phenotype.mass / 410, 0.75 ))
+            : SWIMBOT_MAX_ENERGY;
         if ( _slot >= 0 ) { _shared.brainWeights.set( _genotype.getBrain(), _slot * BRAIN_SIZE ); }
 
         // the inherited hunger threshold (environment pool; classic pools: the setting)
@@ -1876,7 +1900,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	    };
 	}
 	this.getHungerThreshold             = function() { return _brain.getHungerThreshold();                  }
-	this.getMaxEnergy                   = function() { return SWIMBOT_MAX_ENERGY;                           }
+	this.getMaxEnergy                   = function() { return _M[ _m + SS.M_MAX_ENERGY ];                     }
 	this.getMaxAge                      = function() { return globalTweakers.maximumLifeSpan;               }
 	this.getOldAgeThreshold             = function() { return globalTweakers.maximumLifeSpan - OLD_AGE_DURATION; }
 	this.getDynamicScanRadius           = function() { return _M[ _m + SS.M_SCAN_RADIUS ];                                  }
@@ -2038,6 +2062,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
                 // (meat: exactly the energy it holds, e.g. a dropped tail)
                 energyFromFoodBit = ( chosenFoodBit().getType() === 2 ) ? chosenFoodBit().getEnergy()
                                   : chosenFoodBit().getEnergy()
+                                  * this.plantStageFactor( chosenFoodBit().getAge() )
                                   * this.getDigestionEfficiency( chosenFoodBit().getType() )
                                   * climateFoodFactor( _M[ _m + SS.M_THERMAL_FIT ], _M[ _m + SS.M_THERMAL_PEAK ] );
             }
@@ -2093,7 +2118,11 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	    //-----------------------------------------------
 	    // missed! the prey gets away and starts fleeing
 	    //-----------------------------------------------
-	    if ( gpRandom() > ( environment.active ? ENVIRONMENT_ATTACK_SUCCESS_CHANCE : ATTACK_SUCCESS_CHANCE ))
+	    // PREDATOR_GAPE_CURVE_ENABLED: big prey is harder to catch and takes longer
+	    const sizeRatio = chosenPrey().getPhenotypeMass() / Math.max( 1, _phenotype.mass );
+	    const gape = PREDATOR_GAPE_CURVE_ENABLED ? Math.min( ONE, Math.max( ZERO, 1.5 - sizeRatio )) : ONE;
+	    if ( PREDATOR_GAPE_CURVE_ENABLED ) { _M[ _m + SS.M_HUNT_CD ] = ATTACK_COOLDOWN * ( 1 + 2 * sizeRatio ); }
+	    if ( gpRandom() > ( environment.active ? ENVIRONMENT_ATTACK_SUCCESS_CHANCE : ATTACK_SUCCESS_CHANCE ) * gape )
 	    {
 	        simCounters.failedAttacks ++;
 	        chosenPrey().notifyAttackedBy( this );
@@ -2108,7 +2137,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	    if ( dropped !== null )
 	    {
 	        simCounters.autotomyBiteDrops ++;
-	        _B[ _b + SS.B_ENERGY ] += Math.min( Math.max( ZERO, SWIMBOT_MAX_ENERGY - _B[ _b + SS.B_ENERGY ] ), dropped.energy );
+	        _B[ _b + SS.B_ENERGY ] += Math.min( Math.max( ZERO, _M[ _m + SS.M_MAX_ENERGY ] - _B[ _b + SS.B_ENERGY ] ), dropped.energy );
 	        chosenPrey().notifyAttackedBy( this );
 	        _numPartsEaten ++;
 	        _B[ _b + SS.B_TIMER_DELTA ] = ZERO;
@@ -2124,7 +2153,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	    simCounters.attackCount ++;
 	    _numPreyEaten ++;
 
-	    let room = Math.max( ZERO, SWIMBOT_MAX_ENERGY - _B[ _b + SS.B_ENERGY ] );
+	    let room = Math.max( ZERO, _M[ _m + SS.M_MAX_ENERGY ] - _B[ _b + SS.B_ENERGY ] );
 
 	    if ( energyFromPrey > room )
 	    {
@@ -2649,7 +2678,9 @@ console.log( "contributeToOffspring: _childEnergyRatio = " + _childEnergyRatio )
 */
 
 //let energyToContribute = _B[ _b + SS.B_ENERGY ] * _childEnergyRatio;
-        let energyToContribute = _B[ _b + SS.B_ENERGY ] * globalTweakers.childEnergyRatio;
+        // the share: the pool's setting, or my own gene (INHERITED_INVESTMENT_ENABLED)
+        const share = INHERITED_INVESTMENT_ENABLED ? _M[ _m + SS.M_INVEST ] : globalTweakers.childEnergyRatio;
+        let energyToContribute = _B[ _b + SS.B_ENERGY ] * share;
 
 //GLOBAL_childEnergyRatio
 //console.log( "GLOBAL_childEnergyRatio = " + GLOBAL_childEnergyRatio );

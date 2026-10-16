@@ -244,3 +244,26 @@ export function GlobalTweakers()
 
 
 
+
+//------------------------------------------------------------------------------
+// Food finding (bug fixes: on by default; see docs/для_комиссии/СВОД_ответов_комиссии.md)
+//------------------------------------------------------------------------------
+export const FOOD_TARGET_PERSISTENCE_ENABLED = true;   // keep the chosen plant unless a new one is clearly nearer (gene "persistence")
+export const FOOD_SWITCH_RATIO_MIN          = 0.4;    // most persistent: switch only to food 0.4 x as far
+export const FOOD_KEEP_RADIUS_SCALE         = 1.5;    // a chosen plant is kept up to 1.5 x the view radius away
+export const CONTACT_EATING_ENABLED         = true;   // the mouth touches edible food: eat it, whatever the brain is doing
+export const BITE_AT_CONTACT_ENABLED        = true;   // a bite needs the mouth at a body part of the prey, not near its center
+
+//------------------------------------------------------------------------------
+// Experiments for different body forms (off by default)
+//------------------------------------------------------------------------------
+export const MASS_SCALED_STOMACH_ENABLED    = false;  // maximum energy = 200 x (mass / 410)^0.75, at least 60
+export const PLANT_STAGES_ENABLED           = false;  // sprout / mature / old plant; small bodies digest sprouts, big ones old plants better
+export const PLANT_SPROUT_AGE               = 1500;
+export const PLANT_OLD_AGE                  = 6000;
+export const PLANT_ROT_AGE                  = 12000;
+export const PLANT_STAGE_ENERGY             = [ 0.35, 1.0, 1.4 ];
+export const INHERITED_INVESTMENT_ENABLED   = false;  // gene: share of energy given to a child (0.15..0.85) instead of the pool setting
+export const SIZE_MATURITY_ENABLED          = false;  // grown up (may mate) at 1000 x clamp( mass / 410, 0.5, 4 ) steps
+export const SIZE_ASSORTATIVE_MATING_ENABLED = false; // mates chosen by color AND size (gene: how much size counts)
+export const PREDATOR_GAPE_CURVE_ENABLED    = false;  // attack success falls with prey/predator mass, big prey takes longer to eat

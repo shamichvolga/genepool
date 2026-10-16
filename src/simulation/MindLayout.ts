@@ -63,7 +63,12 @@ export const M_AUTOTOMY_THREAT = 51;
 export const M_AUTOTOMY_LOSS = 52;
 export const M_PHENO_PARTS   = 53;
 export const M_INDEX         = 54;
-export const MIND_STRIDE     = 56;
+export const M_PERSIST       = 55;   // gene: how firmly the chosen food is kept (0..1)
+export const M_MATURE_AGE    = 56;   // age from which it may mate
+export const M_INVEST        = 57;   // gene: share of energy given to a child
+export const M_SIZE_PICKY    = 58;   // gene: how much a mate's size counts (0..1)
+export const M_MAX_ENERGY    = 59;   // its maximum energy (depends on mass when MASS_SCALED_STOMACH_ENABLED)
+export const MIND_STRIDE     = 60;
 
 // what the decision kernel asks the main thread to do (bits in M_EVENTS)
 export const EVENT_REGROW    = 1;    // grow the dropped parts back

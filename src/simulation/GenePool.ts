@@ -1,8 +1,8 @@
-import { geneAverage, convertOldGenes, GENE_LAYOUT_VERSION, setTrait, gaussian, thermalWidthToGene, preyTargetScore, GENES_PREDATOR, GENES_THERMAL_OPTIMUM, GENES_THERMAL_WIDTH, GENES_DIGESTION, GENES_BRIGHTNESS, GENES_CHOOSINESS, GENES_HUNGER, GENES_AUTOTOMY_BITE, GENES_AUTOTOMY_THREAT, GENES_AUTOTOMY_AMOUNT, GENES_AUTOTOMY_WHICH } from "./EcologyGenes";
+import { geneAverage, convertOldGenes, GENE_LAYOUT_VERSION, setTrait, gaussian, thermalWidthToGene, preyTargetScore, GENES_PREDATOR, GENES_THERMAL_OPTIMUM, GENES_THERMAL_WIDTH, GENES_DIGESTION, GENES_BRIGHTNESS, GENES_CHOOSINESS, GENES_HUNGER, GENES_AUTOTOMY_BITE, GENES_AUTOTOMY_THREAT, GENES_AUTOTOMY_AMOUNT, GENES_AUTOTOMY_WHICH, GENES_PERSISTENCE, GENES_INVESTMENT, GENES_SIZE_PICKINESS } from "./EcologyGenes";
 import { environment, FLAT_ENVIRONMENT, INITIAL_SOIL_NUTRIENT_PER_CELL, NUTRIENT_CYCLE_ENABLED, PLANT_TYPE_WARM, PLANT_TYPE_COLD, SEASONAL_PLANT_GROWTH_ENABLED, SEASONAL_PLANT_GROWTH_AMPLITUDE } from "./Environment";
 import { petriSettings, petriStartZone } from "./Petri";
 import { IGNORE_FOOD_EFFICIENCY, preyVisibility, TWO_PLANT_TYPES } from "./Ecology";
-import { DIET_SWITCH_RATE, CLASSIC_NUM_SWIMBOTS, CLASSIC_NUM_FOODBITS, GARDEN_RADIUS, ENVIRONMENT_PLANT_SPREAD_RATE, ENVIRONMENT_SEEDS_PER_PERIOD, LOCAL_ENVIRONMENT_PLANT_GROWTH, PLANT_CELL_CAPACITY, PLANT_PARENT_SEED_FRACTION, PLANT_SEED_MIN_DISTANCE, PLANT_SEED_MAX_DISTANCE } from "./Parameters";
+import { PLANT_STAGES_ENABLED, PLANT_ROT_AGE, DIET_SWITCH_RATE, CLASSIC_NUM_SWIMBOTS, CLASSIC_NUM_FOODBITS, GARDEN_RADIUS, ENVIRONMENT_PLANT_SPREAD_RATE, ENVIRONMENT_SEEDS_PER_PERIOD, LOCAL_ENVIRONMENT_PLANT_GROWTH, PLANT_CELL_CAPACITY, PLANT_PARENT_SEED_FRACTION, PLANT_SEED_MIN_DISTANCE, PLANT_SEED_MAX_DISTANCE } from "./Parameters";
 
 import { BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_PREY } from "./Brain";
 import { Camera } from "./Camera";
@@ -998,6 +998,11 @@ if ( mode === SimulationStartMode.SPECIES )
 	    setTrait( genotype, GENES_AUTOTOMY_BITE,   0.3 * gpRandom(),            0 );
 	    setTrait( genotype, GENES_AUTOTOMY_THREAT, 0.3 * gpRandom(),            0 );
 	    setTrait( genotype, GENES_AUTOTOMY_AMOUNT, gpRandom(),                  0 );
+	    // founders differ in how firmly they keep a food target, how much they
+	    // give a child and how much a mate's size counts (selection decides)
+	    setTrait( genotype, GENES_PERSISTENCE,     gpRandom(),                  0 );
+	    setTrait( genotype, GENES_INVESTMENT,      0.3 + 0.4 * gpRandom(),      0 );
+	    setTrait( genotype, GENES_SIZE_PICKINESS,  gpRandom(),                  0 );
 	    setTrait( genotype, GENES_AUTOTOMY_WHICH,  gpRandom(),                  0 );
 
 	    // hunger threshold factor around 1 (gene 1/3), a little different for each founder
@@ -2353,6 +2358,9 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
             if ( live[f] !== 1 ) continue;
 
             let type = foodType[f];
+
+            // PLANT_STAGES_ENABLED: very old plants rot away (their place frees up)
+            if ( PLANT_STAGES_ENABLED && ( type !== 2 ) && ( _clock - born[f] > PLANT_ROT_AGE )) { _foodBits[f].kill(); continue; }
 
                  if ( type === 0 ) { numType0FoodBits ++; }
             else if ( type === 1 ) { numType1FoodBits ++; }

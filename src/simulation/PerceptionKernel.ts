@@ -16,6 +16,8 @@ import { ATTACK_SUCCESS_CHANCE, ENVIRONMENT_ATTACK_SUCCESS_CHANCE, PREDATOR_LEVE
 import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
 import { ATTRACTION_SIMILAR_COLOR, STARVING, SWIMBOT_MOUTH_LENGTH, SWIMBOT_VIEW_RADIUS } from "./SwimbotTypes";
 import { FOOD_BIT_GRAB_RADIUS } from "./FoodBit";
+import { FOOD_TARGET_PERSISTENCE_ENABLED, FOOD_SWITCH_RATIO_MIN, FOOD_KEEP_RADIUS_SCALE, SIZE_ASSORTATIVE_MATING_ENABLED } from "./Parameters";
+import { MIND_STRIDE, M_FOOD, M_PERSIST, M_MATURE_AGE, M_SIZE_PICKY, M_MAX_ENERGY } from "./MindLayout";
 import { preyTargetScore } from "./EcologyGenes";
 import {
     BACKGROUND_SIZE, B_VEL_X, B_VEL_Y, BOT_STRIDE, MAX_SEEN, PARAM_ENV_ACTIVE, PARAM_ENV_FIELDS, PARAM_FOOD_TYPES, PARAM_OBSTACLE_X1, PARAM_OBSTACLE_X2,
@@ -289,7 +291,7 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
 
         if ( type === 2 && foodAlive[f] === 1 && PREDATOR_TARGET_SELECTION_ENABLED )
         {
-            const room = Math.max( 0, SWIMBOT_MAX_ENERGY - st.energy[s] );
+            const room = Math.max( 0, st.mind[ s * MIND_STRIDE + M_MAX_ENERGY ] - st.energy[s] );
             const reward = Math.min( room, st.foodEnergy[f] ) / SWIMBOT_MAX_ENERGY;
             const distanceCost = Math.sqrt( viewDistanceSquared ) / Math.max( 1, viewRadius );
             const chaseCost = Math.min( 1, Math.sqrt( viewDistanceSquared ) / swimSpeed / Math.max( 1, PREY_SCAN_COOLDOWN ));
@@ -329,6 +331,28 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
             }
         }
     }
+    //------------------------------------------------------------------
+    // keep the plant I am already after, unless another one is clearly
+    // nearer (how clearly: the gene "persistence"); otherwise the target
+    // jumped every look and most chases were never finished
+    //------------------------------------------------------------------
+    if ( FOOD_TARGET_PERSISTENCE_ENABLED && !iAmPredator )
+    {
+        const current = st.mind[ s * MIND_STRIDE + M_FOOD ];
+        if (( current >= 0 ) && ( current !== chosenFood ) && ( foodAlive[ current ] === 1 ) && ( foodType[ current ] !== 2 ))
+        {
+            const cx = myMouthX - foodX[ current ], cy = myMouthY - foodY[ current ];
+            const currentSquared = cx * cx + cy * cy;
+            if ( currentSquared < FOOD_KEEP_RADIUS_SCALE * FOOD_KEEP_RADIUS_SCALE * viewRadiusSquared )   // (a plant once chosen is kept a little beyond sight)
+            {
+                let newSquared = Infinity;
+                if ( chosenFood >= 0 ) { const nx = myMouthX - foodX[ chosenFood ], ny = myMouthY - foodY[ chosenFood ]; newSquared = nx * nx + ny * ny; }
+                const ratio = 1 - ( 1 - FOOD_SWITCH_RATIO_MIN ) * st.mind[ s * MIND_STRIDE + M_PERSIST ];
+                if ( newSquared >= ratio * ratio * currentSquared ) { chosenFood = current; }
+            }
+        }
+    }
+
     st.seenFood[s] = chosenFood;
     st.targetBaitPresent[s] = baitFound ? 1 : 0;
     st.targetBaitDistance[s] = baitDistance;
@@ -459,11 +483,18 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
             const rDiff = Math.abs( r[o] - r[s] );
             const gDiff = Math.abs( g[o] - g[s] );
             const bDiff = Math.abs( b[o] - b[s] );
-            const attractiveness = ONE - ( ( rDiff + gDiff + bDiff ) * ONE_THIRD );
+            let attractiveness = ONE - ( ( rDiff + gDiff + bDiff ) * ONE_THIRD );
+            if ( SIZE_ASSORTATIVE_MATING_ENABLED )
+            {
+                // how much a similar size counts: my own gene
+                const w = st.mind[ s * MIND_STRIDE + M_SIZE_PICKY ];
+                const sizeSimilarity = ONE - Math.min( ONE, Math.abs( Math.log( Math.max( 1, st.mass[o] ) / Math.max( 1, st.mass[s] ))) / 1.5 );
+                attractiveness = ( ONE - w ) * attractiveness + w * sizeSimilarity;
+            }
 
             if (( attractiveness > highest )
             &&  ( attractiveness > 0 )
-            &&  ( st.age[o] > YOUNG_AGE_DURATION )
+            &&  ( st.age[o] > st.mind[ o * MIND_STRIDE + M_MATURE_AGE ] )
             &&  ( st.energy[o] > STARVING )
             &&  (( predator[o] > PREDATOR_LEVEL_THRESHOLD ) === iAmPredator )     // predators mate with predators only
             &&  accepts( st, o, s, environmentOn ))
