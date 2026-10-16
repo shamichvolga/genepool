@@ -269,3 +269,37 @@ export function Vector2D()
 
 
 
+
+
+//------------------------------------------------------------------------------
+// A vector whose x and y live in a number array (the shared state of the
+// threads, see SharedState.ts) at [ offset ] and [ offset + 1 ]. It has all the
+// methods of Vector2D. rebind() moves it to another array without making a
+// new object (others may keep a reference to it).
+//------------------------------------------------------------------------------
+export function SharedVector2D( array: Float64Array, offset: number )
+{
+    this.array  = array;
+    this.offset = offset;
+}
+
+SharedVector2D.prototype = Object.create( Vector2D.prototype );
+SharedVector2D.prototype.constructor = SharedVector2D;
+
+Object.defineProperty( SharedVector2D.prototype, "x", {
+    get: function() { return this.array[ this.offset ]; },
+    set: function( v ) { this.array[ this.offset ] = v; },
+});
+Object.defineProperty( SharedVector2D.prototype, "y", {
+    get: function() { return this.array[ this.offset + 1 ]; },
+    set: function( v ) { this.array[ this.offset + 1 ] = v; },
+});
+
+SharedVector2D.prototype.rebind = function( array: Float64Array, offset: number )
+{
+    const x = this.x, y = this.y;
+    this.array  = array;
+    this.offset = offset;
+    this.x = x;
+    this.y = y;
+}

@@ -32,7 +32,7 @@ import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
 import { SwimbotRenderer } from "./SwimbotRenderer";
 import { ATTRACTION_BIG, ATTRACTION_CLOSEST, ATTRACTION_COLORFUL, ATTRACTION_CROOKED, ATTRACTION_HYPER, ATTRACTION_LONG, ATTRACTION_NO_COLOR, ATTRACTION_RANDOM, ATTRACTION_SHORT, ATTRACTION_SIMILAR_COLOR, ATTRACTION_SIMILAR_HYPER, ATTRACTION_SIMILAR_LENGTH, ATTRACTION_SIMILAR_SIZE, ATTRACTION_SIMILAR_STRAIGHT, ATTRACTION_SMALL, ATTRACTION_STILL, ATTRACTION_STRAIGHT, CONTINUAL_ENERGY_DRAIN, ENERGY_EFFICIENCY_MEASUREMENT_PERIOD, ENERGY_USED_UP_SWIMMING, GENITAL_INDEX, MAX_PARTS, MOUTH_INDEX, NULL_PART, Phenotype, ROOT_PART, STARVING, STARVING_TIMER_DELTA, SWIMBOT_GENITAL_LENGTH, SWIMBOT_MOUTH_LENGTH, SWIMBOT_VIEW_RADIUS, TIMER_DELTA_INCREASE_RATE, WALL_BOUNCE } from "./SwimbotTypes";
 import { Color, assert } from "./Utility";
-import { Vector2D } from "./Vector2D";
+import { SharedVector2D, Vector2D } from "./Vector2D";
 
 
 export function Swimbot()
@@ -64,24 +64,33 @@ var    flopperYV = 0;
     const OUTLINE_COLOR     = "rgba( 0, 0, 0, 0.4 )";
     */
 
+	//-----------------------------------------------------------------------
+	// the numbers used every step (position, speed, angle, energy, age,
+	// goal...) live in one row of the shared state (SharedState.bots), so the
+	// threads read and write them directly - no copying back and forth.
+	// Until the swimbot gets its slot they live in a private row.
+	//-----------------------------------------------------------------------
+	let _B = new Float64Array( SS.BOT_STRIDE );
+	let _b = 0;
+	_B[ SS.B_EFFORT ] = 1;
+
 	//-----------------------------------------
 	// variables
 	//-----------------------------------------
 	let _genotype		    = new Genotype();
 	let _phenotype		    = new Phenotype();
 	let _brain  		    = new Brain();
-	let _position 		    = new Vector2D();
-	let _velocity 		    = new Vector2D();
+	const _position = new SharedVector2D( _B, SS.B_POS_X );
+	const _velocity = new SharedVector2D( _B, SS.B_VEL_X );
 	let _acceleration       = new Vector2D();
 	let _heading		    = new Vector2D();
-	let _directionToGoal    = new Vector2D();
-	let _focusDirection	    = new Vector2D();
-	let _centerOfMass	    = new Vector2D();
+	const _directionToGoal = new SharedVector2D( _B, SS.B_GOAL_X );
+	const _focusDirection = new SharedVector2D( _B, SS.B_FOCUS_X );
+	const _centerOfMass = new SharedVector2D( _B, SS.B_COM_X );
 	let _vectorUtility      = new Vector2D();
 	let _chosenFoodBit      = new FoodBit();
 	let _swimbotRenderer  	= new SwimbotRenderer();
 	let _chosenMate         = null; // must start as null!
-	let _age 	  		    = 0;
 	let _numOffspring       = 0;
 	let _numFoodBitsEaten   = 0;
 	//let _maximumLifeSpan    = 0;
@@ -92,21 +101,12 @@ var    flopperYV = 0;
 	let _alive 	  		    = false;
 	let _tryingToMate       = false;
 	let _tryingToEat        = false;
-	let _growthScale        = ZERO;
 	let _torque             = ZERO;
-	let _angle			    = ZERO;
-	let _spin			    = ZERO;
-	let _energy			    = ZERO;
-	let _timer              = ZERO;
-	let _timerDelta         = ZERO;
 	let _colorUtility       = new Color();
 	let _previousFocusDirection = new Vector2D(); // scratch, reused every update
-	let _energyEfficiency   = ZERO;
-	let _selectRadius       = ZERO;
 	let _species            = NULL_INDEX;
 
-	let _lastPositionForEfficiencyMeasurement = new Vector2D();
-    let _lastEnergyForEfficiencyMeasurement = ZERO;
+	const _lastPositionForEfficiencyMeasurement = new SharedVector2D( _B, SS.B_LAST_X );
 	let _readyforSensoryInputToBrain = false;
 
 	//-----------------------------------------
@@ -156,7 +156,6 @@ var    flopperYV = 0;
 	const _nnHidden         = new Float64Array( NUM_HIDDEN  );
 	const _nnNewHidden      = new Float64Array( NUM_HIDDEN  );
 	const _nnOutputs        = new Float64Array( NUM_OUTPUTS );
-	let _effort             = ONE;    // how hard I swim (stroke speed)
 	let _climateWeight      = ZERO;   // how strongly I follow the better temperature
 	let _socialWeight       = ZERO;   // + towards the others, - away from them
 	let _climateDirX        = ZERO;
@@ -211,8 +210,8 @@ var    flopperYV = 0;
 	let _pParent     = new Int32Array  ( MAX_PARTS );
 	let _unitAxisX   = new Float64Array( MAX_PARTS );   // scratch for getCurrentBodyStraightness
 	let _unitAxisY   = new Float64Array( MAX_PARTS );
-	let _mouthPosition   = new Vector2D();               // kept up to date from _pd
-	let _genitalPosition = new Vector2D();
+	const _mouthPosition = new SharedVector2D( _B, SS.B_MOUTH_X );               // kept up to date from _pd
+	const _genitalPosition = new SharedVector2D( _B, SS.B_GENITAL_X );
 	let _huntCooldown       = 0;     // steps until the predator can bite again
 
 
@@ -237,6 +236,20 @@ this.setParent = function( parent )
 	    const st = SS.sharedState();
 	    _shared = st;
 	    _slot   = slot;
+
+	    // the hot numbers move into the slot's row (keeping their values)
+	    const row = slot * SS.BOT_STRIDE;
+	    st.bots.set( _B.subarray( _b, _b + SS.BOT_STRIDE ), row );
+	    _B = st.bots;
+	    _b = row;
+	    _position.rebind( _B, _b + SS.B_POS_X );
+	    _velocity.rebind( _B, _b + SS.B_VEL_X );
+	    _directionToGoal.rebind( _B, _b + SS.B_GOAL_X );
+	    _focusDirection.rebind( _B, _b + SS.B_FOCUS_X );
+	    _centerOfMass.rebind( _B, _b + SS.B_COM_X );
+	    _mouthPosition.rebind( _B, _b + SS.B_MOUTH_X );
+	    _genitalPosition.rebind( _B, _b + SS.B_GENITAL_X );
+	    _lastPositionForEfficiencyMeasurement.rebind( _B, _b + SS.B_LAST_X );
 	    const from = slot * MAX_PARTS, to = from + MAX_PARTS;
 	    _pd         = st.parts        .subarray( slot * SS.PART_STRIDE, ( slot + 1 ) * SS.PART_STRIDE );
 	    _pLength    = st.partLength   .subarray( from, to );
@@ -261,7 +274,7 @@ this.setParent = function( parent )
 	this.autotomize = function( selfFeeding = false )
 	{
 	    if ( _partsLost || !environment.active ) return null;
-	    if ( selfFeeding && ( !SELF_CANNIBALISM_ENABLED || ( _energy >= SWIMBOT_MAX_ENERGY ))) return null;
+	    if ( selfFeeding && ( !SELF_CANNIBALISM_ENABLED || ( _B[ _b + SS.B_ENERGY ] >= SWIMBOT_MAX_ENERGY ))) return null;
 	    const n = _phenotype.numParts;
 	    if ( n <= 4 ) return null;
 	    this.syncPartObjects();
@@ -305,7 +318,7 @@ this.setParent = function( parent )
 	    for ( const p of drop ) { droppedMass += parts[p].mass; x += parts[p].midPosition.x * parts[p].mass; y += parts[p].midPosition.y * parts[p].mass; }
 	    if ( droppedMass <= ZERO ) return null;
 	    x /= droppedMass; y /= droppedMass;
-	    const lost = _energy * ( droppedMass / _phenotype.mass );
+	    const lost = _B[ _b + SS.B_ENERGY ] * ( droppedMass / _phenotype.mass );
 
 	    // the body without them: keep the order, renumber parents and children
 	    const isDropped = new Array( n ).fill( false );
@@ -330,8 +343,8 @@ this.setParent = function( parent )
 	    {
 	        // The organism retains its existing reserve and digests part of the
 	        // removed tissue. The branch is permanently gone: no free regrowth.
-	        const gained = Math.min( SWIMBOT_MAX_ENERGY - _energy, tissueEnergy );
-	        _energy += gained;
+	        const gained = Math.min( SWIMBOT_MAX_ENERGY - _B[ _b + SS.B_ENERGY ], tissueEnergy );
+	        _B[ _b + SS.B_ENERGY ] += gained;
 	        _partsLost = false;
 	        _autotomyLoss = ZERO;
 	        _regrowTimer = 0;
@@ -341,7 +354,7 @@ this.setParent = function( parent )
 	    }
 	    else
 	    {
-	        _energy      -= lost;
+	        _B[ _b + SS.B_ENERGY ]      -= lost;
 	        _autotomyLoss = lost;
 	        _partsLost    = true;
 	        _regrowTimer  = AUTOTOMY_REGROW_DELAY;
@@ -367,7 +380,7 @@ this.setParent = function( parent )
 	this.canSelfFeed = function()
 	{
 	    return SELF_CANNIBALISM_ENABLED && environment.active && !_partsLost
-	        && ( _phenotype.numParts > 4 ) && ( _energy < SWIMBOT_MAX_ENERGY );
+	        && ( _phenotype.numParts > 4 ) && ( _B[ _b + SS.B_ENERGY ] < SWIMBOT_MAX_ENERGY );
 	};
 	this.getNumPartsEaten = function() { return _numPartsEaten; }
 
@@ -442,61 +455,19 @@ this.setParent = function( parent )
 	// copy the numbers the physics needs into the shared state
 	this.writePhysicsState = function()
 	{
-	    const B = _shared.bots, b = _slot * SS.BOT_STRIDE;
-	    B[ b + SS.B_POS_X         ] = _position.x;
-	    B[ b + SS.B_POS_Y         ] = _position.y;
-	    B[ b + SS.B_VEL_X         ] = _velocity.x;
-	    B[ b + SS.B_VEL_Y         ] = _velocity.y;
-	    B[ b + SS.B_ANGLE         ] = _angle;
-	    B[ b + SS.B_SPIN          ] = _spin;
-	    B[ b + SS.B_TIMER         ] = _timer;
-	    B[ b + SS.B_TIMER_DELTA   ] = _timerDelta;
-	    B[ b + SS.B_EFFORT        ] = _effort;
-	    B[ b + SS.B_FOCUS_X       ] = _focusDirection.x;
-	    B[ b + SS.B_FOCUS_Y       ] = _focusDirection.y;
-	    B[ b + SS.B_GROWTH        ] = _growthScale;
-	    B[ b + SS.B_ENERGY        ] = _energy;
-	    B[ b + SS.B_AGE           ] = _age;
+	    // (position, speed, energy... are already there: they live in the row)
+	    const B = _B, b = _b;
 	    B[ b + SS.B_ETERNAL       ] = _eternal ? 1 : 0;
 	    B[ b + SS.B_NUM_PARTS     ] = _numParts;
 	    B[ b + SS.B_FREQUENCY     ] = _frequency;
 	    B[ b + SS.B_SUM_LENGTHS   ] = _sumPartLengths;
 	    B[ b + SS.B_BODY_MASS     ] = _bodyMass;
-	    B[ b + SS.B_GOAL_X        ] = _directionToGoal.x;
-	    B[ b + SS.B_GOAL_Y        ] = _directionToGoal.y;
-	    B[ b + SS.B_SELECT_RADIUS ] = _selectRadius;
 	    B[ b + SS.B_DEATHS        ] = 0;
 	    B[ b + SS.B_BASAL         ] = _basalMetabolism;
-	    B[ b + SS.B_LAST_X        ] = _lastPositionForEfficiencyMeasurement.x;
-	    B[ b + SS.B_LAST_Y        ] = _lastPositionForEfficiencyMeasurement.y;
-	    B[ b + SS.B_LAST_ENERGY   ] = _lastEnergyForEfficiencyMeasurement;
-	    B[ b + SS.B_EFFICIENCY    ] = _energyEfficiency;
 	}
 
-	// take the results of the physics back
-	this.readPhysicsState = function()
-	{
-	    const B = _shared.bots, b = _slot * SS.BOT_STRIDE;
-	    _position.x         = B[ b + SS.B_POS_X       ];
-	    _position.y         = B[ b + SS.B_POS_Y       ];
-	    _velocity.x         = B[ b + SS.B_VEL_X       ];
-	    _velocity.y         = B[ b + SS.B_VEL_Y       ];
-	    _angle              = B[ b + SS.B_ANGLE       ];
-	    _spin               = B[ b + SS.B_SPIN        ];
-	    _timer              = B[ b + SS.B_TIMER       ];
-	    _timerDelta         = B[ b + SS.B_TIMER_DELTA ];
-	    _growthScale        = B[ b + SS.B_GROWTH      ];
-	    _energy             = B[ b + SS.B_ENERGY      ];
-	    _directionToGoal.x  = B[ b + SS.B_GOAL_X      ];
-	    _directionToGoal.y  = B[ b + SS.B_GOAL_Y      ];
-	    _selectRadius       = B[ b + SS.B_SELECT_RADIUS ];
-	    _mouthPosition  .setXY( B[ b + SS.B_MOUTH_X   ], B[ b + SS.B_MOUTH_Y   ] );
-	    _genitalPosition.setXY( B[ b + SS.B_GENITAL_X ], B[ b + SS.B_GENITAL_Y ] );
-	    _centerOfMass   .setXY( B[ b + SS.B_COM_X     ], B[ b + SS.B_COM_Y     ] );
-	    _lastPositionForEfficiencyMeasurement.setXY( B[ b + SS.B_LAST_X ], B[ b + SS.B_LAST_Y ] );
-	    _lastEnergyForEfficiencyMeasurement = B[ b + SS.B_LAST_ENERGY ];
-	    _energyEfficiency   = B[ b + SS.B_EFFICIENCY  ];
-	}
+	// the results of the physics: already in the row (nothing to copy)
+	this.readPhysicsState = function() {}
 
 	// the physics decided to die (old age / starvation): do it here
 	this.applyPhysicsDeaths = function()
@@ -505,7 +476,7 @@ this.setParent = function( parent )
 	    const deaths = B[ b + SS.B_DEATHS ];
 	    B[ b + SS.B_DEATHS ] = 0;
 	    for (let d = 0; d < deaths; d++)
-	        this.die( _age > globalTweakers.maximumLifeSpan ? "old_age" : "starvation" );
+	        this.die( _B[ _b + SS.B_AGE ] > globalTweakers.maximumLifeSpan ? "old_age" : "starvation" );
 	}
 
 	// the climate drain (between physics parts A and B)
@@ -514,8 +485,8 @@ this.setParent = function( parent )
 	    if ( environment.active )
 	    {
 	        this.updateBodyTemperature();
-	        if ( ( _age + _index ) % THERMAL_FIT_UPDATE_PERIOD === 0 ) { this.updateThermalFit(); }
-	        _energy -= THERMAL_MISMATCH_DRAIN * ( ONE - _thermalFit );
+	        if ( ( _B[ _b + SS.B_AGE ] + _index ) % THERMAL_FIT_UPDATE_PERIOD === 0 ) { this.updateThermalFit(); }
+	        _B[ _b + SS.B_ENERGY ] -= THERMAL_MISMATCH_DRAIN * ( ONE - _thermalFit );
 	    }
 	}
 
@@ -533,9 +504,9 @@ this.setParent = function( parent )
 	    // the climate drain needs the new position
 	    _position.x = B[ b + SS.B_POS_X ];
 	    _position.y = B[ b + SS.B_POS_Y ];
-	    _energy     = B[ b + SS.B_ENERGY ];
+	    _B[ _b + SS.B_ENERGY ]     = B[ b + SS.B_ENERGY ];
 	    this.applyClimateDrain();
-	    B[ b + SS.B_ENERGY ] = _energy;
+	    B[ b + SS.B_ENERGY ] = _B[ _b + SS.B_ENERGY ];
 
 	    physicsPartB( _slot, _shared );
 	    this.readPhysicsState();
@@ -574,43 +545,43 @@ this.setParent = function( parent )
         // swimmer is not old yet
         // (eternal swimbots never get old)
         //----------------------------------
-        if (( _age < oldAgeThreshold ) || _eternal )
+        if (( _B[ _b + SS.B_AGE ] < oldAgeThreshold ) || _eternal )
         {
-            if ( _age < YOUNG_AGE_DURATION )
+            if ( _B[ _b + SS.B_AGE ] < YOUNG_AGE_DURATION )
             {
                 //----------------------------------
                 // swimmer is still growing
                 //----------------------------------
-                _growthScale = _age / YOUNG_AGE_DURATION;
+                _B[ _b + SS.B_GROWTH ] = _B[ _b + SS.B_AGE ] / YOUNG_AGE_DURATION;
             }
             else
             {
-                _growthScale = ONE;
+                _B[ _b + SS.B_GROWTH ] = ONE;
             }
 
-            assert( _growthScale >= 0.0, "assert swimbot.js:updateBodyParts: _growthScale >= 0.0" )
-            assert( _growthScale <= 1.0, "assert swimbot.js:updateBodyParts: _growthScale <= 1.0" )
+            assert( _B[ _b + SS.B_GROWTH ] >= 0.0, "assert swimbot.js:updateBodyParts: _B[ _b + SS.B_GROWTH ] >= 0.0" )
+            assert( _B[ _b + SS.B_GROWTH ] <= 1.0, "assert swimbot.js:updateBodyParts: _B[ _b + SS.B_GROWTH ] <= 1.0" )
 
             //---------------------------------------
             // slowing down because starving,
             // but not slowing down to a full stop.
             //---------------------------------------
-            if  ( _energy < STARVING )
+            if  ( _B[ _b + SS.B_ENERGY ] < STARVING )
             {
-                _timerDelta = _energy / STARVING;
+                _B[ _b + SS.B_TIMER_DELTA ] = _B[ _b + SS.B_ENERGY ] / STARVING;
 
-                if ( _timerDelta < STARVING_TIMER_DELTA )
+                if ( _B[ _b + SS.B_TIMER_DELTA ] < STARVING_TIMER_DELTA )
                 {
-                    _timerDelta = STARVING_TIMER_DELTA;
+                    _B[ _b + SS.B_TIMER_DELTA ] = STARVING_TIMER_DELTA;
                 }
             }
             else
             {
-                _timerDelta += TIMER_DELTA_INCREASE_RATE;
+                _B[ _b + SS.B_TIMER_DELTA ] += TIMER_DELTA_INCREASE_RATE;
 
-                if ( _timerDelta > ONE )
+                if ( _B[ _b + SS.B_TIMER_DELTA ] > ONE )
                 {
-                    _timerDelta = ONE;
+                    _B[ _b + SS.B_TIMER_DELTA ] = ONE;
                 }
             }
         }
@@ -622,7 +593,7 @@ this.setParent = function( parent )
             //----------------------------------
             // dying of old age
             //----------------------------------
-            if ( _age > globalTweakers.maximumLifeSpan )
+            if ( _B[ _b + SS.B_AGE ] > globalTweakers.maximumLifeSpan )
             {
                 this.die( "old_age" );
             }
@@ -633,9 +604,9 @@ this.setParent = function( parent )
                 //----------------------------------
                 //let earlyDeath = 200;
                 //earlyDeath = 0;
-                //let inc = ( _age - OLD_AGE ) / ( oldAgeDuration - earlyDeath );
+                //let inc = ( _B[ _b + SS.B_AGE ] - OLD_AGE ) / ( oldAgeDuration - earlyDeath );
 
-                //let inc = ( _age - OLD_AGE ) / oldAgeDuration;
+                //let inc = ( _B[ _b + SS.B_AGE ] - OLD_AGE ) / oldAgeDuration;
 
                 /*
                 if ( inc > ONE )
@@ -644,20 +615,20 @@ this.setParent = function( parent )
                 }
                 */
 
-                _timerDelta = ONE - ( _age - oldAgeThreshold ) / OLD_AGE_DURATION;
+                _B[ _b + SS.B_TIMER_DELTA ] = ONE - ( _B[ _b + SS.B_AGE ] - oldAgeThreshold ) / OLD_AGE_DURATION;
 
-                assert( _timerDelta >= 0.0, "assert swimbot.js:updateBodyParts: _timerDelta >= 0.0" )
-                assert( _timerDelta <= 1.0, "assert swimbot.js:updateBodyParts: _timerDelta <= 1.0" )
+                assert( _B[ _b + SS.B_TIMER_DELTA ] >= 0.0, "assert swimbot.js:updateBodyParts: _B[ _b + SS.B_TIMER_DELTA ] >= 0.0" )
+                assert( _B[ _b + SS.B_TIMER_DELTA ] <= 1.0, "assert swimbot.js:updateBodyParts: _B[ _b + SS.B_TIMER_DELTA ] <= 1.0" )
             }
         }
 
-        _timer += _timerDelta * _effort;
+        _B[ _b + SS.B_TIMER ] += _B[ _b + SS.B_TIMER_DELTA ] * _B[ _b + SS.B_EFFORT ];
 
 		//---------------------------------------------------------------
 		// calculate the modulators as a function of the dot between the
 		// heading and the perpendicular of the direction to the goal
 		//---------------------------------------------------------------
-		let radian = _angle * PI_OVER_180;
+		let radian = _B[ _b + SS.B_ANGLE ] * PI_OVER_180;
 
 		_heading.x = Math.sin( radian );
 		_heading.y = Math.cos( radian );
@@ -679,7 +650,7 @@ this.setParent = function( parent )
 		const pd = _pd;
 		pd[ ROOT_PART * PS + P_X ] = _position.x;
 		pd[ ROOT_PART * PS + P_Y ] = _position.y;
-		pd[ ROOT_PART * PS + C_A ] = _angle - this.getMomentAdjustment();
+		pd[ ROOT_PART * PS + C_A ] = _B[ _b + SS.B_ANGLE ] - this.getMomentAdjustment();
 
 		//-----------------------------------------------------------------
 		// loop through parts to determine angle and position
@@ -715,7 +686,7 @@ this.setParent = function( parent )
 				let ampModulator   = _pTurnAmp  [p] * directionDot;
 				let phaseModulator = _pTurnPhase[p] * directionDot;
 
-				let radian = _timer * _frequency + ( _pPhase[p] + phaseModulator );
+				let radian = _B[ _b + SS.B_TIMER ] * _frequency + ( _pPhase[p] + phaseModulator );
 				pd[ i + B_A ] = ( _pAmp[p] + ampModulator ) * Math.sin( radian );
 
 				pd[ i + C_A ] += pd[ i + B_A ];
@@ -727,9 +698,9 @@ this.setParent = function( parent )
 			let radian = pd[ i + C_A ] * PI_OVER_180;
 			let length = _pLength[p];
 
-			if ( _age < YOUNG_AGE_DURATION )
+			if ( _B[ _b + SS.B_AGE ] < YOUNG_AGE_DURATION )
 			{
-                length *= _growthScale;
+                length *= _B[ _b + SS.B_GROWTH ];
 			}
 
 			let x = length * Math.sin( radian );
@@ -780,7 +751,7 @@ this.setParent = function( parent )
 		//
 		// (this is a weird hacky solution)
 		//----------------------------------------
-		if ( _age % 20 === 0 )
+		if ( _B[ _b + SS.B_AGE ] % 20 === 0 )
 		{
             for (let p=1; p<_numParts; p++)
             {
@@ -794,9 +765,9 @@ this.setParent = function( parent )
 
                         distance = SWIMBOT_SELECT_RADIUS_SCALAR * Math.sqrt( distance );
 
-                        if ( distance > _selectRadius )
+                        if ( distance > _B[ _b + SS.B_SELECT_RADIUS ] )
                         {
-                            _selectRadius = distance;
+                            _B[ _b + SS.B_SELECT_RADIUS ] = distance;
                         }
                     }
                 }
@@ -1002,7 +973,7 @@ this.setParent = function( parent )
 
         _chosenFoodBit      = null;
         _chosenMate         = null;
-        _age 	  		    = 0;
+        _B[ _b + SS.B_AGE ] 	  		    = 0;
         _numOffspring       = 0;
         _numFoodBitsEaten   = 0;
         _index              = NULL_INDEX;
@@ -1012,16 +983,16 @@ this.setParent = function( parent )
         _alive 	  		    = false;
         _tryingToMate       = false;
         _tryingToEat        = false;
-        _growthScale        = ZERO;
+        _B[ _b + SS.B_GROWTH ]        = ZERO;
         _torque             = ZERO;
-        _angle			    = ZERO;
-        _spin			    = ZERO;
-        _energy			    = ZERO;
-        _timer              = ZERO;
-        _timerDelta         = ZERO;
-        _energyEfficiency   = ZERO;
-        _selectRadius       = ZERO;
-        _lastEnergyForEfficiencyMeasurement = ZERO;
+        _B[ _b + SS.B_ANGLE ]			    = ZERO;
+        _B[ _b + SS.B_SPIN ]			    = ZERO;
+        _B[ _b + SS.B_ENERGY ]			    = ZERO;
+        _B[ _b + SS.B_TIMER ]              = ZERO;
+        _B[ _b + SS.B_TIMER_DELTA ]         = ZERO;
+        _B[ _b + SS.B_EFFICIENCY ]   = ZERO;
+        _B[ _b + SS.B_SELECT_RADIUS ]       = ZERO;
+        _B[ _b + SS.B_LAST_ENERGY ] = ZERO;
         _readyforSensoryInputToBrain = false;
         */
 
@@ -1035,11 +1006,11 @@ _position.copyFrom( position );
 
 		//_velocity.clear();
 		_index              = index;
-		_angle 		        = angle;
-		_age		        = age;
-		_energy             = energy;
+		_B[ _b + SS.B_ANGLE ] 		        = angle;
+		_B[ _b + SS.B_AGE ]		        = age;
+		_B[ _b + SS.B_ENERGY ]             = energy;
 		_alive		        = true;
-		_growthScale        = ONE;
+		_B[ _b + SS.B_GROWTH ]        = ONE;
 
 		// whole body
 		_partsLost = false; _autotomyLoss = ZERO; _regrowTimer = 0; _partsDropped = 0; _selfFeedCooldown = 0;
@@ -1053,7 +1024,7 @@ _position.copyFrom( position );
 		_nnHidden.fill( ZERO );
 		_nnNewHidden.fill( ZERO );
 		_nnOutputs.fill( ZERO );
-		_effort         = ONE;
+		_B[ _b + SS.B_EFFORT ]         = ONE;
 		_climateWeight  = ZERO;
 		_socialWeight   = ZERO;
 		_comfortTrend   = ZERO;
@@ -1064,11 +1035,11 @@ _position.copyFrom( position );
 		_brain.setGoal( -1 );
 		//_maximumLifeSpan    = DEFAULT_MAXIMUM_LIFESPAN;
 
-		//_spin		        = ZERO;
+		//_B[ _b + SS.B_SPIN ]		        = ZERO;
         //_numOffspring       = 0;
 		//_numFoodBitsEaten   = 0;
 		//_torque             = ZERO;
-        //_selectRadius       = ZERO;
+        //_B[ _b + SS.B_SELECT_RADIUS ]       = ZERO;
 		//_acceleration.clear();
 
 
@@ -1077,9 +1048,9 @@ _position.copyFrom( position );
 
 	/*
 	let _heading		    = new Vector2D();
-	let _directionToGoal    = new Vector2D();
-	let _focusDirection	    = new Vector2D();
-	let _centerOfMass	    = new Vector2D();
+	const _directionToGoal = new SharedVector2D( _B, SS.B_GOAL_X );
+	const _focusDirection = new SharedVector2D( _B, SS.B_FOCUS_X );
+	const _centerOfMass = new SharedVector2D( _B, SS.B_COM_X );
 	let _vectorUtility      = new Vector2D();
 	let _chosenFoodBit      = new FoodBit();
 	let _chosenMate         = null; // must start as null!
@@ -1087,9 +1058,6 @@ _position.copyFrom( position );
 	let _chosenFoodBitIndex = NULL_INDEX;
 	let _tryingToMate       = false;
 	let _tryingToEat        = false;
-	let _growthScale        = ZERO;
-	let _timer              = ZERO;
-	let _timerDelta         = ZERO;
 	let _readyforSensoryInputToBrain = false;
 	*/
 
@@ -1118,11 +1086,11 @@ _position.copyFrom( position );
 		// initialize energy efficiency-related stuff
 		//------------------------------------------------
 	    _lastPositionForEfficiencyMeasurement.set( _position );
-	    _lastEnergyForEfficiencyMeasurement = _energy;
+	    _B[ _b + SS.B_LAST_ENERGY ] = _B[ _b + SS.B_ENERGY ];
 
 	    //console.log( "_lastPositionForEfficiencyMeasurement = " + _lastPositionForEfficiencyMeasurement );
-	    //console.log( "_lastEnergyForEfficiencyMeasurement = " + _lastEnergyForEfficiencyMeasurement );
-	    //console.log( "_energyEfficiency = " + _energyEfficiency );
+	    //console.log( "_B[ _b + SS.B_LAST_ENERGY ] = " + _B[ _b + SS.B_LAST_ENERGY ] );
+	    //console.log( "_B[ _b + SS.B_EFFICIENCY ] = " + _B[ _b + SS.B_EFFICIENCY ] );
 
     	//--------------------------------
 	    // initialize brain
@@ -1135,7 +1103,7 @@ _position.copyFrom( position );
         _baseHungerThreshold = globalTweakers.hungerThreshold;
         _brain.setHungerThreshold( _baseHungerThreshold * this.getHungerFactor() );
         _brain.setPredatorLevel( this.getPredatorLevel() );
-        _brain.setEnergyLevel( _energy );
+        _brain.setEnergyLevel( _B[ _b + SS.B_ENERGY ] );
         _brain.update();
 	}
 
@@ -1201,7 +1169,7 @@ _position.copyFrom( position );
 
 //fix!  doesn't work on infants!
 
-		_selectRadius = ZERO;
+		_B[ _b + SS.B_SELECT_RADIUS ] = ZERO;
 
 		for (let p=1; p<_phenotype.numParts; p++)
 		{
@@ -1210,9 +1178,9 @@ _position.copyFrom( position );
 	    	    if ( o != p )
 	    	    {
 	    	        let distance = _phenotype.parts[p].position.getDistanceTo( _phenotype.parts[o].position );
-	    	        if ( distance > _selectRadius )
+	    	        if ( distance > _B[ _b + SS.B_SELECT_RADIUS ] )
 	    	        {
-	    	            _selectRadius = distance;
+	    	            _B[ _b + SS.B_SELECT_RADIUS ] = distance;
 	    	        }
 	    	    }
     		}
@@ -1222,17 +1190,17 @@ _position.copyFrom( position );
 		// HACK...
 		// I don't know why - but this makes is come out basically okay...
 		//-------------------------------------------------------------------------
-		//_selectRadius = SWIMBOT_SELECT_RADIUS_SCALAR * Math.sqrt( _selectRadius );
+		//_B[ _b + SS.B_SELECT_RADIUS ] = SWIMBOT_SELECT_RADIUS_SCALAR * Math.sqrt( _B[ _b + SS.B_SELECT_RADIUS ] );
 
-		if ( _selectRadius < MIN_SELECT_RADIUS )
+		if ( _B[ _b + SS.B_SELECT_RADIUS ] < MIN_SELECT_RADIUS )
 		{
-		    _selectRadius = MIN_SELECT_RADIUS;
+		    _B[ _b + SS.B_SELECT_RADIUS ] = MIN_SELECT_RADIUS;
 		}
 */
 		//--------------------------------
 		// do this
 		//--------------------------------
-        _timerDelta = ZERO;
+        _B[ _b + SS.B_TIMER_DELTA ] = ZERO;
 
         //-----------------------------------------------------
         // bigger bodies cost more to keep alive (Kleiber's law)
@@ -1353,18 +1321,18 @@ _position.copyFrom( position );
 		//---------------------------
 		// update age
 		//---------------------------
-		_age ++;
+		_B[ _b + SS.B_AGE ] ++;
 
 		// a dropped part grows back after a while, if I can pay for it
 		if ( _partsLost )
 		{
 		    _regrowTimer --;
-		    if (( _regrowTimer <= 0 ) && ( _energy > _brain.getHungerThreshold() + _autotomyLoss ) && ( _embryology != null ))
+		    if (( _regrowTimer <= 0 ) && ( _B[ _b + SS.B_ENERGY ] > _brain.getHungerThreshold() + _autotomyLoss ) && ( _embryology != null ))
 		    {
 		        this.syncPartObjects();
 		        _phenotype = _embryology.generatePhenotypeFromGenotype( _genotype );
 		        this.processPhenotype();
-		        _energy   -= _autotomyLoss;
+		        _B[ _b + SS.B_ENERGY ]   -= _autotomyLoss;
 		        _partsLost = false;
 		    }
 		}
@@ -1377,7 +1345,7 @@ _position.copyFrom( position );
             _huntCooldown --;
         }
 
-        if ( _age % BRAIN_SENSORY_UPDATE_PERIOD == 0 )
+        if ( _B[ _b + SS.B_AGE ] % BRAIN_SENSORY_UPDATE_PERIOD == 0 )
         {
             _readyforSensoryInputToBrain = true;
         }
@@ -1385,7 +1353,7 @@ _position.copyFrom( position );
         //-----------------------------
         // neural brain: think now and then
         //-----------------------------
-        if ( _neural && (( _age + _index ) % THINK_PERIOD === 0 ))
+        if ( _neural && (( _B[ _b + SS.B_AGE ] + _index ) % THINK_PERIOD === 0 ))
         {
             this.think();
         }
@@ -1393,7 +1361,7 @@ _position.copyFrom( position );
         //-----------------------------
         // update brain
         //-----------------------------
-        _brain.setEnergyLevel( _energy );
+        _brain.setEnergyLevel( _B[ _b + SS.B_ENERGY ] );
         _brain.update();
 
         if ( _selfFeedCooldown > 0 ) _selfFeedCooldown --;
@@ -1657,7 +1625,7 @@ _position.copyFrom( position );
 	//----------------------------------------
 	this.wanderFocus = function()
 	{
-	    if ( environment.active && ( ( _age + _index ) % KINESIS_PERIOD === 0 ))
+	    if ( environment.active && ( ( _B[ _b + SS.B_AGE ] + _index ) % KINESIS_PERIOD === 0 ))
 	    {
 	        this.kinesis();
 	    }
@@ -1695,9 +1663,9 @@ _position.copyFrom( position );
 	    const x         = _nnInputs;
 
 	    x[ IN_BIAS     ] = ONE;
-	    x[ IN_HUNGER   ] = Math.max( -ONE, Math.min( ONE, ( hunger - _energy ) / Math.max( ONE, hunger )));
-	    x[ IN_ENERGY   ] = Math.min( 2, _energy / 100 );
-	    x[ IN_AGE      ] = _age / globalTweakers.maximumLifeSpan;
+	    x[ IN_HUNGER   ] = Math.max( -ONE, Math.min( ONE, ( hunger - _B[ _b + SS.B_ENERGY ] ) / Math.max( ONE, hunger )));
+	    x[ IN_ENERGY   ] = Math.min( 2, _B[ _b + SS.B_ENERGY ] / 100 );
+	    x[ IN_AGE      ] = _B[ _b + SS.B_AGE ] / globalTweakers.maximumLifeSpan;
 	    x[ IN_FIT      ] = _thermalFit;
 	    x[ IN_TREND    ] = _comfortTrend;
 	    x[ IN_FOOD     ] = _seenFood ? ONE : ZERO;
@@ -1709,7 +1677,7 @@ _position.copyFrom( position );
 	    x[ IN_PREDATOR ] = predator ? ONE : ZERO;
 
 	    // directions, as the swimbot sees them (heading as in the physics)
-	    const radian   = _angle * PI_OVER_180;
+	    const radian   = _B[ _b + SS.B_ANGLE ] * PI_OVER_180;
 	    const headingX = Math.sin( radian ), headingY = Math.cos( radian );
 	    const toward = ( tx, ty, sideIndex, aheadIndex ) =>
 	    {
@@ -1760,7 +1728,7 @@ _position.copyFrom( position );
 	    //------------------------------------------------------
 	    // how to move
 	    //------------------------------------------------------
-	    _effort        = EFFORT_MIN + EFFORT_RANGE * sigmoid( _nnOutputs[ OUT_EFFORT ] );
+	    _B[ _b + SS.B_EFFORT ]        = EFFORT_MIN + EFFORT_RANGE * sigmoid( _nnOutputs[ OUT_EFFORT ] );
 	    _steer         = Math.tanh( _nnOutputs[ OUT_STEER ] ) * STEER_MAX_DEGREES * PI_OVER_180;
 	    _socialWeight  = Math.tanh( _nnOutputs[ OUT_SOCIAL ] );
 	    _climateWeight = environment.active ? sigmoid( _nnOutputs[ OUT_CLIMATE ] ) : ZERO;
@@ -1792,7 +1760,7 @@ _position.copyFrom( position );
 	    _socialDirX = ( length > ZERO ) ? sx / length : ZERO;
 	    _socialDirY = ( length > ZERO ) ? sy / length : ZERO;
 	}
-	this.getEffort          = function() { return _effort;        }
+	this.getEffort          = function() { return _B[ _b + SS.B_EFFORT ];        }
 	this.getClimateWeight   = function() { return _climateWeight; }
 	this.getSocialWeight    = function() { return _socialWeight;  }
 	this.getDrives          = function() { return _nnOutputs;     }
@@ -1934,7 +1902,7 @@ _position.copyFrom( position );
         //---------------------------------------------------------------------------
         this.calculateFluidForces();
 
-        if ( _age % ENERGY_EFFICIENCY_MEASUREMENT_PERIOD === 0 )
+        if ( _B[ _b + SS.B_AGE ] % ENERGY_EFFICIENCY_MEASUREMENT_PERIOD === 0 )
         {
             this.calculateEnergyEfficiency();
         }
@@ -1942,7 +1910,7 @@ _position.copyFrom( position );
         //---------------------------------------------
         // energy is always slowly draining
         //---------------------------------------------
-        _energy -= CONTINUAL_ENERGY_DRAIN + _basalMetabolism;
+        _B[ _b + SS.B_ENERGY ] -= CONTINUAL_ENERGY_DRAIN + _basalMetabolism;
 
         //---------------------------------------------
         // living at the wrong temperature costs energy
@@ -1952,9 +1920,9 @@ _position.copyFrom( position );
         //---------------------------------------------
         // when energy hits zero, that means death
         //---------------------------------------------
-        if ( _energy <= ZERO )
+        if ( _B[ _b + SS.B_ENERGY ] <= ZERO )
         {
-            _energy = ZERO;
+            _B[ _b + SS.B_ENERGY ] = ZERO;
 
             // eternal swimbots don't starve to death
             if ( !_eternal )
@@ -2029,13 +1997,13 @@ _position.copyFrom( position );
 		    // it were something like angle bend times mass.
             //--------------------------------------------------
             if ( motion.enabled )
-                _energy -= Math.abs( strokeAmplitude ) * ENERGY_USED_UP_SWIMMING * motion.strokeCost;
+                _B[ _b + SS.B_ENERGY ] -= Math.abs( strokeAmplitude ) * ENERGY_USED_UP_SWIMMING * motion.strokeCost;
             else
-                _energy -= Math.abs( strokeAmplitude ) * ENERGY_USED_UP_SWIMMING;
+                _B[ _b + SS.B_ENERGY ] -= Math.abs( strokeAmplitude ) * ENERGY_USED_UP_SWIMMING;
 
-            if ( _energy < ZERO )
+            if ( _B[ _b + SS.B_ENERGY ] < ZERO )
             {
-                _energy = ZERO;
+                _B[ _b + SS.B_ENERGY ] = ZERO;
             }
 
             //-------------------------------------------------
@@ -2128,16 +2096,16 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
         {
             const drag = applyWaterDrag( _velocity.x, _velocity.y, _phenotype.mass, motion.drag );
             _velocity.setXY( drag.velocityX, drag.velocityY );
-            _energy = Math.max( ZERO, _energy - drag.energyCost );
+            _B[ _b + SS.B_ENERGY ] = Math.max( ZERO, _B[ _b + SS.B_ENERGY ] - drag.energyCost );
         }
-        _spin += _torque;// * SPIN_SCALAR;
-//_spin *= SPIN_DECAY;
+        _B[ _b + SS.B_SPIN ] += _torque;// * SPIN_SCALAR;
+//_B[ _b + SS.B_SPIN ] *= SPIN_DECAY;
 
 		//--------------------------------------------------
 		// update position by velocity, and angle by spin
 		//--------------------------------------------------
         _position.add( _velocity );
-        _angle += _spin;
+        _B[ _b + SS.B_ANGLE ] += _B[ _b + SS.B_SPIN ];
     }
 
 
@@ -2156,7 +2124,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
         //console.log( distanceTraveled );
 
         let averageSpeed = distanceTraveled / ENERGY_EFFICIENCY_MEASUREMENT_PERIOD;
-        let energyLost   = _lastEnergyForEfficiencyMeasurement - _energy;
+        let energyLost   = _B[ _b + SS.B_LAST_ENERGY ] - _B[ _b + SS.B_ENERGY ];
 
         //----------------------------------------------------------
         //if swimbot ate food, energy went up, so cancel that....
@@ -2169,11 +2137,11 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
         //------------------------------
         // calculate efficiency
         //------------------------------
-        _energyEfficiency = averageSpeed / ( ONE + energyLost );
+        _B[ _b + SS.B_EFFICIENCY ] = averageSpeed / ( ONE + energyLost );
 
         // reset these values for the next go-round...
         _lastPositionForEfficiencyMeasurement.set( _position );
-        _lastEnergyForEfficiencyMeasurement = _energy;
+        _B[ _b + SS.B_LAST_ENERGY ] = _B[ _b + SS.B_ENERGY ];
     }
 
 
@@ -2316,7 +2284,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	//---------------------------
 	this.setEnergy = function(e)
 	{
-        _energy = e;
+        _B[ _b + SS.B_ENERGY ] = e;
     }
 
 	//---------------------------
@@ -2324,7 +2292,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	//---------------------------
 	this.setAngle = function(a)
 	{
-        _angle = a;
+        _B[ _b + SS.B_ANGLE ] = a;
     }
 
 
@@ -2334,11 +2302,11 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	this.getIsTryingToEat               = function() { return _tryingToEat;                                 }
 	this.getIsTryingToMate              = function() { return _tryingToMate;                                }
 	this.getIndex                       = function() { return _index;                                       }
-	this.getAge                         = function() { return _age;                                         }
+	this.getAge                         = function() { return _B[ _b + SS.B_AGE ];                                         }
 	this.getAlive                       = function() { return _alive;                                       }
-	this.getEnergy                      = function() { return _energy;                                      }
-	this.getAngle                       = function() { return _angle;                                       }
-	this.getEnergyEfficiency            = function() { return _energyEfficiency;                            }
+	this.getEnergy                      = function() { return _B[ _b + SS.B_ENERGY ];                                      }
+	this.getAngle                       = function() { return _B[ _b + SS.B_ANGLE ];                                       }
+	this.getEnergyEfficiency            = function() { return _B[ _b + SS.B_EFFICIENCY ];                            }
 	this.getPosition                    = function() { return _position;                                    }
 	this.getSpeed                       = function() { return _velocity.getMagnitude();                     }
 	this.getBoundingRadius              = function() { return _phenotype.sumPartLengths;                    }
@@ -2355,7 +2323,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	this.getPreyValueWeight             = function() { return sigmoid( _nnOutputs[ OUT_PREY_VALUE ] ); }
 	this.getPreyTravelWeight            = function() { return sigmoid( _nnOutputs[ OUT_PREY_TRAVEL ] ); }
 	this.getPreyBaitBias                = function() { return Math.tanh( _nnOutputs[ OUT_PREY_BAIT ] ); }
-	this.getSelectRadius                = function() { return _selectRadius;                                }
+	this.getSelectRadius                = function() { return _B[ _b + SS.B_SELECT_RADIUS ];                                }
 	this.getPreferredFoodType           = function() { return _phenotype.preferredFoodType;                 }
 	this.getDigestibleFoodType          = function() { return _phenotype.digestibleFoodType;                }
 	this.getIsTryingToHunt              = function() { return _tryingToHunt;                                }
@@ -2400,7 +2368,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	        hungerThreshold: _brain.getHungerThreshold(),
 	        autotomyBite: _phenotype.autotomyBite,
 	        autotomyThreat: _phenotype.autotomyThreat,
-	        effort: _effort,
+	        effort: _B[ _b + SS.B_EFFORT ],
 	    };
 	}
 	this.getHungerThreshold             = function() { return _brain.getHungerThreshold();                  }
@@ -2594,7 +2562,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
                                   * climateFoodFactor( _thermalFit, _thermalPeak );
             }
 
-            _energy += energyFromFoodBit;
+            _B[ _b + SS.B_ENERGY ] += energyFromFoodBit;
 
             _numFoodBitsEaten ++;
             if ( _chosenFoodBit.getType() === 2 )
@@ -2609,7 +2577,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 
             _tryingToEat = false;
 
-            _timerDelta = ZERO;
+            _B[ _b + SS.B_TIMER_DELTA ] = ZERO;
 
             //foodBitIndex = _chosenFoodBit.getIndex();
 
@@ -2660,10 +2628,10 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	    if ( dropped !== null )
 	    {
 	        simCounters.autotomyBiteDrops ++;
-	        _energy += Math.min( Math.max( ZERO, SWIMBOT_MAX_ENERGY - _energy ), dropped.energy );
+	        _B[ _b + SS.B_ENERGY ] += Math.min( Math.max( ZERO, SWIMBOT_MAX_ENERGY - _B[ _b + SS.B_ENERGY ] ), dropped.energy );
 	        _chosenPrey.notifyAttackedBy( this );
 	        _numPartsEaten ++;
-	        _timerDelta = ZERO;
+	        _B[ _b + SS.B_TIMER_DELTA ] = ZERO;
 	        return;
 	    }
 
@@ -2676,21 +2644,21 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	    simCounters.attackCount ++;
 	    _numPreyEaten ++;
 
-	    let room = Math.max( ZERO, SWIMBOT_MAX_ENERGY - _energy );
+	    let room = Math.max( ZERO, SWIMBOT_MAX_ENERGY - _B[ _b + SS.B_ENERGY ] );
 
 	    if ( energyFromPrey > room )
 	    {
-	        _energy += room;
+	        _B[ _b + SS.B_ENERGY ] += room;
 
 	        let numMeatBits = Math.floor( ( energyFromPrey - room ) / DEFAULT_FOOD_BIT_ENERGY );
 	        _parent.spawnMeatFoodBits( preyPosition, numMeatBits );
 	    }
 	    else
 	    {
-	        _energy += energyFromPrey;
+	        _B[ _b + SS.B_ENERGY ] += energyFromPrey;
 	    }
 
-	    _timerDelta = ZERO;
+	    _B[ _b + SS.B_TIMER_DELTA ] = ZERO;
 	    _chosenPrey = null;
 	    _brain.setFoundPrey( false );
 	}
@@ -3372,7 +3340,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 
         _chosenFoodBit      = null;
         _chosenMate         = null;
-        _age 	  		    = 0;
+        _B[ _b + SS.B_AGE ] 	  		    = 0;
         _numOffspring       = 0;
         _numFoodBitsEaten   = 0;
         _index              = NULL_INDEX;
@@ -3382,16 +3350,16 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
         _alive 	  		    = false;
         _tryingToMate       = false;
         _tryingToEat        = false;
-        _growthScale        = ZERO;
+        _B[ _b + SS.B_GROWTH ]        = ZERO;
         _torque             = ZERO;
-        _angle			    = ZERO;
-        _spin			    = ZERO;
-        _energy			    = ZERO;
-        _timer              = ZERO;
-        _timerDelta         = ZERO;
-        _energyEfficiency   = ZERO;
-        _selectRadius       = ZERO;
-        _lastEnergyForEfficiencyMeasurement = ZERO;
+        _B[ _b + SS.B_ANGLE ]			    = ZERO;
+        _B[ _b + SS.B_SPIN ]			    = ZERO;
+        _B[ _b + SS.B_ENERGY ]			    = ZERO;
+        _B[ _b + SS.B_TIMER ]              = ZERO;
+        _B[ _b + SS.B_TIMER_DELTA ]         = ZERO;
+        _B[ _b + SS.B_EFFICIENCY ]   = ZERO;
+        _B[ _b + SS.B_SELECT_RADIUS ]       = ZERO;
+        _B[ _b + SS.B_LAST_ENERGY ] = ZERO;
         _readyforSensoryInputToBrain = false;
 
         _chosenPrey         = null;
@@ -3412,7 +3380,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	{
         //console.log( "" );
         //console.log( "-------------------------" );
-        //console.log( "swimbot has energy of " + _energy );
+        //console.log( "swimbot has energy of " + _B[ _b + SS.B_ENERGY ] );
 
 /*
         assert( _childEnergyRatio >= ZERO, "_childEnergyRatio >= ZERO" );
@@ -3421,8 +3389,8 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 console.log( "contributeToOffspring: _childEnergyRatio = " + _childEnergyRatio );
 */
 
-//let energyToContribute = _energy * _childEnergyRatio;
-        let energyToContribute = _energy * globalTweakers.childEnergyRatio;
+//let energyToContribute = _B[ _b + SS.B_ENERGY ] * _childEnergyRatio;
+        let energyToContribute = _B[ _b + SS.B_ENERGY ] * globalTweakers.childEnergyRatio;
 
 //GLOBAL_childEnergyRatio
 //console.log( "GLOBAL_childEnergyRatio = " + GLOBAL_childEnergyRatio );
@@ -3439,13 +3407,13 @@ console.log( "contributeToOffspring: _childEnergyRatio = " + _childEnergyRatio )
 	    }
 */
 
-	    _energy -= energyToContribute;
+	    _B[ _b + SS.B_ENERGY ] -= energyToContribute;
 
-        assert( _energy >= ZERO, "Swimbot: contributeToOffspring: _energy >= ZERO" );
+        assert( _B[ _b + SS.B_ENERGY ] >= ZERO, "Swimbot: contributeToOffspring: _B[ _b + SS.B_ENERGY ] >= ZERO" );
 
 	    _numOffspring ++;
 
-        _timerDelta         = ZERO;
+        _B[ _b + SS.B_TIMER_DELTA ]         = ZERO;
         _tryingToMate       = false;
         _chosenMate         = null;
         _chosenMateIndex    = NULL_INDEX
@@ -3458,7 +3426,7 @@ console.log( "contributeToOffspring: _childEnergyRatio = " + _childEnergyRatio )
         /*
 	    _numOffspring ++;
 
-        let energyBeforeContribution = _energy;
+        let energyBeforeContribution = _B[ _b + SS.B_ENERGY ];
 
         if (( _childEnergyRatio < ZERO )
         ||  ( _childEnergyRatio > ONE  ))
@@ -3469,11 +3437,11 @@ console.log( "contributeToOffspring: _childEnergyRatio = " + _childEnergyRatio )
 
         //console.log( _childEnergyRatio );
 
-        _energy *= ( ONE - _childEnergyRatio );
+        _B[ _b + SS.B_ENERGY ] *= ( ONE - _childEnergyRatio );
 
-        _timerDelta = ZERO;
+        _B[ _b + SS.B_TIMER_DELTA ] = ZERO;
 
-        let energyToContribute = energyBeforeContribution - _energy;
+        let energyToContribute = energyBeforeContribution - _B[ _b + SS.B_ENERGY ];
 
         //cancel out all mate-related data so it doesn't get in the way next time..
         _tryingToMate = false;
@@ -3507,7 +3475,7 @@ console.log( "contributeToOffspring: _childEnergyRatio = " + _childEnergyRatio )
 	//-------------------------------------------------------------------
 	this.writeCapsules = function( capsules, asDot )
 	{
-	    _swimbotRenderer.prepareColors( _phenotype, _age, _energy, _growthScale, this );
+	    _swimbotRenderer.prepareColors( _phenotype, _B[ _b + SS.B_AGE ], _B[ _b + SS.B_ENERGY ], _B[ _b + SS.B_GROWTH ], this );
 
 	    if ( asDot )
 	    {
@@ -3537,9 +3505,9 @@ console.log( "contributeToOffspring: _childEnergyRatio = " + _childEnergyRatio )
 	    (
 	        _phenotype,
 	        _brain,
-	        _age,
-	        _energy,
-	        _growthScale,
+	        _B[ _b + SS.B_AGE ],
+	        _B[ _b + SS.B_ENERGY ],
+	        _B[ _b + SS.B_GROWTH ],
 	        _focusDirection,
 	        levelOfDetail,
 	        this

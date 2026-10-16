@@ -141,6 +141,22 @@ async function main()
     //------------------------------------------------------------
     sb.performance.now = () => Number( process.hrtime.bigint() ) / 1e6;
     for ( let i = 0; i < 10; i++ ) genePool.update();
+
+    //------------------------------------------------------------
+    // experiment (BRAINLESS=1): no brain - the swimbots only flap
+    // their bodies; BRAINLESS=2: also no looking around
+    //------------------------------------------------------------
+    const brainless = parseInt( process.env.BRAINLESS || "0", 10 );
+    if ( brainless > 0 )
+    {
+        for ( const b of genePool.getSwimbots() )
+        {
+            b.decide = function() {};
+            b.setEnvironmentalStimuli = function() {};
+            if ( brainless > 1 ) b.getIsLookingForSensoryInput = function() { return false; };
+        }
+        console.log( brainless > 1 ? "experiment: no brain, no looking around" : "experiment: no brain (bodies only flap)" );
+    }
     const times = genePool.getPhaseTimes();
     times.fill( 0 );
     const t0 = process.hrtime.bigint();
