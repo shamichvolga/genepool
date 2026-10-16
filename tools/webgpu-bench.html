@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WebGPU bench</title>
+<style>
+  body { font: 14px/1.5 system-ui, sans-serif; margin: 16px; background: #fff; color: #222; }
+  pre  { background: #f4f4f4; padding: 8px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<h3>Поиск ближайшей еды: видеокарта (WebGPU) против процессора</h3>
+<p>Та же задача, что в восприятии: для каждого существа — ближайшая еда в радиусе зрения.
+Видеокарта перебирает всю еду (каждое существо — свой поток), процессор — сетка ячеек, один поток.
+«С отправкой и чтением» — полный путь, как было бы в симуляции на каждом шаге.</p>
+<button id="run">Запустить</button>
+<pre id="out"></pre>
+<script type="module">
+//------------------------------------------------------------------------------
+// WebGPU feasibility bench (not part of the simulation). Open it from the dev
+// server: http://localhost:5173/tools/webgpu-bench.html
+//------------------------------------------------------------------------------
+const out = document.getElementById( "out" );
+const log = ( s ) => { out.textContent += s + "\n"; };
+
+const WORLD = 16000, RADIUS = 300;
+
+function makeRandom( seed ) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul( seed ^ seed >>> 15, 1 | seed ); t = t + Math.imul( t ^ t >>> 7, 61 | t ) ^ t; return (( t ^ t >>> 14 ) >>> 0 ) / 4294967296; }; }
+
+function scene( bots, foods )
+{
+    const r = makeRandom( 7 );
+    const b = new Float32Array( bots * 2 ), f = new Float32Array( foods * 2 );
+    for ( let i = 0; i < b.length; i++ ) b[i] = r() * WORLD;
+    for ( let i = 0; i < f.length; i++ ) f[i] = r() * WORLD;
+    return { b, f };
+}
+
+// processor: a uniform grid with cells of the view radius
+function cpuNearest( b, f, result )
+{
+    const cells = Math.ceil( WORLD / RADIUS ), n = f.length / 2;
+    const start = new Int32Array( cells * cells + 1 ), order = new Int32Array( n );
+    const cellOf = new Int32Array( n );
+    for ( let i = 0; i < n; i++ ) { const c = Math.min( cells - 1, ( f[2*i] / RADIUS ) | 0 ) + cells * Math.min( cells - 1, ( f[2*i+1] / RADIUS ) | 0 ); cellOf[i] = c; start[c + 1]++; }
+    for ( let c = 0; c < cells * cells; c++ ) start[c + 1] += start[c];
+    const fill = start.slice( 0, cells * cells );
+    for ( let i = 0; i < n; i++ ) order[ fill[ cellOf[i] ]++ ] = i;
+    const r2 = RADIUS * RADIUS;
+    for ( let s = 0; s < b.length / 2; s++ )
+    {
+        const x = b[2*s], y = b[2*s+1];
+        const cx = ( x / RADIUS ) | 0, cy = ( y / RADIUS ) | 0;
+        let best = -1, bestD = r2;
+        for ( let gy = Math.max( 0, cy - 1 ); gy <= Math.min( cells - 1, cy + 1 ); gy++ )
+        for ( let gx = Math.max( 0, cx - 1 ); gx <= Math.min( cells - 1, cx + 1 ); gx++ )
+        {
+            const c = gx + gy * cells;
+            for ( let k = start[c]; k < start[c + 1]; k++ )
+            {
+                const i = order[k], dx = f[2*i] - x, dy = f[2*i+1] - y, d = dx * dx + dy * dy;
+                if ( d < bestD ) { bestD = d; best = i; }
+            }
+        }
+        result[s] = best;
+    }
+}
+
+const SHADER = /* wgsl */`
+struct Params { bots: u32, foods: u32, radius2: f32, pad: f32 };
+@group(0) @binding(0) var<uniform>             params : Params;
+@group(0) @binding(1) var<storage, read>       bots   : array<vec2f>;
+@group(0) @binding(2) var<storage, read>       foods  : array<vec2f>;
+@group(0) @binding(3) var<storage, read_write> result : array<i32>;
+
+const TILE = 256u;
+var<workgroup> tile : array<vec2f, 256>;
+
+@compute @workgroup_size(256)
+fn main( @builtin(global_invocation_id) id : vec3u, @builtin(local_invocation_index) li : u32 )
+{
+    let s = id.x;
+    var me = vec2f( 0.0 );
+    if ( s < params.bots ) { me = bots[s]; }
+    var best  : i32 = -1;
+    var bestD : f32 = params.radius2;
+    // the food goes through the fast shared memory in tiles of 256
+    for ( var base = 0u; base < params.foods; base += TILE )
+    {
+        let k = base + li;
+        if ( k < params.foods ) { tile[li] = foods[k]; } else { tile[li] = vec2f( 1e9 ); }
+        workgroupBarrier();
+        for ( var j = 0u; j < TILE; j++ )
+        {
+            let d  = tile[j] - me;
+            let dd = dot( d, d );
+            if ( dd < bestD ) { bestD = dd; best = i32( base + j ); }
+        }
+        workgroupBarrier();
+    }
+    if ( s < params.bots ) { result[s] = best; }
+}`;
+
+async function gpuSetup( bots, foods )
+{
+    const adapter = await navigator.gpu.requestAdapter({ powerPreference: "high-performance" });
+    const device  = await adapter.requestDevice();
+    const module  = device.createShaderModule({ code: SHADER });
+    const pipeline = device.createComputePipeline({ layout: "auto", compute: { module, entryPoint: "main" } });
+    const U = GPUBufferUsage;
+    const params = device.createBuffer({ size: 16, usage: U.UNIFORM | U.COPY_DST });
+    const botBuf  = device.createBuffer({ size: bots  * 8, usage: U.STORAGE | U.COPY_DST });
+    const foodBuf = device.createBuffer({ size: foods * 8, usage: U.STORAGE | U.COPY_DST });
+    const resBuf  = device.createBuffer({ size: bots  * 4, usage: U.STORAGE | U.COPY_SRC });
+    const readBuf = device.createBuffer({ size: bots  * 4, usage: U.MAP_READ | U.COPY_DST });
+    const p = new ArrayBuffer( 16 ); new Uint32Array( p, 0, 2 ).set([ bots, foods ]); new Float32Array( p, 8, 1 )[0] = RADIUS * RADIUS;
+    device.queue.writeBuffer( params, 0, p );
+    const bind = device.createBindGroup({ layout: pipeline.getBindGroupLayout( 0 ), entries: [
+        { binding: 0, resource: { buffer: params } }, { binding: 1, resource: { buffer: botBuf } },
+        { binding: 2, resource: { buffer: foodBuf } }, { binding: 3, resource: { buffer: resBuf } } ]});
+    const info = adapter.info ? adapter.info.vendor + " " + adapter.info.architecture : "?";
+    return { device, pipeline, bind, botBuf, foodBuf, resBuf, readBuf, bots, info };
+}
+
+async function gpuRun( g, b, f, withTransfer, repeat = 1 )
+{
+    const { device } = g;
+    if ( withTransfer ) { device.queue.writeBuffer( g.botBuf, 0, b ); device.queue.writeBuffer( g.foodBuf, 0, f ); }
+    const enc = device.createCommandEncoder();
+    for ( let r = 0; r < repeat; r++ )
+    {
+        const pass = enc.beginComputePass();
+        pass.setPipeline( g.pipeline ); pass.setBindGroup( 0, g.bind );
+        pass.dispatchWorkgroups( Math.ceil( g.bots / 256 ));
+        pass.end();
+    }
+    if ( withTransfer ) enc.copyBufferToBuffer( g.resBuf, 0, g.readBuf, 0, g.bots * 4 );
+    device.queue.submit([ enc.finish() ]);
+    if ( withTransfer )
+    {
+        await g.readBuf.mapAsync( GPUMapMode.READ );
+        const r = new Int32Array( g.readBuf.getMappedRange().slice( 0 ));
+        g.readBuf.unmap();
+        return r;
+    }
+    await device.queue.onSubmittedWorkDone();
+    return null;
+}
+
+const median = ( a ) => { const s = [ ...a ].sort(( x, y ) => x - y ); return s[ s.length >> 1 ]; };
+
+async function bench( bots, foods )
+{
+    const { b, f } = scene( bots, foods );
+    const cpu = new Int32Array( bots );
+    const cpuT = [];
+    for ( let i = 0; i < 15; i++ ) { const t = performance.now(); cpuNearest( b, f, cpu ); cpuT.push( performance.now() - t ); }
+
+    const g = await gpuSetup( bots, foods );
+    await gpuRun( g, b, f, true );   // warm up
+    const fullT = [];
+    let gpu = null;
+    for ( let i = 0; i < 15; i++ ) { const t = performance.now(); gpu = await gpuRun( g, b, f, true ); fullT.push( performance.now() - t ); }
+    const t0 = performance.now(); await gpuRun( g, b, f, false, 50 ); const pure = ( performance.now() - t0 ) / 50;
+
+    let same = 0; for ( let i = 0; i < bots; i++ ) if ( gpu[i] === cpu[i] ) same++;
+    g.device.destroy();
+    log( `существ ${ bots }, еды ${ foods }:  процессор (сетка, 1 поток) ${ median( cpuT ).toFixed( 2 ) } мс;  видеокарта: только счёт ${ pure.toFixed( 2 ) } мс, с отправкой и чтением ${ median( fullT ).toFixed( 2 ) } мс;  совпало ${ ( 100 * same / bots ).toFixed( 1 ) } %   [${ g.info }]` );
+}
+
+document.getElementById( "run" ).onclick = async () =>
+{
+    out.textContent = "";
+    if ( !navigator.gpu ) { log( "WebGPU нет в этом браузере" ); return; }
+    for ( const [ n, m ] of [[ 1000, 3000 ], [ 3000, 6000 ], [ 6000, 12000 ], [ 12000, 24000 ]] ) { await bench( n, m ); }
+    log( "готово" );
+};
+</script>
+</body>
+</html>
