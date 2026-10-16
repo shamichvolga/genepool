@@ -54,6 +54,7 @@ export function GenePool()
     const NORMAL_FRAME_BUDGET_MS    = 12;   // at most this much simulation per frame
     const FAST_FRAME_BUDGET_MS      = 25;   // speed ">>"
     const MAX_FRAME_BUDGET_MS       = 40;   // speed ">>>": as many steps as fit
+    const MAX_FRAME_BUDGET_DRAWN_MS = 22;   // the same while drawing: leaves time for a smooth picture and panel (~35 frames/s)
     let _speedLevel                 = 1;
     let _useAnimationFrames         = false;
     let _lastFrameTime              = 0;
@@ -1846,7 +1847,8 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
             if ( _speedLevel === 3 )
             {
                 // as many steps as fit into the frame
-                const deadline = performance.now() + MAX_FRAME_BUDGET_MS;
+                const drawing  = _rendering && draw && !(( typeof document !== "undefined" ) && document.hidden );
+                const deadline = performance.now() + ( drawing ? MAX_FRAME_BUDGET_DRAWN_MS : MAX_FRAME_BUDGET_MS );
                 do { this.simulateStep(); } while ( performance.now() < deadline );
                 _stepDebt = 0;
             }
