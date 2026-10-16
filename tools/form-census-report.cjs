@@ -19,8 +19,8 @@ function readCsv( file )
 const deaths = [], births = [], census = {};
 for ( const d of dirs )
 {
-    deaths.push( ...readCsv( path.join( d, "deaths.csv" )));
-    births.push( ...readCsv( path.join( d, "births.csv" )));
+    for ( const r of readCsv( path.join( d, "deaths.csv" ))) deaths.push( r );
+    for ( const r of readCsv( path.join( d, "births.csv" ))) births.push( r );
     census[ path.basename( d ) ] = readCsv( path.join( d, "census.csv" ));
 }
 
