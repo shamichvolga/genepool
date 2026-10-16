@@ -356,3 +356,26 @@
 
 /* sliders and radio buttons in the Gene Pool colors */
 #masterPanel input[type="range"], #masterPanel input[type="radio"] { accent-color: #6e7f5c; }
+
+/* ------------------------------------------- hide / show the panel ------ */
+#panelToggleButton
+{
+    position:       fixed;
+    top:            8px;
+    right:          388px;
+    z-index:        20;
+    width:          26px;
+    height:         34px;
+    padding:        0;
+    border:         1px solid #666659;
+    border-radius:  4px 0 0 4px;
+    background:     #dcdcd0;
+    color:          #33402e;
+    font-size:      16px;
+    cursor:         pointer;
+    opacity:        0.85;
+}
+#panelToggleButton:hover { background: #eeeedd; opacity: 1; }
+
+body.panelHidden #masterPanel       { display: none; }
+body.panelHidden #panelToggleButton { right: 8px; }

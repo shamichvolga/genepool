@@ -973,6 +973,7 @@ if ( mode === SimulationStartMode.SPECIES )
 		//---------------------------------
 		_clock = 0;
 	    resetSimulationCounters();
+	    resetHistory();
 	}
 
 
@@ -1688,6 +1689,65 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
         }
     }
 
+	//------------------------------------------------------------------------
+	// population history for the graph. It is sampled by simulation steps,
+	// not by wall-clock time, so the curves look the same whether the pool
+	// is drawn or not and whatever the speed. When full, every second sample
+	// is dropped and the interval doubles: the whole run stays in view.
+	//------------------------------------------------------------------------
+	const HISTORY_MAX_SAMPLES   = 600;
+	const HISTORY_FIRST_INTERVAL = 50;
+	const _history = { interval: HISTORY_FIRST_INTERVAL, step: [], herbivores: [], predators: [], plants: [], meat: [] };
+
+	function resetHistory()
+	{
+	    _history.interval = HISTORY_FIRST_INTERVAL;
+	    _history.step.length = 0;
+	    _history.herbivores.length = 0;
+	    _history.predators.length = 0;
+	    _history.plants.length = 0;
+	    _history.meat.length = 0;
+	}
+
+	function recordHistory()
+	{
+	    const n = _history.step.length;
+	    if ( n > 0 && _history.step[ n - 1 ] >= _clock ) { resetHistory(); }   // a new or loaded pool
+
+	    let herbivores = 0, predators = 0;
+	    for (let s = 0; s < MAX_SWIMBOTS; s++)
+	    {
+	        if ( !_swimbots[s].getAlive() ) continue;
+	        if ( _swimbots[s].getPredatorLevel() > PREDATOR_LEVEL_THRESHOLD ) { predators ++; } else { herbivores ++; }
+	    }
+	    let plants = 0, meat = 0;
+	    for (let f = 0; f < MAX_FOODBITS; f++)
+	    {
+	        if ( !_foodBits[f].getAlive() ) continue;
+	        if ( _foodBits[f].getType() === 2 ) { meat ++; } else { plants ++; }
+	    }
+
+	    _history.step.push( _clock );
+	    _history.herbivores.push( herbivores );
+	    _history.predators.push( predators );
+	    _history.plants.push( plants );
+	    _history.meat.push( meat );
+
+	    if ( _history.step.length >= HISTORY_MAX_SAMPLES )
+	    {
+	        for ( const key of [ "step", "herbivores", "predators", "plants", "meat" ] )
+	        {
+	            const a = _history[ key ];
+	            let w = 0;
+	            for (let i = 1; i < a.length; i += 2) { a[ w ++ ] = a[i]; }
+	            a.length = w;
+	        }
+	        _history.interval *= 2;
+	    }
+	}
+
+	this.getPopulationHistory = function() { return _history; }
+
 	//------------------------
 	this.update = function()
 	{
@@ -1772,6 +1832,8 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
         this.updateFood();
         _phaseTimes[5] += now() - stepStart;
         _phaseTimes[6] += 1;
+
+        if ( _clock % _history.interval === 0 ) { recordHistory(); }
 
         _stepsThisSecond ++;
 	}
@@ -5008,6 +5070,7 @@ this.testPredation = function()
     _familyTree.reset();
     _clock = 0;
     resetSimulationCounters();
+    resetHistory();
 
     // --- helper to create swimbot with predator gene ---
     const setPredatorGene = function(genotype, value255) {

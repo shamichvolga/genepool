@@ -17,6 +17,9 @@
 
 		
         
+		<!-- hides / shows the whole panel on the right (key H) -->
+		<button id = "panelToggleButton" onClick = "togglePanel();" title = "hide the panel (H)">&#x276F;</button>
+
 		<!-- ------------------------------------------------------------------ -->
 		<!-- the panel on the right: everything flows top to bottom             -->
 		<!-- (layout in css/panel.css; tabs switched in src/ui/ui.ts)           -->
@@ -190,11 +193,6 @@
                         <input id = "foodBitEnergySlider" class = "EcoSlider" type = "range" step = "10" autocomplete = "off" oninput = "setEcosystemValue( id )">
                     </div>
                     <div class = "ecoRow">
-                        <label id = "hungerThresholdLabel" for = "hungerThresholdSlider">hunger threshold</label>
-                        <span  id = "hungerThresholdValue" class = "ecoValue">–</span>
-                        <input id = "hungerThresholdSlider" class = "EcoSlider" type = "range" step = "1" autocomplete = "off" oninput = "setEcosystemValue( id )">
-                    </div>
-                    <div class = "ecoRow">
                         <label id = "energyToOffspringLabel" for = "energyToOffspringSlider">offspring energy ratio</label>
                         <span  id = "energyToOffspringValue" class = "ecoValue">–</span>
                         <input id = "energyToOffspringSlider" class = "EcoSlider" type = "range" step = "0.1" autocomplete = "off" oninput = "setEcosystemValue( id )">
@@ -206,7 +204,10 @@
                     </div>
                     <button id = "tweakDefaultButton" class = "basicButton wide" onClick = "setEcosystemToDefaults();" >reset to defaults</button>
 
-                    <div class = "gpHeading">swimbot mate preferences</div>
+                    <div class = "gpNote">hunger threshold, mate choosiness, diet and temperature preference are inherited genes now: see the swimbot tab.</div>
+
+                    <details id = "attractionDetails">
+                    <summary class = "gpHeading" title = "who a swimbot swims towards; whether the partner accepts is decided by its own genes">experiment: one mate-approach rule for everybody</summary>
                     <div id = "attractionPanel" class = "gpGrid2 radioGrid">
                         <label><input type = "radio" id = "radioColorful"        name = "attractionRadioButton" value = "colorful"        onchange = "chooseAttraction()"> colorful</label>
                         <label><input type = "radio" id = "radioNoColor"         name = "attractionRadioButton" value = "noColor"         onchange = "chooseAttraction()"> not colorful</label>
@@ -226,6 +227,7 @@
                         <label><input type = "radio" id = "radioClosest"         name = "attractionRadioButton" value = "closest"         onchange = "chooseAttraction()"> closest</label>
                         <label><input type = "radio" id = "radioRandom"          name = "attractionRadioButton" value = "random"          onchange = "chooseAttraction()"> random</label>
                     </div>
+                    </details>
                 </div>
 
                 <!-- ============================== graph ============================== -->

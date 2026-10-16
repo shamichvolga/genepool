@@ -156,7 +156,6 @@ export function setEcosystemValue( id )
     if ( id === "foodGrowthDelaySlider"    ) { genePool.setFoodGrowthDelay     ( input.value ); }
     else if ( id === "foodSpreadSlider"         ) { genePool.setFoodSpread          ( input.value ); }
     else if ( id === "foodBitEnergySlider"      ) { genePool.setFoodBitEnergy       ( input.value ); }
-    else if ( id === "hungerThresholdSlider"    ) { genePool.setHungerThreshold     ( input.value ); }
     else if ( id === "energyToOffspringSlider"  ) { genePool.setOffspringEnergyRatio( input.value ); }
     else if ( id === "maxAgeSlider"             ) { genePool.setMaximumSwimbotAge   ( input.value ); }
     updateEcosystemUI();
@@ -183,8 +182,6 @@ export function initializeEcosystemUI()
     document.getElementById( 'foodSpreadSlider'         ).max = MAX_FOOD_BIT_MAX_SPAWN_RADIUS;
     document.getElementById( 'foodBitEnergySlider'      ).min = MIN_FOOD_BIT_ENERGY;
     document.getElementById( 'foodBitEnergySlider'      ).max = MAX_FOOD_BIT_ENERGY;
-    document.getElementById( 'hungerThresholdSlider'    ).min = MIN_SWIMBOT_HUNGER_THRESHOLD;
-    document.getElementById( 'hungerThresholdSlider'    ).max = MAX_SWIMBOT_HUNGER_THRESHOLD;
     document.getElementById( 'energyToOffspringSlider'  ).min = MIN_CHILD_ENERGY_RATIO;
     document.getElementById( 'energyToOffspringSlider'  ).max = MAX_CHILD_ENERGY_RATIO;
     document.getElementById( 'maxAgeSlider'             ).min = MIN_MAXIMUM_AGE;
@@ -203,8 +200,6 @@ export function updateEcosystemUI()
         document.getElementById( "foodSpreadValue"          ).innerHTML = genePool.getFoodSpread();
         document.getElementById( "foodBitEnergySlider"      ).value     = genePool.getFoodBitEnergy();
         document.getElementById( "foodBitEnergyValue"       ).innerHTML = genePool.getFoodBitEnergy();
-        document.getElementById( "hungerThresholdSlider"    ).value     = genePool.getHungerThreshold();
-        document.getElementById( "hungerThresholdValue"     ).innerHTML = genePool.getHungerThreshold();
         document.getElementById( "energyToOffspringSlider"  ).value     = genePool.getEnergyToOffspring();
         document.getElementById( "energyToOffspringValue"   ).innerHTML = genePool.getEnergyToOffspring();
         document.getElementById( "maxAgeSlider"             ).value     = genePool.getMaximumSwimbotAge();
@@ -814,7 +809,7 @@ export function updateUI()
         }
         if ( genePoolIsDefined )
         {
-            _graph.update( genePool.getTimeStep(), genePool.getNumSwimbots(), genePool.getNumFoodBits() , genePool.getNumFoodBits1() );
+            _graph.update( genePool.getPopulationHistory() );
         }
         if ( panelIsOpen( 'graphPanel' ) )
         {
@@ -867,12 +862,24 @@ export function notifyGeneTweakPanelMouseDown()
     }
 }
 
+//------------------------------------------------------------
+// hide the whole right panel to see more of the pool (key H)
+//------------------------------------------------------------
+export function togglePanel()
+{
+    const hidden = document.body.classList.toggle( "panelHidden" );
+    const button = document.getElementById( "panelToggleButton" );
+    button.innerHTML = hidden ? "&#x276E;" : "&#x276F;";
+    button.title     = hidden ? "show the panel (H)" : "hide the panel (H)";
+    window.dispatchEvent( new Event( "resize" ));
+}
+
 //----------------------
 // under construction
 //----------------------
 export function resize()
 {
-    let rightMargin = 400;
+    let rightMargin = document.body.classList.contains( "panelHidden" ) ? 0 : 400;
     let width  = window.innerWidth  - rightMargin;
     let height = window.innerHeight;
     canvasID.width  = width;
@@ -999,6 +1006,8 @@ document.onkeydown = function(e: any)
 {
     if ( typeof genePool == "undefined" ) return;
     if ( isTypingInAField(e) || e.ctrlKey || e.metaKey || e.altKey ) return;
+
+    if ( e.code === "KeyH" && !e.repeat ) { togglePanel(); return; }
 
     const action = CAMERA_KEYS[ e.code ];
     if ( action === undefined ) return;
