@@ -54,6 +54,7 @@ export function GenePool()
     const NORMAL_FRAME_BUDGET_MS    = 12;   // at most this much simulation per frame
     const FAST_FRAME_BUDGET_MS      = 25;   // speed ">>"
     const MAX_FRAME_BUDGET_MS       = 40;   // speed ">>>": as many steps as fit
+    const OUTSIDE_POOL_COLOR        = "rgb( 22, 26, 30 )";   // the screen beyond the pool's edges
     const MAX_FRAME_BUDGET_DRAWN_MS = 22;   // the same while drawing: leaves time for a smooth picture and panel (~35 frames/s)
     let _speedLevel                 = 1;
     let _useAnimationFrames         = false;
@@ -3233,6 +3234,15 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
 	//-------------------------
 	this.render = function()
 	{
+		//----------------------------------------------------------
+		// clear the whole canvas: the pool is square, the screen is
+		// not - zoomed out, the strips beside the pool would keep
+		// pieces of old frames
+		//----------------------------------------------------------
+		_canvas.resetTransform();
+		_canvas.fillStyle = OUTSIDE_POOL_COLOR;
+		_canvas.fillRect( 0, 0, _canvasWidth, _canvasHeight );
+
 		//----------------------------------------------------------
 		// set transform according to camera
 		//----------------------------------------------------------
