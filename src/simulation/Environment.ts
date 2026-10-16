@@ -121,10 +121,30 @@ export class Environment
         return { active: this.active, petri: this.petri, seeds: this.biomeSeeds.map( s => ({ x: s.x, y: s.y, type: s.type, shade: s.shade })) };
     }
 
+    // petri settings from a file: whole numbers in range, or the defaults
+    static checkedPetri( p ): { zones: number, layout: number, softness: number }
+    {
+        const zones    = Math.round( Number( p.zones ));
+        const layout   = Math.round( Number( p.layout ));
+        const softness = Number( p.softness );
+        return {
+            zones   : Number.isFinite( zones )    ? Math.min( 12, Math.max( 2, zones )) : 7,
+            layout  : Number.isFinite( layout ) && layout >= 0 ? layout : 0,
+            softness: Number.isFinite( softness ) ? Math.min( 1, Math.max( 0, softness )) : 0.1,
+        };
+    }
+
     setState( state ): void
     {
-        this.petri = ( state && state.petri ) ? state.petri : null;
-        if ( state && state.active && this.petri ) { this.active = true; this.biomeSeeds = []; this.computePetriField(); return; }
+        this.petri = ( state && state.petri ) ? Environment.checkedPetri( state.petri ) : null;
+        if ( state && state.active && this.petri )
+        {
+            // the panel shows (and a new petri pool uses) the loaded settings
+            petriSettings.zones    = this.petri.zones;
+            petriSettings.layout   = this.petri.layout;
+            petriSettings.softness = this.petri.softness;
+            this.active = true; this.biomeSeeds = []; this.computePetriField(); return;
+        }
         this.active     = !!( state && state.active && state.seeds && state.seeds.length > 0 );
         this.biomeSeeds = this.active ? state.seeds.map( s => ({ x: s.x, y: s.y, type: s.type, shade: ( s.shade !== undefined ) ? s.shade : 0.5 })) : [];
         if ( this.active ) { this.computeField(); }

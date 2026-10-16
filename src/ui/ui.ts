@@ -1121,12 +1121,49 @@ export function showPetriPicture()
     if ( canvas ) { drawPetriPreview( canvas, petriSettings.zones, petriSettings.layout, petriSettings.softness ); }
     const name = document.getElementById( "petriLayoutName" );
     if ( name ) { name.innerHTML = "shape: " + PETRI_LAYOUTS[ petriSettings.layout ] + " · " + petriSettings.zones + " zones (click the picture to change the shape)"; }
+    rememberPetriSettings();
 }
 
 export function nextPetriLayout()
 {
     petriSettings.layout = ( petriSettings.layout + 1 ) % PETRI_LAYOUTS.length;
     showPetriPicture();
+}
+
+// the petri settings are remembered in this browser (a convenience only)
+const PETRI_STORAGE_KEY = "genepool.petri";
+
+function rememberPetriSettings()
+{
+    try { localStorage.setItem( PETRI_STORAGE_KEY, JSON.stringify( petriSettings )); } catch ( e ) {}
+}
+
+function recallPetriSettings()
+{
+    try
+    {
+        const saved = JSON.parse( localStorage.getItem( PETRI_STORAGE_KEY ) || "null" );
+        if ( saved )
+        {
+            const zones = Math.round( Number( saved.zones )), layout = Math.round( Number( saved.layout )), softness = Number( saved.softness );
+            if ( Number.isFinite( zones ))    petriSettings.zones    = Math.min( 12, Math.max( 2, zones ));
+            if ( Number.isFinite( layout ))   petriSettings.layout   = (( layout % PETRI_LAYOUTS.length ) + PETRI_LAYOUTS.length ) % PETRI_LAYOUTS.length;
+            if ( Number.isFinite( softness )) petriSettings.softness = Math.min( 1, Math.max( 0, softness ));
+        }
+    }
+    catch ( e ) {}
+}
+
+// put petriSettings into the panel (after a pool was loaded, at the start)
+export function syncPetriPanel()
+{
+    petriSettings.layout = (( petriSettings.layout % PETRI_LAYOUTS.length ) + PETRI_LAYOUTS.length ) % PETRI_LAYOUTS.length;
+    const zones    = document.getElementById( "petriZones" )    as HTMLInputElement;
+    const softness = document.getElementById( "petriSoftness" ) as HTMLInputElement;
+    if ( zones )    { zones.value    = String( petriSettings.zones ); }
+    if ( softness ) { softness.value = String( petriSettings.softness ); }
+    showPetriPicture();
+    rememberPetriSettings();
 }
 
 export function startPetri()
@@ -1144,5 +1181,6 @@ export function setupPetriPanel()
         const input = document.getElementById( id );
         if ( input ) { input.addEventListener( "input", showPetriPicture ); }
     }
-    showPetriPicture();
+    recallPetriSettings();
+    syncPetriPanel();
 }

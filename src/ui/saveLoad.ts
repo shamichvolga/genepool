@@ -11,7 +11,7 @@
 //                                                                        
 // -------------------------------------------------------------------------- 
 import { SimulationStartMode } from "../simulation/Globals";
-import { closePopupPanel, switchToChosenPresetPool } from "./ui";
+import { closePopupPanel, switchToChosenPresetPool, syncPetriPanel } from "./ui";
 
 
 export const InputMode = 
@@ -229,6 +229,7 @@ export function submitFilenameInput()
                         if ( data ) 
                         {
                             genePool.setPoolData( data.pool );
+                            syncPetriPanel();
                             closePopupPanel();
                             _inputFilenameString = "";
                         }
