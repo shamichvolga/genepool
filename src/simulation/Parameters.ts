@@ -258,7 +258,7 @@ export const BITE_AT_CONTACT_ENABLED        = true;   // a bite needs the mouth 
 // Experiments for different body forms (off by default)
 //------------------------------------------------------------------------------
 export const MASS_SCALED_STOMACH_ENABLED    = false;  // maximum energy = 200 x (mass / 410)^0.75, at least 60
-export const PLANT_STAGES_ENABLED           = false;  // sprout / mature / old plant; small bodies digest sprouts, big ones old plants better
+export const PLANT_STAGES_ENABLED           = true;   // sprout / mature / old plant; small bodies digest sprouts, big ones old plants better
 export const PLANT_SPROUT_AGE               = 1500;
 export const PLANT_OLD_AGE                  = 6000;
 export const PLANT_ROT_AGE                  = 12000;
