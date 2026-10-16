@@ -2,7 +2,7 @@ import { geneAverage, convertOldGenes, GENE_LAYOUT_VERSION, setTrait, gaussian, 
 import { environment, FLAT_ENVIRONMENT, INITIAL_SOIL_NUTRIENT_PER_CELL, NUTRIENT_CYCLE_ENABLED, PLANT_TYPE_WARM, PLANT_TYPE_COLD, SEASONAL_PLANT_GROWTH_ENABLED, SEASONAL_PLANT_GROWTH_AMPLITUDE } from "./Environment";
 import { petriSettings, petriStartZone } from "./Petri";
 import { IGNORE_FOOD_EFFICIENCY, preyVisibility, TWO_PLANT_TYPES } from "./Ecology";
-import { CLASSIC_SEED_RAIN_FRACTION, MEAT_PIECE_ENERGY, MEAT_PIECE_SCATTER, PLANT_STAGES_ENABLED, PLANT_ROT_AGE, DIET_SWITCH_RATE, CLASSIC_NUM_SWIMBOTS, CLASSIC_NUM_FOODBITS, GARDEN_RADIUS, ENVIRONMENT_PLANT_SPREAD_RATE, ENVIRONMENT_SEEDS_PER_PERIOD, LOCAL_ENVIRONMENT_PLANT_GROWTH, PLANT_CELL_CAPACITY, PLANT_PARENT_SEED_FRACTION, PLANT_SEED_MIN_DISTANCE, PLANT_SEED_MAX_DISTANCE } from "./Parameters";
+import { CURRENTS_ENABLED, CURRENT_SPEED, CURRENT_WAVELENGTH, CLASSIC_SEED_RAIN_FRACTION, MEAT_PIECE_ENERGY, MEAT_PIECE_SCATTER, PLANT_STAGES_ENABLED, PLANT_ROT_AGE, DIET_SWITCH_RATE, CLASSIC_NUM_SWIMBOTS, CLASSIC_NUM_FOODBITS, GARDEN_RADIUS, ENVIRONMENT_PLANT_SPREAD_RATE, ENVIRONMENT_SEEDS_PER_PERIOD, LOCAL_ENVIRONMENT_PLANT_GROWTH, PLANT_CELL_CAPACITY, PLANT_PARENT_SEED_FRACTION, PLANT_SEED_MIN_DISTANCE, PLANT_SEED_MAX_DISTANCE } from "./Parameters";
 
 import { BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_PREY } from "./Brain";
 import { Camera } from "./Camera";
@@ -2406,6 +2406,14 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
                     simCounters.nutrientsFromMeatDecay += environment.returnMeatDetritusAt( position.x, position.y, _foodBits[f].getEnergy() );
                 }
                 _foodBits[f].kill();
+            }
+            else if ( CURRENTS_ENABLED )
+            {
+                // meat drifts with the water (plants are rooted)
+                const k = 2 * Math.PI / CURRENT_WAVELENGTH;
+                const x = foodX[f], y = foodY[f];
+                foodX[f] = Math.max( POOL_LEFT + 1, Math.min( POOL_RIGHT  - 1, x + CURRENT_SPEED * Math.sin( k * y )));
+                foodY[f] = Math.max( POOL_TOP  + 1, Math.min( POOL_BOTTOM - 1, y + CURRENT_SPEED * Math.cos( k * x )));
             }
 
             if ( counting && ( type !== 2 ) && ( live[f] === 1 ))
