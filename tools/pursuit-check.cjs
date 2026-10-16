@@ -26,11 +26,13 @@ const STATES = [ "resting", "looking for mate", "pursuing mate", "looking for fo
 const open = new Array( N ).fill( null );
 const ended = [];
 const switches = [];
+const mealEnergy = [];
+const claimants = [];   // for each targeted plant at a sample: how many herbivores target it
 const meals = new Array( N ).fill( 0 );
 for ( let s = 0; s < N; s++ )
 {
     const real = bots[s].eatChosenFoodBit.bind( bots[s] );
-    bots[s].eatChosenFoodBit = function() { meals[s] ++; return real(); };
+    bots[s].eatChosenFoodBit = function() { const before = bots[s].getEnergy(); meals[s] ++; const r = real(); mealEnergy.push( bots[s].getEnergy() - before ); return r; };
 }
 
 let contactNotChasing = 0, contactSamples = 0, herbivoreSamples = 0;
@@ -50,6 +52,17 @@ for ( let step = 0; step < STEPS; step++ )
         let list = hash.get( key ); if ( !list ) hash.set( key, list = [] ); list.push( f );
     }
 
+    if ( step % 10 === 0 )
+    {
+        const count = new Map();
+        for ( let s = 0; s < N; s++ )
+        {
+            if ( !bots[s].getAlive() || bots[s].getPredatorLevel() > sb.PREDATOR_LEVEL_THRESHOLD ) continue;
+            const t = M[ s * MS + sb.M_FOOD ];
+            if ( M[ s * MS + sb.M_STATE ] === PURSUING_FOOD && t >= 0 ) count.set( t, ( count.get( t ) || 0 ) + 1 );
+        }
+        for ( const c of count.values()) claimants.push( c );
+    }
     for ( let s = 0; s < N; s++ )
     {
         const b = bots[s];
@@ -119,6 +132,11 @@ const ratios = switches.filter( w => w.nd >= 0 ).map( w => w.nd / Math.max( 1, w
 console.log( "SWITCHES", switches.length, "new/old distance p10 p50 p90:", ratios.length ? [ 0.1, 0.5, 0.9 ].map( p => ratios[ Math.floor( p * ratios.length ) ].toFixed( 2 )).join( " " ) : "-",
              "old dist p50:", switches.map( w => w.od ).sort( ( a, b ) => a - b )[ Math.floor( switches.length / 2 ) ]?.toFixed( 0 ),
              "new target -1:", switches.filter( w => w.newTarget < 0 ).length, "sample:", JSON.stringify( switches.slice( 0, 5 )));
+const qq = ( a, p ) => { const b = a.slice().sort( ( x, y ) => x - y ); return b.length ? b[ Math.floor( p * b.length ) ].toFixed( 1 ) : "-"; };
+const chasers = claimants.reduce( ( s, c ) => s + c, 0 );
+console.log( "CROWD targeted plants sampled", claimants.length, "chasers per plant p50/p90/max", qq( claimants, 0.5 ), qq( claimants, 0.9 ), Math.max( ...claimants ),
+             "share of chasers on a plant with >=3 chasers", ( 100 * claimants.filter( c => c >= 3 ).reduce( ( s, c ) => s + c, 0 ) / Math.max( 1, chasers )).toFixed( 0 ) + "%" );
+console.log( "MEAL ENERGY n", mealEnergy.length, "p10/p50/p90", qq( mealEnergy, 0.1 ), qq( mealEnergy, 0.5 ), qq( mealEnergy, 0.9 ), "mean", ( mealEnergy.reduce( ( s, x ) => s + x, 0 ) / Math.max( 1, mealEnergy.length )).toFixed( 1 ));
 console.log( JSON.stringify({
     seed: SEED, measuredSteps: STEPS, afterWarmSteps: WARM,
     episodes: ended.length, endings: byEnd,
