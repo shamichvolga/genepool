@@ -299,7 +299,7 @@ export function openTweakGenesPanel( selectedSwimbotID )
 {
     if ( selectedSwimbotID != NULL_INDEX )
     {
-        document.getElementById( 'tweakGenesPanel'      ).style.visibility = 'visible';
+        document.getElementById( 'tweakGenesPanel'      ).style.visibility = 'visible'; document.getElementById( 'tweakGenesPanel' ).style.display = 'block';
         document.getElementById( 'closeTweakGenesPanel' ).style.display = "block";
         document.getElementById( 'tweakGenesPanel' ).innerHTML = "<div id = 'tweakGenesTitle' >Tweak the genes of swimbot " + selectedSwimbotID + "</div>";
         document.getElementById( 'tweakGenesPanel' ).innerHTML += "<div id = 'tweakGenesCategoryNote' >(choose which limb type to tweak)</div>";
@@ -363,7 +363,7 @@ export function openTweakGenesPanel( selectedSwimbotID )
     }
     else
     {
-        document.getElementById( 'tweakGenesPanel'      ).style.visibility = 'hidden';
+        document.getElementById( 'tweakGenesPanel'      ).style.visibility = 'hidden'; document.getElementById( 'tweakGenesPanel' ).style.display = 'none';
         document.getElementById( 'closeTweakGenesPanel' ).style.display = "none";
     }
 }
@@ -399,7 +399,7 @@ export function updateGeneSliders( selectedSwimbotID )
 //-------------------------
 export function closePopupPanel()
 {
-    document.getElementById( 'popUpPanel'               ).style.visibility = 'hidden';
+    document.getElementById( 'popUpPanel'               ).style.visibility = 'hidden'; document.getElementById( 'popUpPanel' ).style.display = 'none';
     document.getElementById( 'cancelPopUpPanelButton'   ).style.visibility = 'hidden';
     document.getElementById( 'dataDisplayButton'        ).style.display = "none";
     document.getElementById( "Canvas" ).focus();
@@ -857,7 +857,7 @@ export function notifyGeneTweakPanelMouseDown()
     }
     else
     {
-        if ( document.getElementById( 'tweakGenesPanel' ).style.visibility === 'visible' )
+        if ( document.getElementById( 'tweakGenesPanel' ).style.display === 'block' )
         {
             openTweakGenesPanel( selectedSwimbotID );
         }

@@ -351,7 +351,7 @@ function showAccountRequiredPopup( text )
     document.getElementById( 'noSavePopUpPanelButton'   ).style.visibility = "hidden";   
     document.getElementById( 'savePopUpPanelButton'     ).style.visibility = "hidden";      
     
-    document.getElementById( 'popUpPanel'               ).style.visibility = "visible";   
+    document.getElementById( 'popUpPanel'               ).style.visibility = "visible"; document.getElementById( 'popUpPanel' ).style.display = 'block';   
     document.getElementById( 'cancelPopUpPanelButton'   ).style.visibility = "visible";
     document.getElementById( 'popUpPanel' ).innerHTML
     = "<font size = 3 color = '#770000' face='arial'>" + text + "</font>"
@@ -387,7 +387,7 @@ export function openPopupPanelForInput( text, mode )
     //----------------------------------------------------------------------------------    
     // turn these on  
     //----------------------------------------------------------------------------------    
-    document.getElementById( 'popUpPanel'               ).style.visibility = "visible";   
+    document.getElementById( 'popUpPanel'               ).style.visibility = "visible"; document.getElementById( 'popUpPanel' ).style.display = 'block';   
     document.getElementById( 'cancelPopUpPanelButton'   ).style.visibility = "visible";    
     document.getElementById( 'popUpPanelInput'          ).style.visibility = "visible";   
     document.getElementById( 'submitFilenameButton'     ).style.visibility = "visible";   
@@ -499,7 +499,7 @@ function showPoolData( pool )
     {
         let json = JSON.stringify( { pool } );
 
-        document.getElementById( 'dataDisplay'      ).style.visibility = "visible";
+        document.getElementById( 'dataDisplay'      ).style.visibility = "visible"; document.getElementById( 'dataDisplay' ).style.display = 'block';
         document.getElementById( 'closeDataDisplay' ).style.visibility = "visible";
         document.getElementById( 'dataDisplay'      ).innerHTML
         = "Copy the text below, put it in a new text file, and then give"
@@ -523,7 +523,7 @@ export function showSwimbotGenes(s)
         let genes = genePool.getSwimbotGenes(s);
         let json = JSON.stringify( { genes } );
 
-        document.getElementById( 'dataDisplay'      ).style.visibility = "visible";
+        document.getElementById( 'dataDisplay'      ).style.visibility = "visible"; document.getElementById( 'dataDisplay' ).style.display = 'block';
         document.getElementById( 'closeDataDisplay' ).style.visibility = "visible";
         document.getElementById( 'dataDisplay'      ).innerHTML
         = "<br>"
@@ -566,7 +566,7 @@ export function downloadSwimbotGenes(s)
 //----------------------------
 export function closeDataDisplay()
 {
-    document.getElementById( 'dataDisplay'      ).style.visibility = "hidden"; 
+    document.getElementById( 'dataDisplay'      ).style.visibility = "hidden"; document.getElementById( 'dataDisplay' ).style.display = 'none'; 
     document.getElementById( 'closeDataDisplay' ).style.visibility = "hidden"; 
 }
 
