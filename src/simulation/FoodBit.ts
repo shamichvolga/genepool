@@ -38,6 +38,18 @@ export function FoodBit()
     let _maxSpawnRadius = DEFAULT_FOOD_BIT_MAX_SPAWN_RADIUS;
     let _autotomyDecoy  = false;
 
+    // alive or not, mirrored as one byte in the shared state (see bindLiveFlag)
+    let _live   = new Uint8Array( 1 );
+    let _liveAt = 0;
+    const markLive = function() { _live[ _liveAt ] = ( _index != NULL_INDEX ) ? 1 : 0; }
+
+    this.bindLiveFlag = function( array: Uint8Array, slot: number )
+    {
+        _live   = array;
+        _liveAt = slot;
+        markLive();
+    }
+
     //--------------------------------------------------------
     // initialize
     //--------------------------------------------------------
@@ -51,6 +63,7 @@ export function FoodBit()
         _position.x = POOL_LEFT + gpRandom() * POOL_WIDTH;
         _position.y = POOL_TOP  + gpRandom() * POOL_HEIGHT;
         _type       = 0;
+        markLive();
     }
 
 
@@ -88,6 +101,7 @@ export function FoodBit()
 	       assert( childIndex != NULL_INDEX, "foodbit.js: spawnNearParent: childIndex != NULL_INDEX" );
 
         _index      = childIndex;
+        markLive();
         _age        = 0;
         _opacity    = ZERO;
         _energy     = parentFoodBit.getEnergy();
@@ -215,6 +229,7 @@ export function FoodBit()
     this.kill = function()
     {
         _index = NULL_INDEX;
+        markLive();
     }
 
 	//----------------------------

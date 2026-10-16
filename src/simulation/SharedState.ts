@@ -132,6 +132,8 @@ export class SharedState
     readonly effCold      : Float64Array;
     readonly preferred    : Float64Array;   // preferred food type (classic pools)
     readonly alive        : Uint8Array;
+    readonly liveSwimbot  : Uint8Array;     // 1 = alive right now (the swimbot's own flag)
+    readonly liveFood     : Uint8Array;     // 1 = the food bit exists right now (its own flag)
     readonly eternal      : Uint8Array;
     readonly sensing      : Uint8Array;     // 1 = perceives this step
     readonly brainState   : Int8Array;
@@ -231,6 +233,8 @@ export class SharedState
         this.effCold    = f64( "effCold", n );
         this.preferred  = f64( "preferred", n );
         this.alive      = u8 ( "alive", n );
+        this.liveSwimbot = u8( "liveSwimbot", n );
+        this.liveFood    = u8( "liveFood", MAX_FOODBITS );
         this.eternal    = u8 ( "eternal", n );
         this.sensing    = u8 ( "sensing", n );
         this.brainState = new Int8Array( make( "brainState", n ));

@@ -343,12 +343,12 @@ export function GenePool()
     //------------------------------------------------------------------
     function syncSwimbotPosition( s )
     {
-        const position = _swimbots[s].getPosition();
-        const genital  = _swimbots[s].getGenitalPosition();
-        _botX    [s] = position.x;
-        _botY    [s] = position.y;
-        _genitalX[s] = genital.x;
-        _genitalY[s] = genital.y;
+        // (the swimbot keeps these in its row of the shared state)
+        const k = s * SS.BOT_STRIDE, B = _st.bots;
+        _botX    [s] = B[ k + SS.B_POS_X     ];
+        _botY    [s] = B[ k + SS.B_POS_Y     ];
+        _genitalX[s] = B[ k + SS.B_GENITAL_X ];
+        _genitalY[s] = B[ k + SS.B_GENITAL_Y ];
     }
 
     function syncSwimbot( s )
@@ -367,21 +367,10 @@ export function GenePool()
         _aliveSwimbotIndices.length = 0;
         _aliveFoodBitIndices.length = 0;
 
-        for (let s = 0; s < MAX_SWIMBOTS; s++)
-        {
-            if (_swimbots[s].getAlive())
-            {
-                _aliveSwimbotIndices.push(s);
-            }
-        }
-
-        for (let f = 0; f < MAX_FOODBITS; f++)
-        {
-            if (_foodBits[f].getAlive())
-            {
-                _aliveFoodBitIndices.push(f);
-            }
-        }
+        // (the alive flags are bytes in the shared state: fast to scan)
+        const liveSwimbot = _st.liveSwimbot, liveFood = _st.liveFood;
+        for (let s = 0; s < MAX_SWIMBOTS; s++) { if ( liveSwimbot[s] === 1 ) _aliveSwimbotIndices.push(s); }
+        for (let f = 0; f < MAX_FOODBITS; f++) { if ( liveFood[f]    === 1 ) _aliveFoodBitIndices.push(f); }
     }
 
 	//---------------------------------------------------------
@@ -398,6 +387,7 @@ export function GenePool()
 	for (let f=0; f<MAX_FOODBITS; f++)
 	{
 		_foodBits[f] = new FoodBit();
+		_foodBits[f].bindLiveFlag( _st.liveFood, f );
 	}
 
 	//-------------------------------------
@@ -2283,7 +2273,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	    // Swimbots that died last step: leave the grid, maybe leave meat
 	    for (let s = 0; s < MAX_SWIMBOTS; s++)
 	    {
-            if (_swimbotWasAlive[s] && !_swimbots[s].getAlive())
+            if (_swimbotWasAlive[s] && ( _st.liveSwimbot[s] === 0 ))
             {
                 // Запомнить позицию трупа ДО удаления из грида
                 let deadPosition = _swimbots[s].getPosition();

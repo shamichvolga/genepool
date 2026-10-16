@@ -98,7 +98,9 @@ var    flopperYV = 0;
 	let _chosenMateIndex    = NULL_INDEX;
 	let _chosenFoodBitIndex = NULL_INDEX;
 	let _lastPursuitMeatIndex = NULL_INDEX;
-	let _alive 	  		    = false;
+	// alive or not: one byte, in the shared state once I have a slot
+	let _live    = new Uint8Array( 1 );
+	let _liveAt  = 0;
 	let _tryingToMate       = false;
 	let _tryingToEat        = false;
 	let _torque             = ZERO;
@@ -236,6 +238,10 @@ this.setParent = function( parent )
 	    const st = SS.sharedState();
 	    _shared = st;
 	    _slot   = slot;
+
+	    st.liveSwimbot[ slot ] = _live[ _liveAt ];
+	    _live   = st.liveSwimbot;
+	    _liveAt = slot;
 
 	    // the hot numbers move into the slot's row (keeping their values)
 	    const row = slot * SS.BOT_STRIDE;
@@ -980,7 +986,7 @@ this.setParent = function( parent )
         _chosenMateIndex    = NULL_INDEX;
         _chosenFoodBitIndex = NULL_INDEX;
         _lastPursuitMeatIndex = NULL_INDEX;
-        _alive 	  		    = false;
+        _live[ _liveAt ] = 0;
         _tryingToMate       = false;
         _tryingToEat        = false;
         _B[ _b + SS.B_GROWTH ]        = ZERO;
@@ -1009,7 +1015,7 @@ _position.copyFrom( position );
 		_B[ _b + SS.B_ANGLE ] 		        = angle;
 		_B[ _b + SS.B_AGE ]		        = age;
 		_B[ _b + SS.B_ENERGY ]             = energy;
-		_alive		        = true;
+		_live[ _liveAt ] = 1;
 		_B[ _b + SS.B_GROWTH ]        = ONE;
 
 		// whole body
@@ -2303,7 +2309,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	this.getIsTryingToMate              = function() { return _tryingToMate;                                }
 	this.getIndex                       = function() { return _index;                                       }
 	this.getAge                         = function() { return _B[ _b + SS.B_AGE ];                                         }
-	this.getAlive                       = function() { return _alive;                                       }
+	this.getAlive                       = function() { return _live[ _liveAt ] === 1;                       }
 	this.getEnergy                      = function() { return _B[ _b + SS.B_ENERGY ];                                      }
 	this.getAngle                       = function() { return _B[ _b + SS.B_ANGLE ];                                       }
 	this.getEnergyEfficiency            = function() { return _B[ _b + SS.B_EFFICIENCY ];                            }
@@ -3303,7 +3309,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	//----------------------
 	this.die = function( cause = "other" )
 	{
-	    if ( _alive )
+	    if ( _live[ _liveAt ] === 1 )
 	    {
 	        simCounters.numDeadSwimbots ++;
 	        if ( cause === "starvation" ) simCounters.starvationDeaths ++;
@@ -3311,7 +3317,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	        else if ( cause === "predation" ) simCounters.predationDeaths ++;
 	        else simCounters.otherDeaths ++;
 	    }
-        _alive = false;
+        _live[ _liveAt ] = 0;
 
 	    //assert( _index != NULL_INDEX, "Swimbot.js: this.die: _index != NULL_INDEX" )
 	    if ( _index != NULL_INDEX )
@@ -3347,7 +3353,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
         _chosenMateIndex    = NULL_INDEX;
         _chosenFoodBitIndex = NULL_INDEX;
         _lastPursuitMeatIndex = NULL_INDEX;
-        _alive 	  		    = false;
+        _live[ _liveAt ] = 0;
         _tryingToMate       = false;
         _tryingToEat        = false;
         _B[ _b + SS.B_GROWTH ]        = ZERO;
