@@ -1203,6 +1203,14 @@ _position.copyFrom( position );
 	//---------------------------------------------------------------
     this.processPhenotype = function()
     {
+        // part colours in one dense array, for drawing on the graphics card
+        for (let p=0; p<_phenotype.numParts; p++)
+        {
+            _partRGB[ p * 3     ] = _phenotype.parts[p].red;
+            _partRGB[ p * 3 + 1 ] = _phenotype.parts[p].green;
+            _partRGB[ p * 3 + 2 ] = _phenotype.parts[p].blue;
+        }
+
 		//-----------------------------------------------------
 		// calculate masses and total part length
 		//-----------------------------------------------------
@@ -2805,17 +2813,33 @@ console.log( "contributeToOffspring: _childEnergyRatio = " + _childEnergyRatio )
 	        return;
 	    }
 
-	    for (let p=1; p<_B[ _b + SS.B_NUM_PARTS ]; p++)
+	    // the whole body straight into the renderer's array; the colour mix
+	    // (newborn white, dying grey) is worked out once for the body
+	    _swimbotRenderer.getColorMix( _colorMix );
+	    const white = _colorMix.white, dead = _colorMix.dead, keep = ONE - white - dead;
+	    const greyR = white + dead * _swimbotRenderer.deadRed, greyG = white + dead * _swimbotRenderer.deadGreen, greyB = white + dead * _swimbotRenderer.deadBlue;
+
+	    const numParts = _B[ _b + SS.B_NUM_PARTS ];
+	    if ( numParts <= 1 ) { return; }
+	    let i = capsules.reserve( numParts - 1 );
+	    const d = capsules.reserved();
+	    for (let p=1; p<numParts; p++)
 	    {
 	        const parent = _pParent[p];
-	        let ax, ay;
-	        if ( parent == NULL_PART ) { ax = _position.x; ay = _position.y; }
-	        else { ax = _pd[ parent * PS + P_X ]; ay = _pd[ parent * PS + P_Y ]; }
-
-	        const c = _swimbotRenderer.calculatePartColor(p);
-	        capsules.add( ax, ay, _pd[ p * PS + P_X ], _pd[ p * PS + P_Y ], _pWidth[p], c.red, c.green, c.blue, 1 );
+	        if ( parent == NULL_PART ) { d[ i ] = _position.x; d[ i + 1 ] = _position.y; }
+	        else { d[ i ] = _pd[ parent * PS + P_X ]; d[ i + 1 ] = _pd[ parent * PS + P_Y ]; }
+	        d[ i + 2 ] = _pd[ p * PS + P_X ];
+	        d[ i + 3 ] = _pd[ p * PS + P_Y ];
+	        d[ i + 4 ] = _pWidth[p];
+	        d[ i + 5 ] = greyR + _partRGB[ p * 3     ] * keep;
+	        d[ i + 6 ] = greyG + _partRGB[ p * 3 + 1 ] * keep;
+	        d[ i + 7 ] = greyB + _partRGB[ p * 3 + 2 ] * keep;
+	        d[ i + 8 ] = 1;
+	        i += 9;
 	    }
 	}
+	const _colorMix = { white: 0, dead: 0 };
+	const _partRGB  = new Float32Array( MAX_PARTS * 3 );   // part colours (filled in processPhenotype)
 
 	this.render = function( levelOfDetail )
 	{

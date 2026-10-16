@@ -535,6 +535,27 @@ var    flopperYV = 0;
     	_swimbot        = swimbot;
 	}
 
+	//-------------------------------------------------------------------
+	// the same colours as calculatePartColor, for the whole body at once:
+	// how much newborn white and how much dead grey is mixed in (for the
+	// graphics card, where a call per part is too slow with thousands)
+	//-------------------------------------------------------------------
+	this.getColorMix = function( mix )
+	{
+	    mix.white = ZERO; mix.dead = ZERO;
+	    if ( _swimbot.getEternal() ) { return; }
+	    const oldAgeThreshold = _swimbot.getOldAgeThreshold();
+	    if ( _age < oldAgeThreshold )
+	    {
+	        if      ( _age    < YOUNG_AGE_DURATION ) { mix.white = ONE - _growthScale; }
+	        else if ( _energy < STARVING           ) { mix.dead  = ONE - Math.max( ZERO, _energy ) / STARVING; }
+	    }
+	    else { mix.dead = Math.max( ZERO, Math.min( ONE, ( _age - oldAgeThreshold ) / OLD_AGE_DURATION )); }
+	}
+	this.deadRed   = DEAD_COLOR_RED;
+	this.deadGreen = DEAD_COLOR_GREEN;
+	this.deadBlue  = DEAD_COLOR_BLUE;
+
 	this.calculatePartColor = function(p)
 	{
 	    // Calculate the color if not cached

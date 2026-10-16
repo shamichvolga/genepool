@@ -18,7 +18,7 @@ export function createRemotePool( worker: Worker, onPetriLoaded: () => void )
     // until the first snapshot comes
     let S: any =
     {
-        timeStep: 0, numSwimbots: 0, stepsPerSecond: 0, numThreads: 1, speedLevel: 1, simulationRunning: true, rendering: true,
+        timeStep: 0, numSwimbots: 0, stepsPerSecond: 0, renderMs: 0, numThreads: 1, speedLevel: 1, simulationRunning: true, rendering: true,
         selectedSwimbotID: -1, aSwimbotIsSelected: false, viewMode: 0, attraction: 0,
         foodGrowthDelay: 0, foodSpread: 0, foodBitEnergy: 0, energyToOffspring: 0, maximumSwimbotAge: 0, hungerThreshold: 0,
         history: { interval: 50, step: [], herbivores: [], predators: [], plants: [], meat: [] },
@@ -59,6 +59,7 @@ export function createRemotePool( worker: Worker, onPetriLoaded: () => void )
         getTimeStep:            () => S.timeStep,
         getNumSwimbots:         () => S.numSwimbots,
         getStepsPerSecond:      () => S.stepsPerSecond,
+        getRenderMs:            () => S.renderMs,
         getNumThreads:          () => S.numThreads,
         getSpeedLevel:          () => S.speedLevel,
         getSimulationRunning:   () => S.simulationRunning,

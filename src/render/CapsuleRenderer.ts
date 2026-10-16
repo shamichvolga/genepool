@@ -175,12 +175,7 @@ export class CapsuleRenderer
     add( ax: number, ay: number, bx: number, by: number, radius: number,
          red: number, green: number, blue: number, alpha: number ): void
     {
-        if ( ( this.count + 1 ) * FLOATS_PER_CAPSULE > this.data.length )
-        {
-            const bigger = new Float32Array( this.data.length * 2 );
-            bigger.set( this.data );
-            this.data = bigger;
-        }
+        if ( ( this.count + 1 ) * FLOATS_PER_CAPSULE > this.data.length ) { this.grow( this.count + 1 ); }
         const d = this.data;
         let i = this.count * FLOATS_PER_CAPSULE;
         d[ i++ ] = ax;  d[ i++ ] = ay;
@@ -188,6 +183,29 @@ export class CapsuleRenderer
         d[ i++ ] = radius;
         d[ i++ ] = red; d[ i++ ] = green; d[ i++ ] = blue; d[ i++ ] = alpha;
         this.count ++;
+    }
+
+    //--------------------------------------------------------------------
+    // room for n more capsules, to be written straight into reserved():
+    // returns where in it the first of them starts (a whole body at once,
+    // without a call per part)
+    //--------------------------------------------------------------------
+    reserve( n: number ): number
+    {
+        if ( ( this.count + n ) * FLOATS_PER_CAPSULE > this.data.length ) { this.grow( this.count + n ); }
+        const start = this.count * FLOATS_PER_CAPSULE;
+        this.count += n;
+        return start;
+    }
+    reserved(): Float32Array { return this.data; }
+
+    private grow( capsules: number ): void
+    {
+        let length = this.data.length;
+        while ( capsules * FLOATS_PER_CAPSULE > length ) { length *= 2; }
+        const bigger = new Float32Array( length );
+        bigger.set( this.data );
+        this.data = bigger;
     }
 
     //--------------------------------------------------------------------

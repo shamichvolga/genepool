@@ -63,6 +63,7 @@ export function GenePool()
     let _stepDebt                   = 0;    // simulation steps owed at normal speed
     let _stepsThisSecond            = 0;
     let _stepsPerSecond             = 0;    // measured, for display
+    let _renderMs                   = 0;    // how long drawing a frame takes (smoothed)
     let _stepsSecondStart           = 0;
 
     let _lastAnimationFrame         = 0;    // when the screen refresh last called us
@@ -1914,14 +1915,22 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 
         if ( _rendering && !pageHidden && draw )
         {
+            const renderStart = performance.now();
             rebuildAliveIndexCaches();
             this.renderFrame();
+            _renderMs += ( performance.now() - renderStart - _renderMs ) * 0.05;   // smoothed, for finding what is slow
         }
 
         _touch.update();
 	}
 
 	this.getStepsPerSecond = function() { return _stepsPerSecond; }
+	this.getRenderMs       = function() { return _renderMs; }
+
+	// drawing time by part (milliseconds, smoothed): water and obstacle, food, swimbots, graphics card
+	const _renderPhaseMs = [ 0, 0, 0, 0 ];
+	function renderPhase( phase, since ) { const t = performance.now(); _renderPhaseMs[ phase ] += ( t - since - _renderPhaseMs[ phase ] ) * 0.05; return t; }
+	this.getRenderPhaseMs = function() { return _renderPhaseMs.slice(); }
 
 	// no screen refresh for a while (hidden or covered window, embedded view)?
 	this.screenRefreshStalled = function( now ) { return ( now - _lastAnimationFrame ) > 100; }
@@ -3324,6 +3333,7 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
         const useGraphicsCard = ( _capsuleRenderer !== null ) && ( _levelOfDetail !== SWIMBOT_LEVEL_OF_DETAIL_HIGH );
         if ( useGraphicsCard ) { _capsuleRenderer.begin(); }
 
+        let phaseStart = performance.now();
         _pool.render( _seconds, _camera );
 
 		//-------------------------
@@ -3334,12 +3344,15 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
 		//-------------------------
 		// render food
 		//-------------------------
+        phaseStart = renderPhase( 0, phaseStart );
 		this.renderFoodBits( useGraphicsCard );
+        phaseStart = renderPhase( 1, phaseStart );
 
 		//----------------------------------
 		// render swimbots with batching
 		//----------------------------------
         this.renderSwimbotsWithBatching( useGraphicsCard );
+        phaseStart = renderPhase( 2, phaseStart );
 
         if ( useGraphicsCard )
         {
@@ -3355,6 +3368,7 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
         {
             _capsuleRenderer.clear();
         }
+        renderPhase( 3, phaseStart );
 
 		//-----------------------------------------------------------------------
 		// when view is in mutual love mode, show a line between the lovers...
