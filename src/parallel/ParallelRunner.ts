@@ -87,7 +87,9 @@ export class ParallelRunner
         while ( Atomics.load( control, CTRL_DONE ) < numWorkers )
         {
             // safety: a worker that never answers must not freeze the page
-            if ((( ++ spins ) & 0xffff ) === 0 && ( performance.now() - this.phaseStart > 3000 ))
+            // (15 s: a computer busy with other programs can be slow for a
+            //  few seconds - that must not switch the threads off for good)
+            if ((( ++ spins ) & 0xffff ) === 0 && ( performance.now() - this.phaseStart > 15000 ))
             {
                 console.error( "simulation workers stopped answering: continuing in one thread" );
                 this.broken = true;
