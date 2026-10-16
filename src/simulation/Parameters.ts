@@ -267,3 +267,4 @@ export const INHERITED_INVESTMENT_ENABLED   = false;  // gene: share of energy g
 export const SIZE_MATURITY_ENABLED          = false;  // grown up (may mate) at 1000 x clamp( mass / 410, 0.5, 4 ) steps
 export const SIZE_ASSORTATIVE_MATING_ENABLED = false; // mates chosen by color AND size (gene: how much size counts)
 export const PREDATOR_GAPE_CURVE_ENABLED    = false;  // attack success falls with prey/predator mass, big prey takes longer to eat
+export const CROWD_AWARE_FOOD_CHOICE_ENABLED = false; // a plant others are nearer to looks farther (gene "deference": how much)

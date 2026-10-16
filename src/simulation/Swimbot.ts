@@ -1,4 +1,4 @@
-import { geneAverage, GENES_PERSISTENCE, GENES_INVESTMENT, GENES_SIZE_PICKINESS, setTrait, GENES_PREDATOR, GENES_SELF_FEED_WHICH, GENES_SELF_FEED_AMOUNT } from "./EcologyGenes";
+import { geneAverage, GENES_DEFERENCE, GENES_PERSISTENCE, GENES_INVESTMENT, GENES_SIZE_PICKINESS, setTrait, GENES_PREDATOR, GENES_SELF_FEED_WHICH, GENES_SELF_FEED_AMOUNT } from "./EcologyGenes";
 import { physicsPartA, physicsPartB } from "./PhysicsKernel";
 import { applyWaterDrag, bodyMotionFactors } from "./BodyPhysics";
 import { advanceBodyTemperature } from "./ThermalPhysics";
@@ -1284,6 +1284,7 @@ _position.copyFrom( position );
         _M[ _m + SS.M_PERSIST ]         = geneAverage( _genotype, GENES_PERSISTENCE );
         _M[ _m + SS.M_INVEST ]          = 0.15 + 0.7 * geneAverage( _genotype, GENES_INVESTMENT );
         _M[ _m + SS.M_SIZE_PICKY ]      = geneAverage( _genotype, GENES_SIZE_PICKINESS );
+        _M[ _m + SS.M_DEFERENCE ]       = geneAverage( _genotype, GENES_DEFERENCE );
         _M[ _m + SS.M_MATURE_AGE ]      = SIZE_MATURITY_ENABLED
             ? YOUNG_AGE_DURATION * Math.min( 4, Math.max( 0.5, _phenotype.mass / 410 ))
             : YOUNG_AGE_DURATION;

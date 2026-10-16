@@ -1,4 +1,4 @@
-import { ecologyMutationRate, isEcologyGene, isMarkerGene, isSelfFeedingGene, mutateEcologyGene, mutateMarkerGene } from "./EcologyGenes";
+import { ecologyMutationRate, isEcologyGene, isMarkerGene, isSelfFeedingGene, mutateEcologyGene, mutateMarkerGene, isDeferenceGene } from "./EcologyGenes";
 import { gpRandom } from "./Globals";
 import { BRAIN_SIZE, founderBrain, inheritBrain, innateBrain, migrateLegacyBrainWeights, mutateBrain } from "./NeuralBrain";
 import { BYTE_SIZE, ONE_HALF } from "./MathConstants";
@@ -430,7 +430,7 @@ g++; _genes[g] = 255;
             // mutation
             //-----------------------------------
             if (( SELF_CANNIBALISM_ENABLED && isSelfFeedingGene(g) )
-            ||  isEcologyGene(g) || isMarkerGene(g) )
+            ||  isEcologyGene(g) || isMarkerGene(g) || isDeferenceGene(g) )
             {
                 // ecology genes and markers: small steps, no wrap-around
                 if ( gpRandom() < ecologyMutationRate(g) )
@@ -513,7 +513,7 @@ g++; _genes[g] = 255;
             {
                 if      ( isMarkerGene(g)  ) { _genes[g] = mutateMarkerGene ( _genes[g] ); }
                 else if ( SELF_CANNIBALISM_ENABLED && isSelfFeedingGene(g) ) { _genes[g] = mutateEcologyGene( _genes[g] ); }
-                else if ( isEcologyGene(g) ) { _genes[g] = mutateEcologyGene( _genes[g] ); }
+                else if ( isEcologyGene(g) || isDeferenceGene(g) ) { _genes[g] = mutateEcologyGene( _genes[g] ); }
                 else                         { this.mutateGene(g); }
             }
         }

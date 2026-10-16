@@ -16,8 +16,8 @@ import { ATTACK_SUCCESS_CHANCE, ENVIRONMENT_ATTACK_SUCCESS_CHANCE, PREDATOR_LEVE
 import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
 import { ATTRACTION_SIMILAR_COLOR, STARVING, SWIMBOT_MOUTH_LENGTH, SWIMBOT_VIEW_RADIUS } from "./SwimbotTypes";
 import { FOOD_BIT_GRAB_RADIUS } from "./FoodBit";
-import { FOOD_TARGET_PERSISTENCE_ENABLED, FOOD_SWITCH_RATIO_MIN, FOOD_KEEP_RADIUS_SCALE, SIZE_ASSORTATIVE_MATING_ENABLED } from "./Parameters";
-import { MIND_STRIDE, M_FOOD, M_PERSIST, M_MATURE_AGE, M_SIZE_PICKY, M_MAX_ENERGY } from "./MindLayout";
+import { CROWD_AWARE_FOOD_CHOICE_ENABLED, FOOD_TARGET_PERSISTENCE_ENABLED, FOOD_SWITCH_RATIO_MIN, FOOD_KEEP_RADIUS_SCALE, SIZE_ASSORTATIVE_MATING_ENABLED } from "./Parameters";
+import { MIND_STRIDE, M_DEFERENCE, M_FOOD, M_PERSIST, M_MATURE_AGE, M_SIZE_PICKY, M_MAX_ENERGY } from "./MindLayout";
 import { preyTargetScore } from "./EcologyGenes";
 import {
     BACKGROUND_SIZE, B_VEL_X, B_VEL_Y, BOT_STRIDE, MAX_SEEN, PARAM_ENV_ACTIVE, PARAM_ENV_FIELDS, PARAM_FOOD_TYPES, PARAM_OBSTACLE_X1, PARAM_OBSTACLE_X2,
@@ -313,7 +313,21 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
         {
             if ( viewDistanceSquared >= viewRadiusSquared ) continue;
             const e = ( type === PLANT_TYPE_WARM ) ? myEfficiencyWarm : myEfficiencyCold;
-            const scaled = viewDistanceSquared / ( e * e );
+            let scaled = viewDistanceSquared / ( e * e );
+            if ( CROWD_AWARE_FOOD_CHOICE_ENABLED )
+            {
+                // herbivores in sight whose mouth is nearer to this plant than mine
+                let rivals = 0;
+                for (let i = 0; i < numSeen; i++)
+                {
+                    const o = st.seen[ seenBase + i ];
+                    if ( predator[o] > PREDATOR_LEVEL_THRESHOLD ) continue;
+                    const ox = st.mouthX[o] - foodX[f], oy = st.mouthY[o] - foodY[f];
+                    if ( ox * ox + oy * oy < viewDistanceSquared ) rivals ++;
+                }
+                const k = 1 + st.mind[ s * MIND_STRIDE + M_DEFERENCE ] * rivals;
+                scaled *= k * k;
+            }
             if ( scaled < smallestDistanceSquared && foodAlive[f] === 1 && !obstructed( st, myMouthX, myMouthY, foodX[f], foodY[f] ))
             {
                 smallestDistanceSquared = scaled;

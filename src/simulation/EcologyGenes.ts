@@ -32,6 +32,8 @@ export const GENES_SIZE_PICKINESS  = [ 143 ];                  // how much a mat
 // otherwise-unused loci are active only in that experiment.
 export const GENES_SELF_FEED_WHICH   = [ 160 ];
 export const GENES_SELF_FEED_AMOUNT  = [ 161 ];
+export const GENES_DEFERENCE         = [ 162 ];   // how much a plant others are nearer to is avoided (CROWD_AWARE_FOOD_CHOICE_ENABLED)
+export function isDeferenceGene( g ) { return g === GENES_DEFERENCE[0]; }
 
 export function isSelfFeedingGene( g ): boolean
 {
