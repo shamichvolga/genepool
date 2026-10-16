@@ -17,6 +17,27 @@
 
 		
         
+		<!-- what is going on in the pool, over the pool (see ui.ts updateHud) -->
+		<div id = "hud" title = "press ? for the keys"></div>
+
+		<!-- the keys (press ? or F1) -->
+		<div id = "helpOverlay" onClick = "toggleHelp();">
+			<div class = "helpBox">
+				<div class = "helpTitle">Keys</div>
+				<table>
+					<tr><td>W A S D, arrows</td><td>move the view</td></tr>
+					<tr><td>Q E, &minus; +, wheel</td><td>zoom</td></tr>
+					<tr><td>Space</td><td>freeze / go on</td></tr>
+					<tr><td>1 2 3</td><td>speed: normal, fast, as fast as possible</td></tr>
+					<tr><td>R</td><td>drawing on / off (faster when off)</td></tr>
+					<tr><td>G</td><td>show mouths and genitals</td></tr>
+					<tr><td>H</td><td>hide / show the panel</td></tr>
+					<tr><td>Tab</td><td>next panel tab</td></tr>
+					<tr><td>? or F1</td><td>this help (click to close)</td></tr>
+				</table>
+			</div>
+		</div>
+
 		<!-- hides / shows the whole panel on the right (key H) -->
 		<button id = "panelToggleButton" onClick = "togglePanel();" title = "hide the panel (H)">&#x276F;</button>
 
@@ -312,6 +333,7 @@
             <br>
             <br>
             Rendering is currently turned off. It makes the simulation run faster.
+            <div id = "noRenderStats"></div>
         </div>                  
         
 		<!-- everything starts in src/main.ts -->

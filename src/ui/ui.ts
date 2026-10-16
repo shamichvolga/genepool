@@ -479,12 +479,15 @@ export function setRendering(r)
         genePool.setRendering( true );
         canvasID.style.visibility = 'visible';
         document.getElementById( "noRenderPanel" ).style.visibility = 'hidden';
+        document.getElementById( "noRenderPanel" ).style.display    = 'none';
     }
     else
     {
         genePool.setRendering( false );
         canvasID.style.visibility = 'hidden';
         document.getElementById( "noRenderPanel" ).style.visibility = 'visible';
+        document.getElementById( "noRenderPanel" ).style.display    = 'block';
+        updateHud();
     }
 }
 
@@ -844,7 +847,87 @@ export function updateUI()
             _graph.render();
         }
     }
+    updateHud();
     setTimeout( updateUI, UI_UPDATE_PERIOD );
+}
+
+//------------------------------------------------------------
+// the status over the pool (also while the drawing is off)
+//------------------------------------------------------------
+function updateHud()
+{
+    if ( typeof genePool == "undefined" ) return;
+    const history = genePool.getPopulationHistory();
+    const n = history.step.length;
+    const herbivores = n > 0 ? history.herbivores[ n - 1 ] : 0;
+    const predators  = n > 0 ? history.predators [ n - 1 ] : 0;
+    const plants     = n > 0 ? history.plants    [ n - 1 ] : 0;
+    const environment = genePool.getEnvironment();
+    const paused = !genePool.getSimulationRunning();
+    const speedName = [ "", ">", ">>", ">>>" ][ genePool.getSpeedLevel() ] || "";
+
+    const html =
+        ( paused ? "<span class='hudPaused'>FROZEN (space)</span> · " : "" )
+        + "step <b>" + genePool.getTimeStep() + "</b>"
+        + ( environment.active ? " · " + environment.seasonName() : "" )
+        + " · " + Math.round( genePool.getStepsPerSecond() ) + " steps/s " + speedName
+        + "<br>"
+        + "<span class='hudHerb'>herbivores " + herbivores + "</span> · "
+        + "<span class='hudPred'>predators " + predators + "</span> · "
+        + "<span class='hudPlant'>plants " + plants + "</span>";
+
+    const hud = document.getElementById( "hud" );
+    if ( hud && hud.innerHTML !== html ) { hud.innerHTML = html; }
+
+    // the same, big, while the drawing is off (so it is clear what goes on)
+    if ( !genePool.getRendering() )
+    {
+        const stats = document.getElementById( "noRenderStats" );
+        if ( stats && stats.innerHTML !== html ) { stats.innerHTML = html; }
+    }
+}
+
+//------------------------------------------------------------
+// the keys help (press ? or F1)
+//------------------------------------------------------------
+export function toggleHelp()
+{
+    document.body.classList.toggle( "helpShown" );
+}
+
+// the tabs in order, for the Tab key
+const TAB_ORDER = [ "menuPoolButton", "menuSwimbotButton", "menuTweakButton", "menuGraphButton", "menuInfoButton" ];
+
+function nextTab()
+{
+    let current = 0;
+    for ( let k = 0; k < TAB_ORDER.length; k++ )
+    {
+        const button = document.getElementById( TAB_ORDER[k] );
+        if ( button && button.classList.contains( "active" )) { current = k; }
+    }
+    openPanel( TAB_ORDER[ ( current + 1 ) % TAB_ORDER.length ] );
+}
+
+// keys that are not camera keys; true = handled
+function handleCommandKey( e ): boolean
+{
+    if ( e.repeat ) return false;
+    switch ( e.code )
+    {
+        case "Space":  toggleSimulationRunning(); return true;
+        case "Digit1": case "Numpad1": setSpeed( 1 ); return true;
+        case "Digit2": case "Numpad2": setSpeed( 2 ); return true;
+        case "Digit3": case "Numpad3": setSpeed( 3 ); return true;
+        case "KeyR":   toggleRendering(); return true;
+        case "KeyG":   toggleGoalOverlay(); return true;
+        case "KeyH":   togglePanel(); return true;
+        case "Tab":    nextTab(); return true;
+        case "F1":     toggleHelp(); return true;
+        case "Slash":  if ( e.shiftKey ) { toggleHelp(); return true; } return false;
+        case "Escape": document.body.classList.remove( "helpShown" ); return true;
+    }
+    return false;
 }
 
 //----------------------------------------
@@ -1023,7 +1106,7 @@ document.onkeydown = function(e: any)
     if ( typeof genePool == "undefined" ) return;
     if ( isTypingInAField(e) || e.ctrlKey || e.metaKey || e.altKey ) return;
 
-    if ( e.code === "KeyH" && !e.repeat ) { togglePanel(); return; }
+    if ( handleCommandKey( e )) { e.preventDefault(); return; }
 
     const action = CAMERA_KEYS[ e.code ];
     if ( action === undefined ) return;

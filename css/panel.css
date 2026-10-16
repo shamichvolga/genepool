@@ -379,3 +379,69 @@
 
 body.panelHidden #masterPanel       { display: none; }
 body.panelHidden #panelToggleButton { right: 8px; }
+
+/* --------------------------------------------- status over the pool ----- */
+#hud
+{
+    position:       fixed;
+    left:           10px;
+    bottom:         10px;
+    z-index:        15;
+    padding:        6px 10px;
+    border-radius:  6px;
+    background:     rgba( 20, 26, 20, 0.62 );
+    color:          #e8eadc;
+    font-family:    Arial, sans-serif;
+    font-size:      12px;
+    line-height:    1.45;
+    pointer-events: none;
+    white-space:    nowrap;
+}
+#hud b          { color: #ffffff; }
+#hud .hudPred   { color: #ff9a88; }
+#hud .hudHerb   { color: #ffc070; }
+#hud .hudPlant  { color: #9fe08a; }
+#hud .hudPaused { color: #ffdd55; font-weight: bold; }
+
+/* ------------------------------------------------------ keys help ------- */
+#helpOverlay
+{
+    display:        none;
+    position:       fixed;
+    inset:          0;
+    z-index:        30;
+    background:     rgba( 0, 0, 0, 0.35 );
+    align-items:    center;
+    justify-content: center;
+    cursor:         pointer;
+}
+body.helpShown #helpOverlay { display: flex; }
+#helpOverlay .helpBox
+{
+    background:     #caccc2;
+    border:         1px solid #666659;
+    border-bottom-width: 4px;
+    border-radius:  6px;
+    padding:        14px 18px;
+    font-family:    Arial, sans-serif;
+    font-size:      13px;
+    color:          #33402e;
+    box-shadow:     0 6px 24px rgba( 0, 0, 0, 0.35 );
+}
+#helpOverlay .helpTitle { font-family: "Arial Black", Arial, sans-serif; font-size: 16px; margin-bottom: 8px; }
+#helpOverlay td         { padding: 2px 12px 2px 0; }
+#helpOverlay td:first-child { font-weight: bold; white-space: nowrap; }
+
+/* ------------------------------------------- drawing is off: centered --- */
+#noRenderPanel
+{
+    right:          auto !important;
+    top:            40% !important;
+    left:           calc( ( 100% - 400px ) / 2 ) !important;
+    transform:      translate( -50%, -50% );
+    height:         auto !important;
+    cursor:         pointer;
+    border-radius:  6px;
+}
+body.panelHidden #noRenderPanel { left: 50% !important; }
+#noRenderStats { margin-top: 10px; line-height: 1.5; font-size: 13px; }
