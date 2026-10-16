@@ -1446,7 +1446,7 @@ _position.copyFrom( position );
 	}
 
 	this.getBrightness      = function() { return _brightness;      }
-	this.getHungerFactor    = function() { return ( environment.active && ( _phenotype.hungerFactor !== undefined )) ? _phenotype.hungerFactor : ONE; }
+	this.getHungerFactor    = function() { return ( _phenotype.hungerFactor !== undefined ) ? _phenotype.hungerFactor : ONE; }   // (inherited in every pool)
 
 	// predators mate only with predators, herbivores with herbivores
 	this.sameDiet = function( other )
