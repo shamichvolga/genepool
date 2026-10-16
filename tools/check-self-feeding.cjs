@@ -69,10 +69,13 @@ assert.strictEqual( disabled.sandbox.simCounters.selfCannibalismEvents, 0, "BASE
 const legacy = new disabled.sandbox.Genotype();
 const inputs = disabled.sandbox.NUM_INPUTS;
 const hidden = disabled.sandbox.NUM_HIDDEN;
-const oldWeights = new Float32Array( 8 * inputs + hidden * inputs + hidden * hidden + 8 * hidden );
-const oldInputOffset = 7 * inputs + disabled.sandbox.IN_BIAS;
-const oldHiddenOffset = 8 * inputs;
-const oldOutputHiddenOffset = 8 * inputs + hidden * inputs + hidden * hidden;
+// (saves from before C12 had 21 inputs, before C11 8 outputs)
+const legacyInputs = 21;
+const oldWeights = new Float32Array( 8 * legacyInputs + hidden * legacyInputs + hidden * hidden + 8 * hidden );
+assert.strictEqual( oldWeights.length, disabled.sandbox.LEGACY_BRAIN_SIZE, "the test brain should have the legacy layout" );
+const oldInputOffset = 7 * legacyInputs + disabled.sandbox.IN_BIAS;
+const oldHiddenOffset = 8 * legacyInputs;
+const oldOutputHiddenOffset = 8 * legacyInputs + hidden * legacyInputs + hidden * hidden;
 oldWeights[ oldInputOffset ] = 0.75;
 oldWeights[ oldHiddenOffset ] = -0.5;
 oldWeights[ oldOutputHiddenOffset ] = 1.25;

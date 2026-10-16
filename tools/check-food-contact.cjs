@@ -17,9 +17,14 @@ predator.setEnergy( 1 );
 predator.decide();
 assert.strictEqual( predator.getBrainState(), sb.BRAIN_STATE_LOOKING_FOR_PREY, "hungry predator should search for prey" );
 
+// two different free food slots of the pool (the decision kernel sees only the pool's food)
+const freeSlots = [];
+for ( let f = 0; f < sb.MAX_FOODBITS && freeSlots.length < 2; f++ ) { if ( !run.genePool.getFoodBitAt( f ).getAlive() ) freeSlots.push( f ); }
+assert.strictEqual( freeSlots.length, 2, "the pool should have free food slots" );
+
 function makeMeat( index, x, y, decoy )
 {
-    const meat = new sb.FoodBit();
+    const meat = run.genePool.getFoodBitAt( index );
     meat.initialize( index );
     meat.setType( 2 );
     meat.setEnergy( 10 );
@@ -44,21 +49,20 @@ preyPosition.setXY( mouth.x + 500, mouth.y );
 prey.setPosition( preyPosition );
 
 const counters = sb.simCounters;
-const meatIndex = sb.MAX_FOODBITS + 10;
-const contactDecoy = makeMeat( meatIndex, mouth.x, mouth.y, true );
+const contactDecoy = makeMeat( freeSlots[0], mouth.x, mouth.y, true );
 showPreyAndMeat( contactDecoy );
-assert.strictEqual( predator.getIsTryingToEat(), true, "mouth contact should trigger eating" );
-assert.strictEqual( predator.getIsTryingToHunt(), false, "predator must not bite prey in the same step" );
+assert.strictEqual( !!predator.getIsTryingToEat(), true, "mouth contact should trigger eating" );
+assert.strictEqual( !!predator.getIsTryingToHunt(), false, "predator must not bite prey in the same step" );
 predator.eatChosenFoodBit();
 assert.strictEqual( contactDecoy.getAlive(), false, "contact meat should be consumed" );
 assert.strictEqual( counters.autotomyDecoysEaten, 1, "the decoy meal should be counted" );
 assert.strictEqual( counters.meatMealsWhilePursuing, 1, "the meal should be recorded as eaten during pursuit" );
 
 const tooFar = sb.SWIMBOT_MOUTH_LENGTH + sb.FOOD_BIT_GRAB_RADIUS + 1;
-const nonContactMeat = makeMeat( meatIndex + 1, mouth.x + tooFar, mouth.y, false );
+const nonContactMeat = makeMeat( freeSlots[1], mouth.x + tooFar, mouth.y, false );
 showPreyAndMeat( nonContactMeat );
-assert.strictEqual( predator.getIsTryingToEat(), false, "a gap beyond the meat radius must not count as contact" );
-assert.strictEqual( predator.getIsTryingToHunt(), false, "the distant prey should not cause an unrelated bite" );
+assert.strictEqual( !!predator.getIsTryingToEat(), false, "a gap beyond the meat radius must not count as contact" );
+assert.strictEqual( !!predator.getIsTryingToHunt(), false, "the distant prey should not cause an unrelated bite" );
 assert.strictEqual( nonContactMeat.getAlive(), true, "meat outside the mouth radius must remain uneaten" );
 assert( counters.meatTargetsWhilePursuing >= 2, "meat target selections during pursuit should be counted" );
 

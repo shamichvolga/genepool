@@ -3,6 +3,7 @@ import { physicsPartA, physicsPartB } from "./PhysicsKernel";
 import { applyWaterDrag, bodyMotionFactors } from "./BodyPhysics";
 import { advanceBodyTemperature } from "./ThermalPhysics";
 import * as SS from "./SharedState";
+import { decideStep, neuralThink, takeInLook } from "./DecisionKernel";
 import { BRAIN_SIZE, think, sigmoid, NUM_INPUTS, NUM_HIDDEN, NUM_OUTPUTS, DRIVE_OUTPUTS, THINK_PERIOD, DRIVE_HYSTERESIS, EFFORT_MIN, EFFORT_RANGE, IN_BIAS, IN_HUNGER, IN_ENERGY, IN_AGE, IN_FIT, IN_TREND, IN_FOOD, IN_MATE, IN_THREAT, IN_PREY, IN_CROWD, IN_PREDATOR, OUT_FOOD, OUT_MATE, OUT_FLEE, OUT_HUNT, OUT_CLIMATE, OUT_SOCIAL, OUT_EFFORT,
          IN_FOOD_SIDE, IN_FOOD_AHEAD, IN_NEAR_SIDE, IN_NEAR_AHEAD, IN_THREAT_SIDE, IN_THREAT_AHEAD, IN_KIN, IN_SEASON, IN_PREDATOR_NEAR, IN_PREY_DISTANCE, IN_PREY_REWARD, IN_PREY_SUCCESS, IN_PREY_CHASE, IN_BAIT_PRESENT, IN_BAIT_DISTANCE, IN_BAIT_REWARD, OUT_STEER, OUT_SELF_EAT, OUT_PREY_VALUE, OUT_PREY_TRAVEL, OUT_PREY_BAIT, STEER_MAX_DEGREES } from "./NeuralBrain";
 import { NEURAL_BRAIN_ENABLED, CLIMATE_STEERING, SOCIAL_STEERING, CLIMATE_PROBE_DISTANCE, BODY_TEMPERATURE_INERTIA_ENABLED, SELF_CANNIBALISM_ENABLED, PREDATOR_TARGET_SELECTION_ENABLED } from "./Parameters";
@@ -265,6 +266,50 @@ this.setParent = function( parent )
 	//------------------------------------------------------------------------
 	this.getKernelEvents = function() { return _M[ _m + SS.M_EVENTS ]; }
 
+	//------------------------------------------------------------------------
+	// One swimbot alone, through the same kernel (for tests and tools; the
+	// pool runs the kernel for everybody at once, see GenePool)
+	//------------------------------------------------------------------------
+	this.decide = function()
+	{
+	    if ( _parent != null ) { _parent.writePerceptionParams(); }
+	    decideStep( _shared, _slot, 0 );
+	    this.handleEventsBeforeMoving();
+	    if ( _parent != null ) { _parent.collectKernelCounters(); }
+	}
+
+	this.think = function()
+	{
+	    if ( _parent != null ) { _parent.writePerceptionParams(); }
+	    _shared.brainWeights.set( _genotype.getBrain(), _slot * BRAIN_SIZE );   // (the genes may have just been changed)
+	    neuralThink( _shared, _slot );
+	}
+
+	// what it sees (as the perception would find it), taken in at once
+	this.setEnvironmentalStimuli = function( numNearbySwimbots, nearbySwimbotArray, foodBitWasFound, theFoodBit, preyWasFound, thePrey, theNearestPredator, mateChoice = undefined )
+	{
+	    const st = _shared, s = _slot, base = s * SS.MAX_SEEN;
+	    st.seenCount[s] = numNearbySwimbots;
+	    for (let k = 0; k < numNearbySwimbots; k++) { st.seen[ base + k ] = nearbySwimbotArray[k].getIndex(); }
+	    const food = ( foodBitWasFound && ( theFoodBit != null )) ? theFoodBit : null;
+	    st.seenFood[s] = ( food != null ) ? food.getIndex() : -1;
+	    if ( food != null )
+	    {
+	        const f = food.getIndex();
+	        st.foodX[f] = food.getPosition().x;
+	        st.foodY[f] = food.getPosition().y;
+	        st.foodType[f] = food.getType();
+	    }
+	    st.seenPrey[s]     = ( preyWasFound && ( thePrey != null )) ? thePrey.getIndex() : -1;
+	    st.seenThreat[s]   = ( theNearestPredator != null ) ? theNearestPredator.getIndex() : -1;
+	    st.seenPredator[s] = st.seenThreat[s];
+	    st.seenMate[s]     = ( mateChoice === undefined ) ? -2 : (( mateChoice != null ) ? mateChoice.getIndex() : -1 );
+	    st.socialX[s] = st.socialY[s] = 0;
+	    takeInLook( st, s, 0 );
+	    this.handleEventsAfterLooking();
+	    if ( _parent != null ) { _parent.collectKernelCounters(); }
+	}
+
 	this.handleEventsBeforeMoving = function()
 	{
 	    const events = _M[ _m + SS.M_EVENTS ];
@@ -436,7 +481,7 @@ this.setParent = function( parent )
 	this.getAutotomy = function()
 	{
 	    return { bite: _phenotype.autotomyBite, threat: _phenotype.autotomyThreat, amount: _phenotype.autotomyAmount,
-	             partsLost: _M[ _m + SS.M_PARTS_LOST ], regrowIn: _M[ _m + SS.M_REGROW ], timesDropped: _partsDropped };
+	             partsLost: _M[ _m + SS.M_PARTS_LOST ] === 1, regrowIn: _M[ _m + SS.M_REGROW ], timesDropped: _partsDropped };
 	};
 	this.canSelfFeed = function()
 	{
@@ -1303,7 +1348,7 @@ _position.copyFrom( position );
 
 
 
-	this.getUsesNeuralBrain = function() { return _M[ _m + SS.M_NEURAL ];        }
+	this.getUsesNeuralBrain = function() { return _M[ _m + SS.M_NEURAL ] === 1;        }
 
 	this.getEffort          = function() { return _B[ _b + SS.B_EFFORT ];        }
 	this.getClimateWeight   = function() { return _M[ _m + SS.M_CLIMATE_W ]; }
@@ -1754,8 +1799,8 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	//--------------------------------------------------------------------------------------------------------
 	// get functions
 	//--------------------------------------------------------------------------------------------------------
-	this.getIsTryingToEat               = function() { return _M[ _m + SS.M_TRY_EAT ];                                 }
-	this.getIsTryingToMate              = function() { return _M[ _m + SS.M_TRY_MATE ];                                }
+	this.getIsTryingToEat               = function() { return _M[ _m + SS.M_TRY_EAT ] === 1;                                 }
+	this.getIsTryingToMate              = function() { return _M[ _m + SS.M_TRY_MATE ] === 1;                                }
 	this.getIndex                       = function() { return _index;                                       }
 	this.getAge                         = function() { return _B[ _b + SS.B_AGE ];                                         }
 	this.getAlive                       = function() { return _live[ _liveAt ] === 1;                       }
@@ -1766,7 +1811,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	this.getSpeed                       = function() { return _velocity.getMagnitude();                     }
 	this.getBoundingRadius              = function() { return _phenotype.sumPartLengths;                    }
 	this.getNumParts                    = function() { return _phenotype.numParts;                          }
-	this.getIsLookingForSensoryInput    = function() { return _M[ _m + SS.M_READY ];                 }
+	this.getIsLookingForSensoryInput    = function() { return _M[ _m + SS.M_READY ] === 1;                 }
 	this.getGenitalPosition             = function() { return _genitalPosition;                             }
 	this.getMouthPosition               = function() { return _mouthPosition;                               }
 	this.getChosenMateIndex             = function() { return _M[ _m + SS.M_MATE ];                             }
@@ -1781,7 +1826,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	this.getSelectRadius                = function() { return _B[ _b + SS.B_SELECT_RADIUS ];                                }
 	this.getPreferredFoodType           = function() { return _phenotype.preferredFoodType;                 }
 	this.getDigestibleFoodType          = function() { return _phenotype.digestibleFoodType;                }
-	this.getIsTryingToHunt              = function() { return _M[ _m + SS.M_TRY_HUNT ];                                }
+	this.getIsTryingToHunt              = function() { return _M[ _m + SS.M_TRY_HUNT ] === 1;                                }
 	this.getNumPreyEaten                = function() { return _numPreyEaten;                                }
 	this.getPhenotypeMass               = function() { return _phenotype.mass;                              }
 	this.getMorphologySummary           = function()

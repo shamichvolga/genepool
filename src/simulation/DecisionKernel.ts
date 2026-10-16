@@ -240,7 +240,7 @@ function wanderFocus( st: SharedState, s: number ): void
 //------------------------------------------------------------------------------
 const _newHidden = new Float64Array( NUM_HIDDEN );
 
-function neuralThink( st: SharedState, s: number ): void
+export function neuralThink( st: SharedState, s: number ): void
 {
     const M = st.mind, m = s * SS.MIND_STRIDE, B = st.bots, b = s * SS.BOT_STRIDE;
     const energy    = B[ b + SS.B_ENERGY ];
