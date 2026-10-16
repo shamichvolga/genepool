@@ -7,6 +7,7 @@
 //   node tools/experiment-compare.cjs [results folder] [--prefix exp-] [--at STEP] > report.md
 //
 // --prefix: which run folders (exp-<config>-<seed>, r3-<config>-<seed> ...);
+// --seeds 11,12: only runs of these seeds;
 // --at: compare every run at this step (runs that went further are cut there,
 // so configurations of different speed are compared fairly).
 //------------------------------------------------------------------------------
@@ -17,6 +18,7 @@ const option = ( name, fallback ) => { const i = process.argv.indexOf( "--" + na
 const dir    = ( process.argv[2] && !process.argv[2].startsWith( "--" )) ? process.argv[2] : path.join( __dirname, "results" );
 const PREFIX = option( "prefix", "exp-" );
 const AT     = +option( "at", "Infinity" );
+const SEEDS  = option( "seeds", "" ).split( "," ).filter( x => x );   // --seeds 11,12: only these seeds
 
 function readCsv( file )
 {
@@ -37,7 +39,8 @@ function partsDiversity( row )
     return { forms10: shares.filter( x => x >= 0.10 ).length, effective: Math.exp( shannon ), top: Math.max( ...shares ) };
 }
 
-const runs = fs.readdirSync( dir ).filter( d => d.startsWith( PREFIX ) && fs.existsSync( path.join( dir, d, "census.csv" )));
+const runs = fs.readdirSync( dir ).filter( d => d.startsWith( PREFIX ) && fs.existsSync( path.join( dir, d, "census.csv" )))
+    .filter( d => SEEDS.length === 0 || SEEDS.includes( d.split( "-" ).pop()));
 const byConfig = {};
 for ( const r of runs ) { const cfg = r.slice( PREFIX.length ).replace( /-\d+$/, "" ); ( byConfig[ cfg ] = byConfig[ cfg ] || [] ).push( r ); }
 
