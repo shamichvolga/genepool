@@ -790,6 +790,7 @@ export function updateUI()
                         ( isPredator ? "predator" : "herbivore" ) + " (" + swimbot.getPredatorLevel().toFixed(2) + ")" +
                         ( genePool.getSwimbotEternalStatus(selectedSwimbot) ? " · immortal" : "" ) +
                     "</div>" +
+                    energyBar( genePool.getSwimbotEnergy(selectedSwimbot), maxEnergy, threshold ) +
                     "<table class='swimbotTable'>" +
                     row( "goal",              goalDescription ) +
                     row( "age",               genePool.getSwimbotAge(selectedSwimbot) ) +
@@ -849,6 +850,20 @@ export function updateUI()
     }
     updateHud();
     setTimeout( updateUI, UI_UPDATE_PERIOD );
+}
+
+//------------------------------------------------------------
+// a bar: energy of the selected swimbot, with its hunger threshold
+//------------------------------------------------------------
+function energyBar( energy, maxEnergy, threshold )
+{
+    const fill   = Math.max( 0, Math.min( 100, 100 * energy    / Math.max( 1, maxEnergy )));
+    const hunger = Math.max( 0, Math.min( 100, 100 * threshold / Math.max( 1, maxEnergy )));
+    const color  = ( energy < threshold ) ? "#c8642a" : "#6e9f4c";
+    return "<div class='energyBar' title='energy (the mark: hunger threshold)'>"
+         +   "<div class='energyFill' style='width:" + fill.toFixed( 1 ) + "%;background:" + color + "'></div>"
+         +   "<div class='energyMark' style='left:" + hunger.toFixed( 1 ) + "%'></div>"
+         + "</div>";
 }
 
 //------------------------------------------------------------

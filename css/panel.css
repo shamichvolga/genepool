@@ -445,3 +445,17 @@ body.helpShown #helpOverlay { display: flex; }
 }
 body.panelHidden #noRenderPanel { left: 50% !important; }
 #noRenderStats { margin-top: 10px; line-height: 1.5; font-size: 13px; }
+
+/* energy of the selected swimbot */
+.energyBar
+{
+    position:       relative;
+    height:         8px;
+    margin:         0 0 6px 0;
+    border:         1px solid #8a8c80;
+    border-radius:  4px;
+    background:     #e6e6dc;
+    overflow:       hidden;
+}
+.energyFill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; }
+.energyMark { position: absolute; top: -1px; bottom: -1px; width: 2px; background: #33402e; }
