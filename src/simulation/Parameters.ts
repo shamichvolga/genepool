@@ -263,8 +263,17 @@ export const PLANT_SPROUT_AGE               = 1500;
 export const PLANT_OLD_AGE                  = 6000;
 export const PLANT_ROT_AGE                  = 12000;
 export const PLANT_STAGE_ENERGY             = [ 0.35, 1.0, 1.4 ];
-export const INHERITED_INVESTMENT_ENABLED   = false;  // gene: share of energy given to a child (0.15..0.85) instead of the pool setting
+export const INHERITED_INVESTMENT_ENABLED   = true;   // gene: share of energy given to a child (0.15..0.85) instead of the pool setting
 export const SIZE_MATURITY_ENABLED          = false;  // grown up (may mate) at 1000 x clamp( mass / 410, 0.5, 4 ) steps
 export const SIZE_ASSORTATIVE_MATING_ENABLED = false; // mates chosen by color AND size (gene: how much size counts)
 export const PREDATOR_GAPE_CURVE_ENABLED    = false;  // attack success falls with prey/predator mass, big prey takes longer to eat
 export const CROWD_AWARE_FOOD_CHOICE_ENABLED = false; // a plant others are nearer to looks farther (gene "deference": how much)
+
+//------------------------------------------------------------------------------
+// The young (see docs/ТЗ_не_сделано.md)
+//------------------------------------------------------------------------------
+export const JUVENILE_PREDATION_ENABLED     = true;   // a predator may bite a not yet grown-up prey even if it is heavier
+export const MEAT_PIECE_ENERGY              = 25;     // a body that is not eaten whole falls apart into pieces of this much
+export const MEAT_PIECE_SCATTER             = 40;     // ... lying this far around the place of death
+export const YOUNG_CANNIBALISM_ENABLED      = false;  // a hungry herbivore may eat a young one of its kind with fewer body parts
+export const CLASSIC_SEED_RAIN_FRACTION     = 0.1;    // classic pools: share of new food landing anywhere (not next to other food)

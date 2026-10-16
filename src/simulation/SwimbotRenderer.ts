@@ -691,7 +691,9 @@ var    flopperYV = 0;
         let rightEndX = mouthEndX;
         let rightEndY = mouthEndY;
 
-        const isPredator = ( _phenotype.predatorLevel !== undefined ) && ( _phenotype.predatorLevel > PREDATOR_LEVEL_THRESHOLD );
+        // (a herbivore going for a young one of its kind shows the predator's mouth)
+        const isPredator = (( _phenotype.predatorLevel !== undefined ) && ( _phenotype.predatorLevel > PREDATOR_LEVEL_THRESHOLD ))
+                        || (( _swimbot != null ) && _swimbot.getIsCannibalHunting && _swimbot.getIsCannibalHunting() );
         const state      = _brain.getState();
 
         //--------------------------------------------------------------

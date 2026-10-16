@@ -135,6 +135,7 @@ var    flopperYV = 0;
 	let _embryology         = null;  // kept so the phenotype can be regrown (applyPredatorLevel)
 	let _numPreyEaten       = 0;
 	let _numPartsEaten      = 0;      // parts that prey dropped when bitten
+	let _numCannibalized    = 0;      // young ones of its own kind eaten (YOUNG_CANNIBALISM_ENABLED)
 
 	//-----------------------------------------------------------------------
 	// ecology (stage 5): how this swimbot copes with the temperature and the
@@ -267,6 +268,8 @@ this.setParent = function( parent )
 	// mate by other criteria than color).
 	//------------------------------------------------------------------------
 	this.getKernelEvents = function() { return _M[ _m + SS.M_EVENTS ]; }
+	this.getIsCannibalHunting = function() { return _M[ _m + SS.M_CANNIBAL ] === 1; }
+	this.getNumCannibalized   = function() { return _numCannibalized; }
 
 	//------------------------------------------------------------------------
 	// PLANT_STAGES_ENABLED: a sprout gives little, an old plant much; small
@@ -2154,19 +2157,19 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	    simCounters.attackCount ++;
 	    _numPreyEaten ++;
 
+	    if ( _M[ _m + SS.M_CANNIBAL ] === 1 ) { simCounters.youngCannibalism ++; _numCannibalized ++; }
 	    let room = Math.max( ZERO, _M[ _m + SS.M_MAX_ENERGY ] - _B[ _b + SS.B_ENERGY ] );
-
 	    if ( energyFromPrey > room )
 	    {
+	        // what I cannot eat falls apart into pieces around (others may eat them)
 	        _B[ _b + SS.B_ENERGY ] += room;
-
-	        let numMeatBits = Math.floor( ( energyFromPrey - room ) / DEFAULT_FOOD_BIT_ENERGY );
-	        _parent.spawnMeatFoodBits( preyPosition, numMeatBits );
+	        _parent.spawnCarcass( preyPosition.x, preyPosition.y, energyFromPrey - room );
 	    }
 	    else
 	    {
 	        _B[ _b + SS.B_ENERGY ] += energyFromPrey;
 	    }
+	    _M[ _m + SS.M_CANNIBAL ] = 0;
 
 	    _B[ _b + SS.B_TIMER_DELTA ] = ZERO;
 	    _M[ _m + SS.M_PREY ] = NULL_INDEX;

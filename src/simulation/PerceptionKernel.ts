@@ -16,7 +16,7 @@ import { ATTACK_SUCCESS_CHANCE, ENVIRONMENT_ATTACK_SUCCESS_CHANCE, PREDATOR_LEVE
 import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
 import { ATTRACTION_SIMILAR_COLOR, STARVING, SWIMBOT_MOUTH_LENGTH, SWIMBOT_VIEW_RADIUS } from "./SwimbotTypes";
 import { FOOD_BIT_GRAB_RADIUS } from "./FoodBit";
-import { CROWD_AWARE_FOOD_CHOICE_ENABLED, FOOD_TARGET_PERSISTENCE_ENABLED, FOOD_SWITCH_RATIO_MIN, FOOD_KEEP_RADIUS_SCALE, SIZE_ASSORTATIVE_MATING_ENABLED } from "./Parameters";
+import { JUVENILE_PREDATION_ENABLED, CROWD_AWARE_FOOD_CHOICE_ENABLED, FOOD_TARGET_PERSISTENCE_ENABLED, FOOD_SWITCH_RATIO_MIN, FOOD_KEEP_RADIUS_SCALE, SIZE_ASSORTATIVE_MATING_ENABLED } from "./Parameters";
 import { MIND_STRIDE, M_DEFERENCE, M_FOOD, M_PERSIST, M_MATURE_AGE, M_SIZE_PICKY, M_MAX_ENERGY } from "./MindLayout";
 import { preyTargetScore } from "./EcologyGenes";
 import {
@@ -353,7 +353,8 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
     if ( FOOD_TARGET_PERSISTENCE_ENABLED && !iAmPredator )
     {
         const current = st.mind[ s * MIND_STRIDE + M_FOOD ];
-        if (( current >= 0 ) && ( current !== chosenFood ) && ( foodAlive[ current ] === 1 ) && ( foodType[ current ] !== 2 ))
+        if (( current >= 0 ) && ( current !== chosenFood ) && ( foodAlive[ current ] === 1 ) && ( foodType[ current ] !== 2 )
+        &&  !obstructed( st, myMouthX, myMouthY, foodX[ current ], foodY[ current ] ))
         {
             const cx = myMouthX - foodX[ current ], cy = myMouthY - foodY[ current ];
             const currentSquared = cx * cx + cy * cy;
@@ -389,12 +390,15 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
             if ( alive[o] === 0 ) continue;
             if ( predator[o] > PREDATOR_LEVEL_THRESHOLD ) continue;      // predators don't hunt predators
             if ( st.eternal[o] === 1 ) continue;                        // immortals are not eaten
-            if ( st.mass[o] > myMass * PREY_MAX_MASS_RATIO ) continue;  // too big to bite
+            // too big to bite (a not yet grown-up one can be bitten anyway)
+            const young = JUVENILE_PREDATION_ENABLED && ( st.age[o] < st.mind[ o * MIND_STRIDE + M_MATURE_AGE ] );
+            if (( st.mass[o] > myMass * PREY_MAX_MASS_RATIO ) && !young ) continue;
 
             const px = myMouthX - botX[o];
             const py = myMouthY - botY[o];
             const distance = Math.sqrt( px * px + py * py );
             if ( distance > preyViewRadius ) continue;
+            if ( obstructed( st, myMouthX, myMouthY, botX[o], botY[o] )) continue;   // (no seeing through the wall)
 
             // camouflage: prey that matches the bottom is seen only up close;
             // the search image: prey like the last meals is seen from farther
@@ -468,6 +472,7 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
             const gy = myGenitalY - genitalY[o];
             const distance = Math.sqrt( gx * gx + gy * gy );
             if ( distance > viewRadius ) continue;
+            if ( obstructed( st, myGenitalX, myGenitalY, genitalX[o], genitalY[o] )) continue;   // (no seeing through the wall)
 
             if ( distance < anyDistance ) { anyDistance = distance; anyPredator = o; }
 

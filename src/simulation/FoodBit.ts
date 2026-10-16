@@ -39,6 +39,7 @@ export function FoodBit()
     let _fb = new Float64Array( 1 );   // the step it appeared (shared: foodBorn)
     let _maxSpawnRadius = DEFAULT_FOOD_BIT_MAX_SPAWN_RADIUS;
     let _autotomyDecoy  = false;
+    let _shownFully     = false;   // (held in the "hand": no fading in)
 
     // alive or not, mirrored as one byte in the shared state (see bindLiveFlag)
     let _live   = new Uint8Array( 1 );
@@ -66,6 +67,7 @@ export function FoodBit()
 	this.initialize = function(f)
 	{
         _index      = f;
+        _shownFully = false;
         _fb[ _fi ] = simClock.step;
         _fe[ _fi ]     = DEFAULT_FOOD_BIT_ENERGY;
         _autotomyDecoy = false;
@@ -251,7 +253,8 @@ export function FoodBit()
 	this.getAge         = function() { return simClock.step - _fb[ _fi ]; }
 
 	// a new food bit fades in
-	const opacity = function() { return Math.min( ONE, ( simClock.step - _fb[ _fi ] ) * FOOD_OPACITY_INCREMENT ); }
+	const opacity = function() { return _shownFully ? ONE : Math.min( ONE, ( simClock.step - _fb[ _fi ] ) * FOOD_OPACITY_INCREMENT ); }
+	this.showFully = function() { _shownFully = true; }
     this.getAlive       = function() { return ( _index != NULL_INDEX ); }
 
     // Add method for spatial grid support

@@ -69,6 +69,7 @@ export const M_INVEST        = 57;   // gene: share of energy given to a child
 export const M_SIZE_PICKY    = 58;   // gene: how much a mate's size counts (0..1)
 export const M_MAX_ENERGY    = 59;   // its maximum energy (depends on mass when MASS_SCALED_STOMACH_ENABLED)
 export const M_DEFERENCE     = 60;   // gene: how much a plant others are nearer to is avoided (0..1)
+export const M_CANNIBAL      = 61;   // 1 = it is after a young one of its kind (YOUNG_CANNIBALISM_ENABLED)
 export const MIND_STRIDE     = 64;
 
 // what the decision kernel asks the main thread to do (bits in M_EVENTS)

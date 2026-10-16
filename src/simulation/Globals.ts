@@ -102,6 +102,7 @@ export const simCounters = {
     meatMeals: 0,
     autotomyThreatDrops: 0,
     autotomyBiteDrops: 0,
+    youngCannibalism: 0,
     autotomyDecoysEaten: 0,
     selfCannibalismEvents: 0,
     selfCannibalismEnergy: 0,

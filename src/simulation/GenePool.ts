@@ -2,7 +2,7 @@ import { geneAverage, convertOldGenes, GENE_LAYOUT_VERSION, setTrait, gaussian, 
 import { environment, FLAT_ENVIRONMENT, INITIAL_SOIL_NUTRIENT_PER_CELL, NUTRIENT_CYCLE_ENABLED, PLANT_TYPE_WARM, PLANT_TYPE_COLD, SEASONAL_PLANT_GROWTH_ENABLED, SEASONAL_PLANT_GROWTH_AMPLITUDE } from "./Environment";
 import { petriSettings, petriStartZone } from "./Petri";
 import { IGNORE_FOOD_EFFICIENCY, preyVisibility, TWO_PLANT_TYPES } from "./Ecology";
-import { PLANT_STAGES_ENABLED, PLANT_ROT_AGE, DIET_SWITCH_RATE, CLASSIC_NUM_SWIMBOTS, CLASSIC_NUM_FOODBITS, GARDEN_RADIUS, ENVIRONMENT_PLANT_SPREAD_RATE, ENVIRONMENT_SEEDS_PER_PERIOD, LOCAL_ENVIRONMENT_PLANT_GROWTH, PLANT_CELL_CAPACITY, PLANT_PARENT_SEED_FRACTION, PLANT_SEED_MIN_DISTANCE, PLANT_SEED_MAX_DISTANCE } from "./Parameters";
+import { CLASSIC_SEED_RAIN_FRACTION, MEAT_PIECE_ENERGY, MEAT_PIECE_SCATTER, PLANT_STAGES_ENABLED, PLANT_ROT_AGE, DIET_SWITCH_RATE, CLASSIC_NUM_SWIMBOTS, CLASSIC_NUM_FOODBITS, GARDEN_RADIUS, ENVIRONMENT_PLANT_SPREAD_RATE, ENVIRONMENT_SEEDS_PER_PERIOD, LOCAL_ENVIRONMENT_PLANT_GROWTH, PLANT_CELL_CAPACITY, PLANT_PARENT_SEED_FRACTION, PLANT_SEED_MIN_DISTANCE, PLANT_SEED_MAX_DISTANCE } from "./Parameters";
 
 import { BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_PREY } from "./Brain";
 import { Camera } from "./Camera";
@@ -1610,6 +1610,28 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
         }
     }
 
+    //------------------------------------------------------------------------
+    // a body that was not eaten whole: pieces of MEAT_PIECE_ENERGY each (the
+    // last one smaller), lying within MEAT_PIECE_SCATTER of the place
+    //------------------------------------------------------------------------
+    this.spawnCarcass = function( x, y, energy )
+    {
+        let rest = energy;
+        while ( rest > 0.5 )
+        {
+            const f = this.findLowestDeadFoodBitInArray();
+            if ( f === NULL_INDEX ) return;
+            const piece = Math.min( MEAT_PIECE_ENERGY, rest );
+            rest -= piece;
+            const angle = gpRandom() * PI2, distance = gpRandom() * MEAT_PIECE_SCATTER;
+            _vectorUtility.setXY( x + Math.cos( angle ) * distance, y + Math.sin( angle ) * distance );
+            _foodBits[f].initialize( f );
+            _foodBits[f].setType( 2 );
+            _foodBits[f].setPosition( _vectorUtility );
+            _foodBits[f].setEnergy( piece );
+        }
+    }
+
     this.spawnMeatFoodBits = function(position, count)
     {
         // type = 2 => red meat, edible by predators
@@ -2532,7 +2554,18 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
             parentFoodBitIndex = this.findRandomLivingFoodBit( newFoodType );
         }
 
-        if ( parentFoodBitIndex == NULL_INDEX ) return;
+        //------------------------------------------------------------------
+        // now and then a seed comes from anywhere: otherwise a part of the
+        // pool walled off by the obstacle (or barrier) and eaten bare would
+        // never grow food again
+        //------------------------------------------------------------------
+        if (( parentFoodBitIndex == NULL_INDEX ) || ( gpRandom() < CLASSIC_SEED_RAIN_FRACTION ))
+        {
+            _foodBits[ childFoodBitIndex ].initialize( childFoodBitIndex );     // (a random place in the pool)
+            _foodBits[ childFoodBitIndex ].setType( newFoodType );
+            _foodBits[ childFoodBitIndex ].setEnergy( globalTweakers.foodBitEnergy );
+            return;
+        }
 
         _foodBits[ childFoodBitIndex ].spawnFromParent( _foodBits[ parentFoodBitIndex ], childFoodBitIndex, newFoodType );
 
@@ -3936,6 +3969,11 @@ this.renderFoodBits = function( useGraphicsCard )
                 if ( _selectedFoodBit != NULL_INDEX )
                 {
                     _foodBitBeingDragged = true;
+
+                    // the food jumps into the "hand" at once, fully visible
+                    _vectorUtility = this.convertScreenCoordinatesToPoolPosition( x, y );
+                    _foodBits[ _selectedFoodBit ].setPosition( _vectorUtility );
+                    _foodBits[ _selectedFoodBit ].showFully();
                 }
             }
             else
