@@ -12,12 +12,12 @@
 // (between them the main thread may apply the climate drain)
 //------------------------------------------------------------------------------
 import { ONE, ONE_HALF, PI_OVER_180, ZERO } from "./MathConstants";
-import { OLD_AGE_DURATION, SWIMBOT_SELECT_RADIUS_SCALAR, YOUNG_AGE_DURATION } from "./Parameters";
+import { OLD_AGE_DURATION, RUDDER_COST_PER_DEGREE, RUDDER_ENABLED, STEER_BY_SWIM_DIRECTION_ENABLED, SWIM_DIRECTION_SMOOTHING, SWIMBOT_SELECT_RADIUS_SCALAR, YOUNG_AGE_DURATION } from "./Parameters";
 import { applyWaterDrag, bodyMotionFactors } from "./BodyPhysics";
 import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
 import { CONTINUAL_ENERGY_DRAIN, ENERGY_EFFICIENCY_MEASUREMENT_PERIOD, ENERGY_USED_UP_SWIMMING, GENITAL_INDEX, MAX_PARTS, MOUTH_INDEX, ROOT_PART, STARVING, STARVING_TIMER_DELTA, TIMER_DELTA_INCREASE_RATE, WALL_BOUNCE } from "./SwimbotTypes";
 import {
-    A_X, A_Y, B_A, B_AGE, B_ANGLE, B_BASAL, B_BODY_MASS, B_COM_X, B_COM_Y, B_DEATHS, B_EFFICIENCY, B_EFFORT,
+    B_RUDDER, B_SWIM_X, B_SWIM_Y, A_X, A_Y, B_A, B_AGE, B_ANGLE, B_BASAL, B_BODY_MASS, B_COM_X, B_COM_Y, B_DEATHS, B_EFFICIENCY, B_EFFORT,
     B_ENERGY, B_ETERNAL, B_FOCUS_X, B_FOCUS_Y, B_FREQUENCY, B_GENITAL_X, B_GENITAL_Y, B_GOAL_X, B_GOAL_Y, B_GROWTH,
     B_LAST_ENERGY, B_LAST_X, B_LAST_Y, B_MOUTH_X, B_MOUTH_Y, B_NUM_PARTS, B_POS_X, B_POS_Y, B_SELECT_RADIUS,
     B_SPIN, B_SUM_LENGTHS, B_TIMER, B_TIMER_DELTA, B_VEL_X, B_VEL_Y, BOT_STRIDE, C_A, M_X, M_Y, N_X, N_Y, P_X,
@@ -98,8 +98,14 @@ export function physicsPartA( s: number, st: SharedState ): void
 
     // modulators: the dot between the heading's perpendicular and the focus direction
     const radian0 = angleNow * PI_OVER_180;
-    const headingX = Math.sin( radian0 );
-    const headingY = Math.cos( radian0 );
+    let headingX = Math.sin( radian0 );
+    let headingY = Math.cos( radian0 );
+    if ( STEER_BY_SWIM_DIRECTION_ENABLED )
+    {
+        // "forward" = where I actually swim (smoothed velocity), if I swim at all
+        const sx = B[ b + B_SWIM_X ], sy = B[ b + B_SWIM_Y ], sl = Math.sqrt( sx * sx + sy * sy );
+        if ( sl > 0.02 ) { headingX = sx / sl; headingY = sy / sl; }
+    }
     const perpX =  headingY;
     const perpY = -headingX;
     const directionDot = B[ b + B_FOCUS_X ] * perpX + B[ b + B_FOCUS_Y ] * perpY;
@@ -273,7 +279,25 @@ export function physicsPartA( s: number, st: SharedState ): void
         energy -= drag.energyCost;
         if ( energy < ZERO ) { energy = ZERO; }
     }
-    const spin = B[ b + B_SPIN ] + torque;
+    // the remembered swimming direction follows the velocity slowly
+    B[ b + B_SWIM_X ] += ( velX - B[ b + B_SWIM_X ] ) * SWIM_DIRECTION_SMOOTHING;
+    B[ b + B_SWIM_Y ] += ( velY - B[ b + B_SWIM_Y ] ) * SWIM_DIRECTION_SMOOTHING;
+
+    let spin = B[ b + B_SPIN ] + torque;
+
+    // RUDDER_ENABLED: the whole body turns towards the focus, as fast as the
+    // gene allows, for energy (if the focus is right behind, it turns anyway)
+    if ( RUDDER_ENABLED && ( B[ b + B_RUDDER ] > ZERO ))
+    {
+        const fx = B[ b + B_FOCUS_X ], fy = B[ b + B_FOCUS_Y ];
+        const side  = fx * perpX + fy * perpY;               // focus . perpendicular of "forward"
+        const ahead = fx * headingX + fy * headingY;
+        const want  = ( ahead < ZERO ) ? ( side >= ZERO ? ONE : -ONE ) : side;
+        const turn  = B[ b + B_RUDDER ] * Math.max( -ONE, Math.min( ONE, want ));
+        spin += turn;
+        energy -= Math.abs( turn ) * RUDDER_COST_PER_DEGREE;
+        if ( energy < ZERO ) { energy = ZERO; }
+    }
     posX += velX;
     posY += velY;
     angleNow += spin;

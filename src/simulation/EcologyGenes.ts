@@ -33,7 +33,8 @@ export const GENES_SIZE_PICKINESS  = [ 143 ];                  // how much a mat
 export const GENES_SELF_FEED_WHICH   = [ 160 ];
 export const GENES_SELF_FEED_AMOUNT  = [ 161 ];
 export const GENES_DEFERENCE         = [ 162 ];   // how much a plant others are nearer to is avoided (CROWD_AWARE_FOOD_CHOICE_ENABLED)
-export function isDeferenceGene( g ) { return g === GENES_DEFERENCE[0]; }
+export const GENES_RUDDER            = [ 163 ];   // how fast the whole body may turn towards its goal (RUDDER_ENABLED)
+export function isDeferenceGene( g ) { return ( g === GENES_DEFERENCE[0] ) || ( g === GENES_RUDDER[0] ); }   // (small-step genes outside the ecology block)
 
 export function isSelfFeedingGene( g ): boolean
 {

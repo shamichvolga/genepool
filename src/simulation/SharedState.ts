@@ -55,7 +55,10 @@ export const B_LAST_X        = 30;    // for measuring energy efficiency
 export const B_LAST_Y        = 31;
 export const B_LAST_ENERGY   = 32;
 export const B_EFFICIENCY    = 33;
-export const BOT_STRIDE      = 34;
+export const B_RUDDER        = 34;    // the rudder gene's turn rate (degrees per step), see RUDDER_ENABLED
+export const B_SWIM_X        = 35;    // smoothed swimming direction (velocity), for STEER_BY_SWIM_DIRECTION
+export const B_SWIM_Y        = 36;
+export const BOT_STRIDE      = 37;
 
 //------------------------------------------------------------
 // per body part numbers (in `parts`)

@@ -13,7 +13,9 @@ const { createSimulation } = require( "./headless.cjs" );
 function arg( name, fallback ) { const i = process.argv.indexOf( "--" + name ); return ( i >= 0 && i + 1 < process.argv.length ) ? process.argv[ i + 1 ] : fallback; }
 const SEED = parseInt( arg( "seed", "1" ), 10 ), WARM = parseInt( arg( "warm", "6000" ), 10 ), STEPS = parseInt( arg( "steps", "4000" ), 10 );
 
-const run = createSimulation( SEED, {} );
+const overrides = {};
+for ( const kv of ( arg( "set", "" ) || "" ).split( "," ).filter( Boolean )) { const [ k, v ] = kv.split( "=" ); overrides[ k.trim() ] = v.trim(); }
+const run = createSimulation( SEED, overrides );
 const sb = run.sandbox, gp = run.genePool;
 for ( let i = 0; i < WARM; i++ ) gp.update();
 

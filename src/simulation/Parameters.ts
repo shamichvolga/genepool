@@ -285,3 +285,19 @@ export const SIZE_SCALED_VISION_ENABLED     = false;  // view radius = 300 x (ma
 export const SIZE_SCALED_GRAB_ENABLED       = false;  // food grab radius = 20 x (mass / 410)^0.25 (about 15 .. 25)
 export const GAPE_SUCCESS_FLOOR             = 0.3;    // PREDATOR_GAPE_CURVE: success never below 0.3 x the normal
 export const GAPE_COOLDOWN_SLOPE            = 0.5;    // PREDATOR_GAPE_CURVE: cooldown x ( 1 + 0.5 x prey/predator mass )
+
+//------------------------------------------------------------------------------
+// The rudder (experiment, off): every body may turn as a whole towards where
+// it wants to go, as fast as its gene allows, paying energy for each degree.
+// Without it turning comes only from how the parts' strokes change, which a
+// body of many parts rarely gets right (complex bodies steer almost randomly).
+//------------------------------------------------------------------------------
+export const RUDDER_ENABLED                 = false;
+export const RUDDER_MAX_TURN                = 1.5;    // degrees per step at the strongest gene
+export const RUDDER_COST_PER_DEGREE         = 0.0004; // energy
+// Steer by where I swim, not where my "nose" (root part) points (experiment,
+// off): most bodies swim tail first or sideways, so turning the nose to the
+// goal sends them past it. With this, the turning compares the goal with the
+// smoothed swimming direction (the genes still decide how to turn).
+export const STEER_BY_SWIM_DIRECTION_ENABLED = false;
+export const SWIM_DIRECTION_SMOOTHING       = 0.05;   // how fast the remembered swimming direction follows the velocity
