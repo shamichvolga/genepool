@@ -15,6 +15,8 @@ import { MAX_FOODBITS, MAX_SWIMBOTS } from "./Parameters";
 import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
 import { GridAllocator, UniformGrid } from "./UniformGrid";
 import { BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS } from "./Brain";
+import { BRAIN_SIZE, NUM_HIDDEN, NUM_INPUTS, NUM_OUTPUTS } from "./NeuralBrain";
+import { FIELD_SIZE, PLANT_CELL_SIZE } from "./Environment";
 
 //------------------------------------------------------------
 // per swimbot numbers
@@ -86,7 +88,17 @@ export const PARAM_OB_LENGTH    = 10;
 export const PARAM_OB_PERP_X    = 11;
 export const PARAM_OB_PERP_Y    = 12;
 export const PARAM_OB_END_RADIUS= 13;
-export const NUM_PARAMS         = 16;
+export const PARAM_TIME         = 14;   // the environment's clock (seasons)
+export const PARAM_PETRI        = 15;   // 1 = the "petri" map (no seasons)
+export const PARAM_MAX_ENERGY   = 16;
+export const NUM_PARAMS         = 20;
+
+export * from "./MindLayout";
+import { MAX_THREADS, MIND_STRIDE, NUM_COUNTERS } from "./MindLayout";
+
+// the plant counting grid (as in Environment)
+export const PLANT_COLUMNS = Math.ceil( ( POOL_RIGHT  - POOL_LEFT ) / PLANT_CELL_SIZE );
+export const PLANT_ROWS    = Math.ceil( ( POOL_BOTTOM - POOL_TOP  ) / PLANT_CELL_SIZE );
 
 export const MAX_SEEN           = BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS;
 export const BACKGROUND_SIZE    = 256;  // = Environment FIELD_SIZE
@@ -159,6 +171,20 @@ export class SharedState
     readonly foodEnergy    : Float64Array;
 
     readonly background   : Float32Array;   // environment: brightness of the bottom
+    readonly temperature  : Float32Array;   // environment: base temperature map (FIELD_SIZE²)
+    readonly plantWarm    : Int32Array;     // environment: plants per cell
+    readonly plantCold    : Int32Array;
+
+    //--------------------------------------------------------
+    // the mind (see M_...), the neural brains and their state
+    //--------------------------------------------------------
+    readonly mind         : Float64Array;
+    readonly brainWeights : Float32Array;   // BRAIN_SIZE per swimbot (copied from the genes)
+    readonly nnInputs     : Float64Array;
+    readonly nnHidden     : Float64Array;
+    readonly nnOutputs    : Float64Array;
+    readonly random       : Uint32Array;    // each swimbot's own random numbers
+    readonly counters     : Float64Array;   // NUM_COUNTERS per thread
 
     readonly swimbotGrid  : UniformGrid;
     readonly foodGrid     : UniformGrid;
@@ -260,6 +286,17 @@ export class SharedState
         this.foodEnergy = f64( "foodEnergy", MAX_FOODBITS );
 
         this.background = new Float32Array( make( "background", BACKGROUND_SIZE * BACKGROUND_SIZE * 4 ));
+        this.temperature = new Float32Array( make( "temperature", FIELD_SIZE * FIELD_SIZE * 4 ));
+        this.plantWarm   = new Int32Array( make( "plantWarm", PLANT_COLUMNS * PLANT_ROWS * 4 ));
+        this.plantCold   = new Int32Array( make( "plantCold", PLANT_COLUMNS * PLANT_ROWS * 4 ));
+
+        this.mind         = f64( "mind", n * MIND_STRIDE );
+        this.brainWeights = new Float32Array( make( "brainWeights", n * BRAIN_SIZE * 4 ));
+        this.nnInputs     = f64( "nnInputs",  n * NUM_INPUTS );
+        this.nnHidden     = f64( "nnHidden",  n * NUM_HIDDEN );
+        this.nnOutputs    = f64( "nnOutputs", n * NUM_OUTPUTS );
+        this.random       = new Uint32Array( make( "random", n * 4 ));
+        this.counters     = f64( "counters", MAX_THREADS * NUM_COUNTERS );
 
         const allocator = ( prefix: string ): GridAllocator => ( name, bytes ) => make( prefix + name, bytes );
         this.swimbotGrid = new UniformGrid( SWIMBOT_GRID_CELL, POOL_LEFT, POOL_TOP, POOL_RIGHT, POOL_BOTTOM, n,            allocator( "swimbotGrid." ));

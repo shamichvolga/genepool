@@ -131,16 +131,23 @@ document.getElementById( "loadSwimbotFile" ).addEventListener( "change", functio
 function startBackgroundMetronome()
 {
     const metronome = new Worker( new URL( "./metronome.worker.ts", import.meta.url ), { type: "module" } );
+    let lastFrameEnd = 0;
     metronome.onmessage = () =>
     {
         if ( typeof genePool == "undefined" ) return;
 
+        // ticks that piled up while the last frame was computed are skipped:
+        // otherwise the page never gets a free moment (no panel updates, no
+        // graph) - a frame of the fastest speed takes longer than a tick
+        const now = performance.now();
+        if ( now - lastFrameEnd < 10 ) return;
+
         // hidden page, or the browser stopped giving us screen refreshes
         // (a covered window, an embedded view): keep simulating without drawing
-        const now = performance.now();
         if ( document.hidden || genePool.screenRefreshStalled( now ))
         {
             genePool.runFrame( now, false );
+            lastFrameEnd = performance.now();
         }
     };
 }

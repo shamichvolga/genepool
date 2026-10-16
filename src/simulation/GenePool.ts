@@ -2,7 +2,7 @@ import { geneAverage, convertOldGenes, GENE_LAYOUT_VERSION, setTrait, gaussian, 
 import { environment, FLAT_ENVIRONMENT, INITIAL_SOIL_NUTRIENT_PER_CELL, NUTRIENT_CYCLE_ENABLED, PLANT_TYPE_WARM, PLANT_TYPE_COLD, SEASONAL_PLANT_GROWTH_ENABLED, SEASONAL_PLANT_GROWTH_AMPLITUDE } from "./Environment";
 import { petriStartZone } from "./Petri";
 import { IGNORE_FOOD_EFFICIENCY, preyVisibility, TWO_PLANT_TYPES } from "./Ecology";
-import { INTERLEAVED_STEP, PERCEPTION_CHECK, DIET_SWITCH_RATE, CLASSIC_NUM_SWIMBOTS, CLASSIC_NUM_FOODBITS, GARDEN_RADIUS, ENVIRONMENT_PLANT_SPREAD_RATE, ENVIRONMENT_SEEDS_PER_PERIOD, LOCAL_ENVIRONMENT_PLANT_GROWTH, PLANT_CELL_CAPACITY, PLANT_PARENT_SEED_FRACTION, PLANT_SEED_MIN_DISTANCE, PLANT_SEED_MAX_DISTANCE } from "./Parameters";
+import { DIET_SWITCH_RATE, CLASSIC_NUM_SWIMBOTS, CLASSIC_NUM_FOODBITS, GARDEN_RADIUS, ENVIRONMENT_PLANT_SPREAD_RATE, ENVIRONMENT_SEEDS_PER_PERIOD, LOCAL_ENVIRONMENT_PLANT_GROWTH, PLANT_CELL_CAPACITY, PLANT_PARENT_SEED_FRACTION, PLANT_SEED_MIN_DISTANCE, PLANT_SEED_MAX_DISTANCE } from "./Parameters";
 
 import { BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_PREY } from "./Brain";
 import { Camera } from "./Camera";
@@ -18,6 +18,7 @@ import { PhyloTree } from "./PhyloTree";
 import { POOL_BOTTOM, POOL_HEIGHT, POOL_LEFT, POOL_RIGHT, POOL_TOP, POOL_WIDTH, Pool } from "./Pool";
 import { UniformGrid } from "./UniformGrid";
 import * as SS from "./SharedState";
+import { doTask, TASK_DECIDE, TASK_LOOK, TASK_PHYSICS, TASK_PREPARE_LOOK } from "../parallel/ParallelWork";
 import { perceive, PerceptionScratch } from "./PerceptionKernel";
 import { physicsStep } from "./PhysicsKernel";
 import { Swimbot } from "./Swimbot";
@@ -207,14 +208,7 @@ export function GenePool()
     let _runner: any =
     {
         getNumThreads() { return 1; },
-        physics( list, n )
-        {
-            for (let i = 0; i < n; i++) { const s = list[i]; if ( _st.alive[s] ) { physicsStep( s, _st ); } }
-        },
-        perception( list, n )
-        {
-            for (let i = 0; i < n; i++) { const s = list[i]; if ( _st.sensing[s] ) { perceive( s, _st, _perceptionScratch ); } }
-        },
+        task( task, list, n ) { for (let i = 0; i < n; i++) { doTask( task, _st, _perceptionScratch, list[i], 0 ); } },
     };
     this.setParallelRunner = function( runner ) { _runner = runner; }
     this.getNumThreads     = function() { return _runner.getNumThreads(); }
@@ -1220,6 +1214,13 @@ if ( mode === SimulationStartMode.SPECIES )
 	    P[ SS.PARAM_OBSTACLE_X2  ] = _obstacle.getEnd2Position().x;
 	    P[ SS.PARAM_OBSTACLE_Y2  ] = _obstacle.getEnd2Position().y;
 	    _obstacle.writeGeometry( P, SS.PARAM_OB_MID_X, SS.PARAM_OB_MID_Y, SS.PARAM_OB_LENGTH, SS.PARAM_OB_PERP_X, SS.PARAM_OB_PERP_Y, SS.PARAM_OB_END_RADIUS );
+
+	    // the environment, for the decision kernel (DecisionKernel.temperatureAt...)
+	    P[ SS.PARAM_TIME  ] = environment.getTime();
+	    P[ SS.PARAM_PETRI ] = environment.petri ? 1 : 0;
+	    environment.copyTemperatureTo( _st.temperature );
+	    _st.plantWarm.set( environment.plantCount[0] );
+	    _st.plantCold.set( environment.plantCount[1] );
 	}
 
 	this.writePerceptionInputs = function( s )
@@ -1236,58 +1237,7 @@ if ( mode === SimulationStartMode.SPECIES )
 	    //  the swimbot writes them itself, see Swimbot.writeStaticPerception)
 	}
 
-	//------------------------------------------------------------------------
-	// PERCEPTION_CHECK: run the kernel on exactly the state the old code just
-	// saw, and count any difference
-	//------------------------------------------------------------------------
-	this.checkPerceptionKernel = function( s, food, prey, threat, socialX, socialY )
-	{
-	    this.writePerceptionParams();
-	    for (let o = 0; o < MAX_SWIMBOTS; o++)
-	    {
-	        if ( _swimbots[o].getAlive() || _botAlive[o] ) { this.writePerceptionInputs(o); }
-	    }
-	    for (let f = 0; f < MAX_FOODBITS; f++) { _st.foodAlive[f] = _foodBits[f].getAlive() ? 1 : 0; }
 
-	    perceive( s, _st, _perceptionScratch );
-	    _perceptionChecks ++;
-
-	    let same = ( _st.seenCount[s] === _numNearbySwimbots )
-	            && ( _st.seenFood[s]   === food )
-	            && ( _st.seenPrey[s]   === ( prey   ? prey.getIndex()   : -1 ))
-	            && ( _st.seenThreat[s] === ( threat ? threat.getIndex() : -1 ))
-	            && ( _st.socialX[s]    === socialX )
-	            && ( _st.socialY[s]    === socialY );
-	    for (let i = 0; same && i < _numNearbySwimbots; i++)
-	    {
-	        if ( _st.seen[ s * SS.MAX_SEEN + i ] !== _nearbySwimbotsArray[i].getIndex() ) { same = false; }
-	    }
-	    if ( !same ) { _perceptionMismatches ++; }
-	}
-
-	// PERCEPTION_CHECK: the mate the threads chose = the one the old code would choose?
-	this.checkMateChoices = function( list, n )
-	{
-	    for (let i = 0; i < n; i++)
-	    {
-	        const s = list[i];
-	        if ( !_st.sensing[s] || _st.seenMate[s] === -2 ) continue;
-	        const me = _swimbots[s];
-	        let best = -1, highest = -100.0;
-	        for (let k = 0; k < _st.seenCount[s]; k++)
-	        {
-	            const other = _swimbots[ _st.seen[ s * SS.MAX_SEEN + k ] ];
-	            const babe = other.getAttractiveness( me );
-	            if (( babe > highest ) && ( babe > 0 ) && ( other.getAge() > YOUNG_AGE_DURATION ) && ( other.getEnergy() > STARVING ) && other.sameDiet( me ) && other.acceptsMate( me ))
-	            {
-	                highest = babe;
-	                best = other.getIndex();
-	            }
-	        }
-	        _perceptionChecks ++;
-	        if ( best !== _st.seenMate[s] ) { _perceptionMismatches ++; }
-	    }
-	}
 
 	this.getPerceptionMismatches = function() { return { checks: _perceptionChecks, mismatches: _perceptionMismatches }; }
 
@@ -1951,18 +1901,6 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	//------------------------------------------------------------------------
 	this.interact = function( s )
 	{
-                //--------------------------------------------------------------------------------------------------------
-                // check for obstacle collision....
-                //--------------------------------------------------------------------------------------------------------
-                // (in the phased step the physics threads do this, see PhysicsKernel.obstacleCollision)
-                if ( INTERLEAVED_STEP && _obstacle.getCollision( _swimbots[s].getPosition(), _swimbots[s].getBoundingRadius() * ONE_HALF ) )
-                {
-                    // only call this IMMEDIATELY after calling "_obstacle.getCollision"...
-                    _vectorUtility = _obstacle.getCurrentCollisionForce();
-                    _vectorUtility.scale( 1.2 );
-                    _swimbots[s].addForce( _vectorUtility );
-                }
-
                 //-------------------------------------
                 // eating
                 //-------------------------------------
@@ -2115,70 +2053,52 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
                 }         //    if ( swimbot[s].isTryingToMate() )
 	}
 
+
 	//------------------------------------------------------------------------
-	// stage 7: the step in phases. The heavy phases (moving the bodies,
-	// looking around) touch only the shared arrays and can run in several
-	// threads (_runner); deciding and acting stay in this thread, in order.
+	// stage 7: the step in phases. Deciding, moving and looking around touch
+	// only the shared arrays and run in several threads (_runner, see
+	// ParallelWork.ts); what changes other objects (eating, biting, mating,
+	// dropping parts) stays in this thread, in order.
 	//------------------------------------------------------------------------
 	this.updateSwimbotsInPhases = function()
 	{
 	    const list = _aliveSwimbotIndices;
 	    const n    = list.length;
+	    const M    = _st.mind;
 	    this.writePerceptionParams();
 
 	    let t = now();
 
-	    // 1. decide
-	    for (let i = 0; i < n; i++)
-	    {
-	        const b = _swimbots[ list[i] ];
-	        if ( b.getAlive() ) { b.prepareStep(); }
-	    }
-
-	    t = phaseTime( 0, t );
-
-	    // 2. move (many threads)
-	    _runner.physics( list, n );
-	    t = phaseTime( 1, t );
-
-	    // 3. take the results back; get ready to look around
+	    // 1. decide (many threads), then what only this thread can do
+	    _runner.task( TASK_DECIDE, list, n );
 	    for (let i = 0; i < n; i++)
 	    {
 	        const s = list[i];
-	        const b = _swimbots[s];
-	        _st.sensing[s] = 0;
-	        if ( !b.getAlive() ) continue;
-
-	        b.finishStep();
-
-	        // positions straight from the physics numbers (= the swimbot's own, just copied)
-	        const k = s * SS.BOT_STRIDE, B = _st.bots;
-	        _botX    [s] = B[ k + SS.B_POS_X     ];
-	        _botY    [s] = B[ k + SS.B_POS_Y     ];
-	        _genitalX[s] = B[ k + SS.B_GENITAL_X ];
-	        _genitalY[s] = B[ k + SS.B_GENITAL_Y ];
-	        if ( _botAlive[s] === 0 ) continue;         // died of old age or hunger just now
-
-	        if ( b.getIsLookingForSensoryInput() )
+	        if (( M[ s * SS.MIND_STRIDE + SS.M_EVENTS ] & ( SS.EVENT_REGROW | SS.EVENT_SELF_FEED )) && _swimbots[s].getAlive() )
 	        {
-	            b.updateScanRadius();
-	            _st.sensing[s] = 1;
+	            _swimbots[s].handleEventsBeforeMoving();
 	        }
-	        _st.mouthX    [s] = B[ k + SS.B_MOUTH_X ];
-	        _st.mouthY    [s] = B[ k + SS.B_MOUTH_Y ];
-	        _st.energy    [s] = B[ k + SS.B_ENERGY  ];
-	        _st.scanRadius[s] = b.getDynamicScanRadius();
-	        _st.brainState[s] = b.getBrainState();
-	        _st.age       [s] = b.getAge();
 	    }
+	    t = phaseTime( 0, t );
 
+	    // 2. move (many threads)
+	    _runner.task( TASK_PHYSICS, list, n );
+	    t = phaseTime( 1, t );
+
+	    // 3. died of old age or hunger while moving
+	    const B = _st.bots;
+	    for (let i = 0; i < n; i++)
+	    {
+	        const s = list[i];
+	        if ( B[ s * SS.BOT_STRIDE + SS.B_DEATHS ] > 0 ) { _swimbots[s].applyPhysicsDeaths(); }
+	    }
+	    _runner.task( TASK_PREPARE_LOOK, list, n );
 	    t = phaseTime( 2, t );
 
-	    // 4. look around (many threads)
-	    _runner.perception( list, n );
+	    // 4. look around and take it in (many threads)
+	    _runner.task( TASK_LOOK, list, n );
+	    this.collectKernelCounters();
 	    t = phaseTime( 3, t );
-
-	    if ( PERCEPTION_CHECK ) { this.checkMateChoices( list, n ); }
 
 	    // 5. act, one after the other
 	    for (let i = 0; i < n; i++)
@@ -2189,11 +2109,39 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	            if ( _selectedSwimbot === s ) { setSelectedSwimbot( NULL_INDEX ); }
 	            continue;
 	        }
-	        if ( _st.sensing[s] ) { this.applyPerception(s); }
+	        if ( M[ s * SS.MIND_STRIDE + SS.M_EVENTS ] & ( SS.EVENT_DECOY | SS.EVENT_CHOOSE_MATE )) { _swimbots[s].handleEventsAfterLooking(); }
 	        this.interact(s);
 	    }
 	    phaseTime( 4, t );
 	}
+
+	//------------------------------------------------------------------------
+	// the kernels count into rows of _st.counters (one per thread): add them up
+	//------------------------------------------------------------------------
+	this.collectKernelCounters = function()
+	{
+	    const K = _st.counters;
+	    let a = new Float64Array( SS.NUM_COUNTERS );
+	    for (let row = 0; row < SS.MAX_THREADS; row++)
+	    {
+	        const base = row * SS.NUM_COUNTERS;
+	        for (let c = 0; c < SS.NUM_COUNTERS; c++) { a[c] += K[ base + c ]; K[ base + c ] = 0; }
+	    }
+	    simCounters.meatTargetsWhilePursuing  += a[ SS.K_MEAT_TARGETS_PURSUING ];
+	    simCounters.preyTargetChoices         += a[ SS.K_PREY_CHOICES ];
+	    simCounters.preyTargetMeatChoices     += a[ SS.K_PREY_MEAT_CHOICES ];
+	    simCounters.preyTargetMeatDistanceSum += a[ SS.K_PREY_MEAT_DISTANCE ];
+	    simCounters.preyTargetMeatRewardSum   += a[ SS.K_PREY_MEAT_REWARD ];
+	    simCounters.preyTargetLiveChoices     += a[ SS.K_PREY_LIVE_CHOICES ];
+	    simCounters.preyTargetLiveDistanceSum += a[ SS.K_PREY_LIVE_DISTANCE ];
+	    simCounters.preyTargetLiveRewardSum   += a[ SS.K_PREY_LIVE_REWARD ];
+	    simCounters.preyTargetDistanceSum     += a[ SS.K_PREY_DISTANCE ];
+	    simCounters.preyTargetRewardSum       += a[ SS.K_PREY_REWARD ];
+	}
+
+	// the objects behind the numbers in the shared arrays (for the swimbots)
+	this.getSwimbotAt = function( i ) { return _swimbots[i]; }
+	this.getFoodBitAt = function( i ) { return _foodBits[i]; }
 
 	//------------------------------------------------------------------------
 	// how long the phases take (milliseconds, summed; for finding what is slow)
@@ -2203,70 +2151,6 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	function phaseTime( phase, since ) { const t = now(); _phaseTimes[ phase ] += t - since; return t; }
 	this.getPhaseTimes = function() { return _phaseTimes; }
 
-	// give a swimbot what the perception kernel found for it
-	this.applyPerception = function( s )
-	{
-	    const me    = _swimbots[s];
-	    const count = _st.seenCount[s];
-	    const base  = s * SS.MAX_SEEN;
-	    for (let k = 0; k < count; k++) { _nearbySwimbotsArray[k] = _swimbots[ _st.seen[ base + k ] ]; }
-	    _numNearbySwimbots = count;
-
-	    if ( me.getUsesNeuralBrain() ) { me.setSocialOffset( _st.socialX[s], _st.socialY[s] ); }
-	    me.setPredatorTargetSignals({
-	        preyDistance: _st.targetPreyDistance[s],
-	        preyReward: _st.targetPreyReward[s],
-	        preySuccess: _st.targetPreySuccess[s],
-	        preyChase: _st.targetPreyChase[s],
-	        baitPresent: _st.targetBaitPresent[s] === 1,
-	        baitDistance: _st.targetBaitDistance[s],
-	        baitReward: _st.targetBaitReward[s],
-	    });
-
-	    // (something may have been eaten since the look)
-	    const f = _st.seenFood[s];
-	    const p = _st.seenPrey[s];
-	    const t = _st.seenThreat[s];
-	    const foodOkay   = ( f >= 0 ) && _foodBits[f].getAlive();
-	    const preyOkay   = ( p >= 0 ) && _swimbots[p].getAlive();
-	    const threatOkay = ( t >= 0 ) && _swimbots[t].getAlive();
-	    const a = _st.seenPredator[s];
-	    const anyPredator = (( a >= 0 ) && _swimbots[a].getAlive() ) ? _swimbots[a] : null;
-
-    const baitOkay = foodOkay && ( _foodBits[f].getType() === 2 );
-    if ( PREDATOR_TARGET_SELECTION_ENABLED && ( preyOkay || baitOkay ))
-	    {
-	        simCounters.preyTargetChoices ++;
-        if ( baitOkay && !preyOkay )
-        {
-            simCounters.preyTargetMeatChoices ++;
-            simCounters.preyTargetMeatDistanceSum += _st.targetBaitDistance[s];
-            simCounters.preyTargetMeatRewardSum += _st.targetBaitReward[s];
-            simCounters.preyTargetDistanceSum += _st.targetBaitDistance[s];
-            simCounters.preyTargetRewardSum += _st.targetBaitReward[s];
-        }
-        else
-        {
-            simCounters.preyTargetLiveChoices ++;
-            simCounters.preyTargetLiveDistanceSum += _st.targetPreyDistance[s];
-            simCounters.preyTargetLiveRewardSum += _st.targetPreyReward[s] * _st.targetPreySuccess[s];
-            simCounters.preyTargetDistanceSum += _st.targetPreyDistance[s];
-            simCounters.preyTargetRewardSum += _st.targetPreyReward[s] * _st.targetPreySuccess[s];
-        }
-	    }
-
-	    if ( preyOkay ) { me.notifyTargetFound(); }
-
-	    // the mate the threads chose (-2: choose here, the old way)
-	    const m = _st.seenMate[s];
-	    const mateChoice = ( m === -2 ) ? undefined : (( m >= 0 && _swimbots[m].getAlive() ) ? _swimbots[m] : null );
-
-	    me.setEnvironmentalStimuli( count, _nearbySwimbotsArray,
-	                                foodOkay, foodOkay ? _foodBits[f] : null,
-	                                preyOkay, preyOkay ? _swimbots[p] : null,
-	                                threatOkay ? _swimbots[t] : null,
-	                                mateChoice, _st.seen, base, anyPredator );
-	}
 
 	this.updateSwimbots = function()
 	{
@@ -2325,46 +2209,7 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
 	    }
         _foodBitGrid.build( _aliveFoodBitIndices, _aliveFoodBitIndices.length, _foodX, _foodY );
 
-        if ( !INTERLEAVED_STEP )
-        {
-            this.updateSwimbotsInPhases();
-        }
-        else for (let i = 0; i < _aliveSwimbotIndices.length; i++)
-        {
-            let s = _aliveSwimbotIndices[i];
-            if ( _swimbots[s].getAlive() )
-            {
-
-
-
-                _swimbots[s].update();
-                syncSwimbotPosition(s);
-
-                //-----------------------------------------------------------------
-                // provide aspects of the environment for the swimbot to perceive
-                //-----------------------------------------------------------------
-                if ( _swimbots[s].getIsLookingForSensoryInput() )
-                {
-                    this.giveSwimbotNearbyEnvironmentalStimuli(s);
-                }
-
-                // Не сбрасываем _tryingToHunt принудительно.
-                // Это ломало/теряло попытки укуса при некоторых состояниях мозга.
-
-
-                this.interact(s);
-            }            //     if ( _swimbots[s].getAlive() )
-            else
-            {
-                //-------------------------------------------------------------
-                // In case the selected swimbot has just died, de-select it!
-                //-------------------------------------------------------------
-                if ( _selectedSwimbot === s )
-                {
-                    setSelectedSwimbot( NULL_INDEX );
-                }
-            }
-        } // for (let s=0; s<MAX_SWIMBOTS; s++)
+        this.updateSwimbotsInPhases();
 
         //-------------------------------------------------
         // if showing mutual love....
@@ -2472,416 +2317,6 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
     }
 
 
-    //--------------------------------------------------------
-	this.giveSwimbotNearbyEnvironmentalStimuli = function(s)
-	{
-        const me = _swimbots[s];
-        const viewRadius = SWIMBOT_VIEW_RADIUS;
-        const viewRadiusSquared = viewRadius * viewRadius;
-        me.updateScanRadius();
-        const preyViewRadius = me.getDynamicScanRadius();
-        const preyViewRadiusSquared = preyViewRadius * preyViewRadius;
-
-        const myGenitalPosition = me.getGenitalPosition();
-        const myMouthPosition = me.getMouthPosition();
-        const preferredFoodType = me.getPreferredFoodType();
-        const predatorLevel     = me.getPredatorLevel();
-
-        const myMass            = me.getPhenotypeMass();
-
-
-
-	    //------------------------------------------------------
-	    // collect the array of nearby visible swimbots...
-	    //------------------------------------------------------
-        _numNearbySwimbots = 0;
-
-        //------------------------------------------------------------------
-        // everybody within the search radius (wider for a hunting predator)
-        //------------------------------------------------------------------
-        const myPosition   = me.getPosition();
-        const myX          = myPosition.x;
-        const myY          = myPosition.y;
-        const searchRadius = (predatorLevel > PREDATOR_LEVEL_THRESHOLD) ? preyViewRadius : viewRadius;
-        const searchRadiusSquared = searchRadius * searchRadius;
-
-        let numNearby = 0;
-        const numInCells = _swimbotGrid.collect( myX, myY, searchRadius, _gridResult );
-
-        for (let k = 0; k < numInCells; k++)
-        {
-            const o = _gridResult[k];
-            if ( o === s ) continue;
-
-            const dx = _botX[o] - myX;
-            const dy = _botY[o] - myY;
-            if ( dx * dx + dy * dy < searchRadiusSquared )
-            {
-                _nearbyIndices[ numNearby ++ ] = o;
-            }
-        }
-
-        //------------------------------------------------------------------
-        // the brain perceives the NEAREST swimbots within normal view,
-        // always in order of distance
-        //------------------------------------------------------------------
-        const myGenitalX = myGenitalPosition.x;
-        const myGenitalY = myGenitalPosition.y;
-        let numCandidates = 0;
-
-        for (let i = 0; i < numNearby; i++)
-        {
-            const o = _nearbyIndices[i];
-
-            if ( _botAlive[o] === 1 )
-            {
-                const dx = myGenitalX - _genitalX[o];
-                const dy = myGenitalY - _genitalY[o];
-                const distanceSquared = dx * dx + dy * dy;
-
-                if (distanceSquared < viewRadiusSquared)
-                {
-                    _candidateIndices  [numCandidates] = o;
-                    _candidateDistances[numCandidates] = distanceSquared;
-                    numCandidates++;
-                }
-            }
-        }
-
-        // usually only the nearest few are needed; if the obstacle hides
-        // some of them, fall back to sorting the whole list
-        let numNearest = selectNearestCandidates( numCandidates, BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS );
-        let nearestList = _nearestIndices;
-
-        for (let i = 0; i < numNearest; i++)
-        {
-            const o = _nearestIndices[i];
-            _genitalPositionUtility.setXY( _genitalX[o], _genitalY[o] );
-            if ( _obstacle.getObstruction( myGenitalPosition, _genitalPositionUtility ) && ( numCandidates > numNearest ))
-            {
-                sortCandidatesByDistance( numCandidates );
-                nearestList = _candidateIndices;
-                numNearest  = numCandidates;
-                break;
-            }
-        }
-
-        let socialX = 0, socialY = 0;
-        for (let i = 0; i < numNearest && _numNearbySwimbots < BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS; i++)
-        {
-            const o = nearestList[i];
-            _genitalPositionUtility.setXY( _genitalX[o], _genitalY[o] );
-
-            if (!_obstacle.getObstruction(myGenitalPosition, _genitalPositionUtility))
-            {
-                _nearbySwimbotsArray[_numNearbySwimbots] = _swimbots[o];
-                _numNearbySwimbots++;
-                socialX += _botX[o] - myX;
-                socialY += _botY[o] - myY;
-            }
-        }
-
-        // the neural brain may want to swim towards (or away from) the others
-        if ( me.getUsesNeuralBrain() ) { me.setSocialOffset( socialX, socialY ); }
-
-        //------------------------------------------------------
-        // find the closest food bit using spatial grid
-        //------------------------------------------------------
-        const environmentOn    = environment.active;
-        const myEfficiencyWarm = environmentOn ? me.getDigestionEfficiency( PLANT_TYPE_WARM ) : ONE;
-        const myEfficiencyCold = environmentOn ? me.getDigestionEfficiency( PLANT_TYPE_COLD ) : ONE;
-        const iAmStarving      = me.getEnergy() < STARVING_FOOD_CHOICE;
-        let foundFoodBit = false;
-        let smallestDistanceSquared = Number.MAX_SAFE_INTEGER;
-        let bestMeatScore = -Infinity;
-        const targetSignals = { preyDistance: 0, preyReward: 0, preySuccess: 0, preyChase: 0,
-                                baitPresent: false, baitDistance: 0, baitReward: 0 };
-
-        // The broad phase is centered on the body, so include the mouth's
-        // reach; meat itself is then range-checked from the mouth below.
-        const foodSearchRadius = viewRadius + SWIMBOT_MOUTH_LENGTH + FOOD_BIT_GRAB_RADIUS;
-        const numFoodInCells = _foodBitGrid.collect( myX, myY, foodSearchRadius, _foodGridResult );
-
-        for (let k = 0; k < numFoodInCells; k++)
-        {
-            const f  = _foodGridResult[k];
-
-            const fx = _foodX[f] - myX;
-            const fy = _foodY[f] - myY;
-
-            const foodBit = _foodBits[f];
-            const foodType = _foodType[f];
-            const mx = myMouthPosition.x - _foodX[f];
-            const my = myMouthPosition.y - _foodY[f];
-            const viewDistanceSquared = mx * mx + my * my;
-            if ( foodType === 2 )
-            {
-                if ( viewDistanceSquared >= viewRadiusSquared ) continue;
-            }
-            else if ( fx * fx + fy * fy >= viewRadiusSquared ) continue;
-
-            let okay = true;
-
-            // Check food type compatibility
-            // Type 2 (meat) must be eaten only by predators, independent of numFoodTypes
-            if (foodType === 2)
-            {
-                // Meat (type 2): eat only by predators
-                if (predatorLevel <= PREDATOR_LEVEL_THRESHOLD) okay = false;
-            }
-            else if (predatorLevel > PREDATOR_LEVEL_THRESHOLD)
-            {
-                // Predators don't eat plants
-                okay = false;
-            }
-            else if ( environmentOn )
-            {
-                // the environment: any plant, but poorly digestible ones only when starving
-                if ((( foodType === PLANT_TYPE_WARM ) ? myEfficiencyWarm : myEfficiencyCold ) < IGNORE_FOOD_EFFICIENCY && !iAmStarving) okay = false;
-            }
-            else if (globalTweakers.numFoodTypes === 2)
-            {
-                if (foodType != preferredFoodType)
-                {
-                    okay = false;
-                }
-            }
-
-            if (!okay) continue;
-
-            if ( foodType === 2 && foodBit.getAlive() && PREDATOR_TARGET_SELECTION_ENABLED )
-            {
-                const room = Math.max( 0, SWIMBOT_MAX_ENERGY - me.getEnergy() );
-                const reward = Math.min( room, foodBit.getEnergy() ) / SWIMBOT_MAX_ENERGY;
-                const distanceCost = Math.sqrt( viewDistanceSquared ) / Math.max( 1, viewRadius );
-                const chaseCost = Math.min( 1, Math.sqrt( viewDistanceSquared ) / Math.max( 0.05, me.getSpeed() ) / Math.max( 1, PREY_SCAN_COOLDOWN ));
-                const value = preyTargetScore( reward, chaseCost, me.getPreyValueWeight(),
-                                               me.getPreyTravelWeight(), me.getPreyBaitBias(), true );
-                if ( value > bestMeatScore && !_obstacle.getObstruction( myMouthPosition, foodBit.getPosition() ))
-                {
-                    bestMeatScore = value;
-                    smallestDistanceSquared = viewDistanceSquared;
-                    _chosenFoodBit = foodBit;
-                    foundFoodBit = true;
-                    targetSignals.baitPresent = true;
-                    targetSignals.baitDistance = distanceCost;
-                    targetSignals.baitReward = reward;
-                }
-                continue;
-            }
-
-            // distance from my mouth (from the arrays; the food bit itself
-            // is only looked at for the few that could be the closest)
-            // in the environment, better food counts as nearer:
-            // value = efficiency / distance, i.e. compare distance² / efficiency²
-            if ( environmentOn && ( foodType !== 2 ))
-            {
-                if ( viewDistanceSquared >= viewRadiusSquared ) continue;
-                const e = ( foodType === PLANT_TYPE_WARM ) ? myEfficiencyWarm : myEfficiencyCold;
-                const scaled = viewDistanceSquared / ( e * e );
-                if ( scaled < smallestDistanceSquared && foodBit.getAlive() && !_obstacle.getObstruction( myMouthPosition, foodBit.getPosition() ))
-                {
-                    smallestDistanceSquared = scaled;
-                    _chosenFoodBit = foodBit;
-                    foundFoodBit = true;
-                }
-                continue;
-            }
-
-            if ( viewDistanceSquared < viewRadiusSquared && viewDistanceSquared < smallestDistanceSquared && foodBit.getAlive() )
-            {
-                const foodPosition = foodBit.getPosition();
-                {
-                    {
-                        if (!_obstacle.getObstruction(myMouthPosition, foodPosition))
-                        {
-                            smallestDistanceSquared = viewDistanceSquared;
-                            _chosenFoodBit = foodBit;
-                            foundFoodBit = true;
-                        }
-                    }
-                }
-            }
-        }
-
-	    //------------------------------------------------------------------------------
-	    // pass these environmental stimuli along to the swimbot...
-	    //------------------------------------------------------------------------------
-        //------------------------------------------------------
-        // find prey (for predators)
-        //------------------------------------------------------
-        let preyWasFound = false;
-        let chosenPrey = null;
-        let bestPreyValue = -Infinity;
-        let chosenPreyDistance = 0;
-        const attackChance = environmentOn ? ENVIRONMENT_ATTACK_SUCCESS_CHANCE : ATTACK_SUCCESS_CHANCE;
-
-        // Читаем predatorLevel и mass через публичные геттеры Swimbot
-        // (predatorLevel объявлен выше, чтобы не ловить Temporal Dead Zone)
-
-
-        // ─── Поиск добычи (только для хищников) ───────────────────────────────────
-        if (predatorLevel > PREDATOR_LEVEL_THRESHOLD) {
-            for (let i = 0; i < numNearby; i++) {
-                const o = _nearbyIndices[i];
-                if (_botAlive[o] === 0) continue;
-
-                // Охотиться только на травоядных (хищники на хищников не нападают)
-                // Порог совпадает с порогом окраски в чёрный (Embryology.js, predatorLevel > 0.6),
-                // иначе боты с predatorLevel 0.5-0.6 визуально выглядят добычей,
-                // но хищники их игнорируют как "своих"
-                if (_botPredator[o] > PREDATOR_LEVEL_THRESHOLD) continue;
-
-                // Бессмертных не едят
-                if (_botEternal[o] === 1) continue;
-
-                // Слишком крупная добыча хищнику не по зубам
-                if (_botMass[o] > myMass * PREY_MAX_MASS_RATIO) continue;
-
-
-                const px = myMouthPosition.x - _botX[o];
-                const py = myMouthPosition.y - _botY[o];
-                let distance = Math.sqrt( px * px + py * py );
-
-                if (distance > preyViewRadius) continue;
-
-                // camouflage: prey that matches the background is seen only up close
-                if ( environmentOn && distance > preyViewRadius * preyVisibility( _botBrightness[o], environment.backgroundAt( _botX[o], _botY[o] ))) continue;
-
-                const candidate = _swimbots[o];
-
-                // Скоринг: предпочитаем максимально близкую жертву.
-                // Энергия остаётся небольшим плюсом, но выбор делаем по близости.
-                // Жёстко выбираем минимальную дистанцию среди видимых.
-                // Энергия добавляется только как микроприбавка, чтобы избежать тикового залипания при равных расстояниях.
-                let value = -distance + candidate.getEnergy() * 0.001;
-                if ( PREDATOR_TARGET_SELECTION_ENABLED )
-                {
-                    const room = Math.max( 0, SWIMBOT_MAX_ENERGY - me.getEnergy() );
-                    const potential = candidate.getEnergy() * PREDATION_ENERGY_TRANSFER + candidate.getPhenotypeMass() * PREY_BODY_ENERGY;
-                    const reward = Math.min( room, potential ) / SWIMBOT_MAX_ENERGY;
-                    const distanceCost = distance / Math.max( 1, preyViewRadius );
-                    const chaseCost = Math.min( 1, distance / Math.max( 0.05, me.getSpeed() ) / Math.max( 1, PREY_SCAN_COOLDOWN ));
-                    value = preyTargetScore( reward * attackChance, chaseCost, me.getPreyValueWeight(),
-                                             me.getPreyTravelWeight(), me.getPreyBaitBias(), false );
-                    if ( value > bestPreyValue )
-                    {
-                        targetSignals.preyDistance = distanceCost;
-                        targetSignals.preyReward = reward;
-                        targetSignals.preySuccess = attackChance;
-                        targetSignals.preyChase = chaseCost;
-                    }
-                }
-
-
-
-
-                if (value > bestPreyValue) {
-                    bestPreyValue = value;
-                    chosenPrey = candidate;
-                    preyWasFound = true;
-                    chosenPreyDistance = distance;
-                }
-            }
-
-
-        }
-
-        if ( PREDATOR_TARGET_SELECTION_ENABLED )
-        {
-            const baitWins = foundFoodBit && ( _chosenFoodBit != null ) && ( _chosenFoodBit.getType() === 2 )
-                          && ( bestMeatScore > bestPreyValue );
-            if ( baitWins )
-            {
-                preyWasFound = false;
-                chosenPrey = null;
-                simCounters.preyTargetChoices ++;
-                simCounters.preyTargetMeatChoices ++;
-                simCounters.preyTargetMeatDistanceSum += targetSignals.baitDistance;
-                simCounters.preyTargetMeatRewardSum += targetSignals.baitReward;
-                simCounters.preyTargetDistanceSum += targetSignals.baitDistance;
-                simCounters.preyTargetRewardSum += targetSignals.baitReward;
-            }
-            else if ( preyWasFound )
-            {
-                // A live prey scored higher, so don't leave the lower-scoring
-                // meat target active alongside it.
-                if ( foundFoodBit && ( _chosenFoodBit != null ) && ( _chosenFoodBit.getType() === 2 ))
-                {
-                    foundFoodBit = false;
-                    _chosenFoodBit = null;
-                }
-                simCounters.preyTargetChoices ++;
-                simCounters.preyTargetLiveChoices ++;
-                simCounters.preyTargetLiveDistanceSum += targetSignals.preyDistance;
-                simCounters.preyTargetLiveRewardSum += targetSignals.preyReward * targetSignals.preySuccess;
-                simCounters.preyTargetDistanceSum += targetSignals.preyDistance;
-                simCounters.preyTargetRewardSum += targetSignals.preyReward * targetSignals.preySuccess;
-            }
-        }
-
-
-
-
-
-
-        // ─── Поиск ближайшего хищника (для механики побега травоядных) ───────
-        let nearestPredator     = null;
-        let nearestPredatorDist = Infinity;
-
-        if (predatorLevel <= PREDATOR_LEVEL_THRESHOLD) { // Я — травоядный, ищу угрозу
-            for (let i = 0; i < _numNearbySwimbots; i++) {
-                let candidate = _nearbySwimbotsArray[i];
-                const o = candidate.getIndex();
-                if (_botAlive[o] === 0) continue;
-                if (_botPredator[o] <= PREDATOR_LEVEL_THRESHOLD) continue;
-
-                // сытый хищник не опасен — бежим только от охотящегося
-                const predatorState = candidate.getBrainState();
-                if ((predatorState !== BRAIN_STATE_LOOKING_FOR_PREY) && (predatorState !== BRAIN_STATE_PURSUING_PREY)) continue;
-
-                const gx = myGenitalX - _genitalX[o];
-                const gy = myGenitalY - _genitalY[o];
-                let distance = Math.sqrt( gx * gx + gy * gy );
-                if (distance > viewRadius) continue;
-
-                if (distance < nearestPredatorDist) {
-                    nearestPredatorDist = distance;
-                    nearestPredator     = candidate;
-                }
-            }
-        }
-
-        //------------------------------------------------------------------------------
-        // pass these environmental stimuli along to the swimbot...
-        //------------------------------------------------------------------------------
-        if (preyWasFound && chosenPrey) {
-            // ensure the candidate is visible and can be targeted
-            // (debugging aid; should be safe in production too)
-            // console.log("[predation] chosenPrey index=" + chosenPrey.getIndex());
-
-            // Found prey — dynamic radar should reset immediately (with cooldown).
-            me.notifyTargetFound();
-        }
-
-        if ( PERCEPTION_CHECK )
-        {
-            this.checkPerceptionKernel( s, foundFoodBit ? _chosenFoodBit.getIndex() : -1, chosenPrey, nearestPredator, socialX, socialY );
-        }
-
-        me.setPredatorTargetSignals( targetSignals );
-        me.setEnvironmentalStimuli(
-
-            _numNearbySwimbots,
-            _nearbySwimbotsArray,
-            foundFoodBit,
-            _chosenFoodBit,
-            preyWasFound,
-            chosenPrey,
-            nearestPredator
-        );
-
-     }
 
 
 

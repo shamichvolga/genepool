@@ -13,7 +13,7 @@ import { CTRL_DONE, CTRL_GENERATION, CTRL_TASK, workOnList } from "./ParallelWor
 
 self.onmessage = ( e: MessageEvent ) =>
 {
-    const { buffers, maxSwimbots, control: controlBuffer, list: listBuffer } = e.data;
+    const { buffers, maxSwimbots, control: controlBuffer, list: listBuffer, thread } = e.data;
     const st      = new SharedState( maxSwimbots, buffers );
     const scratch = new PerceptionScratch( maxSwimbots, MAX_FOODBITS );
     const control = new Int32Array( controlBuffer );
@@ -28,7 +28,7 @@ self.onmessage = ( e: MessageEvent ) =>
         Atomics.wait( control, CTRL_GENERATION, generation );       // sleep until the next phase
         generation = Atomics.load( control, CTRL_GENERATION );
 
-        workOnList( Atomics.load( control, CTRL_TASK ), st, scratch, control, list );
+        workOnList( Atomics.load( control, CTRL_TASK ), st, scratch, control, list, thread );
         Atomics.add( control, CTRL_DONE, 1 );
     }
 };

@@ -36,8 +36,8 @@ function workerSource()
     const entry = `
         import "./Globals";
         import { SharedState } from "./SharedState";
-        import { physicsStep } from "./PhysicsKernel";
-        import { perceive, PerceptionScratch } from "./PerceptionKernel";
+        import { PerceptionScratch } from "./PerceptionKernel";
+        import { workOnList } from "../parallel/ParallelWork";
         import { MAX_FOODBITS } from "./Parameters";
         globalThis.__workerMain = function( data, parentPort )
         {
@@ -50,15 +50,7 @@ function workerSource()
             {
                 Atomics.wait( control, 0, generation );
                 generation = Atomics.load( control, 0 );
-                const task = Atomics.load( control, 1 ), n = Atomics.load( control, 2 );
-                while ( true )
-                {
-                    const start = Atomics.add( control, 3, 16 );
-                    if ( start >= n ) break;
-                    const end = Math.min( n, start + 16 );
-                    if ( task === 1 ) { for ( let i = start; i < end; i++ ) { const s = list[i]; if ( st.alive[s] ) physicsStep( s, st ); } }
-                    else              { for ( let i = start; i < end; i++ ) { const s = list[i]; if ( st.sensing[s] ) perceive( s, st, scratch ); } }
-                }
+                workOnList( Atomics.load( control, 1 ), st, scratch, control, list, data.thread );
                 Atomics.add( control, 4, 1 );
             }
         };`;
@@ -101,39 +93,30 @@ async function main()
                 const worker = new Worker( file );
                 worker.on( "message", m => { if ( m === "ready" && ++ ready === numWorkers ) resolve(); } );
                 worker.on( "error", reject );
-                worker.postMessage({ buffers: st.buffers, maxSwimbots: st.maxSwimbots, control: control.buffer, list: list.buffer });
+                worker.postMessage({ buffers: st.buffers, maxSwimbots: st.maxSwimbots, control: control.buffer, list: list.buffer, thread: w + 1 });
                 workers.push( worker );
             }
         });
     }
 
     const scratch = new sb.PerceptionScratch( st.maxSwimbots, maxFoodBits );
-    function runPhase( task, items, n )
+    function runTask( task, items, n )
     {
         if ( numWorkers === 0 )
         {
-            if ( task === 1 ) { for ( let i = 0; i < n; i++ ) { const s = items[i]; if ( st.alive[s] ) sb.physicsStep( s, st ); } }
-            else              { for ( let i = 0; i < n; i++ ) { const s = items[i]; if ( st.sensing[s] ) sb.perceive( s, st, scratch ); } }
+            for ( let i = 0; i < n; i++ ) sb.doTask( task, st, scratch, items[i], 0 );
             return;
         }
         for ( let i = 0; i < n; i++ ) list[i] = items[i];
         Atomics.store( control, 1, task ); Atomics.store( control, 2, n );
         Atomics.store( control, 3, 0 );    Atomics.store( control, 4, 0 );
         Atomics.add( control, 0, 1 );      Atomics.notify( control, 0 );
-        while ( true )
-        {
-            const start = Atomics.add( control, 3, 16 );
-            if ( start >= n ) break;
-            const end = Math.min( n, start + 16 );
-            if ( task === 1 ) { for ( let i = start; i < end; i++ ) { const s = list[i]; if ( st.alive[s] ) sb.physicsStep( s, st ); } }
-            else              { for ( let i = start; i < end; i++ ) { const s = list[i]; if ( st.sensing[s] ) sb.perceive( s, st, scratch ); } }
-        }
+        sb.workOnList( task, st, scratch, control, list, 0 );
         while ( Atomics.load( control, 4 ) < numWorkers ) {}
     }
     genePool.setParallelRunner({
         getNumThreads: () => threads,
-        physics:    ( items, n ) => runPhase( 1, items, n ),
-        perception: ( items, n ) => runPhase( 2, items, n ),
+        task: runTask,
     });
 
     //------------------------------------------------------------
@@ -151,11 +134,14 @@ async function main()
     {
         for ( const b of genePool.getSwimbots() )
         {
-            b.decide = function() {};
-            b.setEnvironmentalStimuli = function() {};
-            if ( brainless > 1 ) b.getIsLookingForSensoryInput = function() { return false; };
+            b.handleEventsBeforeMoving = function() {};
         }
-        console.log( brainless > 1 ? "experiment: no brain, no looking around" : "experiment: no brain (bodies only flap)" );
+        const realTask = runTask;
+        genePool.setParallelRunner({
+            getNumThreads: () => threads,
+            task: ( task, items, n ) => { if ( task === 1 || task === 4 ) return; realTask( task, items, n ); },
+        });
+        console.log( "experiment: no brain, no looking around (bodies only flap)" );
     }
     const times = genePool.getPhaseTimes();
     times.fill( 0 );

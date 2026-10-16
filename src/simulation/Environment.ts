@@ -46,8 +46,8 @@ const BIOME_BORDER_SOFTNESS            = 300;      // larger = wider, softer bor
 const BIOME_OFFSETS                    = [ -1.0, -0.5, 0.0, 0.5, 1.0 ];   // 5 biome types
 
 export const SEASON_PERIOD             = 10000;    // steps
-const SEASON_AMPLITUDE_EQUATOR         = 0.02;
-const SEASON_AMPLITUDE_POLES           = 0.08;
+export const SEASON_AMPLITUDE_EQUATOR         = 0.02;
+export const SEASON_AMPLITUDE_POLES           = 0.08;
 
 // plants: A likes warm water, B likes cold water
 export const PLANT_TYPE_WARM           = 0;
@@ -291,6 +291,10 @@ export class Environment
         const t = base + amplitude * Math.sin( 2 * Math.PI * this.time / SEASON_PERIOD );
         return t < 0 ? 0 : ( t > 1 ? 1 : t );
     }
+
+    // the clock and the temperature map (for the decision kernel's threads)
+    getTime(): number { return this.time; }
+    copyTemperatureTo( target: Float32Array ): void { target.set( this.baseTemperature ); }
 
     // copy the bottom brightness map (for the perception threads)
     copyBackgroundTo( target: Float32Array ): void { target.set( this.background ); }

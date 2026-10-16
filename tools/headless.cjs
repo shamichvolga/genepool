@@ -86,6 +86,8 @@ function bundleTypeScript( root )
     const esbuild = require( path.join( __dirname, "..", "node_modules", "esbuild" ) );
     const dir = path.join( root, "src", "simulation" );
     const modules = fs.readdirSync( dir ).filter( f => f.endsWith( ".ts" ) ).map( f => f.slice( 0, -3 ) );
+    // (and the work every thread does, see src/parallel/ParallelWork.ts)
+    if ( fs.existsSync( path.join( root, "src", "parallel", "ParallelWork.ts" ))) modules.push( "../parallel/ParallelWork" );
 
     // put every export on the global object, like the plain-script version had them
     const imports = modules.map( ( m, i ) => `import * as m${i} from "./${m}";` );

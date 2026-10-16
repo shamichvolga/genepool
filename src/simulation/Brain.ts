@@ -1,9 +1,9 @@
 import { gpRandom } from "./Globals";
+import * as ML from "./MindLayout";
 import { OUT_FLEE, OUT_FOOD, OUT_HUNT, OUT_MATE, OUT_SELF_EAT } from "./NeuralBrain";
 import { ZERO } from "./MathConstants";
 import { PREDATOR_LEVEL_THRESHOLD } from "./Parameters";
 import { ATTRACTION_SIMILAR_COLOR } from "./SwimbotTypes";
-import { assert } from "./Utility";
 
 //----------------------------------------
 // states
@@ -33,218 +33,130 @@ export const BRAIN_WANDER_AMOUNT					= 0.2;
 //const BRAIN_WALL_BOUNCE_SHIFT_AMOUNT	    = 0.1;
 
 
+//------------------------------------------------------------------------------
+// the brain's state machine: one row of the mind (see MindLayout.ts).
+// Used by the Brain below and by the decision kernel (any thread).
+// rand() gives a random number 0..1.
+//------------------------------------------------------------------------------
+export function brainUpdate( M: Float64Array, m: number, rand: () => number ): void
+{
+    //----------------------------------------------------------------------
+    // neural brain: the network has chosen the goal (see NeuralBrain.ts);
+    // the looking / pursuing steps below stay the same.
+    // Classic brain: fleeing a predator in reach comes first (herbivores),
+    // then food (prey for predators) when hungry, otherwise a mate.
+    //----------------------------------------------------------------------
+    let state = M[ m + ML.M_STATE ];
+    const goal = M[ m + ML.M_GOAL ];
+
+    if ( goal >= 0 )
+    {
+        if ( goal === OUT_SELF_EAT ) { M[ m + ML.M_STATE ] = BRAIN_STATE_SELF_FEED;        return; }
+        if ( goal === OUT_FLEE     ) { M[ m + ML.M_STATE ] = BRAIN_STATE_FLEEING_PREDATOR; return; }
+        if (( goal === OUT_HUNT ) && ( state != BRAIN_STATE_PURSUING_PREY ) && ( state != BRAIN_STATE_LOOKING_FOR_PREY )) { state = BRAIN_STATE_LOOKING_FOR_PREY; }
+        if (( goal === OUT_FOOD ) && ( state != BRAIN_STATE_PURSUING_FOOD ) && ( state != BRAIN_STATE_LOOKING_FOR_FOOD )) { state = BRAIN_STATE_LOOKING_FOR_FOOD; }
+        if (( goal === OUT_MATE ) && ( state != BRAIN_STATE_PURSUING_MATE ) && ( state != BRAIN_STATE_LOOKING_FOR_MATE )) { state = BRAIN_STATE_LOOKING_FOR_MATE; }
+    }
+    else if (( M[ m + ML.M_THREAT_NEAR ] === 1 ) && ( M[ m + ML.M_PRED_LEVEL ] <= PREDATOR_LEVEL_THRESHOLD ))
+    {
+        M[ m + ML.M_STATE ] = BRAIN_STATE_FLEEING_PREDATOR;
+        return;
+    }
+    else if ( M[ m + ML.M_BRAIN_ENERGY ] < M[ m + ML.M_HUNGER ] )
+    {
+        if ( M[ m + ML.M_PRED_LEVEL ] > PREDATOR_LEVEL_THRESHOLD )
+        {
+            if (( state != BRAIN_STATE_PURSUING_PREY ) && ( state != BRAIN_STATE_LOOKING_FOR_PREY )) { state = BRAIN_STATE_LOOKING_FOR_PREY; }
+        }
+        else
+        {
+            if (( state != BRAIN_STATE_PURSUING_FOOD ) && ( state != BRAIN_STATE_LOOKING_FOR_FOOD )) { state = BRAIN_STATE_LOOKING_FOR_FOOD; }
+        }
+    }
+    else
+    {
+        if (( state != BRAIN_STATE_PURSUING_MATE ) && ( state != BRAIN_STATE_LOOKING_FOR_MATE )) { state = BRAIN_STATE_LOOKING_FOR_MATE; }
+    }
+
+    const foundFood = M[ m + ML.M_FOUND_FOOD ] === 1;
+    const foundMate = M[ m + ML.M_FOUND_MATE ] === 1;
+    const foundPrey = M[ m + ML.M_FOUND_PREY ] === 1;
+
+    if      ( state == BRAIN_STATE_LOOKING_FOR_FOOD ) { if (  foundFood ) state = BRAIN_STATE_PURSUING_FOOD;    }
+    else if ( state == BRAIN_STATE_PURSUING_FOOD    ) { if ( !foundFood ) state = BRAIN_STATE_LOOKING_FOR_FOOD; }
+    else if ( state == BRAIN_STATE_LOOKING_FOR_PREY ) { if (  foundPrey ) state = BRAIN_STATE_PURSUING_PREY;    }
+    else if ( state == BRAIN_STATE_PURSUING_PREY    )
+    {
+        // no switching at once (it would dither): a small chance per step
+        if ( !foundPrey && ( rand() < 0.1 )) state = BRAIN_STATE_LOOKING_FOR_PREY;
+    }
+    else if ( state == BRAIN_STATE_LOOKING_FOR_MATE ) { if (  foundMate ) state = BRAIN_STATE_PURSUING_MATE;    }
+    else if ( state == BRAIN_STATE_PURSUING_MATE    ) { if ( !foundMate ) state = BRAIN_STATE_LOOKING_FOR_MATE; }
+
+    M[ m + ML.M_STATE ] = state;
+}
+
 //----------------------------------------
-// Brain!
+// Brain! (its numbers live in a mind row:
+// a private one until bind() gives it
+// the swimbot's row in the shared state)
 //----------------------------------------
 export function Brain()
 {
-	let _state               = BRAIN_STATE_NULL;
-	let _energy              = ZERO;
-	let _foundFoodBit        = false;
-	let _foundSwimbot        = false;
-	let _foundPrey           = false;
-	let _hungerThreshold     = ZERO;
-	let _attractionCriterion = ATTRACTION_SIMILAR_COLOR;
-	let _predatorLevel          = ZERO; // 0..1
-	let _nearbyPredatorThreat   = false; // хищник в зоне экстренного бегства
-	let _goal                   = -1;    // neural brain: the chosen drive (OUT_FOOD...), -1 = classic brain
-	
-	
+    let _M = new Float64Array( ML.MIND_STRIDE );
+    let _m = 0;
+    _M[ ML.M_STATE ]      = BRAIN_STATE_NULL;
+    _M[ ML.M_GOAL ]       = -1;
+    _M[ ML.M_ATTRACTION ] = ATTRACTION_SIMILAR_COLOR;
+
+    // use the row m of the array M from now on (the numbers move along)
+    this.bind = function( M: Float64Array, m: number )
+    {
+        M.set( _M.subarray( _m, _m + ML.MIND_STRIDE ), m );
+        _M = M;
+        _m = m;
+    }
+
     //-----------------------------
     this.initialize = function()
     {
-	    _state = BRAIN_STATE_NULL;
-	    
-	    /*
-	    _energy                 = ZERO;
-	    _foundFoodBit           = false;
-	    _foundSwimbot           = false;
-	    _foundPrey              = false;
-	    _hungerThreshold        = ZERO;
-	    _attractionCriterion    = ATTRACTION_SIMILAR_COLOR;
-	    */
-		_predatorLevel        = ZERO;
-		_foundPrey            = false;
-		_nearbyPredatorThreat = false;
-		_goal                 = -1;
+        _M[ _m + ML.M_STATE ]       = BRAIN_STATE_NULL;
+        _M[ _m + ML.M_PRED_LEVEL ]  = ZERO;
+        _M[ _m + ML.M_FOUND_PREY ]  = 0;
+        _M[ _m + ML.M_THREAT_NEAR ] = 0;
+        _M[ _m + ML.M_GOAL ]        = -1;
     }
 
-    //-----------------------
-    this.update = function()
-    {   
-        //----------------------------------------------------------------------
-        // if low energy:
-        //   - predators: look for prey
-        //   - otherwise: look for food
-        // if enough energy: look for sex
-        //----------------------------------------------------------------------
-        // ВЫСШИЙ ПРИОРИТЕТ: бегство от хищника в упор
-        // Перекрывает и голод, и поиск партнёра.
-        // Только для травоядных; только пока угроза активна.
-        //----------------------------------------------------------------------
-        // neural brain: the network has chosen the goal (see NeuralBrain.ts);
-        // the looking / pursuing steps below stay the same
-        //----------------------------------------------------------------------
-        if ( _goal >= 0 )
-        {
-            if ( _goal === OUT_SELF_EAT )
-            {
-                _state = BRAIN_STATE_SELF_FEED;
-                return;
-            }
-            if ( _goal === OUT_FLEE )
-            {
-                _state = BRAIN_STATE_FLEEING_PREDATOR;
-                return;
-            }
-            const wantsFood = ( _goal === OUT_FOOD );
-            const wantsPrey = ( _goal === OUT_HUNT );
-            const wantsMate = ( _goal === OUT_MATE );
-
-            if ( wantsPrey && ( _state != BRAIN_STATE_PURSUING_PREY ) && ( _state != BRAIN_STATE_LOOKING_FOR_PREY )) { _state = BRAIN_STATE_LOOKING_FOR_PREY; }
-            if ( wantsFood && ( _state != BRAIN_STATE_PURSUING_FOOD ) && ( _state != BRAIN_STATE_LOOKING_FOR_FOOD )) { _state = BRAIN_STATE_LOOKING_FOR_FOOD; }
-            if ( wantsMate && ( _state != BRAIN_STATE_PURSUING_MATE ) && ( _state != BRAIN_STATE_LOOKING_FOR_MATE )) { _state = BRAIN_STATE_LOOKING_FOR_MATE; }
-        }
-        else if ( _nearbyPredatorThreat && _predatorLevel <= PREDATOR_LEVEL_THRESHOLD )
-        {
-            _state = BRAIN_STATE_FLEEING_PREDATOR;
-            return;
-        }
-        else if ( _energy < _hungerThreshold )
-        {
-            if ( _predatorLevel > PREDATOR_LEVEL_THRESHOLD )
-            {
-                if (( _state != BRAIN_STATE_PURSUING_PREY )
-                &&  ( _state != BRAIN_STATE_LOOKING_FOR_PREY ))
-                {
-                    _state = BRAIN_STATE_LOOKING_FOR_PREY;
-                }
-            }
-            else
-            {
-                if (( _state != BRAIN_STATE_PURSUING_FOOD )
-                &&  ( _state != BRAIN_STATE_LOOKING_FOR_FOOD ))
-                {
-                    _state = BRAIN_STATE_LOOKING_FOR_FOOD;
-                }       
-            }
-        }
-        else 
-        {
-            if (( _state != BRAIN_STATE_PURSUING_MATE )
-            &&  ( _state != BRAIN_STATE_LOOKING_FOR_MATE ))
-            {
-                _state = BRAIN_STATE_LOOKING_FOR_MATE;
-            }        
-        }
-    
-        //--------------------------------------------------------
-        //  looking for food
-        //--------------------------------------------------------
-        if ( _state == BRAIN_STATE_LOOKING_FOR_FOOD )
-        {
-            if ( _foundFoodBit )
-            {
-                _state = BRAIN_STATE_PURSUING_FOOD;
-            }
-        }	      
-        //--------------------------------------------------------
-        //  pursuing food
-        //--------------------------------------------------------
-        else if ( _state == BRAIN_STATE_PURSUING_FOOD )
-        {
-            if ( !_foundFoodBit )
-            {
-                _state = BRAIN_STATE_LOOKING_FOR_FOOD;
-            }
-        }
-        //--------------------------------------------------------
-        //  looking for prey
-        //--------------------------------------------------------
-        else if ( _state == BRAIN_STATE_LOOKING_FOR_PREY )
-        {
-            if ( _foundPrey )
-            {
-                _state = BRAIN_STATE_PURSUING_PREY;
-            }
-        }
-        //--------------------------------------------------------
-        //  pursuing prey
-        //--------------------------------------------------------
-        else if ( _state == BRAIN_STATE_PURSUING_PREY )
-        {
-            if ( !_foundPrey )
-            {
-                // Стабилизация: не переключаемся мгновенно, иначе получается дрожание.
-                // Небольшой шанс переключиться за тик.
-                if ( gpRandom() < 0.1 )
-                {
-                    _state = BRAIN_STATE_LOOKING_FOR_PREY;
-                }
-            }
-
-        }
-
-
-        //--------------------------------------------------------
-        //  Looking for mate
-        //--------------------------------------------------------
-        else if ( _state == BRAIN_STATE_LOOKING_FOR_MATE )
-        {
-            if ( _foundSwimbot )
-            {
-                _state = BRAIN_STATE_PURSUING_MATE;
-            }
-        }
-        //--------------------------------------------------------
-        //  pursuing mate
-        //--------------------------------------------------------
-        else if ( _state == BRAIN_STATE_PURSUING_MATE )
-        {
-            if ( !_foundSwimbot )
-            {
-                _state = BRAIN_STATE_LOOKING_FOR_MATE;
-            }
-        }
-
-        //-----------------------------------------------------------------
-        //  check for bogus brain state 
-        //-----------------------------------------------------------------
-        assert( _state < NUM_BRAIN_STATES, "_state < NUM_BRAIN_STATES" );        
-        assert( _state > BRAIN_STATE_NULL, "_state > BRAIN_STATE_NULL" );        
-    }
+    this.update = function() { brainUpdate( _M, _m, gpRandom ); }
 
     //-------------------------------------------------------------------
     // setters
     //-------------------------------------------------------------------
-    this.setEnergyLevel     = function(e) { _energy              = e; }   
-    this.setHungerThreshold = function(h) { _hungerThreshold     = h; }		
-    this.setFoundFoodBit    = function(f) { _foundFoodBit        = f; }
-    this.setFoundSwimbot    = function(f) { _foundSwimbot        = f; }		
-    this.setFoundPrey       = function(f) { _foundPrey    = f; };
-    this.setPredatorLevel          = function(level) { _predatorLevel = level; };
-    this.setNearbyPredatorThreat   = function(v)     { _nearbyPredatorThreat = v; };
-    this.returnToSearchingForPrey  = function()     { if ( _state === BRAIN_STATE_PURSUING_PREY ) _state = BRAIN_STATE_LOOKING_FOR_PREY; };
-    this.setGoal                   = function(g)     { _goal = g; };
-    this.getGoal                   = function()      { return _goal; };
+    this.setEnergyLevel     = function(e) { _M[ _m + ML.M_BRAIN_ENERGY ] = e; }
+    this.setHungerThreshold = function(h) { _M[ _m + ML.M_HUNGER ]       = h; }
+    this.setFoundFoodBit    = function(f) { _M[ _m + ML.M_FOUND_FOOD ]   = f ? 1 : 0; }
+    this.setFoundSwimbot    = function(f) { _M[ _m + ML.M_FOUND_MATE ]   = f ? 1 : 0; }
+    this.setFoundPrey       = function(f) { _M[ _m + ML.M_FOUND_PREY ]   = f ? 1 : 0; }
+    this.setPredatorLevel        = function(level) { _M[ _m + ML.M_PRED_LEVEL ]  = level; }
+    this.setNearbyPredatorThreat = function(v)     { _M[ _m + ML.M_THREAT_NEAR ] = v ? 1 : 0; }
+    this.returnToSearchingForPrey = function() { if ( _M[ _m + ML.M_STATE ] === BRAIN_STATE_PURSUING_PREY ) _M[ _m + ML.M_STATE ] = BRAIN_STATE_LOOKING_FOR_PREY; }
+    this.setGoal                 = function(g)     { _M[ _m + ML.M_GOAL ] = g; }
+    this.getGoal                 = function()      { return _M[ _m + ML.M_GOAL ]; }
 
     //--------------------------------
-    this.setAttraction = function(a) 
+    this.setAttraction = function(a)
     {
-        //console.log( "setAttraction to " + a );
-        
-        _attractionCriterion = a; 
+        _M[ _m + ML.M_ATTRACTION ] = a;
 
-        // setting _foundSwimbot to false, causes the swimbot to search for a new potential mate
-        _foundSwimbot = false;
+        // forgetting the found swimbot makes the swimbot search for a new potential mate
+        _M[ _m + ML.M_FOUND_MATE ] = 0;
     }
-
 
     //--------------------------------------------------------------------------
     // getters
     //--------------------------------------------------------------------------
-    this.getHungerThreshold     = function() { return _hungerThreshold;     }	
-    this.getAttractionCriterion = function() { return _attractionCriterion; }	
-    this.getState               = function() { return _state;               }	
-    this.getPredatorLevel       = function() { return _predatorLevel;       }
+    this.getHungerThreshold     = function() { return _M[ _m + ML.M_HUNGER ];     }
+    this.getAttractionCriterion = function() { return _M[ _m + ML.M_ATTRACTION ]; }
+    this.getState               = function() { return _M[ _m + ML.M_STATE ];      }
+    this.getPredatorLevel       = function() { return _M[ _m + ML.M_PRED_LEVEL ]; }
 }

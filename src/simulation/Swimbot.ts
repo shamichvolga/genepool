@@ -3,7 +3,7 @@ import { physicsPartA, physicsPartB } from "./PhysicsKernel";
 import { applyWaterDrag, bodyMotionFactors } from "./BodyPhysics";
 import { advanceBodyTemperature } from "./ThermalPhysics";
 import * as SS from "./SharedState";
-import { think, sigmoid, NUM_INPUTS, NUM_HIDDEN, NUM_OUTPUTS, DRIVE_OUTPUTS, THINK_PERIOD, DRIVE_HYSTERESIS, EFFORT_MIN, EFFORT_RANGE, IN_BIAS, IN_HUNGER, IN_ENERGY, IN_AGE, IN_FIT, IN_TREND, IN_FOOD, IN_MATE, IN_THREAT, IN_PREY, IN_CROWD, IN_PREDATOR, OUT_FOOD, OUT_MATE, OUT_FLEE, OUT_HUNT, OUT_CLIMATE, OUT_SOCIAL, OUT_EFFORT,
+import { BRAIN_SIZE, think, sigmoid, NUM_INPUTS, NUM_HIDDEN, NUM_OUTPUTS, DRIVE_OUTPUTS, THINK_PERIOD, DRIVE_HYSTERESIS, EFFORT_MIN, EFFORT_RANGE, IN_BIAS, IN_HUNGER, IN_ENERGY, IN_AGE, IN_FIT, IN_TREND, IN_FOOD, IN_MATE, IN_THREAT, IN_PREY, IN_CROWD, IN_PREDATOR, OUT_FOOD, OUT_MATE, OUT_FLEE, OUT_HUNT, OUT_CLIMATE, OUT_SOCIAL, OUT_EFFORT,
          IN_FOOD_SIDE, IN_FOOD_AHEAD, IN_NEAR_SIDE, IN_NEAR_AHEAD, IN_THREAT_SIDE, IN_THREAT_AHEAD, IN_KIN, IN_SEASON, IN_PREDATOR_NEAR, IN_PREY_DISTANCE, IN_PREY_REWARD, IN_PREY_SUCCESS, IN_PREY_CHASE, IN_BAIT_PRESENT, IN_BAIT_DISTANCE, IN_BAIT_REWARD, OUT_STEER, OUT_SELF_EAT, OUT_PREY_VALUE, OUT_PREY_TRAVEL, OUT_PREY_BAIT, STEER_MAX_DEGREES } from "./NeuralBrain";
 import { NEURAL_BRAIN_ENABLED, CLIMATE_STEERING, SOCIAL_STEERING, CLIMATE_PROBE_DISTANCE, BODY_TEMPERATURE_INERTIA_ENABLED, SELF_CANNIBALISM_ENABLED, PREDATOR_TARGET_SELECTION_ENABLED } from "./Parameters";
 import { environment, PLANT_TYPE_WARM, PLANT_TYPE_COLD } from "./Environment";
@@ -74,12 +74,35 @@ var    flopperYV = 0;
 	let _b = 0;
 	_B[ SS.B_EFFORT ] = 1;
 
+	// the mind: what the brain keeps from step to step (SharedState.mind;
+	// the decision kernel works on it). The Brain uses the same row.
+	let _M = new Float64Array( SS.MIND_STRIDE );
+	let _m = 0;
+	_M[ SS.M_FOOD ] = _M[ SS.M_MATE ] = _M[ SS.M_PREY ] = _M[ SS.M_NEAR_PRED ] = _M[ SS.M_CALM_PRED ] = -1;
+	_M[ SS.M_LAST_MEAT ] = _M[ SS.M_NEAREST_SEEN ] = -1;
+	_M[ SS.M_COMFORT ] = -1;
+	_M[ SS.M_THERMAL_FIT ] = 1;
+	_M[ SS.M_THERMAL_WIDTH ] = 0.4;
+	_M[ SS.M_THERMAL_OPT ] = _M[ SS.M_BODY_TEMP ] = 0.5;
+	_M[ SS.M_THERMAL_PEAK ] = 1;
+	_M[ SS.M_SCAN_RADIUS ] = SWIMBOT_VIEW_RADIUS;
+
+	// targets: the mind keeps their numbers, these give the objects
+	const indexOf        = function( thing ) { return ( thing == null ) ? NULL_INDEX : thing.getIndex(); }
+	const swimbotAt      = function( i ) { return ( i >= 0 && _parent != null ) ? _parent.getSwimbotAt( i ) : null; }
+	const chosenFoodBit  = function() { const i = _M[ _m + SS.M_FOOD ]; return ( i >= 0 && _parent != null ) ? _parent.getFoodBitAt( i ) : null; }
+	const chosenMate     = function() { return swimbotAt( _M[ _m + SS.M_MATE ] ); }
+	const chosenPrey     = function() { return swimbotAt( _M[ _m + SS.M_PREY ] ); }
+	const nearestPredator = function() { return swimbotAt( _M[ _m + SS.M_NEAR_PRED ] ); }
+	const calmPredator   = function() { return swimbotAt( _M[ _m + SS.M_CALM_PRED ] ); }
+
 	//-----------------------------------------
 	// variables
 	//-----------------------------------------
 	let _genotype		    = new Genotype();
 	let _phenotype		    = new Phenotype();
 	let _brain  		    = new Brain();
+	_brain.bind( _M, _m );
 	const _position = new SharedVector2D( _B, SS.B_POS_X );
 	const _velocity = new SharedVector2D( _B, SS.B_VEL_X );
 	let _acceleration       = new Vector2D();
@@ -88,92 +111,48 @@ var    flopperYV = 0;
 	const _focusDirection = new SharedVector2D( _B, SS.B_FOCUS_X );
 	const _centerOfMass = new SharedVector2D( _B, SS.B_COM_X );
 	let _vectorUtility      = new Vector2D();
-	let _chosenFoodBit      = new FoodBit();
 	let _swimbotRenderer  	= new SwimbotRenderer();
-	let _chosenMate         = null; // must start as null!
 	let _numOffspring       = 0;
 	let _numFoodBitsEaten   = 0;
 	//let _maximumLifeSpan    = 0;
 	let _index              = NULL_INDEX;
-	let _chosenMateIndex    = NULL_INDEX;
-	let _chosenFoodBitIndex = NULL_INDEX;
-	let _lastPursuitMeatIndex = NULL_INDEX;
 	// alive or not: one byte, in the shared state once I have a slot
 	let _live    = new Uint8Array( 1 );
 	let _liveAt  = 0;
-	let _tryingToMate       = false;
-	let _tryingToEat        = false;
 	let _torque             = ZERO;
 	let _colorUtility       = new Color();
 	let _previousFocusDirection = new Vector2D(); // scratch, reused every update
 	let _species            = NULL_INDEX;
 
 	const _lastPositionForEfficiencyMeasurement = new SharedVector2D( _B, SS.B_LAST_X );
-	let _readyforSensoryInputToBrain = false;
 
 	//-----------------------------------------
 	// predation
 	//-----------------------------------------
 	let _embryology         = null;  // kept so the phenotype can be regrown (applyPredatorLevel)
-	let _chosenPrey         = null;
-	let _nearestPredator    = null;
-	let _tryingToHunt       = false;
 	let _numPreyEaten       = 0;
 	let _numPartsEaten      = 0;      // parts that prey dropped when bitten
-	let _scanRadius         = SWIMBOT_VIEW_RADIUS;
-	let _scanCooldown       = 0;
-	let _eternal            = false;
-	let _basalMetabolism    = ZERO;  // energy per step just to stay alive (grows with body mass)
 
 	//-----------------------------------------------------------------------
 	// ecology (stage 5): how this swimbot copes with the temperature and the
 	// two kinds of plants (see Ecology.ts)
 	//-----------------------------------------------------------------------
-	let _thermalOptimum     = ONE_HALF;
-	let _thermalWidth       = 0.4;
-	let _thermalPeak        = ONE;
 	let _digestion          = ONE_HALF;
 	let _efficiencyWarm     = ONE;
 	let _efficiencyCold     = ONE;
 	let _brightness         = ONE_HALF;  // body brightness: camouflage and mating signal
 	let _choosiness         = ZERO;
-	let _thermalFit         = ONE;    // 0..1, how well the place suits me (updated every few steps)
-	let _bodyTemperature    = ONE_HALF;
-	let _bodyTemperatureInitialized = false;
-	let _comfort            = -ONE;   // last "how good is it here" (for kinesis)
-	let _comfortTrend       = ZERO;   // +1 it got better here, -1 worse
 	let _averageColor       = null;   // cached by getAverageColor (reset with a new phenotype)
 	let _baseHungerThreshold = DEFAULT_SWIMBOT_HUNGER_THRESHOLD;   // the pool's setting
-	let _partsLost          = false;  // autotomy: a part is missing (grows back later)
-	let _autotomyLoss       = ZERO;   // the energy that went with it
-	let _regrowTimer        = 0;
 	let _partsDropped       = 0;      // how many times in its life
-	let _selfFeedCooldown   = 0;
 
 	//-----------------------------------------------------------------------
 	// neural brain (stage 6, see NeuralBrain.ts)
 	//-----------------------------------------------------------------------
-	let _neural             = false;
-	const _nnInputs         = new Float64Array( NUM_INPUTS  );
-	const _nnHidden         = new Float64Array( NUM_HIDDEN  );
+	let _nnInputs           = new Float64Array( NUM_INPUTS  );
+	let _nnHidden           = new Float64Array( NUM_HIDDEN  );
 	const _nnNewHidden      = new Float64Array( NUM_HIDDEN  );
-	const _nnOutputs        = new Float64Array( NUM_OUTPUTS );
-	let _climateWeight      = ZERO;   // how strongly I follow the better temperature
-	let _socialWeight       = ZERO;   // + towards the others, - away from them
-	let _climateDirX        = ZERO;
-	let _climateDirY        = ZERO;
-	let _socialDirX         = ZERO;   // towards the middle of the swimbots I see
-	let _socialDirY         = ZERO;
-	let _seenFood           = false;
-	let _seenPrey           = false;
-	let _numSeen            = 0;
-	let _nearestSeen        = NULL_INDEX;   // the nearest swimbot in sight (for the brain)
-	let _threatCloseness    = ZERO;         // 0 far .. 1 touching: the hunting predator in sight
-	let _predatorCloseness  = ZERO;         // the same for any predator
-	let _calmPredator       = null;         // a predator in sight that is not hunting (neural brain)
-	let _seenFoodX          = ZERO;         // where the food bit in sight is
-	let _seenFoodY          = ZERO;
-	let _steer              = ZERO;         // brain: turn while searching (radians)
+	let _nnOutputs          = new Float64Array( NUM_OUTPUTS );
 
 	//-----------------------------------------------------------------------
 	// Body part state lives in flat number arrays, which is much faster than
@@ -194,10 +173,6 @@ var    flopperYV = 0;
 
 	// copies of phenotype values used every step (reading them from the
 	// phenotype object each time is slow: phenotype objects differ in shape)
-	let _numParts       = 0;
-	let _frequency      = ZERO;
-	let _sumPartLengths = ZERO;
-	let _bodyMass       = ZERO;
 
 	let _pd          = new Float64Array( MAX_PARTS * PS );
 	let _pLength     = new Float64Array( MAX_PARTS );
@@ -214,7 +189,6 @@ var    flopperYV = 0;
 	let _unitAxisY   = new Float64Array( MAX_PARTS );
 	const _mouthPosition = new SharedVector2D( _B, SS.B_MOUTH_X );               // kept up to date from _pd
 	const _genitalPosition = new SharedVector2D( _B, SS.B_GENITAL_X );
-	let _huntCooldown       = 0;     // steps until the predator can bite again
 
 
 let _parent = null;
@@ -242,6 +216,17 @@ this.setParent = function( parent )
 	    st.liveSwimbot[ slot ] = _live[ _liveAt ];
 	    _live   = st.liveSwimbot;
 	    _liveAt = slot;
+
+	    // the mind and the neural brain move into the slot's rows
+	    const mindRow = slot * SS.MIND_STRIDE;
+	    st.mind.set( _M.subarray( _m, _m + SS.MIND_STRIDE ), mindRow );
+	    _M = st.mind;
+	    _m = mindRow;
+	    _brain.bind( _M, _m );
+	    _M[ _m + SS.M_INDEX ] = slot;
+	    st.nnInputs .set( _nnInputs,  slot * NUM_INPUTS  ); _nnInputs  = st.nnInputs .subarray( slot * NUM_INPUTS,  ( slot + 1 ) * NUM_INPUTS  );
+	    st.nnHidden .set( _nnHidden,  slot * NUM_HIDDEN  ); _nnHidden  = st.nnHidden .subarray( slot * NUM_HIDDEN,  ( slot + 1 ) * NUM_HIDDEN  );
+	    st.nnOutputs.set( _nnOutputs, slot * NUM_OUTPUTS ); _nnOutputs = st.nnOutputs.subarray( slot * NUM_OUTPUTS, ( slot + 1 ) * NUM_OUTPUTS );
 
 	    // the hot numbers move into the slot's row (keeping their values)
 	    const row = slot * SS.BOT_STRIDE;
@@ -273,13 +258,83 @@ this.setParent = function( parent )
 	this.getSlot = function() { return _slot; }
 
 	//------------------------------------------------------------------------
+	// What the decision kernel left for the main thread (bits in M_EVENTS,
+	// see DecisionKernel.ts). before = the start of the step (regrow, eat a
+	// part of myself); after = after looking around (drop a decoy, choose a
+	// mate by other criteria than color).
+	//------------------------------------------------------------------------
+	this.getKernelEvents = function() { return _M[ _m + SS.M_EVENTS ]; }
+
+	this.handleEventsBeforeMoving = function()
+	{
+	    const events = _M[ _m + SS.M_EVENTS ];
+	    _M[ _m + SS.M_EVENTS ] = events & ~( SS.EVENT_REGROW | SS.EVENT_SELF_FEED );
+
+	    // a dropped part grows back
+	    if (( events & SS.EVENT_REGROW ) && ( _M[ _m + SS.M_PARTS_LOST ] === 1 ) && ( _embryology != null ))
+	    {
+	        this.syncPartObjects();
+	        _phenotype = _embryology.generatePhenotypeFromGenotype( _genotype );
+	        this.processPhenotype();
+	        _B[ _b + SS.B_ENERGY ] -= _M[ _m + SS.M_AUTOTOMY_LOSS ];
+	        _M[ _m + SS.M_PARTS_LOST ] = 0;
+	    }
+
+	    // the brain chose to eat a part of my own body
+	    if ( events & SS.EVENT_SELF_FEED ) { this.autotomize( true ); }
+	}
+
+	this.handleEventsAfterLooking = function()
+	{
+	    const events = _M[ _m + SS.M_EVENTS ];
+	    _M[ _m + SS.M_EVENTS ] = events & ~( SS.EVENT_DECOY | SS.EVENT_CHOOSE_MATE );
+
+	    // autotomy as a decoy: a hunter came too close - drop a part and leave it behind
+	    if (( events & SS.EVENT_DECOY ) && ( _M[ _m + SS.M_PARTS_LOST ] !== 1 ))
+	    {
+	        const dropped = this.autotomize();
+	        if ( dropped !== null )
+	        {
+	            _parent.spawnMeatWithEnergy( dropped.x, dropped.y, dropped.energy );
+	            simCounters.autotomyThreatDrops ++;
+	        }
+	    }
+
+	    // a mate by another criterion than similar color: the most attractive
+	    // grown-up, not starving swimbot in sight with my diet that accepts me
+	    if ( events & SS.EVENT_CHOOSE_MATE )
+	    {
+	        const st = _shared, count = st.seenCount[ _slot ], base = _slot * SS.MAX_SEEN;
+	        let best = null, highest = -100.0;
+	        for (let o = 0; o < count; o++)
+	        {
+	            const other = swimbotAt( st.seen[ base + o ] );
+	            if (( other == null ) || !other.getAlive() ) continue;
+	            const babeFactor = other.getAttractiveness( this );
+	            if (( babeFactor > highest )
+	            &&  ( babeFactor > TOO_UGLY_TO_CHOOSE )
+	            &&  ( other.getAge() > YOUNG_AGE_DURATION )
+	            &&  ( other.getEnergy() > STARVING )
+	            &&  other.sameDiet( this )
+	            &&  other.acceptsMate( this ))
+	            {
+	                highest = babeFactor;
+	                best    = other;
+	            }
+	        }
+	        if ( best !== null ) { _M[ _m + SS.M_MATE ] = best.getIndex(); _brain.setFoundSwimbot( true ); }
+	        else                 { _brain.setFoundSwimbot( false ); }
+	    }
+	}
+
+	//------------------------------------------------------------------------
 	// Autotomy: drop the tip of a limb (which limb and how much: genes). The
 	// dropped parts take the same share of my energy as of my body mass.
 	// Returns { energy, x, y } (where the parts were), or null.
 	//------------------------------------------------------------------------
 	this.autotomize = function( selfFeeding = false )
 	{
-	    if ( _partsLost || !environment.active ) return null;
+	    if ( _M[ _m + SS.M_PARTS_LOST ] || !environment.active ) return null;
 	    if ( selfFeeding && ( !SELF_CANNIBALISM_ENABLED || ( _B[ _b + SS.B_ENERGY ] >= SWIMBOT_MAX_ENERGY ))) return null;
 	    const n = _phenotype.numParts;
 	    if ( n <= 4 ) return null;
@@ -351,9 +406,9 @@ this.setParent = function( parent )
 	        // removed tissue. The branch is permanently gone: no free regrowth.
 	        const gained = Math.min( SWIMBOT_MAX_ENERGY - _B[ _b + SS.B_ENERGY ], tissueEnergy );
 	        _B[ _b + SS.B_ENERGY ] += gained;
-	        _partsLost = false;
-	        _autotomyLoss = ZERO;
-	        _regrowTimer = 0;
+	        _M[ _m + SS.M_PARTS_LOST ] = 0;
+	        _M[ _m + SS.M_AUTOTOMY_LOSS ] = ZERO;
+	        _M[ _m + SS.M_REGROW ] = 0;
 	        simCounters.selfCannibalismEvents ++;
 	        simCounters.selfCannibalismEnergy += gained;
 	        simCounters.selfCannibalismMass += droppedMass;
@@ -361,9 +416,9 @@ this.setParent = function( parent )
 	    else
 	    {
 	        _B[ _b + SS.B_ENERGY ]      -= lost;
-	        _autotomyLoss = lost;
-	        _partsLost    = true;
-	        _regrowTimer  = AUTOTOMY_REGROW_DELAY;
+	        _M[ _m + SS.M_AUTOTOMY_LOSS ] = lost;
+	        _M[ _m + SS.M_PARTS_LOST ]    = 1;
+	        _M[ _m + SS.M_REGROW ]  = AUTOTOMY_REGROW_DELAY;
 	    }
 	    _partsDropped ++;
 	    // the part itself is food too, like a killed prey's body
@@ -374,18 +429,18 @@ this.setParent = function( parent )
 	// bitten: maybe drop a part instead of dying (chance = gene)
 	this.tryAutotomyOnBite = function()
 	{
-	    if ( _partsLost || ( _phenotype.autotomyBite <= ZERO ) || ( gpRandom() >= _phenotype.autotomyBite )) return null;
+	    if ( _M[ _m + SS.M_PARTS_LOST ] || ( _phenotype.autotomyBite <= ZERO ) || ( gpRandom() >= _phenotype.autotomyBite )) return null;
 	    return this.autotomize();
 	};
 
 	this.getAutotomy = function()
 	{
 	    return { bite: _phenotype.autotomyBite, threat: _phenotype.autotomyThreat, amount: _phenotype.autotomyAmount,
-	             partsLost: _partsLost, regrowIn: _regrowTimer, timesDropped: _partsDropped };
+	             partsLost: _M[ _m + SS.M_PARTS_LOST ], regrowIn: _M[ _m + SS.M_REGROW ], timesDropped: _partsDropped };
 	};
 	this.canSelfFeed = function()
 	{
-	    return SELF_CANNIBALISM_ENABLED && environment.active && !_partsLost
+	    return SELF_CANNIBALISM_ENABLED && environment.active && !_M[ _m + SS.M_PARTS_LOST ]
 	        && ( _phenotype.numParts > 4 ) && ( _B[ _b + SS.B_ENERGY ] < SWIMBOT_MAX_ENERGY );
 	};
 	this.getNumPartsEaten = function() { return _numPartsEaten; }
@@ -434,47 +489,11 @@ this.setParent = function( parent )
 	    st.colorR    [s] = color.red;
 	    st.colorG    [s] = color.green;
 	    st.colorB    [s] = color.blue;
-	    this.writeTargetChoiceState();
 	}
 
-	this.writeTargetChoiceState = function()
-	{
-	    if ( _slot < 0 ) return;
-	    const st = _shared, s = _slot;
-	    st.preyValueWeight [s] = sigmoid( _nnOutputs[ OUT_PREY_VALUE ] );
-	    st.preyTravelWeight[s] = sigmoid( _nnOutputs[ OUT_PREY_TRAVEL ] );
-	    st.preyBaitBias    [s] = Math.tanh( _nnOutputs[ OUT_PREY_BAIT ] );
-	}
 
-	this.setPredatorTargetSignals = function( signals )
-	{
-	    if ( !PREDATOR_TARGET_SELECTION_ENABLED || !signals ) return;
-	    _nnInputs[ IN_PREY_DISTANCE ] = signals.preyDistance || 0;
-	    _nnInputs[ IN_PREY_REWARD ] = signals.preyReward || 0;
-	    _nnInputs[ IN_PREY_SUCCESS ] = signals.preySuccess || 0;
-	    _nnInputs[ IN_PREY_CHASE ] = signals.preyChase || 0;
-	    _nnInputs[ IN_BAIT_PRESENT ] = signals.baitPresent ? ONE : ZERO;
-	    _nnInputs[ IN_BAIT_DISTANCE ] = signals.baitDistance || 0;
-	    _nnInputs[ IN_BAIT_REWARD ] = signals.baitReward || 0;
-	}
 
 	// copy the numbers the physics needs into the shared state
-	this.writePhysicsState = function()
-	{
-	    // (position, speed, energy... are already there: they live in the row)
-	    const B = _B, b = _b;
-	    B[ b + SS.B_ETERNAL       ] = _eternal ? 1 : 0;
-	    B[ b + SS.B_NUM_PARTS     ] = _numParts;
-	    B[ b + SS.B_FREQUENCY     ] = _frequency;
-	    B[ b + SS.B_SUM_LENGTHS   ] = _sumPartLengths;
-	    B[ b + SS.B_BODY_MASS     ] = _bodyMass;
-	    B[ b + SS.B_DEATHS        ] = 0;
-	    B[ b + SS.B_BASAL         ] = _basalMetabolism;
-	}
-
-	// the results of the physics: already in the row (nothing to copy)
-	this.readPhysicsState = function() {}
-
 	// the physics decided to die (old age / starvation): do it here
 	this.applyPhysicsDeaths = function()
 	{
@@ -485,39 +504,7 @@ this.setParent = function( parent )
 	        this.die( _B[ _b + SS.B_AGE ] > globalTweakers.maximumLifeSpan ? "old_age" : "starvation" );
 	}
 
-	// the climate drain (between physics parts A and B)
-	this.applyClimateDrain = function()
-	{
-	    if ( environment.active )
-	    {
-	        this.updateBodyTemperature();
-	        if ( ( _B[ _b + SS.B_AGE ] + _index ) % THERMAL_FIT_UPDATE_PERIOD === 0 ) { this.updateThermalFit(); }
-	        _B[ _b + SS.B_ENERGY ] -= THERMAL_MISMATCH_DRAIN * ( ONE - _thermalFit );
-	    }
-	}
 
-	//-----------------------------------------------------------------------
-	// the whole physics of one step, through the kernel
-	//-----------------------------------------------------------------------
-	this.runPhysicsKernel = function()
-	{
-	    const B = _shared.bots, b = _slot * SS.BOT_STRIDE;
-	    _shared.params[ SS.PARAM_MAX_LIFESPAN ] = globalTweakers.maximumLifeSpan;
-
-	    this.writePhysicsState();
-	    physicsPartA( _slot, _shared );
-
-	    // the climate drain needs the new position
-	    _position.x = B[ b + SS.B_POS_X ];
-	    _position.y = B[ b + SS.B_POS_Y ];
-	    _B[ _b + SS.B_ENERGY ]     = B[ b + SS.B_ENERGY ];
-	    this.applyClimateDrain();
-	    B[ b + SS.B_ENERGY ] = _B[ _b + SS.B_ENERGY ];
-
-	    physicsPartB( _slot, _shared );
-	    this.readPhysicsState();
-	    this.applyPhysicsDeaths();
-	}
 
     //------------------------------------
     this.computeMomentFactors = function()
@@ -551,7 +538,7 @@ this.setParent = function( parent )
         // swimmer is not old yet
         // (eternal swimbots never get old)
         //----------------------------------
-        if (( _B[ _b + SS.B_AGE ] < oldAgeThreshold ) || _eternal )
+        if (( _B[ _b + SS.B_AGE ] < oldAgeThreshold ) || ( _B[ _b + SS.B_ETERNAL ] === 1 ) )
         {
             if ( _B[ _b + SS.B_AGE ] < YOUNG_AGE_DURATION )
             {
@@ -661,7 +648,7 @@ this.setParent = function( parent )
 		//-----------------------------------------------------------------
 		// loop through parts to determine angle and position
 		//-----------------------------------------------------------------
-		for (let p=1; p<_numParts; p++)
+		for (let p=1; p<_B[ _b + SS.B_NUM_PARTS ]; p++)
 		{
 			const i      = p * PS;
 			const parent = _pParent[p];
@@ -692,7 +679,7 @@ this.setParent = function( parent )
 				let ampModulator   = _pTurnAmp  [p] * directionDot;
 				let phaseModulator = _pTurnPhase[p] * directionDot;
 
-				let radian = _B[ _b + SS.B_TIMER ] * _frequency + ( _pPhase[p] + phaseModulator );
+				let radian = _B[ _b + SS.B_TIMER ] * _B[ _b + SS.B_FREQUENCY ] + ( _pPhase[p] + phaseModulator );
 				pd[ i + B_A ] = ( _pAmp[p] + ampModulator ) * Math.sin( radian );
 
 				pd[ i + C_A ] += pd[ i + B_A ];
@@ -759,9 +746,9 @@ this.setParent = function( parent )
 		//----------------------------------------
 		if ( _B[ _b + SS.B_AGE ] % 20 === 0 )
 		{
-            for (let p=1; p<_numParts; p++)
+            for (let p=1; p<_B[ _b + SS.B_NUM_PARTS ]; p++)
             {
-                for (let o=1; o<_numParts; o++)
+                for (let o=1; o<_B[ _b + SS.B_NUM_PARTS ]; o++)
                 {
                     if ( o != p )
                     {
@@ -789,10 +776,10 @@ this.setParent = function( parent )
 	//------------------------------------------------------------------
 	this.loadPartArrays = function()
 	{
-		_numParts       = _phenotype.numParts;
-		_frequency      = _phenotype.frequency;
-		_sumPartLengths = _phenotype.sumPartLengths;
-		_bodyMass       = _phenotype.mass;
+		_B[ _b + SS.B_NUM_PARTS ]       = _phenotype.numParts;
+		_B[ _b + SS.B_FREQUENCY ]      = _phenotype.frequency;
+		_B[ _b + SS.B_SUM_LENGTHS ] = _phenotype.sumPartLengths;
+		_B[ _b + SS.B_BODY_MASS ]       = _phenotype.mass;
 
 		for (let p=0; p<_phenotype.numParts; p++)
 		{
@@ -824,7 +811,7 @@ this.setParent = function( parent )
 	//------------------------------------------------------------------
 	this.syncPartObjects = function()
 	{
-		for (let p=0; p<_numParts; p++)
+		for (let p=0; p<_B[ _b + SS.B_NUM_PARTS ]; p++)
 		{
 			const part = _phenotype.parts[p];
 			const i = p * PS;
@@ -847,7 +834,7 @@ this.setParent = function( parent )
         //--------------------------------
         // part 1 is not involved here..
         //--------------------------------
-        for (let p=2; p<_numParts; p++)
+        for (let p=2; p<_B[ _b + SS.B_NUM_PARTS ]; p++)
         {
             momentAdjustment += _pd[ p * PS + B_A ] * _pMoment[p];
         }
@@ -863,13 +850,13 @@ this.setParent = function( parent )
 	{
 		_centerOfMass.clear();
 
-		for (let p=1; p<_numParts; p++ )
+		for (let p=1; p<_B[ _b + SS.B_NUM_PARTS ]; p++ )
 		{
 			_centerOfMass.x += _pd[ p * PS + M_X ] * _pMass[p];
 			_centerOfMass.y += _pd[ p * PS + M_Y ] * _pMass[p];
 		}
 
-		_centerOfMass.scale( ONE / _bodyMass );
+		_centerOfMass.scale( ONE / _B[ _b + SS.B_BODY_MASS ] );
 	}
 
 	//--------------------------------
@@ -880,7 +867,7 @@ this.setParent = function( parent )
 		let offsetX = _position.x - _centerOfMass.x;
 		let offsetY = _position.y - _centerOfMass.y;
 
-		for (let  p=0; p<_numParts; p++ )
+		for (let  p=0; p<_B[ _b + SS.B_NUM_PARTS ]; p++ )
 		{
 		   const i = p * PS;
 		   _pd[ i + P_X ] += offsetX;
@@ -977,18 +964,18 @@ this.setParent = function( parent )
         _centerOfMass.clear();
         _vectorUtility.clear();
 
-        _chosenFoodBit      = null;
-        _chosenMate         = null;
+        _M[ _m + SS.M_FOOD ] = NULL_INDEX;
+        _M[ _m + SS.M_MATE ] = NULL_INDEX;
         _B[ _b + SS.B_AGE ] 	  		    = 0;
         _numOffspring       = 0;
         _numFoodBitsEaten   = 0;
         _index              = NULL_INDEX;
-        _chosenMateIndex    = NULL_INDEX;
-        _chosenFoodBitIndex = NULL_INDEX;
-        _lastPursuitMeatIndex = NULL_INDEX;
+        _M[ _m + SS.M_MATE ]    = NULL_INDEX;
+        _M[ _m + SS.M_FOOD ] = NULL_INDEX;
+        _M[ _m + SS.M_LAST_MEAT ] = NULL_INDEX;
         _live[ _liveAt ] = 0;
-        _tryingToMate       = false;
-        _tryingToEat        = false;
+        _M[ _m + SS.M_TRY_MATE ]       = 0;
+        _M[ _m + SS.M_TRY_EAT ]        = 0;
         _B[ _b + SS.B_GROWTH ]        = ZERO;
         _torque             = ZERO;
         _B[ _b + SS.B_ANGLE ]			    = ZERO;
@@ -999,7 +986,7 @@ this.setParent = function( parent )
         _B[ _b + SS.B_EFFICIENCY ]   = ZERO;
         _B[ _b + SS.B_SELECT_RADIUS ]       = ZERO;
         _B[ _b + SS.B_LAST_ENERGY ] = ZERO;
-        _readyforSensoryInputToBrain = false;
+        _M[ _m + SS.M_READY ] = 0;
         */
 
 /// if the clear routine above takes care of it, I can delete the assignments below...
@@ -1016,28 +1003,32 @@ _position.copyFrom( position );
 		_B[ _b + SS.B_AGE ]		        = age;
 		_B[ _b + SS.B_ENERGY ]             = energy;
 		_live[ _liveAt ] = 1;
+		_M[ _m + SS.M_EVENTS ] = 0;
+		_M[ _m + SS.M_INDEX ]  = index;
+		// my own random numbers (for the decision kernel), from the pool's
+		if ( _slot >= 0 ) { _shared.random[ _slot ] = Math.floor( gpRandom() * 4294967296 ) >>> 0; }
 		_B[ _b + SS.B_GROWTH ]        = ONE;
 
 		// whole body
-		_partsLost = false; _autotomyLoss = ZERO; _regrowTimer = 0; _partsDropped = 0; _selfFeedCooldown = 0;
+		_M[ _m + SS.M_PARTS_LOST ] = 0; _M[ _m + SS.M_AUTOTOMY_LOSS ] = ZERO; _M[ _m + SS.M_REGROW ] = 0; _partsDropped = 0; _M[ _m + SS.M_SELF_FEED_CD ] = 0;
 
 		// nothing learned yet
 		if ( _slot >= 0 ) { _shared.imageStrength[ _slot ] = ZERO; }
 
 		// the neural brain is used in the environment pool (stage 6)
-		_neural         = environment.active && NEURAL_BRAIN_ENABLED;
+		_M[ _m + SS.M_NEURAL ]         = ( environment.active && NEURAL_BRAIN_ENABLED ) ? 1 : 0;
 		_nnInputs.fill( ZERO );
 		_nnHidden.fill( ZERO );
 		_nnNewHidden.fill( ZERO );
 		_nnOutputs.fill( ZERO );
 		_B[ _b + SS.B_EFFORT ]         = ONE;
-		_climateWeight  = ZERO;
-		_socialWeight   = ZERO;
-		_comfortTrend   = ZERO;
-		_steer          = ZERO;
-		_nearestSeen    = NULL_INDEX;
-		_threatCloseness = _predatorCloseness = ZERO;
-		_calmPredator   = null;
+		_M[ _m + SS.M_CLIMATE_W ]  = ZERO;
+		_M[ _m + SS.M_SOCIAL_W ]   = ZERO;
+		_M[ _m + SS.M_COMFORT_TREND ]   = ZERO;
+		_M[ _m + SS.M_STEER ]          = ZERO;
+		_M[ _m + SS.M_NEAREST_SEEN ]    = NULL_INDEX;
+		_M[ _m + SS.M_THREAT_CLOSE ] = _M[ _m + SS.M_PRED_CLOSE ] = ZERO;
+		_M[ _m + SS.M_CALM_PRED ] = NULL_INDEX;
 		_brain.setGoal( -1 );
 		//_maximumLifeSpan    = DEFAULT_MAXIMUM_LIFESPAN;
 
@@ -1058,13 +1049,6 @@ _position.copyFrom( position );
 	const _focusDirection = new SharedVector2D( _B, SS.B_FOCUS_X );
 	const _centerOfMass = new SharedVector2D( _B, SS.B_COM_X );
 	let _vectorUtility      = new Vector2D();
-	let _chosenFoodBit      = new FoodBit();
-	let _chosenMate         = null; // must start as null!
-	let _chosenMateIndex    = NULL_INDEX;
-	let _chosenFoodBitIndex = NULL_INDEX;
-	let _tryingToMate       = false;
-	let _tryingToEat        = false;
-	let _readyforSensoryInputToBrain = false;
 	*/
 
 
@@ -1211,24 +1195,29 @@ _position.copyFrom( position );
         //-----------------------------------------------------
         // bigger bodies cost more to keep alive (Kleiber's law)
         //-----------------------------------------------------
-        _basalMetabolism = BASAL_METABOLISM * Math.pow( _phenotype.mass, 0.75 );
+        _B[ _b + SS.B_BASAL ] = BASAL_METABOLISM * Math.pow( _phenotype.mass, 0.75 );
         _averageColor    = null;
 
         //-----------------------------------------------------
         // ecology traits
         //-----------------------------------------------------
-        _thermalOptimum = ( _phenotype.thermalOptimum !== undefined ) ? _phenotype.thermalOptimum : ONE_HALF;
-        _thermalWidth   = ( _phenotype.thermalWidth   !== undefined ) ? _phenotype.thermalWidth   : 0.4;
+        _M[ _m + SS.M_THERMAL_OPT ] = ( _phenotype.thermalOptimum !== undefined ) ? _phenotype.thermalOptimum : ONE_HALF;
+        _M[ _m + SS.M_THERMAL_WIDTH ]   = ( _phenotype.thermalWidth   !== undefined ) ? _phenotype.thermalWidth   : 0.4;
         _digestion      = ( _phenotype.digestion      !== undefined ) ? _phenotype.digestion      : ONE_HALF;
         _brightness     = ( _phenotype.brightness     !== undefined ) ? _phenotype.brightness     : ONE_HALF;
         _choosiness     = ( _phenotype.choosiness     !== undefined ) ? _phenotype.choosiness     : ZERO;
-        _thermalPeak    = thermalPeak( _thermalWidth );
+        _M[ _m + SS.M_THERMAL_PEAK ]    = thermalPeak( _M[ _m + SS.M_THERMAL_WIDTH ] );
         const size      = bodySize( _phenotype.mass );
         _efficiencyWarm = digestionEfficiency( _digestion, PLANT_TYPE_WARM ) * sizeDietFactor( size, PLANT_TYPE_WARM );
         _efficiencyCold = digestionEfficiency( _digestion, PLANT_TYPE_COLD ) * sizeDietFactor( size, PLANT_TYPE_COLD );
-        _comfort        = -ONE;
+        _M[ _m + SS.M_COMFORT ]        = -ONE;
         this.updateThermalFit();
         this.writeStaticPerception();
+
+        // what the decision kernel needs from the phenotype and the genes
+        _M[ _m + SS.M_AUTOTOMY_THREAT ] = _phenotype.autotomyThreat || 0;
+        _M[ _m + SS.M_PHENO_PARTS ]     = _phenotype.numParts;
+        if ( _slot >= 0 ) { _shared.brainWeights.set( _genotype.getBrain(), _slot * BRAIN_SIZE ); }
 
         // the inherited hunger threshold (environment pool; classic pools: the setting)
         _brain.setHungerThreshold( _baseHungerThreshold * this.getHungerFactor() );
@@ -1252,9 +1241,9 @@ _position.copyFrom( position );
 	    _phenotype = _embryology.generatePhenotypeFromGenotype( _genotype );
 	    this.processPhenotype();
 
-	    _chosenPrey      = null;
-	    _nearestPredator = null;
-	    _tryingToHunt    = false;
+	    _M[ _m + SS.M_PREY ] = NULL_INDEX;
+	    _M[ _m + SS.M_NEAR_PRED ] = NULL_INDEX;
+	    _M[ _m + SS.M_TRY_HUNT ]    = 0;
 	    _brain.setFoundPrey( false );
 	    _brain.setNearbyPredatorThreat( false );
 	}
@@ -1300,551 +1289,55 @@ _position.copyFrom( position );
 	}
 
 
-	//--------------------------------
-	// update
-	//--------------------------------
-	//------------------------------------------------------------------------
-	// decide: age, brain, intentions, where to swim (everything of a step
-	// before the body moves)
-	//------------------------------------------------------------------------
-	this.decide = function( fastTargets = false )
-	{
-	    // Intentions are one-step decisions; never carry an unresolved action into
-	    // a different brain state or a newly selected target.
-	    _tryingToEat = false;
-	    _tryingToHunt = false;
-
-	    // In the phased step the targets (food bit, mate) are read from the
-	    // shared arrays: same numbers, but much faster than visiting their
-	    // objects. (The old interleaved step keeps reading the objects.)
-	    const fast = fastTargets && ( _slot >= 0 );
-	    const st   = _shared;
-	    const f    = _chosenFoodBitIndex;
-	    const m    = _chosenMateIndex;
-	    const foodAlive = ( _chosenFoodBit != null ) && ( fast ? (( f !== NULL_INDEX ) && ( st.foodAlive[f] === 1 )) : _chosenFoodBit.getAlive() );
-	    const mateAlive = ( _chosenMate    != null ) && ( fast ? ( st.alive[m] === 1 ) : _chosenMate.getAlive() );
-
-		//---------------------------
-		// update age
-		//---------------------------
-		_B[ _b + SS.B_AGE ] ++;
-
-		// a dropped part grows back after a while, if I can pay for it
-		if ( _partsLost )
-		{
-		    _regrowTimer --;
-		    if (( _regrowTimer <= 0 ) && ( _B[ _b + SS.B_ENERGY ] > _brain.getHungerThreshold() + _autotomyLoss ) && ( _embryology != null ))
-		    {
-		        this.syncPartObjects();
-		        _phenotype = _embryology.generatePhenotypeFromGenotype( _genotype );
-		        this.processPhenotype();
-		        _B[ _b + SS.B_ENERGY ]   -= _autotomyLoss;
-		        _partsLost = false;
-		    }
-		}
-
-		// a predator's search image fades
-		if (( _slot >= 0 ) && ( _shared.imageStrength[ _slot ] > ZERO )) { _shared.imageStrength[ _slot ] *= SEARCH_IMAGE_FORGETTING; }
-
-        if ( _huntCooldown > 0 )
-        {
-            _huntCooldown --;
-        }
-
-        if ( _B[ _b + SS.B_AGE ] % BRAIN_SENSORY_UPDATE_PERIOD == 0 )
-        {
-            _readyforSensoryInputToBrain = true;
-        }
-
-        //-----------------------------
-        // neural brain: think now and then
-        //-----------------------------
-        if ( _neural && (( _B[ _b + SS.B_AGE ] + _index ) % THINK_PERIOD === 0 ))
-        {
-            this.think();
-        }
-
-        //-----------------------------
-        // update brain
-        //-----------------------------
-        _brain.setEnergyLevel( _B[ _b + SS.B_ENERGY ] );
-        _brain.update();
-
-        if ( _selfFeedCooldown > 0 ) _selfFeedCooldown --;
-        if (( _brain.getState() === BRAIN_STATE_SELF_FEED ) && ( _selfFeedCooldown === 0 ))
-        {
-            this.autotomize( true );
-            _selfFeedCooldown = THINK_PERIOD;
-        }
-
-        if (( _brain.getState() === BRAIN_STATE_PURSUING_PREY ) && this.getChosenMeatIsValid() )
-        {
-            if ( _chosenFoodBitIndex !== _lastPursuitMeatIndex ) simCounters.meatTargetsWhilePursuing ++;
-            _lastPursuitMeatIndex = _chosenFoodBitIndex;
-        }
-        else if ( _brain.getState() !== BRAIN_STATE_PURSUING_PREY ) { _lastPursuitMeatIndex = NULL_INDEX; }
-
-        //-------------------------------------
-        // I wanna eat my chosen food bit...
-        //-------------------------------------
-        if ( _brain.getState() === BRAIN_STATE_PURSUING_FOOD )
-        {
-            if ( foodAlive )
-            {
-                let xx = ( fast ? st.foodX[f] : _chosenFoodBit.getPosition().x ) - _mouthPosition.x;
-                let yy = ( fast ? st.foodY[f] : _chosenFoodBit.getPosition().y ) - _mouthPosition.y;
-                let distance = Math.sqrt( xx*xx + yy*yy );
-
-                if ( distance < SWIMBOT_MOUTH_LENGTH + _chosenFoodBit.getBoundingRadius() )
-                {
-                    _tryingToEat = true;
-                    //console.log( "I'm trying to eat!" );
-                }
-            }
-        }
-
-        //------------------------------------------
-        // I wanna have sex with my chosen swimbot
-        //------------------------------------------
-        else if ( _brain.getState() === BRAIN_STATE_PURSUING_MATE )
-        {
-            if ( mateAlive )
-            {
-                let xx = ( fast ? st.genitalX[m] : _chosenMate.getGenitalPosition().x ) - _genitalPosition.x;
-                let yy = ( fast ? st.genitalY[m] : _chosenMate.getGenitalPosition().y ) - _genitalPosition.y;
-                let distance = Math.sqrt( xx*xx + yy*yy );
-
-                if ( distance < SWIMBOT_GENITAL_LENGTH )
-
-                /*
-                //fix!!!!!
-                let distanceSquared = _chosenMate.getGenitalPosition().getDistanceSquaredTo( this.getGenitalPosition() );
-                console.log( distanceSquared + ", " + SWIMBOT_GENITAL_LENGTH * SWIMBOT_GENITAL_LENGTH );
-                if ( distanceSquared < SWIMBOT_GENITAL_LENGTH * SWIMBOT_GENITAL_LENGTH )
-                */
-                {
-                    _tryingToMate = true;
-                }
-            }
-        }
-
-        //------------------------------------------
-        // I wanna bite my chosen prey
-        //------------------------------------------
-        else if ( _brain.getState() === BRAIN_STATE_PURSUING_PREY )
-        {
-            // A predator can take meat it touches while pursuing prey. Eating
-            // resolves this step, so it cannot also bite prey in this interaction.
-            if ( this.getChosenMeatIsValid()
-            &&   this.getMouthPosition().getDistanceTo( _chosenFoodBit.getPosition() )
-                    < SWIMBOT_MOUTH_LENGTH + _chosenFoodBit.getBoundingRadius() )
-            {
-                _tryingToEat = true;
-            }
-            else if ( this.getChosenPreyIsValid() )
-            {
-                let biteDistance = SWIMBOT_MOUTH_LENGTH + _chosenPrey.getBoundingRadius() * ONE_HALF;
-
-                if (( _huntCooldown === 0 )
-                &&  ( this.getMouthPosition().getDistanceTo( _chosenPrey.getPosition() ) < biteDistance ))
-                {
-                    _tryingToHunt = true;
-                }
-            }
-        }
-
-        //------------------------------------------------------------
-        // a hungry predator with no prey in sight eats meat it sees
-        //------------------------------------------------------------
-        else if ( _brain.getState() === BRAIN_STATE_LOOKING_FOR_PREY )
-        {
-            if ( this.getChosenMeatIsValid() )
-            {
-                if ( this.getMouthPosition().getDistanceTo( _chosenFoodBit.getPosition() )
-                    < SWIMBOT_MOUTH_LENGTH + _chosenFoodBit.getBoundingRadius() )
-                {
-                    _tryingToEat = true;
-                }
-            }
-        }
-
-        //----------------------------------------------------------------------
-        // determine the direction to the goal...
-        //----------------------------------------------------------------------
-        if ( _brain.getState() === BRAIN_STATE_LOOKING_FOR_PREY )
-        {
-            if ( this.getChosenMeatIsValid() )
-            {
-                _directionToGoal.set( _chosenFoodBit.getPosition() );
-                _directionToGoal.subtract( _mouthPosition );
-                _directionToGoal.normalize();
-            }
-            else
-            {
-                this.wanderFocus();
-            }
-        }
-        else if ( _brain.getState() === BRAIN_STATE_PURSUING_PREY )
-        {
-            if ( this.getChosenPreyIsValid() )
-            {
-                _directionToGoal.set( _chosenPrey.getPosition() );
-                _directionToGoal.subtract( _mouthPosition );
-                _directionToGoal.normalize();
-            }
-        }
-        else if ( _brain.getState() === BRAIN_STATE_FLEEING_PREDATOR )
-        {
-            const danger = ( _nearestPredator != null ) ? _nearestPredator : _calmPredator;
-            if (( danger != null ) && ( danger.getAlive() ))
-            {
-                // swim directly away from the predator
-                _directionToGoal.set( _position );
-                _directionToGoal.subtract( danger.getPosition() );
-                _directionToGoal.normalize();
-            }
-        }
-        else if (( _brain.getState() === BRAIN_STATE_LOOKING_FOR_FOOD )
-        ||  ( _brain.getState() === BRAIN_STATE_LOOKING_FOR_MATE ))
-        {
-            this.wanderFocus();
-        }
-        else if ( _brain.getState() == BRAIN_STATE_PURSUING_MATE )
-        {
-            //console.log( "BRAIN_STATE_PURSUING_MATE");
-            if ( _chosenMate != null )
-            {
-                if ( fast ) { _directionToGoal.setXY( st.genitalX[m], st.genitalY[m] ); }
-                else        { _directionToGoal.set( _chosenMate.getGenitalPosition() ); }
-                _directionToGoal.subtract( _genitalPosition );
-                _directionToGoal.normalize();
-            }
-        }
-        else if ( _brain.getState() === BRAIN_STATE_SELF_FEED )
-        {
-            _directionToGoal.clear();
-        }
-        else if ( _brain.getState() === BRAIN_STATE_PURSUING_FOOD )
-        {
-            //console.log( "BRAIN_STATE_PURSUING_FOOD");
-            if ( _chosenFoodBit != null )
-            {
-                if ( fast && ( f !== NULL_INDEX )) { _directionToGoal.setXY( st.foodX[f], st.foodY[f] ); }
-                else                               { _directionToGoal.set( _chosenFoodBit.getPosition() ); }
-                _directionToGoal.subtract( _mouthPosition );
-                _directionToGoal.normalize();
-            }
-        }
-
-
-        //----------------------------------------------------------------------
-        // neural brain: while searching, also follow the better temperature
-        // and keep close to (or away from) the others, as the brain decides
-        //----------------------------------------------------------------------
-        if ( _neural )
-        {
-            const state = _brain.getState();
-            if (( state === BRAIN_STATE_LOOKING_FOR_FOOD ) || ( state === BRAIN_STATE_LOOKING_FOR_MATE ) || ( state === BRAIN_STATE_LOOKING_FOR_PREY ))
-            {
-                _directionToGoal.x += CLIMATE_STEERING * _climateWeight * _climateDirX + SOCIAL_STEERING * _socialWeight * _socialDirX;
-                _directionToGoal.y += CLIMATE_STEERING * _climateWeight * _climateDirY + SOCIAL_STEERING * _socialWeight * _socialDirY;
-                _directionToGoal.normalize();
-
-                // the brain may also turn the swimbot a little, left or right
-                if ( _steer !== ZERO )
-                {
-                    const c = Math.cos( _steer * 0.1 ), sn = Math.sin( _steer * 0.1 );   // (a tenth per step: a smooth turn)
-                    const gx = _directionToGoal.x, gy = _directionToGoal.y;
-                    _directionToGoal.setXY( gx * c - gy * sn, gx * sn + gy * c );
-                }
-            }
-        }
-
-        //----------------------------------------------------------------------
-        // continually push the focus direction towards the goal
-        //----------------------------------------------------------------------
-        let previousFocusDirection = _previousFocusDirection;
-        previousFocusDirection.set( _focusDirection );
-
-        _focusDirection.addScaled( _directionToGoal, BRAIN_FOCUS_TARGET_SHIFT_STRENGTH );
-
-        _vectorUtility.setToDifference( _focusDirection, previousFocusDirection );
-
-        if ( _vectorUtility.getMagnitudeSquared() > BRAIN_FOCUS_TARGET_SHIFT_THRESHOLD * BRAIN_FOCUS_TARGET_SHIFT_THRESHOLD )
-        {
-            _focusDirection.set( previousFocusDirection );
-            _focusDirection.addScaled( _directionToGoal, BRAIN_FOCUS_TARGET_SHIFT_THRESHOLD );
-        }
-
-        _focusDirection.normalize();
-
-        //old version
-        //_focusDirection.addScaled( _directionToGoal, BRAIN_FOCUS_TARGET_SHIFT_STRENGTH );
-        //_focusDirection.normalize();
-
-	}
-
-	//------------------------------------------------------------------------
-	// one whole step of this swimbot alone (the old interleaved order)
-	//------------------------------------------------------------------------
-	this.update = function()
-	{
-	    this.decide();
-
-        if ( _slot >= 0 )
-        {
-            this.runPhysicsKernel();
-        }
-        else
-        {
-            this.updateBodyParts();
-            this.updatePhysics();
-        }
-	}
-
-	//------------------------------------------------------------------------
-	// phased step (stage 7): decide and hand the numbers to the physics,
-	// which then runs for all swimbots (maybe in several threads); then
-	// take the results back
-	//------------------------------------------------------------------------
-	this.prepareStep = function()
-	{
-	    this.decide( true );
-	    this.writeTargetChoiceState();
-	    this.applyClimateDrain();
-	    this.writePhysicsState();
-	}
-
-	this.finishStep = function()
-	{
-	    this.readPhysicsState();
-	    this.applyPhysicsDeaths();
-	}
-
-	this.cancelEating     = function() { _tryingToEat = false; }
-	this.getChosenFoodBit = function() { return _chosenFoodBit; }
-
-
-
-	//----------------------------------------
-	// wander focus
-	//----------------------------------------
-	this.wanderFocus = function()
-	{
-	    if ( environment.active && ( ( _B[ _b + SS.B_AGE ] + _index ) % KINESIS_PERIOD === 0 ))
-	    {
-	        this.kinesis();
-	    }
-
-	    let length = _directionToGoal.getMagnitude();
-
-	    if ( length === ZERO )
-	    {
-	        //console.log( "ZERO!!!" );
-	        _directionToGoal.x = -ONE_HALF + gpRandom();
-	        _directionToGoal.y = -ONE_HALF + gpRandom();
-	        length = _directionToGoal.getMagnitude();
-	    }
-
-        _directionToGoal.x += ( -BRAIN_WANDER_AMOUNT * ONE_HALF + gpRandom() * BRAIN_WANDER_AMOUNT );
-        _directionToGoal.y += ( -BRAIN_WANDER_AMOUNT * ONE_HALF + gpRandom() * BRAIN_WANDER_AMOUNT );
-
-        _directionToGoal.x /= length;
-        _directionToGoal.y /= length;
-
-        //console.log( _directionToGoal.x + ", " + _directionToGoal.y );
-    }
 
 
 
 
-	//------------------------------------------------------------------------
-	// one thought of the neural brain: what do I want, and how do I move?
-	//------------------------------------------------------------------------
-	this.think = function()
-	{
-	    const hunger    = _brain.getHungerThreshold();
-	    const predator  = this.getPredatorLevel() > PREDATOR_LEVEL_THRESHOLD;
-	    const threat    = ( _nearestPredator != null ) || ( _calmPredator != null );
-	    const x         = _nnInputs;
+	this.cancelEating     = function() { _M[ _m + SS.M_TRY_EAT ] = 0; }
+	this.getChosenFoodBit = function() { return chosenFoodBit(); }
 
-	    x[ IN_BIAS     ] = ONE;
-	    x[ IN_HUNGER   ] = Math.max( -ONE, Math.min( ONE, ( hunger - _B[ _b + SS.B_ENERGY ] ) / Math.max( ONE, hunger )));
-	    x[ IN_ENERGY   ] = Math.min( 2, _B[ _b + SS.B_ENERGY ] / 100 );
-	    x[ IN_AGE      ] = _B[ _b + SS.B_AGE ] / globalTweakers.maximumLifeSpan;
-	    x[ IN_FIT      ] = _thermalFit;
-	    x[ IN_TREND    ] = _comfortTrend;
-	    x[ IN_FOOD     ] = _seenFood ? ONE : ZERO;
-	    x[ IN_MATE     ] = ( _numSeen > 0 ) ? ONE : ZERO;
-	    x[ IN_THREAT   ] = _threatCloseness;                // 0 none/far .. 1 very close
-	    x[ IN_PREDATOR_NEAR ] = _predatorCloseness;
-	    x[ IN_PREY     ] = _seenPrey ? ONE : ZERO;
-	    x[ IN_CROWD    ] = Math.min( ONE, _numSeen / 10 );
-	    x[ IN_PREDATOR ] = predator ? ONE : ZERO;
 
-	    // directions, as the swimbot sees them (heading as in the physics)
-	    const radian   = _B[ _b + SS.B_ANGLE ] * PI_OVER_180;
-	    const headingX = Math.sin( radian ), headingY = Math.cos( radian );
-	    const toward = ( tx, ty, sideIndex, aheadIndex ) =>
-	    {
-	        let dx = tx - _position.x, dy = ty - _position.y;
-	        const length = Math.sqrt( dx * dx + dy * dy );
-	        if ( length <= ZERO ) { x[ sideIndex ] = ZERO; x[ aheadIndex ] = ZERO; return; }
-	        dx /= length; dy /= length;
-	        x[ aheadIndex ] = dx * headingX + dy * headingY;
-	        x[ sideIndex  ] = dx * headingY - dy * headingX;
-	    };
-	    const st = _shared;
-	    x[ IN_FOOD_SIDE ] = x[ IN_FOOD_AHEAD ] = x[ IN_NEAR_SIDE ] = x[ IN_NEAR_AHEAD ] = ZERO;
-	    x[ IN_THREAT_SIDE ] = x[ IN_THREAT_AHEAD ] = x[ IN_KIN ] = ZERO;
-	    if ( _seenFood ) { toward( _seenFoodX, _seenFoodY, IN_FOOD_SIDE, IN_FOOD_AHEAD ); }
-	    if (( _nearestSeen !== NULL_INDEX ) && ( st !== null ))
-	    {
-	        toward( st.botX[ _nearestSeen ], st.botY[ _nearestSeen ], IN_NEAR_SIDE, IN_NEAR_AHEAD );
-	        const mine = this.getAverageColor();
-	        const difference = ( Math.abs( st.colorR[ _nearestSeen ] - mine.red ) + Math.abs( st.colorG[ _nearestSeen ] - mine.green ) + Math.abs( st.colorB[ _nearestSeen ] - mine.blue )) * ONE_THIRD;
-	        x[ IN_KIN ] = ONE - difference;
-	    }
-	    if ( threat )
-	    {
-	        const p = (( _nearestPredator != null ) ? _nearestPredator : _calmPredator ).getPosition();
-	        toward( p.x, p.y, IN_THREAT_SIDE, IN_THREAT_AHEAD );
-	    }
-	    x[ IN_SEASON ] = environment.active ? environment.seasonPhase() : ZERO;
 
-	    think( _genotype.getBrain(), x, _nnHidden, _nnNewHidden, _nnOutputs );
 
-	    //------------------------------------------------------
-	    // the strongest possible drive wins (the current goal
-	    // gets a small bonus so the swimbot doesn't dither)
-	    //------------------------------------------------------
-	    const current = _brain.getGoal();
-	    let best = OUT_MATE, bestValue = -Infinity;
-	    for ( const d of DRIVE_OUTPUTS )
-	    {
-            if (( d === OUT_SELF_EAT ) && !this.canSelfFeed() ) continue;
-	        if (( d === OUT_FLEE ) && ( !threat || predator )) continue;   // nothing to flee from
-	        if (( d === OUT_HUNT ) && !predator ) continue;                // only predators hunt
-	        if (( d === OUT_FOOD ) && predator ) continue;                 // predators don't eat plants
-	        const value = _nnOutputs[d] + ( d === current ? DRIVE_HYSTERESIS : ZERO );
-	        if ( value > bestValue ) { bestValue = value; best = d; }
-	    }
-	    _brain.setGoal( best );
 
-	    //------------------------------------------------------
-	    // how to move
-	    //------------------------------------------------------
-	    _B[ _b + SS.B_EFFORT ]        = EFFORT_MIN + EFFORT_RANGE * sigmoid( _nnOutputs[ OUT_EFFORT ] );
-	    _steer         = Math.tanh( _nnOutputs[ OUT_STEER ] ) * STEER_MAX_DEGREES * PI_OVER_180;
-	    _socialWeight  = Math.tanh( _nnOutputs[ OUT_SOCIAL ] );
-	    _climateWeight = environment.active ? sigmoid( _nnOutputs[ OUT_CLIMATE ] ) : ZERO;
 
-	    if ( _climateWeight > 0.05 )
-	    {
-	        // which way does the temperature suit me better?
-	        const d  = CLIMATE_PROBE_DISTANCE;
-	        const gx = thermalFit( this.feltTemperature( _position.x + d, _position.y ), _thermalOptimum, _thermalWidth )
-	                 - thermalFit( this.feltTemperature( _position.x - d, _position.y ), _thermalOptimum, _thermalWidth );
-	        const gy = thermalFit( this.feltTemperature( _position.x, _position.y + d ), _thermalOptimum, _thermalWidth )
-	                 - thermalFit( this.feltTemperature( _position.x, _position.y - d ), _thermalOptimum, _thermalWidth );
-	        const length = Math.sqrt( gx * gx + gy * gy );
-	        _climateDirX = ( length > 1e-4 ) ? gx / length : ZERO;
-	        _climateDirY = ( length > 1e-4 ) ? gy / length : ZERO;
-	    }
-	    else
-	    {
-	        _climateDirX = _climateDirY = ZERO;
-	    }
-	}
 
-	this.getUsesNeuralBrain = function() { return _neural;        }
 
-	// GenePool tells where the swimbots I see are, on the whole (sum of offsets)
-	this.setSocialOffset = function( sx, sy )
-	{
-	    const length = Math.sqrt( sx * sx + sy * sy );
-	    _socialDirX = ( length > ZERO ) ? sx / length : ZERO;
-	    _socialDirY = ( length > ZERO ) ? sy / length : ZERO;
-	}
+	this.getUsesNeuralBrain = function() { return _M[ _m + SS.M_NEURAL ];        }
+
 	this.getEffort          = function() { return _B[ _b + SS.B_EFFORT ];        }
-	this.getClimateWeight   = function() { return _climateWeight; }
-	this.getSocialWeight    = function() { return _socialWeight;  }
+	this.getClimateWeight   = function() { return _M[ _m + SS.M_CLIMATE_W ]; }
+	this.getSocialWeight    = function() { return _M[ _m + SS.M_SOCIAL_W ];  }
 	this.getDrives          = function() { return _nnOutputs;     }
 
-	//------------------------------------------------------------------------
-	// kinesis ("run and tumble", like bacteria): now and then compare how good
-	// it is here with how good it was; if it got worse, maybe turn. If the
-	// temperature is really wrong, look around and head for the best way.
-	//------------------------------------------------------------------------
-	this.kinesis = function()
-	{
-	    this.updateThermalFit();
-
-	    if ( _thermalFit < EMERGENCY_THERMAL_FIT )
-	    {
-	        let length = _directionToGoal.getMagnitude();
-	        let dx = ( length > ZERO ) ? _directionToGoal.x / length : ONE;
-	        let dy = ( length > ZERO ) ? _directionToGoal.y / length : ZERO;
-	        let bestFit = -ONE, bestX = dx, bestY = dy;
-
-	        for (let k = 0; k < 4; k++)
-	        {
-	            const fit = thermalFit( this.feltTemperature( _position.x + dx * EMERGENCY_PROBE_DISTANCE,
-	                                                          _position.y + dy * EMERGENCY_PROBE_DISTANCE ), _thermalOptimum, _thermalWidth );
-	            if ( fit > bestFit ) { bestFit = fit; bestX = dx; bestY = dy; }
-	            const t = dx; dx = -dy; dy = t;   // turn 90 degrees
-	        }
-
-	        _directionToGoal.setXY( bestX, bestY );
-	        _comfort = -ONE;
-	        return;
-	    }
-
-	    const cell = environment.plantCellIndex( _position.x, _position.y );
-	    const food = ( environment.plantCount[ PLANT_TYPE_WARM ][ cell ] * _efficiencyWarm
-	                 + environment.plantCount[ PLANT_TYPE_COLD ][ cell ] * _efficiencyCold ) / 6;
-	    const comfort = ( 0.05 + _thermalFit * _thermalPeak ) * ( 0.05 + food );
-
-	    _comfortTrend = ( _comfort < ZERO ) ? ZERO : ( comfort > _comfort ? ONE : ( comfort < _comfort ? -ONE : ZERO ));
-
-	    if (( _comfort >= ZERO ) && ( comfort < _comfort ) && ( gpRandom() < KINESIS_TURN_CHANCE ))
-	    {
-	        const turn = ( -ONE + 2 * gpRandom() ) * KINESIS_MAX_TURN * PI_OVER_180;
-	        const c = Math.cos( turn ), sn = Math.sin( turn );
-	        const x = _directionToGoal.x, y = _directionToGoal.y;
-	        _directionToGoal.setXY( x * c - y * sn, x * sn + y * c );
-	    }
-
-	    _comfort = comfort;
-	}
 
 	//------------------------------------------------------------------------
 	this.updateThermalFit = function()
 	{
-	    _thermalFit = environment.active
-	        ? thermalFit( this.getBodyTemperature(), _thermalOptimum, _thermalWidth )
+	    _M[ _m + SS.M_THERMAL_FIT ] = environment.active
+	        ? thermalFit( this.getBodyTemperature(), _M[ _m + SS.M_THERMAL_OPT ], _M[ _m + SS.M_THERMAL_WIDTH ] )
 	        : ONE;
 	}
 
 	this.updateBodyTemperature = function()
 	{
 	    const ambient = this.feltTemperature( _position.x, _position.y );
-	    const meanBodyWidth = _sumPartLengths > ZERO ? _phenotype.mass / _sumPartLengths : ZERO;
+	    const meanBodyWidth = _B[ _b + SS.B_SUM_LENGTHS ] > ZERO ? _phenotype.mass / _B[ _b + SS.B_SUM_LENGTHS ] : ZERO;
 	    if ( !BODY_TEMPERATURE_INERTIA_ENABLED )
 	    {
-	        _bodyTemperature = ambient;
-	        _bodyTemperatureInitialized = false;
+	        _M[ _m + SS.M_BODY_TEMP ] = ambient;
+	        _M[ _m + SS.M_BODY_TEMP_SET ] = 0;
 	        return;
 	    }
 
-	    if ( !_bodyTemperatureInitialized )
+	    if ( !_M[ _m + SS.M_BODY_TEMP_SET ] )
 	    {
-	        _bodyTemperature = advanceBodyTemperature( ambient, ambient, _phenotype.mass, meanBodyWidth );
-	        _bodyTemperatureInitialized = true;
+	        _M[ _m + SS.M_BODY_TEMP ] = advanceBodyTemperature( ambient, ambient, _phenotype.mass, meanBodyWidth );
+	        _M[ _m + SS.M_BODY_TEMP_SET ] = 1;
 	    }
 	    else
 	    {
-	        _bodyTemperature = advanceBodyTemperature( _bodyTemperature, ambient, _phenotype.mass, meanBodyWidth );
+	        _M[ _m + SS.M_BODY_TEMP ] = advanceBodyTemperature( _M[ _m + SS.M_BODY_TEMP ], ambient, _phenotype.mass, meanBodyWidth );
 	    }
 	}
 
@@ -1856,8 +1349,8 @@ _position.copyFrom( position );
 
 	this.getBodyTemperature = function()
 	{
-	    return BODY_TEMPERATURE_INERTIA_ENABLED && _bodyTemperatureInitialized
-	        ? _bodyTemperature
+	    return BODY_TEMPERATURE_INERTIA_ENABLED && _M[ _m + SS.M_BODY_TEMP_SET ]
+	        ? _M[ _m + SS.M_BODY_TEMP ]
 	        : this.feltTemperature( _position.x, _position.y );
 	}
 
@@ -1892,56 +1385,12 @@ _position.copyFrom( position );
 	    return ( type === PLANT_TYPE_WARM ) ? _efficiencyWarm : _efficiencyCold;
 	}
 
-	this.getThermalFit      = function() { return _thermalFit;      }
-	this.getThermalOptimum  = function() { return _thermalOptimum;  }
-	this.getThermalWidth    = function() { return _thermalWidth;    }
+	this.getThermalFit      = function() { return _M[ _m + SS.M_THERMAL_FIT ];      }
+	this.getThermalOptimum  = function() { return _M[ _m + SS.M_THERMAL_OPT ];  }
+	this.getThermalWidth    = function() { return _M[ _m + SS.M_THERMAL_WIDTH ];    }
 	this.getDigestion       = function() { return _digestion;       }
-	this.getComfort         = function() { return _comfort;         }
+	this.getComfort         = function() { return _M[ _m + SS.M_COMFORT ];         }
 
-	//----------------------------------------
-	// update physics
-	//----------------------------------------
-	this.updatePhysics = function()
-	{
-        //---------------------------------------------------------------------------
-        // a swimbot creates its own linear and angular forces via moving parts
-        //---------------------------------------------------------------------------
-        this.calculateFluidForces();
-
-        if ( _B[ _b + SS.B_AGE ] % ENERGY_EFFICIENCY_MEASUREMENT_PERIOD === 0 )
-        {
-            this.calculateEnergyEfficiency();
-        }
-
-        //---------------------------------------------
-        // energy is always slowly draining
-        //---------------------------------------------
-        _B[ _b + SS.B_ENERGY ] -= CONTINUAL_ENERGY_DRAIN + _basalMetabolism;
-
-        //---------------------------------------------
-        // living at the wrong temperature costs energy
-        //---------------------------------------------
-	        this.applyClimateDrain();
-
-        //---------------------------------------------
-        // when energy hits zero, that means death
-        //---------------------------------------------
-        if ( _B[ _b + SS.B_ENERGY ] <= ZERO )
-        {
-            _B[ _b + SS.B_ENERGY ] = ZERO;
-
-            // eternal swimbots don't starve to death
-            if ( !_eternal )
-            {
-                this.die( "starvation" );
-            }
-        }
-
-		//---------------------------
-		// wall collisions
-		//---------------------------
-		this.updateWallCollisions();
-	}
 
 
     //---------------------------------------------------------------------------
@@ -1954,20 +1403,20 @@ _position.copyFrom( position );
         //-----------------------------------------------------
 	    _acceleration.clear();
 	    _torque = ZERO;
-	    const motion = bodyMotionFactors( _phenotype.mass, _sumPartLengths > ZERO ? _phenotype.mass / _sumPartLengths : ZERO );
+	    const motion = bodyMotionFactors( _phenotype.mass, _B[ _b + SS.B_SUM_LENGTHS ] > ZERO ? _phenotype.mass / _B[ _b + SS.B_SUM_LENGTHS ] : ZERO );
 
         //----------------------------------------
         // loop through parts...
         //----------------------------------------
-        assert( _numParts > 0, "_numParts > 0" );
+        assert( _B[ _b + SS.B_NUM_PARTS ] > 0, "_B[ _b + SS.B_NUM_PARTS ] > 0" );
 
-		for (let p=1; p<_numParts; p++)
+		for (let p=1; p<_B[ _b + SS.B_NUM_PARTS ]; p++)
 		{
 		    //---------------------------------------------------------
 		    // calculate this part's fraction of the total length
 		    //---------------------------------------------------------
             const i = p * PS;
-            let fractionOfWhole = _pLength[p] / _sumPartLengths;
+            let fractionOfWhole = _pLength[p] / _B[ _b + SS.B_SUM_LENGTHS ];
 
 		    //---------------------------------------------------------
 		    // calculate velocity
@@ -2071,7 +1520,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
                 //---------------------------------------------------------------
                 // get dot of strokeForce with partPerpendicular
                 //---------------------------------------------------------------
-                let perpDot = ( strokeForceX * partPerpendicularX + strokeForceY * partPerpendicularY ) / _sumPartLengths;
+                let perpDot = ( strokeForceX * partPerpendicularX + strokeForceY * partPerpendicularY ) / _B[ _b + SS.B_SUM_LENGTHS ];
 
                 //-------------------------------
                 // accumulate torque
@@ -2159,10 +1608,10 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
         //--------------------------------------------------------------------
         // left wall
         //--------------------------------------------------------------------
-        if ( _position.x < POOL_LEFT + _sumPartLengths * ONE_HALF )
+        if ( _position.x < POOL_LEFT + _B[ _b + SS.B_SUM_LENGTHS ] * ONE_HALF )
         {
             //console.log( "left " );
-            for (let p=1; p<_numParts; p++)
+            for (let p=1; p<_B[ _b + SS.B_NUM_PARTS ]; p++)
             {
                 let radius = _pLength[p] + _pWidth[p];
                 let limit = POOL_LEFT + radius;
@@ -2181,10 +1630,10 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
         //-------------------------------------------------------------------------
         // right wall
         //-------------------------------------------------------------------------
-        else if ( _position.x > POOL_RIGHT - _sumPartLengths * ONE_HALF )
+        else if ( _position.x > POOL_RIGHT - _B[ _b + SS.B_SUM_LENGTHS ] * ONE_HALF )
         {
             //console.log( "right " );
-            for (let p=1; p<_numParts; p++)
+            for (let p=1; p<_B[ _b + SS.B_NUM_PARTS ]; p++)
             {
                 let radius = _pLength[p] + _pWidth[p];
                 let limit = POOL_RIGHT - radius;
@@ -2204,11 +1653,11 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
         //------------------------------------------------------------------------------
         // top wall
         //------------------------------------------------------------------------------
-        if ( _position.y < POOL_TOP + _sumPartLengths * ONE_HALF )
+        if ( _position.y < POOL_TOP + _B[ _b + SS.B_SUM_LENGTHS ] * ONE_HALF )
         {
             //console.log( "top" );
 
-            for (let p=1; p<_numParts; p++)
+            for (let p=1; p<_B[ _b + SS.B_NUM_PARTS ]; p++)
             {
                 let radius = _pLength[p] + _pWidth[p];
                 let limit = POOL_TOP + radius;
@@ -2227,9 +1676,9 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
         //------------------------------------------------------------------------------
         // bottom wall
         //------------------------------------------------------------------------------
-        else if ( _position.y > POOL_BOTTOM - _sumPartLengths * ONE_HALF )
+        else if ( _position.y > POOL_BOTTOM - _B[ _b + SS.B_SUM_LENGTHS ] * ONE_HALF )
         {
-            for (let p=1; p<_numParts; p++)
+            for (let p=1; p<_B[ _b + SS.B_NUM_PARTS ]; p++)
             {
                 let radius = _pLength[p] + _pWidth[p];
                 let limit = POOL_BOTTOM - radius;
@@ -2305,8 +1754,8 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	//--------------------------------------------------------------------------------------------------------
 	// get functions
 	//--------------------------------------------------------------------------------------------------------
-	this.getIsTryingToEat               = function() { return _tryingToEat;                                 }
-	this.getIsTryingToMate              = function() { return _tryingToMate;                                }
+	this.getIsTryingToEat               = function() { return _M[ _m + SS.M_TRY_EAT ];                                 }
+	this.getIsTryingToMate              = function() { return _M[ _m + SS.M_TRY_MATE ];                                }
 	this.getIndex                       = function() { return _index;                                       }
 	this.getAge                         = function() { return _B[ _b + SS.B_AGE ];                                         }
 	this.getAlive                       = function() { return _live[ _liveAt ] === 1;                       }
@@ -2317,11 +1766,11 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	this.getSpeed                       = function() { return _velocity.getMagnitude();                     }
 	this.getBoundingRadius              = function() { return _phenotype.sumPartLengths;                    }
 	this.getNumParts                    = function() { return _phenotype.numParts;                          }
-	this.getIsLookingForSensoryInput    = function() { return _readyforSensoryInputToBrain;                 }
+	this.getIsLookingForSensoryInput    = function() { return _M[ _m + SS.M_READY ];                 }
 	this.getGenitalPosition             = function() { return _genitalPosition;                             }
 	this.getMouthPosition               = function() { return _mouthPosition;                               }
-	this.getChosenMateIndex             = function() { return _chosenMateIndex;                             }
-	this.getChosenFoodBitIndex          = function() { return _chosenFoodBitIndex;                          }
+	this.getChosenMateIndex             = function() { return _M[ _m + SS.M_MATE ];                             }
+	this.getChosenFoodBitIndex          = function() { return _M[ _m + SS.M_FOOD ];                          }
 	this.getNumOffspring                = function() { return _numOffspring;                                }
 	this.getNumFoodBitsEaten            = function() { return _numFoodBitsEaten;                            }
     this.getBrainState                  = function() { return _brain.getState();                            }
@@ -2332,7 +1781,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	this.getSelectRadius                = function() { return _B[ _b + SS.B_SELECT_RADIUS ];                                }
 	this.getPreferredFoodType           = function() { return _phenotype.preferredFoodType;                 }
 	this.getDigestibleFoodType          = function() { return _phenotype.digestibleFoodType;                }
-	this.getIsTryingToHunt              = function() { return _tryingToHunt;                                }
+	this.getIsTryingToHunt              = function() { return _M[ _m + SS.M_TRY_HUNT ];                                }
 	this.getNumPreyEaten                = function() { return _numPreyEaten;                                }
 	this.getPhenotypeMass               = function() { return _phenotype.mass;                              }
 	this.getMorphologySummary           = function()
@@ -2365,8 +1814,8 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	        meanWidth: morphology.meanWidth,
 	        numParts: morphology.numParts,
 	        branchFraction: morphology.branchFraction,
-	        thermalOptimum: _thermalOptimum,
-	        thermalWidth: _thermalWidth,
+	        thermalOptimum: _M[ _m + SS.M_THERMAL_OPT ],
+	        thermalWidth: _M[ _m + SS.M_THERMAL_WIDTH ],
 	        digestion: _digestion,
 	        brightness: _phenotype.brightness,
 	        choosiness: _choosiness,
@@ -2381,10 +1830,10 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	this.getMaxEnergy                   = function() { return SWIMBOT_MAX_ENERGY;                           }
 	this.getMaxAge                      = function() { return globalTweakers.maximumLifeSpan;               }
 	this.getOldAgeThreshold             = function() { return globalTweakers.maximumLifeSpan - OLD_AGE_DURATION; }
-	this.getDynamicScanRadius           = function() { return _scanRadius;                                  }
-	this.getEternal                     = function() { return _eternal;                                     }
-	this.isEternal                      = function() { return _eternal;                                     }
-	this.setEternal                     = function(e) { _eternal = e;                                       }
+	this.getDynamicScanRadius           = function() { return _M[ _m + SS.M_SCAN_RADIUS ];                                  }
+	this.getEternal                     = function() { return ( _B[ _b + SS.B_ETERNAL ] === 1 );                                     }
+	this.isEternal                      = function() { return ( _B[ _b + SS.B_ETERNAL ] === 1 );                                     }
+	this.setEternal                     = function(e) { _B[ _b + SS.B_ETERNAL ] = e ? 1 : 0;                                       }
 
 	//---------------------------------------
 	this.getPredatorLevel = function()
@@ -2400,54 +1849,30 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	//---------------------------------------
 	this.getChosenPreyIsValid = function()
 	{
-	    return (( _chosenPrey != null ) && _chosenPrey.getAlive() );
+	    return (( chosenPrey() != null ) && chosenPrey().getAlive() );
 	}
 
 	//---------------------------------------
 	this.getChosenMeatIsValid = function()
 	{
-	    return (( _chosenFoodBit != null ) && _chosenFoodBit.getAlive() && ( _chosenFoodBit.getType() === 2 ));
+	    return (( chosenFoodBit() != null ) && chosenFoodBit().getAlive() && ( chosenFoodBit().getType() === 2 ));
 	}
 
 
-	//------------------------------------------------------------------------
-	// the predator's "radar": grows while a hungry predator sees no prey,
-	// holds still for a while after prey is found, and relaxes back to
-	// the normal view radius when the predator is not hunting.
-	//------------------------------------------------------------------------
-	this.updateScanRadius = function()
-	{
-	    let state = _brain.getState();
-	    let hunting = ( this.getPredatorLevel() > PREDATOR_LEVEL_THRESHOLD )
-	              && (( state === BRAIN_STATE_LOOKING_FOR_PREY ) || ( state === BRAIN_STATE_PURSUING_PREY ));
-
-	    if ( _scanCooldown > 0 )
-	    {
-	        _scanCooldown -= BRAIN_SENSORY_UPDATE_PERIOD;
-	    }
-	    else if ( hunting && ( state === BRAIN_STATE_LOOKING_FOR_PREY ))
-	    {
-	        _scanRadius = Math.min( _scanRadius + PREY_SCAN_RADIUS_GROWTH, SWIMBOT_VIEW_RADIUS * PREY_SCAN_RADIUS_MAX_SCALE );
-	    }
-	    else if ( !hunting )
-	    {
-	        _scanRadius = Math.max( _scanRadius - PREY_SCAN_RADIUS_GROWTH, SWIMBOT_VIEW_RADIUS );
-	    }
-	}
 
 	//---------------------------------------------------------
 	// a predator just tried to bite me - flee from it now
 	//---------------------------------------------------------
 	this.notifyAttackedBy = function( predator )
 	{
-	    _nearestPredator = predator;
+	    _M[ _m + SS.M_NEAR_PRED ] = indexOf( predator );
 	    _brain.setNearbyPredatorThreat( true );
 	}
 
 	//---------------------------------------
 	this.notifyTargetFound = function()
 	{
-	    _scanCooldown = PREY_SCAN_COOLDOWN;
+	    _M[ _m + SS.M_SCAN_CD ] = PREY_SCAN_COOLDOWN;
 	}
 
 
@@ -2523,20 +1948,20 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 
     	//console.log( "let's eat this" );
 
-        assert( _chosenFoodBit != null, "Swimbot:eatChosenFoodBit: _chosenFoodBit != null" );
-        assert( _chosenFoodBit.getAlive(), "Swimbot:eatChosenFoodBit: _chosenFoodBit.getAlive()" );
+        assert( chosenFoodBit() != null, "Swimbot:eatChosenFoodBit: chosenFoodBit() != null" );
+        assert( chosenFoodBit().getAlive(), "Swimbot:eatChosenFoodBit: chosenFoodBit().getAlive()" );
 
-        if (( _chosenFoodBit != null )
-        &&  ( _chosenFoodBit.getAlive() ))
+        if (( chosenFoodBit() != null )
+        &&  ( chosenFoodBit().getAlive() ))
         {
-            let energyFromFoodBit = _chosenFoodBit.getEnergy();
+            let energyFromFoodBit = chosenFoodBit().getEnergy();
 
             if ( globalTweakers.numFoodTypes > 1 )
             {
                 /*
                 console.log( "-------------------------------" );
                 console.log( " eating....." );
-                console.log( "_chosenFoodBit.getType() = " + _chosenFoodBit.getType() );
+                console.log( "chosenFoodBit().getType() = " + chosenFoodBit().getType() );
                 console.log( "_phenotype.digestibleFoodType  = " + _phenotype.digestibleFoodType  );
                 console.log( " " );
                 console.log( "-------------------------------" );
@@ -2547,8 +1972,8 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
                 // digestible type of the swimbot, then it gets less energy...
                 //----------------------------------------------------------------------
                 // (meat, type 2, is always fully digestible for predators)
-                if (( _chosenFoodBit.getType() != 2 )
-                &&  ( _chosenFoodBit.getType() != _phenotype.digestibleFoodType ))
+                if (( chosenFoodBit().getType() != 2 )
+                &&  ( chosenFoodBit().getType() != _phenotype.digestibleFoodType ))
                 {
                     //console.log( "decrease energy from food bit..." );
                     energyFromFoodBit *= FOOD_TYPE_OFFSET;
@@ -2562,41 +1987,41 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
             if ( environment.active )
             {
                 // (meat: exactly the energy it holds, e.g. a dropped tail)
-                energyFromFoodBit = ( _chosenFoodBit.getType() === 2 ) ? _chosenFoodBit.getEnergy()
-                                  : _chosenFoodBit.getEnergy()
-                                  * this.getDigestionEfficiency( _chosenFoodBit.getType() )
-                                  * climateFoodFactor( _thermalFit, _thermalPeak );
+                energyFromFoodBit = ( chosenFoodBit().getType() === 2 ) ? chosenFoodBit().getEnergy()
+                                  : chosenFoodBit().getEnergy()
+                                  * this.getDigestionEfficiency( chosenFoodBit().getType() )
+                                  * climateFoodFactor( _M[ _m + SS.M_THERMAL_FIT ], _M[ _m + SS.M_THERMAL_PEAK ] );
             }
 
             _B[ _b + SS.B_ENERGY ] += energyFromFoodBit;
 
             _numFoodBitsEaten ++;
-            if ( _chosenFoodBit.getType() === 2 )
+            if ( chosenFoodBit().getType() === 2 )
             {
                 simCounters.meatMeals ++;
                 if ( _brain.getState() === BRAIN_STATE_PURSUING_PREY ) simCounters.meatMealsWhilePursuing ++;
-                if ( _chosenFoodBit.getAutotomyDecoy && _chosenFoodBit.getAutotomyDecoy() ) simCounters.autotomyDecoysEaten ++;
+                if ( chosenFoodBit().getAutotomyDecoy && chosenFoodBit().getAutotomyDecoy() ) simCounters.autotomyDecoysEaten ++;
             }
             else { simCounters.plantMeals ++; }
 
-            assert( _chosenFoodBit.getEnergy() >= ZERO, "Swimbot:eatChosenFoodBit: _chosenFoodBit.getEnergy() >= ZERO" );
+            assert( chosenFoodBit().getEnergy() >= ZERO, "Swimbot:eatChosenFoodBit: chosenFoodBit().getEnergy() >= ZERO" );
 
-            _tryingToEat = false;
+            _M[ _m + SS.M_TRY_EAT ] = 0;
 
             _B[ _b + SS.B_TIMER_DELTA ] = ZERO;
 
-            //foodBitIndex = _chosenFoodBit.getIndex();
+            //foodBitIndex = chosenFoodBit().getIndex();
 
-            assert( _chosenFoodBitIndex != NULL_INDEX, "Swimbot:eatChosenFoodBit: _chosenFoodBitIndex != NULL_INDEX" );
+            assert( _M[ _m + SS.M_FOOD ] != NULL_INDEX, "Swimbot:eatChosenFoodBit: _M[ _m + SS.M_FOOD ] != NULL_INDEX" );
 
-            _chosenFoodBit.kill();
+            chosenFoodBit().kill();
 
 // somehow, the swimbot is still looking for food even when it is too far away
 // not sure if this is the right place to fix, but it needs fixing
             //_brain.setFoundFoodBit( false );
         }
 
-        return _chosenFoodBitIndex;
+        return _M[ _m + SS.M_FOOD ];
     }
 
 
@@ -2606,15 +2031,15 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	//------------------------------------------------------------------------
 	this.huntEatChosenPrey = function()
 	{
-	    _tryingToHunt = false;
+	    _M[ _m + SS.M_TRY_HUNT ] = 0;
 
 	    if (( !this.getChosenPreyIsValid() )
-	    ||  ( _chosenPrey.isEternal() ))
+	    ||  ( chosenPrey().isEternal() ))
 	    {
 	        return;
 	    }
 
-	    _huntCooldown = ATTACK_COOLDOWN;
+	    _M[ _m + SS.M_HUNT_CD ] = ATTACK_COOLDOWN;
 
 	    //-----------------------------------------------
 	    // missed! the prey gets away and starts fleeing
@@ -2622,30 +2047,30 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	    if ( gpRandom() > ( environment.active ? ENVIRONMENT_ATTACK_SUCCESS_CHANCE : ATTACK_SUCCESS_CHANCE ))
 	    {
 	        simCounters.failedAttacks ++;
-	        _chosenPrey.notifyAttackedBy( this );
+	        chosenPrey().notifyAttackedBy( this );
 	        return;
 	    }
 
 	    let preyPosition = new Vector2D();
-	    preyPosition.set( _chosenPrey.getPosition() );
+	    preyPosition.set( chosenPrey().getPosition() );
 
 	    // autotomy: the prey may drop a part and get away; I eat the part
-	    const dropped = _chosenPrey.tryAutotomyOnBite();
+	    const dropped = chosenPrey().tryAutotomyOnBite();
 	    if ( dropped !== null )
 	    {
 	        simCounters.autotomyBiteDrops ++;
 	        _B[ _b + SS.B_ENERGY ] += Math.min( Math.max( ZERO, SWIMBOT_MAX_ENERGY - _B[ _b + SS.B_ENERGY ] ), dropped.energy );
-	        _chosenPrey.notifyAttackedBy( this );
+	        chosenPrey().notifyAttackedBy( this );
 	        _numPartsEaten ++;
 	        _B[ _b + SS.B_TIMER_DELTA ] = ZERO;
 	        return;
 	    }
 
 	    // the prey's energy (a part) and its body
-	    let energyFromPrey = _chosenPrey.getEnergy() * PREDATION_ENERGY_TRANSFER + _chosenPrey.getPhenotypeMass() * PREY_BODY_ENERGY;
+	    let energyFromPrey = chosenPrey().getEnergy() * PREDATION_ENERGY_TRANSFER + chosenPrey().getPhenotypeMass() * PREY_BODY_ENERGY;
 
-	    this.learnSearchImage( _chosenPrey );
-	    _chosenPrey.die( "predation" );
+	    this.learnSearchImage( chosenPrey() );
+	    chosenPrey().die( "predation" );
 
 	    simCounters.attackCount ++;
 	    _numPreyEaten ++;
@@ -2665,233 +2090,12 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	    }
 
 	    _B[ _b + SS.B_TIMER_DELTA ] = ZERO;
-	    _chosenPrey = null;
+	    _M[ _m + SS.M_PREY ] = NULL_INDEX;
 	    _brain.setFoundPrey( false );
 	}
 
 
-
-	//--------------------------------------------
-	// setEnvironmentalStimuli
-	//--------------------------------------------
-	this.setEnvironmentalStimuli = function( numNearbySwimbots, nearbySwimbotArray, foodBitWasFound, theFoodBit, preyWasFound, thePrey, theNearestPredator, mateChoice = undefined, seenIndices = null, seenBase = 0, anyPredator = null )
-    {
-        //------------------------------------------------------------
-        // predator threat (herbivores only - genepool only passes
-        // a nearest predator to herbivores)
-        //------------------------------------------------------------
-        _nearestPredator = null;
-
-        //------------------------------------------------------------
-        // remember what I see, for the neural brain
-        //------------------------------------------------------------
-        _seenFood = foodBitWasFound && ( theFoodBit != null ) && ( theFoodBit.getType() !== 2 );
-        _seenPrey = ( preyWasFound && ( thePrey != null )) || ( foodBitWasFound && ( theFoodBit != null ) && ( theFoodBit.getType() === 2 ));
-        _numSeen  = numNearbySwimbots;
-        if ( _seenFood ) { const p = theFoodBit.getPosition(); _seenFoodX = p.x; _seenFoodY = p.y; }
-        _nearestSeen = ( numNearbySwimbots > 0 ) ? (( seenIndices !== null ) ? seenIndices[ seenBase ] : nearbySwimbotArray[0].getIndex() ) : NULL_INDEX;
-
-
-        //------------------------------------------------------------
-        // danger: a hunting predator close enough makes me flee (classic
-        // brain). The neural brain also weighs how close it is, and may
-        // keep away from a calm predator too.
-        //------------------------------------------------------------
-        _threatCloseness   = ZERO;
-        _predatorCloseness = ZERO;
-        if ( theNearestPredator != null )
-        {
-            const distance = theNearestPredator.getPosition().getDistanceTo( _position );
-            _threatCloseness = Math.max( ZERO, ONE - distance / SWIMBOT_VIEW_RADIUS );
-            if ( distance < PREDATOR_FLEE_RADIUS ) { _nearestPredator = theNearestPredator; }
-        }
-        _brain.setNearbyPredatorThreat( _nearestPredator != null );
-
-        // autotomy as a decoy: a hunter came too close - drop a part and leave it behind
-        if (( theNearestPredator != null ) && !_partsLost && ( _phenotype.autotomyThreat > 0.05 )
-        &&  ( _threatCloseness >= ONE - AUTOTOMY_DECOY_SPAN * _phenotype.autotomyThreat ))
-        {
-            const dropped = this.autotomize();
-            if ( dropped !== null )
-            {
-                _parent.spawnMeatWithEnergy( dropped.x, dropped.y, dropped.energy );
-                simCounters.autotomyThreatDrops ++;
-            }
-        }
-
-        if ( anyPredator != null )
-        {
-            _predatorCloseness = Math.max( ZERO, ONE - anyPredator.getPosition().getDistanceTo( _position ) / SWIMBOT_VIEW_RADIUS );
-            // the neural brain may flee from it: flee away from the nearest one
-            if ( _neural && ( _nearestPredator == null )) { _calmPredator = anyPredator; } else { _calmPredator = null; }
-        }
-        else { _calmPredator = null; }
-
-        //------------------------------------------------------------
-        // if hunting, choose the prey that was found
-        //------------------------------------------------------------
-        _chosenPrey = null;
-
-        if (( _brain.getState() == BRAIN_STATE_LOOKING_FOR_PREY )
-        ||  ( _brain.getState() == BRAIN_STATE_PURSUING_PREY ))
-        {
-            let preyIsValid = ( preyWasFound === true ) && ( thePrey != null );
-
-            _brain.setFoundPrey( preyIsValid );
-
-            // In C12, a chosen meat target replaces the live-prey chase now;
-            // do not keep pursuing a target the chooser deliberately rejected.
-            if ( PREDATOR_TARGET_SELECTION_ENABLED && !preyIsValid
-            &&   foodBitWasFound && ( theFoodBit != null ) && ( theFoodBit.getType() === 2 ))
-            {
-                _brain.returnToSearchingForPrey();
-            }
-
-            if ( preyIsValid )
-            {
-                _chosenPrey = thePrey;
-            }
-        }
-
-        //------------------------------------------------------------
-        // Keep a meat target available while a predator pursues prey. If it
-        // reaches the meat, decide() gives the meal priority for that step.
-        //------------------------------------------------------------
-        _chosenFoodBit = null;
-        _chosenFoodBitIndex = NULL_INDEX;
-
-        if ((( _brain.getState() == BRAIN_STATE_LOOKING_FOR_PREY )
-        ||   ( _brain.getState() == BRAIN_STATE_PURSUING_PREY ))
-        &&  ( foodBitWasFound )
-        &&  ( theFoodBit != null )
-        &&  ( theFoodBit.getType() === 2 ))
-        {
-            _chosenFoodBit = theFoodBit;
-            _chosenFoodBitIndex = _chosenFoodBit.getIndex();
-        }
-
-        if (( _brain.getState() === BRAIN_STATE_PURSUING_PREY ) && ( _chosenFoodBit != null ))
-        {
-            if ( _chosenFoodBitIndex !== _lastPursuitMeatIndex ) simCounters.meatTargetsWhilePursuing ++;
-            _lastPursuitMeatIndex = _chosenFoodBitIndex;
-        }
-        else { _lastPursuitMeatIndex = NULL_INDEX; }
-
-        if (( _brain.getState() == BRAIN_STATE_LOOKING_FOR_FOOD )
-        ||  ( _brain.getState() == BRAIN_STATE_PURSUING_FOOD ))
-        {
-            _brain.setFoundFoodBit( foodBitWasFound );
-
-            if ( foodBitWasFound )
-            {
-                //console.log( "foodBitWasFound" );
-                assert( theFoodBit != null, "swimbot.js: setEnvironmentalStimuli: theFoodBit != null" );
-                _chosenFoodBit = theFoodBit;
-                _chosenFoodBitIndex = _chosenFoodBit.getIndex();
-            }
-        }
-
-        // nothing to eat anymore - cancel any pending bite
-        if ( _chosenFoodBit == null )
-        {
-            _tryingToEat = false;
-        }
-
-        //------------------------------------------------------------------------------------------------
-        // if looking for mate, scan the nearby swimbots and choose the most attractive...
-        //------------------------------------------------------------------------------------------------
-        if ( _brain.getState() === BRAIN_STATE_LOOKING_FOR_MATE )
-        {
-            //console.log( "horny" );
-
-            let mostAttractiveFound = null;
-            let atLeastOneBabeIsVisible = false;
-            let highestBabeFactor = -100.0;
-
-            // the perception threads may already have chosen (null = nobody)
-            if ( mateChoice !== undefined )
-            {
-                mostAttractiveFound     = mateChoice;
-                atLeastOneBabeIsVisible = ( mateChoice !== null );
-            }
-            else for (let o=0; o<numNearbySwimbots; o++)
-            {
-                let babeFactor = nearbySwimbotArray[o].getAttractiveness( this );
-
-                if (( babeFactor > highestBabeFactor )
-                &&  ( babeFactor > TOO_UGLY_TO_CHOOSE )
-                &&  ( nearbySwimbotArray[o].getAge() > YOUNG_AGE_DURATION )
-                &&  ( nearbySwimbotArray[o].getEnergy() > STARVING )
-                &&  nearbySwimbotArray[o].sameDiet( this )
-                &&  nearbySwimbotArray[o].acceptsMate( this ))
-                {
-                    //console.log( "ok" );
-                    highestBabeFactor = babeFactor;
-                    mostAttractiveFound = nearbySwimbotArray[o];
-                    assert( mostAttractiveFound != null, "mostAttractiveFound != null" );
-                    atLeastOneBabeIsVisible = true;
-                }
-            }
-
-            if ( atLeastOneBabeIsVisible )
-            {
-                _chosenMate = mostAttractiveFound;
-                assert( _chosenMate != null, "_chosenMate != null" );
-
-                _chosenMateIndex = mostAttractiveFound.getIndex();
-                assert( _chosenMateIndex != NULL_INDEX, "_chosenMateIndex != NULL_INDEX" );
-
-                _brain.setFoundSwimbot( true );
-            }
-            else
-            {
-                _brain.setFoundSwimbot( false );
-            }
-        }
-        else if ( _brain.getState() == BRAIN_STATE_PURSUING_MATE )
-        {
-            //console.log( "pursuing mate" );
-
-            let ICanStillSeeYou = false;
-
-            for (let o=0; o<numNearbySwimbots; o++)
-            {
-                let index = ( seenIndices !== null ) ? seenIndices[ seenBase + o ] : nearbySwimbotArray[o].getIndex();
-                // (a mate that turned predator / herbivore meanwhile is given up)
-                if (( index === _chosenMateIndex ) && nearbySwimbotArray[o].sameDiet( this ))
-                {
-                    ICanStillSeeYou = true;
-                    _chosenMate = nearbySwimbotArray[o];
-                }
-            }
-
-            if ( ICanStillSeeYou )
-            {
-                /*
-                assert( chosenMate != NULL );
-                if ( chosenMate->getEnergy() < STARVING )
-                {
-                    state.brain.setFoundSwimbot( false );
-                    chosenMate = NULL;
-                    state.chosenMateIndex = -1;
-                }
-                */
-            }
-            else
-            {
-                //console.log( "can't see you anymore" );
-                _brain.setFoundSwimbot( false );
-                _chosenMate = null;
-                _chosenMateIndex = NULL_INDEX;
-            }
-        }
-
-    	//--------------------------------------------
-    	// reset this to false for next time around
-    	//--------------------------------------------
-    	_readyforSensoryInputToBrain = false;
-
-    } //setEnvironmentalStimuli
+ //setEnvironmentalStimuli
 
 
 
@@ -2901,9 +2105,9 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	//-----------------------------------------------------------------
 	this.abortMating = function()
 	{
-	    _tryingToMate    = false;
-	    _chosenMate      = null;
-	    _chosenMateIndex = NULL_INDEX;
+	    _M[ _m + SS.M_TRY_MATE ]    = 0;
+	    _M[ _m + SS.M_MATE ] = NULL_INDEX;
+	    _M[ _m + SS.M_MATE ] = NULL_INDEX;
 	    _brain.setFoundSwimbot( false );
 	}
 
@@ -3155,9 +2359,9 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
     {
         let amount = ZERO;
 
-        for (let p=1; p<_numParts; p++)
+        for (let p=1; p<_B[ _b + SS.B_NUM_PARTS ]; p++)
         {
-            for (let pp=1; pp<_numParts; pp++)
+            for (let pp=1; pp<_B[ _b + SS.B_NUM_PARTS ]; pp++)
             {
                 if ( pp != p )
                 {
@@ -3190,7 +2394,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
         //-------------------------------------------------------------------
         // normalized vectors for each part axis
         //-------------------------------------------------------------------
-        for (let p=1; p<_numParts; p++)
+        for (let p=1; p<_B[ _b + SS.B_NUM_PARTS ]; p++)
         {
             _unitAxisX[p] = _pd[ p * PS + A_X ] / _pLength[p];
             _unitAxisY[p] = _pd[ p * PS + A_Y ] / _pLength[p];
@@ -3200,16 +2404,16 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
         //---------------------------------------------------------------------------
         // finding the dot products between each pair of these vectors...
         //---------------------------------------------------------------------------
-        if ( _numParts < 3 )
+        if ( _B[ _b + SS.B_NUM_PARTS ] < 3 )
         {
             amount = ONE;
         }
         else
         {
             let numTests = 0;
-            for (let p=1; p<_numParts; p++)
+            for (let p=1; p<_B[ _b + SS.B_NUM_PARTS ]; p++)
             {
-                for (let pp=p+1; pp<_numParts; pp++)
+                for (let pp=p+1; pp<_B[ _b + SS.B_NUM_PARTS ]; pp++)
                 {
                     numTests ++;
                     assert ( p != pp, "Swimbot:getCurrentBodyStraightness: p != pp" );
@@ -3224,7 +2428,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
         // let's favor swimbots with more parts....
         //-----------------------------------------------
         amount *= 0.7;
-        amount += ( _numParts / MAX_PARTS ) * 0.3;
+        amount += ( _B[ _b + SS.B_NUM_PARTS ] / MAX_PARTS ) * 0.3;
 
         if ( amount > ONE )
         {
@@ -3242,7 +2446,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
     {
         let amount = ZERO;
 
-        for (let p=1; p<_numParts; p++)
+        for (let p=1; p<_B[ _b + SS.B_NUM_PARTS ]; p++)
         {
             amount += Math.sqrt( _pd[ p * PS + V_X ] * _pd[ p * PS + V_X ] + _pd[ p * PS + V_Y ] * _pd[ p * PS + V_Y ] );
         }
@@ -3344,18 +2548,18 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
         _centerOfMass.clear();
         _vectorUtility.clear();
 
-        _chosenFoodBit      = null;
-        _chosenMate         = null;
+        _M[ _m + SS.M_FOOD ] = NULL_INDEX;
+        _M[ _m + SS.M_MATE ] = NULL_INDEX;
         _B[ _b + SS.B_AGE ] 	  		    = 0;
         _numOffspring       = 0;
         _numFoodBitsEaten   = 0;
         _index              = NULL_INDEX;
-        _chosenMateIndex    = NULL_INDEX;
-        _chosenFoodBitIndex = NULL_INDEX;
-        _lastPursuitMeatIndex = NULL_INDEX;
+        _M[ _m + SS.M_MATE ]    = NULL_INDEX;
+        _M[ _m + SS.M_FOOD ] = NULL_INDEX;
+        _M[ _m + SS.M_LAST_MEAT ] = NULL_INDEX;
         _live[ _liveAt ] = 0;
-        _tryingToMate       = false;
-        _tryingToEat        = false;
+        _M[ _m + SS.M_TRY_MATE ]       = 0;
+        _M[ _m + SS.M_TRY_EAT ]        = 0;
         _B[ _b + SS.B_GROWTH ]        = ZERO;
         _torque             = ZERO;
         _B[ _b + SS.B_ANGLE ]			    = ZERO;
@@ -3366,16 +2570,16 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
         _B[ _b + SS.B_EFFICIENCY ]   = ZERO;
         _B[ _b + SS.B_SELECT_RADIUS ]       = ZERO;
         _B[ _b + SS.B_LAST_ENERGY ] = ZERO;
-        _readyforSensoryInputToBrain = false;
+        _M[ _m + SS.M_READY ] = 0;
 
-        _chosenPrey         = null;
-        _nearestPredator    = null;
-        _tryingToHunt       = false;
+        _M[ _m + SS.M_PREY ] = NULL_INDEX;
+        _M[ _m + SS.M_NEAR_PRED ] = NULL_INDEX;
+        _M[ _m + SS.M_TRY_HUNT ]       = 0;
         _numPreyEaten       = 0;
-        _scanRadius         = SWIMBOT_VIEW_RADIUS;
-        _scanCooldown       = 0;
-        _eternal            = false;
-        _huntCooldown       = 0;
+        _M[ _m + SS.M_SCAN_RADIUS ]         = SWIMBOT_VIEW_RADIUS;
+        _M[ _m + SS.M_SCAN_CD ]       = 0;
+        _B[ _b + SS.B_ETERNAL ] = 0;
+        _M[ _m + SS.M_HUNT_CD ]       = 0;
     }
 
 
@@ -3420,9 +2624,9 @@ console.log( "contributeToOffspring: _childEnergyRatio = " + _childEnergyRatio )
 	    _numOffspring ++;
 
         _B[ _b + SS.B_TIMER_DELTA ]         = ZERO;
-        _tryingToMate       = false;
-        _chosenMate         = null;
-        _chosenMateIndex    = NULL_INDEX
+        _M[ _m + SS.M_TRY_MATE ]       = 0;
+        _M[ _m + SS.M_MATE ] = NULL_INDEX;
+        _M[ _m + SS.M_MATE ]    = NULL_INDEX
         _brain.setFoundSwimbot( false );
 
 	    return energyToContribute;
@@ -3450,9 +2654,9 @@ console.log( "contributeToOffspring: _childEnergyRatio = " + _childEnergyRatio )
         let energyToContribute = energyBeforeContribution - _B[ _b + SS.B_ENERGY ];
 
         //cancel out all mate-related data so it doesn't get in the way next time..
-        _tryingToMate = false;
-        _chosenMate = null;
-        _chosenMateIndex = NULL_INDEX
+        _M[ _m + SS.M_TRY_MATE ] = 0;
+        _M[ _m + SS.M_MATE ] = NULL_INDEX;
+        _M[ _m + SS.M_MATE ] = NULL_INDEX
         _brain.setFoundSwimbot( false );
 
         //printf( "swimbot %d just gave %f to %d, leaving it with %f\n", index, energyToContribute, energy );
@@ -3491,7 +2695,7 @@ console.log( "contributeToOffspring: _childEnergyRatio = " + _childEnergyRatio )
 	        return;
 	    }
 
-	    for (let p=1; p<_numParts; p++)
+	    for (let p=1; p<_B[ _b + SS.B_NUM_PARTS ]; p++)
 	    {
 	        const parent = _pParent[p];
 	        let ax, ay;
