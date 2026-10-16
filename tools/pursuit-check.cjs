@@ -86,18 +86,29 @@ for ( let step = 0; step < STEPS; step++ )
             }
             if ( finishedBy )
             {
-                e.end = finishedBy; e.steps = now - e.start; ended.push( e ); open[s] = null;
+                e.end = finishedBy; e.steps = now - e.start; e.x1 = B[ k + sb.B_POS_X ]; e.y1 = B[ k + sb.B_POS_Y ]; ended.push( e ); open[s] = null;
             }
             else
             {
                 const d = Math.hypot( st.foodX[ e.target ] - mx, st.foodY[ e.target ] - my );
                 if ( d < e.closest ) e.closest = d;
+                // steering: angle between the body's motion and the way to the target
+                const vx = B[ k + sb.B_VEL_X ], vy = B[ k + sb.B_VEL_Y ], speed = Math.hypot( vx, vy );
+                if ( speed > 0.02 )
+                {
+                    const tx = st.foodX[ e.target ] - B[ k + sb.B_POS_X ], ty = st.foodY[ e.target ] - B[ k + sb.B_POS_Y ], tl = Math.hypot( tx, ty );
+                    if ( tl > 1 ) { e.angleSum += Math.acos( Math.max( -1, Math.min( 1, ( vx * tx + vy * ty ) / ( speed * tl )))) * 180 / Math.PI; e.angleN ++; }
+                }
+                e.pathLength += speed;
+                if ( d > e.lastD ) { e.growing ++; } e.lastD = d;
             }
         }
         if ( !open[s] && state === PURSUING_FOOD && target >= 0 )
         {
             const d = Math.hypot( st.foodX[ target ] - mx, st.foodY[ target ] - my );
-            open[s] = { s, start: now, target, startDistance: d, closest: d, meals: meals[s], mass: b.getPhenotypeMass(), parts: b.getNumParts() };
+            open[s] = { s, start: now, target, startDistance: d, closest: d, meals: meals[s], mass: b.getPhenotypeMass(), parts: b.getNumParts(),
+                        angleSum: 0, angleN: 0, pathLength: 0, growing: 0, lastD: d,
+                        x0: B[ k + sb.B_POS_X ], y0: B[ k + sb.B_POS_Y ], tx0: st.foodX[ target ], ty0: st.foodY[ target ] };
         }
 
         // every 10 steps: does the mouth touch any plant? (while not chasing it)
@@ -137,6 +148,28 @@ const chasers = claimants.reduce( ( s, c ) => s + c, 0 );
 console.log( "CROWD targeted plants sampled", claimants.length, "chasers per plant p50/p90/max", qq( claimants, 0.5 ), qq( claimants, 0.9 ), Math.max( ...claimants ),
              "share of chasers on a plant with >=3 chasers", ( 100 * claimants.filter( c => c >= 3 ).reduce( ( s, c ) => s + c, 0 ) / Math.max( 1, chasers )).toFixed( 0 ) + "%" );
 console.log( "MEAL ENERGY n", mealEnergy.length, "p10/p50/p90", qq( mealEnergy, 0.1 ), qq( mealEnergy, 0.5 ), qq( mealEnergy, 0.9 ), "mean", ( mealEnergy.reduce( ( s, x ) => s + x, 0 ) / Math.max( 1, mealEnergy.length )).toFixed( 1 ));
+// steering by number of parts: mean angle to the target, share of steps moving away, success
+const byParts = {};
+for ( const e of ended )
+{
+    if ( e.angleN < 5 ) continue;
+    const key = e.parts <= 4 ? "2-4" : e.parts <= 6 ? "5-6" : e.parts <= 9 ? "7-9" : e.parts <= 12 ? "10-12" : "13-16";
+    const g = byParts[ key ] || ( byParts[ key ] = { episodes: 0, angle: 0, away: 0, steps: 0, ate: 0 } );
+    g.episodes ++; g.angle += e.angleSum / e.angleN; g.away += e.growing; g.steps += Math.max( 1, e.angleN ); if ( e.end === "ate" ) g.ate ++;
+}
+// net displacement over long chases (>= 100 steps) against the first direction to the target
+const longOnes = ended.filter( e => e.steps >= 100 && e.x1 !== undefined );
+const cosines = longOnes.map( e => { const dx = e.x1 - e.x0, dy = e.y1 - e.y0, tx = e.tx0 - e.x0, ty = e.ty0 - e.y0; const a = Math.hypot( dx, dy ), b = Math.hypot( tx, ty ); return ( a > 1 && b > 1 ) ? ( dx * tx + dy * ty ) / ( a * b ) : NaN; }).filter( Number.isFinite );
+const moved = longOnes.map( e => Math.hypot( e.x1 - e.x0, e.y1 - e.y0 ) / Math.max( 1, e.steps ));
+console.log( "NET long chases", longOnes.length, "mean cos(displacement, target dir)", ( cosines.reduce( ( s, x ) => s + x, 0 ) / Math.max( 1, cosines.length )).toFixed( 2 ),
+             "share heading roughly toward (cos>0.7)", ( 100 * cosines.filter( c => c > 0.7 ).length / Math.max( 1, cosines.length )).toFixed( 0 ) + "%",
+             "net speed per step", ( moved.reduce( ( s, x ) => s + x, 0 ) / Math.max( 1, moved.length )).toFixed( 3 ) );
+const groupsNet = {};
+longOnes.forEach( e => { const dx = e.x1 - e.x0, dy = e.y1 - e.y0, tx = e.tx0 - e.x0, ty = e.ty0 - e.y0; const a = Math.hypot( dx, dy ), b = Math.hypot( tx, ty ); if ( a <= 1 || b <= 1 ) return;
+    const key = e.parts <= 4 ? "2-4" : e.parts <= 6 ? "5-6" : e.parts <= 9 ? "7-9" : e.parts <= 12 ? "10-12" : "13-16";
+    const g = groupsNet[ key ] || ( groupsNet[ key ] = { n: 0, cos: 0, toward: 0, speed: 0 } ); const c = ( dx * tx + dy * ty ) / ( a * b ); g.n ++; g.cos += c; if ( c > 0.7 ) g.toward ++; g.speed += a / e.steps; });
+for ( const [ k, g ] of Object.entries( groupsNet ).sort()) console.log( "NET parts", k.padEnd( 6 ), "chases", g.n, "mean cos", ( g.cos / g.n ).toFixed( 2 ), "toward", ( 100 * g.toward / g.n ).toFixed( 0 ) + "%", "net speed", ( g.speed / g.n ).toFixed( 3 ));
+for ( const [ k, g ] of Object.entries( byParts )) console.log( "STEERING parts", k.padEnd( 6 ), "episodes", g.episodes, "mean angle to target", ( g.angle / g.episodes ).toFixed( 0 ) + "°", "steps moving away", ( 100 * g.away / g.steps ).toFixed( 0 ) + "%", "ate", ( 100 * g.ate / g.episodes ).toFixed( 1 ) + "%" );
 console.log( JSON.stringify({
     seed: SEED, measuredSteps: STEPS, afterWarmSteps: WARM,
     episodes: ended.length, endings: byEnd,

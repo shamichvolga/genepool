@@ -140,12 +140,12 @@ function updateBodyTemperature( st: SharedState, s: number ): void
 // little helpers on the rows
 //------------------------------------------------------------------------------
 const _touchBuffer = new Int32Array( 4096 );
-const EAT_RADIUS = SWIMBOT_MOUTH_LENGTH + FOOD_BIT_GRAB_RADIUS;
 
 // a food bit this swimbot can eat, touching its mouth (-1: none)
 function edibleFoodAtMouth( st: SharedState, s: number, mouthX: number, mouthY: number ): number
 {
     const meatEater = isPredator( st, s );
+    const EAT_RADIUS = SWIMBOT_MOUTH_LENGTH + st.mind[ s * SS.MIND_STRIDE + SS.M_GRAB_RADIUS ];
     const n = st.foodGrid.collect( mouthX, mouthY, EAT_RADIUS, _touchBuffer );
     for (let i = 0; i < n; i++)
     {
@@ -459,7 +459,7 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
         if ( foodAlive )
         {
             const xx = st.foodX[f] - mouthX, yy = st.foodY[f] - mouthY;
-            if ( Math.sqrt( xx * xx + yy * yy ) < SWIMBOT_MOUTH_LENGTH + FOOD_BIT_GRAB_RADIUS ) { M[ m + SS.M_TRY_EAT ] = 1; }
+            if ( Math.sqrt( xx * xx + yy * yy ) < SWIMBOT_MOUTH_LENGTH + M[ m + SS.M_GRAB_RADIUS ] ) { M[ m + SS.M_TRY_EAT ] = 1; }
         }
     }
     else if ( state === BRAIN_STATE_PURSUING_MATE )
@@ -474,7 +474,7 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
     {
         // meat it touches while pursuing prey is eaten first
         const meatX = f >= 0 ? st.foodX[f] - mouthX : 0, meatY = f >= 0 ? st.foodY[f] - mouthY : 0;
-        if ( foodIsMeatAndAlive( st, f ) && ( Math.sqrt( meatX * meatX + meatY * meatY ) < SWIMBOT_MOUTH_LENGTH + FOOD_BIT_GRAB_RADIUS ))
+        if ( foodIsMeatAndAlive( st, f ) && ( Math.sqrt( meatX * meatX + meatY * meatY ) < SWIMBOT_MOUTH_LENGTH + M[ m + SS.M_GRAB_RADIUS ] ))
         {
             M[ m + SS.M_TRY_EAT ] = 1;
         }
@@ -500,7 +500,7 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
         if ( foodIsMeatAndAlive( st, f ))
         {
             const xx = st.foodX[f] - mouthX, yy = st.foodY[f] - mouthY;
-            if ( Math.sqrt( xx * xx + yy * yy ) < SWIMBOT_MOUTH_LENGTH + FOOD_BIT_GRAB_RADIUS ) { M[ m + SS.M_TRY_EAT ] = 1; }
+            if ( Math.sqrt( xx * xx + yy * yy ) < SWIMBOT_MOUTH_LENGTH + M[ m + SS.M_GRAB_RADIUS ] ) { M[ m + SS.M_TRY_EAT ] = 1; }
         }
     }
 
@@ -649,11 +649,11 @@ export function prepareLook( st: SharedState, s: number ): void
         }
         else if ( hunting && ( state === BRAIN_STATE_LOOKING_FOR_PREY ))
         {
-            M[ m + SS.M_SCAN_RADIUS ] = Math.min( M[ m + SS.M_SCAN_RADIUS ] + PREY_SCAN_RADIUS_GROWTH, SWIMBOT_VIEW_RADIUS * PREY_SCAN_RADIUS_MAX_SCALE );
+            M[ m + SS.M_SCAN_RADIUS ] = Math.min( M[ m + SS.M_SCAN_RADIUS ] + PREY_SCAN_RADIUS_GROWTH, M[ m + SS.M_VIEW_RADIUS ] * PREY_SCAN_RADIUS_MAX_SCALE );
         }
         else if ( !hunting )
         {
-            M[ m + SS.M_SCAN_RADIUS ] = Math.max( M[ m + SS.M_SCAN_RADIUS ] - PREY_SCAN_RADIUS_GROWTH, SWIMBOT_VIEW_RADIUS );
+            M[ m + SS.M_SCAN_RADIUS ] = Math.max( M[ m + SS.M_SCAN_RADIUS ] - PREY_SCAN_RADIUS_GROWTH, M[ m + SS.M_VIEW_RADIUS ] );
         }
         st.sensing[s] = 1;
     }

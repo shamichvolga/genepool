@@ -17,7 +17,7 @@ import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
 import { ATTRACTION_SIMILAR_COLOR, STARVING, SWIMBOT_MOUTH_LENGTH, SWIMBOT_VIEW_RADIUS } from "./SwimbotTypes";
 import { FOOD_BIT_GRAB_RADIUS } from "./FoodBit";
 import { JUVENILE_PREDATION_ENABLED, CROWD_AWARE_FOOD_CHOICE_ENABLED, FOOD_TARGET_PERSISTENCE_ENABLED, FOOD_SWITCH_RATIO_MIN, FOOD_KEEP_RADIUS_SCALE, SIZE_ASSORTATIVE_MATING_ENABLED } from "./Parameters";
-import { MIND_STRIDE, M_DEFERENCE, M_FOOD, M_PERSIST, M_MATURE_AGE, M_SIZE_PICKY, M_MAX_ENERGY } from "./MindLayout";
+import { MIND_STRIDE, M_VIEW_RADIUS, M_GRAB_RADIUS, M_DEFERENCE, M_FOOD, M_PERSIST, M_MATURE_AGE, M_SIZE_PICKY, M_MAX_ENERGY } from "./MindLayout";
 import { preyTargetScore } from "./EcologyGenes";
 import {
     BACKGROUND_SIZE, B_VEL_X, B_VEL_Y, BOT_STRIDE, MAX_SEEN, PARAM_ENV_ACTIVE, PARAM_ENV_FIELDS, PARAM_FOOD_TYPES, PARAM_OBSTACLE_X1, PARAM_OBSTACLE_X2,
@@ -142,7 +142,7 @@ function backgroundAt( st: SharedState, x: number, y: number ): number
 //------------------------------------------------------------------------------
 export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): void
 {
-    const viewRadius            = SWIMBOT_VIEW_RADIUS;
+    const viewRadius            = st.mind[ s * MIND_STRIDE + M_VIEW_RADIUS ];   // (grows with mass when SIZE_SCALED_VISION_ENABLED)
     const viewRadiusSquared     = viewRadius * viewRadius;
     const preyViewRadius        = st.scanRadius[s];
     const predatorLevel         = st.predator[s];
@@ -250,7 +250,7 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
     let baitDistance = 0, baitReward = 0;
     // Search far enough from the body center to include food touching the
     // forward mouth, then apply the normal view-radius test from the mouth.
-    const foodSearchRadius = viewRadius + SWIMBOT_MOUTH_LENGTH + FOOD_BIT_GRAB_RADIUS;
+    const foodSearchRadius = viewRadius + SWIMBOT_MOUTH_LENGTH + st.mind[ s * MIND_STRIDE + M_GRAB_RADIUS ];
     const numFoodInCells = st.foodGrid.collect( myX, myY, foodSearchRadius, sc.foodGridResult );
 
     for (let k = 0; k < numFoodInCells; k++)

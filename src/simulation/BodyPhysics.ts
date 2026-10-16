@@ -38,12 +38,13 @@ export function bodyMotionFactors( mass: number, meanWidth: number ): BodyMotion
     const massScale = Math.pow( relativeMass, -1 / 3 );
     return {
         enabled: true,
-        acceleration: clamp( massScale * Math.sqrt( relativeBreadth ), 0.4, 2.2 ),
+        // (softer than mass^-1/3 and mass^1/3: those left big bodies only the costs)
+        acceleration: clamp( Math.pow( relativeMass, -1 / 6 ) * Math.sqrt( relativeBreadth ), 0.4, 2.2 ),
         // (drag: by the breadth only - a narrow big body cruises cheaply, a
         //  broad one is a slow "tank"; it was also x mass^-1/3, which left big
         //  bodies only the costs)
         drag: clamp( relativeBreadth * relativeBreadth, 0.2, 4 ),
-        strokeCost: clamp( Math.pow( relativeMass, 1 / 3 ) * Math.sqrt( relativeBreadth ), 0.4, 2.2 ),
+        strokeCost: clamp( Math.pow( relativeMass, 0.15 ) * Math.sqrt( relativeBreadth ), 0.4, 2.2 ),
     };
 }
 

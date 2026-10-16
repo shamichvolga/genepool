@@ -262,7 +262,7 @@ export const PLANT_STAGES_ENABLED           = false;  // sprout / mature / old p
 export const PLANT_SPROUT_AGE               = 1500;
 export const PLANT_OLD_AGE                  = 6000;
 export const PLANT_ROT_AGE                  = 12000;
-export const PLANT_STAGE_ENERGY             = [ 0.35, 1.0, 1.4 ];
+export const PLANT_STAGE_ENERGY             = [ 0.35, 1.0, 1.6 ];
 export const INHERITED_INVESTMENT_ENABLED   = true;   // gene: share of energy given to a child (0.15..0.85) instead of the pool setting
 export const SIZE_MATURITY_ENABLED          = false;  // grown up (may mate) at 1000 x clamp( mass / 410, 0.5, 4 ) steps
 export const SIZE_ASSORTATIVE_MATING_ENABLED = false; // mates chosen by color AND size (gene: how much size counts)
@@ -277,3 +277,11 @@ export const MEAT_PIECE_ENERGY              = 25;     // a body that is not eate
 export const MEAT_PIECE_SCATTER             = 40;     // ... lying this far around the place of death
 export const YOUNG_CANNIBALISM_ENABLED      = false;  // a hungry herbivore may eat a young one of its kind with fewer body parts
 export const CLASSIC_SEED_RAIN_FRACTION     = 0.1;    // classic pools: share of new food landing anywhere (not next to other food)
+
+//------------------------------------------------------------------------------
+// Income of a big body (commission round 2, bundle B1; off by default)
+//------------------------------------------------------------------------------
+export const SIZE_SCALED_VISION_ENABLED     = false;  // view radius = 300 x (mass / 410)^0.2  (about 240 .. 380)
+export const SIZE_SCALED_GRAB_ENABLED       = false;  // food grab radius = 20 x (mass / 410)^0.25 (about 15 .. 25)
+export const GAPE_SUCCESS_FLOOR             = 0.3;    // PREDATOR_GAPE_CURVE: success never below 0.3 x the normal
+export const GAPE_COOLDOWN_SLOPE            = 0.5;    // PREDATOR_GAPE_CURVE: cooldown x ( 1 + 0.5 x prey/predator mass )
