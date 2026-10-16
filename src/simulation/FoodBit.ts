@@ -1,6 +1,7 @@
 import { simClock, gpRandom } from "./Globals";
 import { NULL_INDEX, ONE, ONE_HALF, PI2, ZERO } from "./MathConstants";
-import { PLANT_OLD_AGE, PLANT_SPROUT_AGE, PLANT_STAGES_ENABLED, SPAWN_FOOD_RANDOMLY_IN_POOL } from "./Parameters";
+import { PLANT_EVOLUTION_ENABLED, PLANT_STAGES_ENABLED, SPAWN_FOOD_RANDOMLY_IN_POOL } from "./Parameters";
+import { plantGrowthOf, plantSpreadOf, plantSproutGrowth, plantStage, randomizePlantGenes } from "./PlantGenes";
 import { POOL_BOTTOM, POOL_HEIGHT, POOL_LEFT, POOL_RIGHT, POOL_TOP, POOL_WIDTH } from "./Pool";
 import { assert } from "./Utility";
 import { SplitVector2D, Vector2D } from "./Vector2D";
@@ -74,6 +75,7 @@ export function FoodBit()
         _position.x = POOL_LEFT + gpRandom() * POOL_WIDTH;
         _position.y = POOL_TOP  + gpRandom() * POOL_HEIGHT;
         _ft[ _fi ]       = 0;
+        if ( _index !== NULL_INDEX ) { randomizePlantGenes( _index ); }
         markLive();
     }
 
@@ -95,9 +97,20 @@ export function FoodBit()
 
 
     //------------------------------------------------
+	// PLANT_EVOLUTION_ENABLED: the genes show a little - fast plants are
+	// yellower, slow ones darker green; far-seeding ones bluer
+	this.tintByGenes = function()
+	{
+	    if ( !PLANT_EVOLUTION_ENABLED || ( _index === NULL_INDEX )) return;
+	    const g = plantGrowthOf( _index ), s = plantSpreadOf( _index );
+	    _red   = 0.15 + 0.45 * g;
+	    _green = 0.55 + 0.30 * g;
+	    _blue  = 0.10 + 0.45 * s;
+	}
+
 	this.setColorAccordingToType = function()
 	{
-       if ( _ft[ _fi ] === 0 ) { _red = 0.3; _green = 0.8; _blue = 0.2; }
+       if ( _ft[ _fi ] === 0 ) { _red = 0.3; _green = 0.8; _blue = 0.2; this.tintByGenes(); }
        if ( _ft[ _fi ] === 1 ) { _red = 0.3; _green = 0.5; _blue = 0.9; }
        if ( _ft[ _fi ] === 2 ) { _red = 0.9; _green = 0.1; _blue = 0.1; }
 	   }
@@ -276,15 +289,20 @@ export function FoodBit()
 	const stage = function()
 	{
 	    if ( !PLANT_STAGES_ENABLED || ( _ft[ _fi ] === 2 )) return 1;
-	    const age = simClock.step - _fb[ _fi ];
-	    return ( age < PLANT_SPROUT_AGE ) ? 0 : ( age > PLANT_OLD_AGE ) ? 2 : 1;
+	    return plantStage( _fi, simClock.step - _fb[ _fi ] );
 	}
 	const STAGE_SIZE = [ 0.7, 1.0, 1.6 ];
+	// (a sprout grows from half size to full, when plants have genes)
+	const stageSize = function( st )
+	{
+	    if (( st !== 0 ) || !PLANT_EVOLUTION_ENABLED ) return STAGE_SIZE[ st ];
+	    return 0.45 + 0.55 * plantSproutGrowth( _fi, simClock.step - _fb[ _fi ] );
+	}
 
 	this.writeCapsule = function( capsules, viewScale )
 	{
 	    const st = stage();
-	    let radius = ( FOOD_BIT_SIZE + viewScale * FOOD_BIT_SIZE_VIEW_SCALE * FOOD_BIT_SIZE_VIEW_SCALE ) * STAGE_SIZE[ st ];
+	    let radius = ( FOOD_BIT_SIZE + viewScale * FOOD_BIT_SIZE_VIEW_SCALE * FOOD_BIT_SIZE_VIEW_SCALE ) * stageSize( st );
 	    if ( st !== 2 )
 	    {
 	        capsules.add( _position.x, _position.y, _position.x, _position.y, radius, _red, _green, _blue, opacity() );
@@ -308,7 +326,7 @@ export function FoodBit()
         + Math.floor( _green * 255 * ( st === 2 ? 0.8 : 1 )) + ", "
         + Math.floor( _blue  * 255 * ( st === 2 ? 0.8 : 1 )) + ", "
         + opacity() + ")";
-	    let radius = ( FOOD_BIT_SIZE + vewScale * FOOD_BIT_SIZE_VIEW_SCALE * FOOD_BIT_SIZE_VIEW_SCALE ) * STAGE_SIZE[ st ];
+	    let radius = ( FOOD_BIT_SIZE + vewScale * FOOD_BIT_SIZE_VIEW_SCALE * FOOD_BIT_SIZE_VIEW_SCALE ) * stageSize( st );
 
 	    if ( st === 2 )
 	    {

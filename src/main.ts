@@ -2,6 +2,7 @@
 // Entry point: loads every module, exposes them to the inline onclick="..."
 // handlers in index.html, prepares the UI and starts the simulation.
 //------------------------------------------------------------------------------
+import { setupDevResume } from "./devResume";
 import "./setupCanvas";
 
 import * as Brain           from "./simulation/Brain";
@@ -220,6 +221,8 @@ function startGenePool()
     ui.showWorldSize();
     ui.setupPetriPanel();
 }
+
+setupDevResume();
 
 if ( document.readyState === "complete" )
 {

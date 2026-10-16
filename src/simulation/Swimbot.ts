@@ -1,3 +1,4 @@
+import { plantOldEnergy, plantSproutGrowth, plantStage } from "./PlantGenes";
 import { geneAverage, GENES_RUDDER, GENES_DEFERENCE, GENES_PERSISTENCE, GENES_INVESTMENT, GENES_SIZE_PICKINESS, setTrait, GENES_PREDATOR, GENES_SELF_FEED_WHICH, GENES_SELF_FEED_AMOUNT } from "./EcologyGenes";
 import { physicsPartA, physicsPartB } from "./PhysicsKernel";
 import { applyWaterDrag, bodyMotionFactors } from "./BodyPhysics";
@@ -6,7 +7,7 @@ import * as SS from "./SharedState";
 import { decideStep, neuralThink, takeInLook } from "./DecisionKernel";
 import { BRAIN_SIZE, think, sigmoid, NUM_INPUTS, NUM_HIDDEN, NUM_OUTPUTS, DRIVE_OUTPUTS, THINK_PERIOD, DRIVE_HYSTERESIS, EFFORT_MIN, EFFORT_RANGE, IN_BIAS, IN_HUNGER, IN_ENERGY, IN_AGE, IN_FIT, IN_TREND, IN_FOOD, IN_MATE, IN_THREAT, IN_PREY, IN_CROWD, IN_PREDATOR, OUT_FOOD, OUT_MATE, OUT_FLEE, OUT_HUNT, OUT_CLIMATE, OUT_SOCIAL, OUT_EFFORT,
          IN_FOOD_SIDE, IN_FOOD_AHEAD, IN_NEAR_SIDE, IN_NEAR_AHEAD, IN_THREAT_SIDE, IN_THREAT_AHEAD, IN_KIN, IN_SEASON, IN_PREDATOR_NEAR, IN_PREY_DISTANCE, IN_PREY_REWARD, IN_PREY_SUCCESS, IN_PREY_CHASE, IN_BAIT_PRESENT, IN_BAIT_DISTANCE, IN_BAIT_REWARD, OUT_STEER, OUT_SELF_EAT, OUT_PREY_VALUE, OUT_PREY_TRAVEL, OUT_PREY_BAIT, STEER_MAX_DEGREES } from "./NeuralBrain";
-import { RUDDER_MAX_TURN, SIZE_SCALED_VISION_ENABLED, SIZE_SCALED_GRAB_ENABLED, GAPE_SUCCESS_FLOOR, GAPE_COOLDOWN_SLOPE, MASS_SCALED_STOMACH_ENABLED, SIZE_MATURITY_ENABLED, INHERITED_INVESTMENT_ENABLED, PLANT_STAGES_ENABLED, PLANT_SPROUT_AGE, PLANT_OLD_AGE, PLANT_STAGE_ENERGY, PREDATOR_GAPE_CURVE_ENABLED, NEURAL_BRAIN_ENABLED, CLIMATE_STEERING, SOCIAL_STEERING, CLIMATE_PROBE_DISTANCE, BODY_TEMPERATURE_INERTIA_ENABLED, SELF_CANNIBALISM_ENABLED, PREDATOR_TARGET_SELECTION_ENABLED } from "./Parameters";
+import { PLANT_EVOLUTION_ENABLED, RUDDER_MAX_TURN, SIZE_SCALED_VISION_ENABLED, SIZE_SCALED_GRAB_ENABLED, GAPE_SUCCESS_FLOOR, GAPE_COOLDOWN_SLOPE, MASS_SCALED_STOMACH_ENABLED, SIZE_MATURITY_ENABLED, INHERITED_INVESTMENT_ENABLED, PLANT_STAGES_ENABLED, PLANT_SPROUT_AGE, PLANT_OLD_AGE, PLANT_STAGE_ENERGY, PREDATOR_GAPE_CURVE_ENABLED, NEURAL_BRAIN_ENABLED, CLIMATE_STEERING, SOCIAL_STEERING, CLIMATE_PROBE_DISTANCE, BODY_TEMPERATURE_INERTIA_ENABLED, SELF_CANNIBALISM_ENABLED, PREDATOR_TARGET_SELECTION_ENABLED } from "./Parameters";
 import { environment, PLANT_TYPE_WARM, PLANT_TYPE_COLD } from "./Environment";
 import { sizeSignature, SEARCH_IMAGE_LEARNING, SEARCH_IMAGE_GAIN, SEARCH_IMAGE_FORGETTING, bodySize, sizeDietFactor, climateFoodFactor, digestionEfficiency, thermalFit, thermalPeak, THERMAL_MISMATCH_DRAIN, THERMAL_FIT_UPDATE_PERIOD, THERMOMELANISM, mateAcceptance, pairRandom, KINESIS_PERIOD, KINESIS_TURN_CHANCE, KINESIS_MAX_TURN, EMERGENCY_THERMAL_FIT, EMERGENCY_PROBE_DISTANCE } from "./Ecology";
 //--------------------------------------------------------------------------
@@ -298,12 +299,18 @@ this.setParent = function( parent )
 	// PLANT_STAGES_ENABLED: a sprout gives little, an old plant much; small
 	// bodies digest sprouts best, big bodies old plants (one plant, three ages)
 	//------------------------------------------------------------------------
-	this.plantStageFactor = function( plantAge )
+	this.plantStageFactor = function( plant )
 	{
 	    if ( !PLANT_STAGES_ENABLED ) return ONE;
-	    const size = bodySize( _phenotype.mass );                // -1 small .. +1 big
-	    if ( plantAge < PLANT_SPROUT_AGE ) return PLANT_STAGE_ENERGY[0] * Math.min( ONE, Math.max( 0.15, ONE - 0.35 * size ));
-	    if ( plantAge > PLANT_OLD_AGE    ) return PLANT_STAGE_ENERGY[2] * Math.min( ONE, Math.max( 0.15, ONE + 0.35 * size ));
+	    const size  = bodySize( _phenotype.mass );                // -1 small .. +1 big
+	    const stage = plantStage( plant.getIndex(), plant.getAge() );
+	    if ( stage === 0 )
+	    {
+	        // a sprout grows: from PLANT_STAGE_ENERGY[0] to a grown-up plant's worth
+	        const grown = PLANT_EVOLUTION_ENABLED ? plantSproutGrowth( plant.getIndex(), plant.getAge() ) : 0;
+	        return ( PLANT_STAGE_ENERGY[0] + ( PLANT_STAGE_ENERGY[1] - PLANT_STAGE_ENERGY[0] ) * grown ) * Math.min( ONE, Math.max( 0.15, ONE - 0.35 * size ));
+	    }
+	    if ( stage === 2 ) return plantOldEnergy( plant.getIndex() ) * Math.min( ONE, Math.max( 0.15, ONE + 0.35 * size ));
 	    return PLANT_STAGE_ENERGY[1];
 	}
 
@@ -2100,7 +2107,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
                 // (meat: exactly the energy it holds, e.g. a dropped tail)
                 energyFromFoodBit = ( chosenFoodBit().getType() === 2 ) ? chosenFoodBit().getEnergy()
                                   : chosenFoodBit().getEnergy()
-                                  * this.plantStageFactor( chosenFoodBit().getAge() )
+                                  * this.plantStageFactor( chosenFoodBit() )
                                   * this.getDigestionEfficiency( chosenFoodBit().getType() )
                                   * climateFoodFactor( _M[ _m + SS.M_THERMAL_FIT ], _M[ _m + SS.M_THERMAL_PEAK ] );
             }

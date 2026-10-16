@@ -31,6 +31,7 @@
 					<tr><td>1 2 3</td><td>speed: normal, fast, as fast as possible</td></tr>
 					<tr><td>R</td><td>drawing on / off (faster when off)</td></tr>
 					<tr><td>G</td><td>show mouths and genitals</td></tr>
+					<tr><td>C</td><td>water currents on / off (shown as faint arrows)</td></tr>
 					<tr><td>H</td><td>hide / show the panel</td></tr>
 					<tr><td>Tab</td><td>next panel tab</td></tr>
 					<tr><td>? or F1</td><td>this help (click to close)</td></tr>
@@ -96,6 +97,7 @@
 
                 <div id = "viewOptionsPanel">
                     <button id = "viewGoalButton" class = "basicButton" onClick = "toggleGoalOverlay();"       >mouth/genital</button>
+                    <button id = "currentsButton" class = "basicButton" onClick = "toggleCurrents();" title = "water currents: big slow eddies carry swimbots and meat (C)" >currents</button>
                     <button id = "freezeButton"   class = "basicButton" onClick = "toggleSimulationRunning();" >freeze</button>
                     <button id = "noRenderButton" class = "basicButton" onClick = "toggleRendering();"         >rendering OFF</button>
                     <button id = "speed1Button"   class = "basicButton speedButton activeButton" onClick = "setSpeed(1);" title = "normal speed (50 steps per second)" >&gt;</button>

@@ -20,6 +20,16 @@
         "4174"
       ],
       "port": 4174
+    },
+    {
+      "name": "genepool-dev2",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "vite",
+        "--port",
+        "5199"
+      ],
+      "port": 5199
     }
   ]
 }

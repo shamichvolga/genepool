@@ -1,8 +1,9 @@
+import { bindPlantGenes, inheritPlantGenes, plantMatureAge, plantOldAge, plantRotAge, plantSeedDistance } from "./PlantGenes";
 import { geneAverage, convertOldGenes, GENE_LAYOUT_VERSION, setTrait, gaussian, thermalWidthToGene, preyTargetScore, GENES_PREDATOR, GENES_THERMAL_OPTIMUM, GENES_THERMAL_WIDTH, GENES_DIGESTION, GENES_BRIGHTNESS, GENES_CHOOSINESS, GENES_HUNGER, GENES_AUTOTOMY_BITE, GENES_AUTOTOMY_THREAT, GENES_AUTOTOMY_AMOUNT, GENES_AUTOTOMY_WHICH, GENES_PERSISTENCE, GENES_INVESTMENT, GENES_SIZE_PICKINESS, GENES_DEFERENCE, GENES_RUDDER } from "./EcologyGenes";
 import { environment, FLAT_ENVIRONMENT, INITIAL_SOIL_NUTRIENT_PER_CELL, NUTRIENT_CYCLE_ENABLED, PLANT_TYPE_WARM, PLANT_TYPE_COLD, SEASONAL_PLANT_GROWTH_ENABLED, SEASONAL_PLANT_GROWTH_AMPLITUDE } from "./Environment";
 import { petriSettings, petriStartZone } from "./Petri";
 import { IGNORE_FOOD_EFFICIENCY, preyVisibility, TWO_PLANT_TYPES } from "./Ecology";
-import { CURRENTS_ENABLED, CURRENT_SPEED, CURRENT_WAVELENGTH, CLASSIC_SEED_RAIN_FRACTION, MEAT_PIECE_ENERGY, MEAT_PIECE_SCATTER, PLANT_STAGES_ENABLED, PLANT_ROT_AGE, DIET_SWITCH_RATE, CLASSIC_NUM_SWIMBOTS, CLASSIC_NUM_FOODBITS, GARDEN_RADIUS, ENVIRONMENT_PLANT_SPREAD_RATE, ENVIRONMENT_SEEDS_PER_PERIOD, LOCAL_ENVIRONMENT_PLANT_GROWTH, PLANT_CELL_CAPACITY, PLANT_PARENT_SEED_FRACTION, PLANT_SEED_MIN_DISTANCE, PLANT_SEED_MAX_DISTANCE } from "./Parameters";
+import { PLANT_EVOLUTION_ENABLED, PLANT_SEED_PARENT_TRIES, CURRENTS_ENABLED, CURRENT_SPEED, CURRENT_WAVELENGTH, CLASSIC_SEED_RAIN_FRACTION, MEAT_PIECE_ENERGY, MEAT_PIECE_SCATTER, PLANT_STAGES_ENABLED, PLANT_ROT_AGE, DIET_SWITCH_RATE, CLASSIC_NUM_SWIMBOTS, CLASSIC_NUM_FOODBITS, GARDEN_RADIUS, ENVIRONMENT_PLANT_SPREAD_RATE, ENVIRONMENT_SEEDS_PER_PERIOD, LOCAL_ENVIRONMENT_PLANT_GROWTH, PLANT_CELL_CAPACITY, PLANT_PARENT_SEED_FRACTION, PLANT_SEED_MIN_DISTANCE, PLANT_SEED_MAX_DISTANCE } from "./Parameters";
 
 import { BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_PREY } from "./Brain";
 import { Camera } from "./Camera";
@@ -191,6 +192,7 @@ export function GenePool()
     // (stage 7: these arrays and grids live in the shared state, so that
     //  worker threads can read them; see SharedState.ts)
     const _st           = SS.sharedState();
+    bindPlantGenes( _st );
     let _swimbotGrid    = _st.swimbotGrid;
     let _foodBitGrid    = _st.foodGrid;
     let _botX           = _st.botX;         // body center
@@ -1126,12 +1128,22 @@ if ( mode === SimulationStartMode.SPECIES )
 	        for (let attempt = 0; attempt < 12; attempt++)
 	        {
 	            let type;
-	            const parent = ( gpRandom() < parentSeedChance ) ? this.findRandomLivingPlant() : null;
+	            let parent = ( gpRandom() < parentSeedChance ) ? this.findRandomLivingPlant() : null;
+	            if ( PLANT_EVOLUTION_ENABLED && ( parent !== null ))
+	            {
+	                // (a grown-up one, if one is found in a few tries)
+	                for (let k = 0; ( k < PLANT_SEED_PARENT_TRIES ) && ( parent.getAge() < plantMatureAge( parent.getIndex() )); k++)
+	                {
+	                    const other = this.findRandomLivingPlant();
+	                    if ( other !== null ) { parent = other; }
+	                }
+	            }
 
 	            if ( parent !== null )
 	            {
 	                type = parent.getType();
-	                const distance = PLANT_SEED_MIN_DISTANCE + gpRandom() * ( PLANT_SEED_MAX_DISTANCE - PLANT_SEED_MIN_DISTANCE );
+	                const distance = PLANT_EVOLUTION_ENABLED ? plantSeedDistance( parent.getIndex() ) * ( 0.5 + gpRandom() )
+	                               : PLANT_SEED_MIN_DISTANCE + gpRandom() * ( PLANT_SEED_MAX_DISTANCE - PLANT_SEED_MIN_DISTANCE );
 	                const angle    = gpRandom() * PI2;
 	                _vectorUtility.x = parent.getPosition().x + distance * Math.cos( angle );
 	                _vectorUtility.y = parent.getPosition().y + distance * Math.sin( angle );
@@ -1157,6 +1169,7 @@ if ( mode === SimulationStartMode.SPECIES )
 	            }
 
 	            _foodBits[ child ].initialize( child );
+	            if ( PLANT_EVOLUTION_ENABLED && ( parent !== null )) { inheritPlantGenes( child, parent.getIndex() ); }
 	            _foodBits[ child ].setType( type );
 	            _foodBits[ child ].setEnergy( globalTweakers.foodBitEnergy );
 	            _foodBits[ child ].setPosition( _vectorUtility );
@@ -1218,6 +1231,7 @@ if ( mode === SimulationStartMode.SPECIES )
 	{
 	    const P = _st.params;
 	    P[ SS.PARAM_MAX_LIFESPAN ] = globalTweakers.maximumLifeSpan;
+	    P[ SS.PARAM_CURRENT      ] = _currentSpeed;
 	    P[ SS.PARAM_ENV_ACTIVE   ] = environment.active ? 1 : 0;
 	    P[ SS.PARAM_ENV_FIELDS   ] = ( environment.active && !FLAT_ENVIRONMENT ) ? 1 : 0;
 	    P[ SS.PARAM_FOOD_TYPES   ] = globalTweakers.numFoodTypes;
@@ -1927,6 +1941,45 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	this.getStepsPerSecond = function() { return _stepsPerSecond; }
 	this.getRenderMs       = function() { return _renderMs; }
 
+	//------------------------------------------------------------------------
+	// currents: on / off while it runs (the C key); shown as faint arrows
+	//------------------------------------------------------------------------
+	let _currentSpeed = CURRENTS_ENABLED ? CURRENT_SPEED : 0;
+	this.toggleCurrents  = function() { _currentSpeed = ( _currentSpeed > 0 ) ? 0 : CURRENT_SPEED; this.writePerceptionParams(); }
+	this.getCurrentsOn   = function() { return _currentSpeed > 0; }
+
+	function renderCurrents()
+	{
+	    if ( !( _currentSpeed > 0 )) return;
+	    const k = 2 * Math.PI / CURRENT_WAVELENGTH;
+	    const view = _camera.getXDimension();
+	    const spacing = Math.max( 150, view / 18 );                 // about 18 arrows across the screen
+	    const left = _camera.getPosition().x - view / 2, top = _camera.getPosition().y - _camera.getYDimension() / 2;
+	    const x0 = Math.max( POOL_LEFT, Math.floor( left / spacing ) * spacing + spacing / 2 );
+	    const y0 = Math.max( POOL_TOP,  Math.floor( top  / spacing ) * spacing + spacing / 2 );
+	    const x1 = Math.min( POOL_RIGHT,  left + view ), y1 = Math.min( POOL_BOTTOM, top + _camera.getYDimension() );
+	    const drift = ( _seconds * 0.6 ) % 1;                         // arrows creep along, so the flow is seen
+	    _canvas.strokeStyle = "rgba( 210, 230, 255, 0.22 )";
+	    _canvas.lineWidth   = Math.max( 1, view / 900 );
+	    _canvas.lineCap     = "round";
+	    _canvas.beginPath();
+	    for ( let y = y0; y < y1; y += spacing )
+	    for ( let x = x0; x < x1; x += spacing )
+	    {
+	        const vx = Math.sin( k * y ), vy = Math.cos( k * x );    // (-1..1)
+	        const len = spacing * 0.45 * Math.sqrt( vx * vx + vy * vy ) / Math.SQRT2;
+	        const n = Math.max( 1e-6, Math.sqrt( vx * vx + vy * vy ));
+	        const dx = vx / n, dy = vy / n;
+	        const sx = x + dx * spacing * 0.3 * ( drift - 0.5 ), sy = y + dy * spacing * 0.3 * ( drift - 0.5 );
+	        const ex = sx + dx * len, ey = sy + dy * len;
+	        _canvas.moveTo( sx, sy ); _canvas.lineTo( ex, ey );
+	        // arrow head
+	        _canvas.moveTo( ex, ey ); _canvas.lineTo( ex - ( dx * 0.8 - dy * 0.5 ) * len * 0.3, ey - ( dy * 0.8 + dx * 0.5 ) * len * 0.3 );
+	        _canvas.moveTo( ex, ey ); _canvas.lineTo( ex - ( dx * 0.8 + dy * 0.5 ) * len * 0.3, ey - ( dy * 0.8 - dx * 0.5 ) * len * 0.3 );
+	    }
+	    _canvas.stroke();
+	}
+
 	// drawing time by part (milliseconds, smoothed): water and obstacle, food, swimbots, graphics card
 	const _renderPhaseMs = [ 0, 0, 0, 0 ];
 	function renderPhase( phase, since ) { const t = performance.now(); _renderPhaseMs[ phase ] += ( t - since - _renderPhaseMs[ phase ] ) * 0.05; return t; }
@@ -2393,7 +2446,9 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
             let type = foodType[f];
 
             // PLANT_STAGES_ENABLED: very old plants rot away (their place frees up)
-            if ( PLANT_STAGES_ENABLED && ( type !== 2 ) && ( _clock - born[f] > PLANT_ROT_AGE )) { _foodBits[f].kill(); continue; }
+            // (PLANT_EVOLUTION_ENABLED: the first plants get mixed ages, so that they do not all grow up at once)
+            if ( PLANT_EVOLUTION_ENABLED && ( _clock === 1 ) && ( type !== 2 )) { born[f] = 1 - gpRandom() * plantOldAge( f ); }
+            if ( PLANT_STAGES_ENABLED && ( type !== 2 ) && ( _clock - born[f] > plantRotAge( f ))) { _foodBits[f].kill(); continue; }
 
                  if ( type === 0 ) { numType0FoodBits ++; }
             else if ( type === 1 ) { numType1FoodBits ++; }
@@ -2407,13 +2462,13 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
                 }
                 _foodBits[f].kill();
             }
-            else if ( CURRENTS_ENABLED )
+            else if ( _currentSpeed > 0 )
             {
                 // meat drifts with the water (plants are rooted)
                 const k = 2 * Math.PI / CURRENT_WAVELENGTH;
                 const x = foodX[f], y = foodY[f];
-                foodX[f] = Math.max( POOL_LEFT + 1, Math.min( POOL_RIGHT  - 1, x + CURRENT_SPEED * Math.sin( k * y )));
-                foodY[f] = Math.max( POOL_TOP  + 1, Math.min( POOL_BOTTOM - 1, y + CURRENT_SPEED * Math.cos( k * x )));
+                foodX[f] = Math.max( POOL_LEFT + 1, Math.min( POOL_RIGHT  - 1, x + _currentSpeed * Math.sin( k * y )));
+                foodY[f] = Math.max( POOL_TOP  + 1, Math.min( POOL_BOTTOM - 1, y + _currentSpeed * Math.cos( k * x )));
             }
 
             if ( counting && ( type !== 2 ) && ( live[f] === 1 ))
@@ -2569,7 +2624,7 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
         }
         else
         {
-            parentFoodBitIndex = this.findRandomLivingFoodBit( newFoodType );
+            parentFoodBitIndex = PLANT_EVOLUTION_ENABLED ? this.findSeedParent( newFoodType ) : this.findRandomLivingFoodBit( newFoodType );
         }
 
         //------------------------------------------------------------------
@@ -2580,6 +2635,8 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
         if (( parentFoodBitIndex == NULL_INDEX ) || ( gpRandom() < CLASSIC_SEED_RAIN_FRACTION ))
         {
             _foodBits[ childFoodBitIndex ].initialize( childFoodBitIndex );     // (a random place in the pool)
+            // (a seed carried far: it still comes from some plant)
+            if ( PLANT_EVOLUTION_ENABLED && ( parentFoodBitIndex != NULL_INDEX )) { inheritPlantGenes( childFoodBitIndex, parentFoodBitIndex ); }
             _foodBits[ childFoodBitIndex ].setType( newFoodType );
             _foodBits[ childFoodBitIndex ].setEnergy( globalTweakers.foodBitEnergy );
             return;
@@ -2587,12 +2644,50 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
 
         _foodBits[ childFoodBitIndex ].spawnFromParent( _foodBits[ parentFoodBitIndex ], childFoodBitIndex, newFoodType );
 
+        if ( PLANT_EVOLUTION_ENABLED )
+        {
+            // the seed falls as far as the parent's gene says
+            inheritPlantGenes( childFoodBitIndex, parentFoodBitIndex );
+            _foodBits[ childFoodBitIndex ].tintByGenes();
+            this.placeSeed( _foodBits[ childFoodBitIndex ], _foodBits[ parentFoodBitIndex ], plantSeedDistance( parentFoodBitIndex ));
+            return;
+        }
+
         // keep the new plant out from behind the obstacle
         for (let attempt = 0; attempt < 10; attempt++)
         {
             _foodBits[ childFoodBitIndex ].randomizeSpawnPosition( _foodBits[ parentFoodBitIndex ] );
             if ( !_obstacle.getObstruction( _foodBits[ parentFoodBitIndex ].getPosition(), _foodBits[ childFoodBitIndex ].getPosition() ) ) break;
         }
+    }
+
+    //------------------------------------------------------------------------------
+    // PLANT_EVOLUTION_ENABLED: a grown-up plant to make the next seed (a few
+    // tries; at the very start, when none is grown up yet, any plant)
+    //------------------------------------------------------------------------------
+    this.findSeedParent = function( foodType )
+    {
+        const count = _aliveFoodBitIndices.length;
+        for (let attempt = 0; ( attempt < PLANT_SEED_PARENT_TRIES ) && ( count > 0 ); attempt++)
+        {
+            const f = _aliveFoodBitIndices[ Math.floor( gpRandom() * count ) ];
+            if ( _foodBits[f].getAlive() && ( _foodBits[f].getType() === foodType ) && ( _foodBits[f].getAge() >= plantMatureAge( f ))) return f;
+        }
+        return this.findRandomLivingFoodBit( foodType );
+    }
+
+    // a seed lands at about this distance from the parent (not behind the obstacle)
+    this.placeSeed = function( seed, parent, distance )
+    {
+        for (let attempt = 0; attempt < 10; attempt++)
+        {
+            const angle = gpRandom() * PI2, d = distance * ( 0.5 + gpRandom() );
+            _vectorUtility.x = parent.getPosition().x + d * Math.cos( angle );
+            _vectorUtility.y = parent.getPosition().y + d * Math.sin( angle );
+            seed.setPosition( _vectorUtility );
+            if ( !_obstacle.getObstruction( parent.getPosition(), seed.getPosition() )) return;
+        }
+        seed.setPosition( parent.getPosition() );
     }
 
 
@@ -2838,6 +2933,11 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
             let id = data.foodBitArray[f].id;
 
             _foodBits[ id ].initialize( id );
+
+            // its age and plant genes (older save files have none)
+            const saved = data.foodBitArray[f];
+            if ( typeof saved.age    === "number" ) { _st.foodBorn[ id ] = _clock - saved.age; }
+            if ( typeof saved.growth === "number" ) { _st.plantGrowth[ id ] = saved.growth; _st.plantSpread[ id ] = saved.spread; }
 
             // older save files have no food type - those are plants
             let type = data.foodBitArray[f].type;
@@ -3348,6 +3448,7 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
 		// render obstacle
 		//-------------------------
 		_obstacle.render( _camera );
+		renderCurrents();
 
 		//-------------------------
 		// render food
@@ -4311,6 +4412,9 @@ this.renderFoodBits = function( useGraphicsCard )
                 foodBitDataArray[ numFoodbits ].x = _foodBits[f].getPosition().x;
                 foodBitDataArray[ numFoodbits ].y = _foodBits[f].getPosition().y;
                 foodBitDataArray[ numFoodbits ].type = _foodBits[f].getType();
+                foodBitDataArray[ numFoodbits ].age    = _foodBits[f].getAge();
+                foodBitDataArray[ numFoodbits ].growth = _st.plantGrowth[f];
+                foodBitDataArray[ numFoodbits ].spread = _st.plantSpread[f];
 
                 numFoodbits ++;
             }

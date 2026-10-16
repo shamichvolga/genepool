@@ -492,6 +492,13 @@ export function setRendering(r)
 }
 
 //---------------------------
+export function toggleCurrents()
+{
+    genePool.toggleCurrents();
+    // (the thread answers with the next snapshot: the button follows a little later)
+    setTimeout( () => { document.getElementById( "currentsButton" ).classList.toggle( "activeButton", genePool.getCurrentsOn() ); }, 300 );
+}
+
 export function toggleGoalOverlay()
 {
     genePool.toggleGoalOverlay();
@@ -824,6 +831,7 @@ function handleCommandKey( e ): boolean
         case "Digit3": case "Numpad3": setSpeed( 3 ); return true;
         case "KeyR":   toggleRendering(); return true;
         case "KeyG":   toggleGoalOverlay(); return true;
+        case "KeyC":   toggleCurrents(); return true;
         case "KeyH":   togglePanel(); return true;
         case "Tab":    nextTab(); return true;
         case "F1":     toggleHelp(); return true;

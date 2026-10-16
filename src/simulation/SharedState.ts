@@ -94,6 +94,7 @@ export const PARAM_OB_END_RADIUS= 13;
 export const PARAM_TIME         = 14;   // the environment's clock (seasons)
 export const PARAM_PETRI        = 15;   // 1 = the "petri" map (no seasons)
 export const PARAM_MAX_ENERGY   = 16;
+export const PARAM_CURRENT      = 17;   // how strong the currents are now (0 = off; the C key)
 export const NUM_PARAMS         = 20;
 
 export * from "./MindLayout";
@@ -173,6 +174,8 @@ export class SharedState
     readonly foodAlive    : Uint8Array;
     readonly foodEnergy    : Float64Array;
     readonly foodBorn     : Float64Array;   // the step it appeared (its age = now - born)
+    readonly plantGrowth  : Float32Array;   // plant genes (PlantGenes.ts)
+    readonly plantSpread  : Float32Array;
 
     readonly background   : Float32Array;   // environment: brightness of the bottom
     readonly temperature  : Float32Array;   // environment: base temperature map (FIELD_SIZE²)
@@ -289,6 +292,8 @@ export class SharedState
         this.foodAlive  = u8 ( "foodAlive", MAX_FOODBITS );
         this.foodEnergy = f64( "foodEnergy", MAX_FOODBITS );
         this.foodBorn   = f64( "foodBorn", MAX_FOODBITS );
+        this.plantGrowth = new Float32Array( make( "plantGrowth", MAX_FOODBITS * 4 ));
+        this.plantSpread = new Float32Array( make( "plantSpread", MAX_FOODBITS * 4 ));
 
         this.background = new Float32Array( make( "background", BACKGROUND_SIZE * BACKGROUND_SIZE * 4 ));
         this.temperature = new Float32Array( make( "temperature", FIELD_SIZE * FIELD_SIZE * 4 ));
