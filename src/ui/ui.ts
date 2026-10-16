@@ -613,8 +613,7 @@ export function switchToChosenPresetPool()
 //--------------------------------
 export function loadSwimbotFromPreset(p)
 {
-    let genes = genePool.getPresetGenotype(p);
-    genePool.createNewSwimbotWithGenes( genes );
+    genePool.createSwimbotFromPreset( p );
 }
 
 //------------------------------------------------------
@@ -708,101 +707,7 @@ export function updateUI()
             {
                 showPart( 'selectedSwimbotPanel',   true  );
                 showPart( 'noSelectedSwimbotPanel', false );
-                let brainState = genePool.getSwimbotBrainState( selectedSwimbot );
-                let mateString = genePool.getSwimbotChosenMate( selectedSwimbot ).toString();
-                let goalDescription = "";
-                if ( brainState ===  BRAIN_STATE_RESTING            ) { goalDescription = "resting";                       }
-                else if ( brainState ===  BRAIN_STATE_LOOKING_FOR_MATE   ) { goalDescription = "looking for mate";              }
-                else if ( brainState ===  BRAIN_STATE_PURSUING_MATE      ) { goalDescription = "pursuing mate " + mateString;   }
-                else if ( brainState ===  BRAIN_STATE_LOOKING_FOR_FOOD   ) { goalDescription = "looking for food bit";          }
-                else if ( brainState ===  BRAIN_STATE_PURSUING_FOOD      ) { goalDescription = "pursuing food bit";             }
-                else if ( brainState ===  BRAIN_STATE_LOOKING_FOR_PREY   ) { goalDescription = "looking for prey";              }
-                else if ( brainState ===  BRAIN_STATE_PURSUING_PREY      ) { goalDescription = "pursuing prey";                 }
-                else if ( brainState ===  BRAIN_STATE_FLEEING_PREDATOR   ) { goalDescription = "fleeing predator";              }
-                let foodPreferenceText = "green";
-                let foodTypeText       = "green";
-                if ( genePool.getSwimbotPreferredFoodType ( selectedSwimbot ) === 1 ) { foodPreferenceText = "blue"; }
-                if ( genePool.getSwimbotDigestibleFoodType( selectedSwimbot ) === 1 ) { foodTypeText       = "blue"; }
-                let swimbot = genePool.getSwimbots()[selectedSwimbot];
-                let threshold = Math.floor(swimbot.getHungerThreshold());
-                let maxEnergy = swimbot.getMaxEnergy();
-                let ratioPercent = Math.round((threshold / maxEnergy) * 100);
-
-                const isPredator = swimbot.getPredatorLevel() > PREDATOR_LEVEL_THRESHOLD;
-                const row = ( label, value ) => "<tr><td>" + label + "</td><td>" + value + "</td></tr>";
-
-                //------------------------------------------------------------
-                // food and climate: the environment pool shows the ecology
-                // traits, the classic pools the old food colors
-                //------------------------------------------------------------
-                let foodRows;
-                const environment = genePool.getEnvironment();
-                if ( environment.active )
-                {
-                    const position = swimbot.getPosition();
-                    const here     = environment.temperatureAt( position.x, position.y );
-                    const percent  = ( x ) => Math.round( x * 100 ) + "%";
-                    foodRows =
-                        row( "likes temperature", swimbot.getThermalOptimum().toFixed(2) + " ± " + swimbot.getThermalWidth().toFixed(2) ) +
-                        row( "temperature here",  here.toFixed(2) + " (suits " + percent( swimbot.getThermalFit() ) + ")" ) +
-                        ( TWO_PLANT_TYPES ? row( "digests", "green " + percent( swimbot.getDigestionEfficiency(0) ) + " · blue " + percent( swimbot.getDigestionEfficiency(1) ) ) : "" ) +
-                        row( "brightness",        swimbot.getBrightness().toFixed(2) + " (picky " + percent( swimbot.getChoosiness() ) + ")" );
-                    const a = swimbot.getAutotomy();
-                    if ( !isPredator )
-                    {
-                        foodRows += row( "drops a part", ( a.bite > 0.01 || a.threat > 0.05 )
-                            ? percent( a.amount ) + " of body · bitten " + percent( a.bite ) + ( a.threat > 0.05 ? " · when chased" : "" )
-                              + ( a.partsLost ? " · <b>missing</b> (" + Math.max( 0, a.regrowIn ) + ")" : "" )
-                            : "never" );
-                    }
-                    else if ( swimbot.getNumPartsEaten() > 0 )
-                    {
-                        foodRows += row( "parts eaten", swimbot.getNumPartsEaten() );
-                    }
-                    const image = swimbot.getSearchImage();
-                    if ( isPredator && image && image.strength > 0.05 )
-                    {
-                        const swatch = "rgb(" + Math.round( image.red * 255 ) + "," + Math.round( image.green * 255 ) + "," + Math.round( image.blue * 255 ) + ")";
-                        foodRows += row( "hunts for",
-                            "<span style='display:inline-block;width:10px;height:10px;background:" + swatch + ";border:1px solid #888'></span> "
-                            + ( image.size < 0.4 ? "small" : ( image.size > 0.6 ? "big" : "medium" )) + " prey (" + percent( image.strength ) + ")" );
-                    }
-                    if ( swimbot.getUsesNeuralBrain() )
-                    {
-                        const social = swimbot.getSocialWeight();
-                        foodRows +=
-                            row( "brain",         "neural" ) +
-                            row( "swims",         percent( swimbot.getEffort() ) + " effort" ) +
-                            row( "climate pull",  percent( swimbot.getClimateWeight() ) ) +
-                            row( "company",       ( social >= 0 ? "seeks " : "avoids " ) + percent( Math.abs( social ) ) );
-                    }
-                }
-                else
-                {
-                    foodRows =
-                        row( "food preferred",    foodPreferenceText ) +
-                        row( "food digested best",foodTypeText );
-                }
-
-                let swimbotPanelHTML =
-                    "<div class='swimbotKind " + ( isPredator ? "predator" : "herbivore" ) + "'>" +
-                        "swimbot " + genePool.getSwimbotIndex(selectedSwimbot) + " · " +
-                        ( isPredator ? "predator" : "herbivore" ) + " (" + swimbot.getPredatorLevel().toFixed(2) + ")" +
-                        ( genePool.getSwimbotEternalStatus(selectedSwimbot) ? " · immortal" : "" ) +
-                    "</div>" +
-                    energyBar( genePool.getSwimbotEnergy(selectedSwimbot), maxEnergy, threshold ) +
-                    "<table class='swimbotTable'>" +
-                    row( "goal",              goalDescription ) +
-                    row( "age",               genePool.getSwimbotAge(selectedSwimbot) ) +
-                    row( "energy",            Math.floor(genePool.getSwimbotEnergy(selectedSwimbot)) + " / " + maxEnergy ) +
-                    row( "hunger threshold",  threshold + " (" + ratioPercent + "%)" ) +
-                    row( "segments",          swimbot.getNumParts() ) +
-                    row( "food eaten",        Math.floor(genePool.getSwimbotNumFoodBitsEaten(selectedSwimbot)) ) +
-                    row( "prey eaten",        swimbot.getNumPreyEaten() ) +
-                    row( "offspring",         Math.floor(genePool.getSwimbotNumOffspring(selectedSwimbot)) ) +
-                    foodRows +
-                    row( "attracted to",      genePool.getSwimbotAttractionDescription(selectedSwimbot) ) +
-                    "</table>";
+                let swimbotPanelHTML = genePool.getSwimbotPanelHTML();
 
                 if (swimbotPanelHTML !== _lastSwimbotPanelHTML)
                 {
@@ -818,11 +723,8 @@ export function updateUI()
         if ( panelIsOpen( 'graphPanel' ) )
         {
             const environment = genePool.getEnvironment();
-            let predators = 0;
-            for ( const swimbot of genePool.getSwimbots() )
-            {
-                if ( swimbot.getAlive() && swimbot.getPredatorLevel() > PREDATOR_LEVEL_THRESHOLD ) { predators ++; }
-            }
+            const history = genePool.getPopulationHistory();
+            const predators = history.step.length > 0 ? history.predators[ history.step.length - 1 ] : 0;
             let graphDataHTML =
                 "time step: " + genePool.getTimeStep()
                 + ( environment.active ? " (" + environment.seasonName() + ")" : "" )
@@ -834,7 +736,7 @@ export function updateUI()
                 + "<br>"
                 + "swimbots: " + genePool.getNumSwimbots() + " (predators: " + predators + ")"
                 + "<br>"
-                + geneticClustersText()
+                + genePool.getGeneticClustersText()
                 + "<br>"
                 + "green plants: " + genePool.getNumFoodBitsOfType(0)
                 + ( TWO_PLANT_TYPES ? "<br>blue plants: " + genePool.getNumFoodBitsOfType(1) : "" )
@@ -850,20 +752,6 @@ export function updateUI()
     }
     updateHud();
     setTimeout( updateUI, UI_UPDATE_PERIOD );
-}
-
-//------------------------------------------------------------
-// a bar: energy of the selected swimbot, with its hunger threshold
-//------------------------------------------------------------
-function energyBar( energy, maxEnergy, threshold )
-{
-    const fill   = Math.max( 0, Math.min( 100, 100 * energy    / Math.max( 1, maxEnergy )));
-    const hunger = Math.max( 0, Math.min( 100, 100 * threshold / Math.max( 1, maxEnergy )));
-    const color  = ( energy < threshold ) ? "#c8642a" : "#6e9f4c";
-    return "<div class='energyBar' title='energy (the mark: hunger threshold)'>"
-         +   "<div class='energyFill' style='width:" + fill.toFixed( 1 ) + "%;background:" + color + "'></div>"
-         +   "<div class='energyMark' style='left:" + hunger.toFixed( 1 ) + "%'></div>"
-         + "</div>";
 }
 
 //------------------------------------------------------------
@@ -1179,25 +1067,6 @@ export function showWorldSize()
         const button = document.getElementById( "world" + w + "Button" );
         if ( button ) { button.classList.toggle( "activeButton", w === WORLD_SCALE ); }
     }
-}
-
-
-//----------------------------------------------------------
-// Genetic clusters, not biological species; recounted every 5 seconds.
-//----------------------------------------------------------
-let _geneticClustersText = "genetic clusters: …";
-let _geneticClustersTime = 0;
-function geneticClustersText()
-{
-    const now = performance.now();
-    if ( now - _geneticClustersTime > 5000 )
-    {
-        _geneticClustersTime = now;
-        const result = genePool.estimateGeneticClusters( 400 );
-        _geneticClustersText = "genetic clusters (used genes): " + result.geneticClusters
-            + ", largest " + Math.round( result.largestClusterShare * 100 ) + "%";
-    }
-    return _geneticClustersText;
 }
 
 

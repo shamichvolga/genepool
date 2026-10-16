@@ -29,7 +29,7 @@ export const Logger = {
                 url, line, col,
                 stack: error?.stack,
                 recentEvents: [...this.recentEvents],
-                state: typeof genePool !== 'undefined' ? { swimbotCount: genePool.swimbots.length } : null
+                state: typeof genePool !== 'undefined' ? { swimbotCount: genePool.getNumSwimbots() } : null
             };
             this.logEvent('error', msg, context);
         };
@@ -48,7 +48,7 @@ export const Logger = {
             type,
             target,
             extra,
-            swimbotCount: typeof genePool !== 'undefined' ? genePool.swimbots.length : 0
+            swimbotCount: typeof genePool !== 'undefined' ? genePool.getNumSwimbots() : 0
         };
 
         this.events.push(entry);

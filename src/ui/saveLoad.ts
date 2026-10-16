@@ -260,13 +260,14 @@ export function submitFilenameInput()
         
             let date = new Date();
             let dateInSeconds = date.getTime();
-            let pool = genePool.getPoolData();      
-        
-            //console.log( pool );
-        
-            let poolWithMetaData = ( { 'name': _inputFilenameString, 'date': dateInSeconds, 'user': _username, 'pool': pool } );        
-        
-            _database.add( 'pools', poolWithMetaData );
+            const name = _inputFilenameString;
+
+            // (the pool may live in the simulation thread: ask for its data)
+            genePool.request( "getPoolData" ).then( function( pool )
+            {
+                let poolWithMetaData = ( { 'name': name, 'date': dateInSeconds, 'user': _username, 'pool': pool } );
+                _database.add( 'pools', poolWithMetaData );
+            });
             closePopupPanel();
             _inputFilenameString = "";
         }
@@ -309,72 +310,18 @@ export function readLocalFile( event )
 //--------------------------
 export function printFamilyTree()
 {
-genePool.generatePhyloTree();
-
+    // open the window now (a click opened it), fill it when the data comes
     let w = window.open
     (
-        "", 
-        "swimbot data", 
-        "left           = 400, \
-         top            = 100, \
-         width          = 600, \
-         height         = 700, \
-         status         = 0, \
-         resizable      = 0, \
-         channelmode    = 0, \
-         menubar        = 0, \
-         toolbar        = 0, \
-         location       = 0, \
-         titlebar       = 0" 
+        "",
+        "swimbot data",
+        "left = 400, top = 100, width = 600, height = 700, status = 0, resizable = 0, channelmode = 0, menubar = 0, toolbar = 0, location = 0, titlebar = 0"
     );
-    
-    
+    if ( !w ) return;
     w.document.title = "Swimbot Data (copy and paste into a text file, then load into Gene Pool Lab)";
+    w.document.body.innerHTML = "collecting the data…";
 
-    let familyTree = genePool.getFamilyTree();
-     
-    //let f = JSON.stringify( { familyTree } );
-    
-    let f = "";
-
-//for (let n=0; n<familyTree.getNumNodes(); n++)
-
-//YO - this is Luka's change to cull the data so it is not too big...
-
-let THROTTLE = 5;
-
-
-for (let n=0; n<familyTree.getNumNodes(); n +=THROTTLE )
-    {
-        f += "swimbot index: " + n.toString();
-        f += "<br>";
-        f += "parent 1 index: " + familyTree.getNodeParent1Index(n).toString();
-        f += "<br>";
-        f += "parent 2 index: " + familyTree.getNodeParent2Index(n).toString();
-        f += "<br>";
-        f += "birth time: " + familyTree.getNodeBirthTime(n).toString();
-        f += "<br>";
-        f += "death time: " + familyTree.getNodeDeathTime(n).toString();
-        f += "<br>";
-        f += "genes: ";
-        f += "<br>";
-
-        let genes = familyTree.getNodeGenes(n);
-
-        for (let g=0; g<genes.length; g++)
-        {
-            f += genes[g].toString();
-            if ( g < genes.length - 1 ) 
-            {
-                f += ", ";
-            }
-        }
-
-        f += "<br>";
-        f += "<br>";
-    }
-
-    w.document.body.innerHTML = f;
+    genePool.request( "getFamilyTreeText" ).then( function( text ) { w.document.body.innerHTML = text; });
 }
 
 
@@ -543,7 +490,13 @@ export function displayData( filename )
     {
         console.log( "show pool data..." );
 
-        let pool = genePool.getPoolData();
+        genePool.request( "getPoolData" ).then( function( pool ) { showPoolData( pool ); });
+    }
+}
+
+function showPoolData( pool )
+{
+    {
         let json = JSON.stringify( { pool } );
 
         document.getElementById( 'dataDisplay'      ).style.visibility = "visible";

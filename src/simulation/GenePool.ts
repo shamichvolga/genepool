@@ -18,6 +18,7 @@ import { PhyloTree } from "./PhyloTree";
 import { POOL_BOTTOM, POOL_HEIGHT, POOL_LEFT, POOL_RIGHT, POOL_TOP, POOL_WIDTH, Pool } from "./Pool";
 import { UniformGrid } from "./UniformGrid";
 import * as SS from "./SharedState";
+import { buildFamilyTreeText, buildSwimbotPanelHTML, geneticClustersText } from "../ui/panelTexts";
 import { doTask, TASK_DECIDE, TASK_LOOK, TASK_PHYSICS, TASK_PREPARE_LOOK } from "../parallel/ParallelWork";
 import { perceive, PerceptionScratch } from "./PerceptionKernel";
 import { physicsStep } from "./PhysicsKernel";
@@ -2143,6 +2144,19 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	    simCounters.preyTargetDistanceSum     += a[ SS.K_PREY_DISTANCE ];
 	    simCounters.preyTargetRewardSum       += a[ SS.K_PREY_REWARD ];
 	}
+
+	//------------------------------------------------------------------------
+	// panel texts that need the swimbot objects (built here, so the page can
+	// show them also when the simulation runs in its own thread)
+	//------------------------------------------------------------------------
+	this.getSwimbotPanelHTML     = function() { return buildSwimbotPanelHTML( this ); }
+	this.getGeneticClustersText  = function() { return geneticClustersText( this ); }
+	this.getFamilyTreeText       = function() { return buildFamilyTreeText( this ); }
+	this.createSwimbotFromPreset = function( p ) { this.createNewSwimbotWithGenes( this.getPresetGenotype( p ).slice() ); }
+
+	// ask for something that may take a while or come from another thread:
+	// always a promise (see RemotePool.ts for the other side)
+	this.request = function( name, ...args ) { return Promise.resolve( this[ name ]( ...args )); }
 
 	// the objects behind the numbers in the shared arrays (for the swimbots)
 	this.getSwimbotAt = function( i ) { return _swimbots[i]; }
