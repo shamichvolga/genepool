@@ -825,6 +825,8 @@ export function updateUI()
                 + "<br>"
                 + "speed: " + Math.round( genePool.getStepsPerSecond() ) + " steps/sec"
                 + " (threads: " + genePool.getNumThreads() + ")"
+                
+                + phaseTimesText()
                 + "<br>"
                 + "swimbots: " + genePool.getNumSwimbots() + " (predators: " + predators + ")"
                 + "<br>"
@@ -843,6 +845,20 @@ export function updateUI()
         }
     }
     setTimeout( updateUI, UI_UPDATE_PERIOD );
+}
+
+//----------------------------------------
+// how long a step takes, by phase (averaged since the last panel update)
+//----------------------------------------
+function phaseTimesText()
+{
+    const T = genePool.getPhaseTimes();
+    const n = T[6];
+    if ( !( n > 0 )) return "";
+    const f = ( x ) => ( x / n ).toFixed( 1 );
+    const text = "<br>step: " + f( T[5] ) + " ms (brain " + f( T[0] ) + ", move " + f( T[1] ) + ", look " + f( T[2] + T[3] ) + ", act " + f( T[4] ) + ")";
+    T.fill( 0 );
+    return text;
 }
 
 //----------------------------------------
