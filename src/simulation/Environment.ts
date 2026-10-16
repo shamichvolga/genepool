@@ -382,10 +382,13 @@ export class Environment
     // a picture of the temperature map (for drawing behind the pool);
     // returns null outside a browser
     //--------------------------------------------------------------------
-    makeImage(): HTMLCanvasElement | null
+    makeImage(): any
     {
-        if ( typeof document === "undefined" ) return null;
-        const image = document.createElement( "canvas" );
+        // a page canvas, or in the simulation thread an offscreen one
+        let image: any = null;
+        if ( typeof document !== "undefined" )          { image = document.createElement( "canvas" ); }
+        else if ( typeof OffscreenCanvas !== "undefined" ) { image = new OffscreenCanvas( FIELD_SIZE, FIELD_SIZE ); }
+        else return null;
         image.width = image.height = FIELD_SIZE;
         const context = image.getContext( "2d" );
         const pixels  = context.createImageData( FIELD_SIZE, FIELD_SIZE );

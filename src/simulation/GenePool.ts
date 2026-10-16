@@ -1,6 +1,6 @@
 import { geneAverage, convertOldGenes, GENE_LAYOUT_VERSION, setTrait, gaussian, thermalWidthToGene, preyTargetScore, GENES_PREDATOR, GENES_THERMAL_OPTIMUM, GENES_THERMAL_WIDTH, GENES_DIGESTION, GENES_BRIGHTNESS, GENES_CHOOSINESS, GENES_HUNGER, GENES_AUTOTOMY_BITE, GENES_AUTOTOMY_THREAT, GENES_AUTOTOMY_AMOUNT, GENES_AUTOTOMY_WHICH } from "./EcologyGenes";
 import { environment, FLAT_ENVIRONMENT, INITIAL_SOIL_NUTRIENT_PER_CELL, NUTRIENT_CYCLE_ENABLED, PLANT_TYPE_WARM, PLANT_TYPE_COLD, SEASONAL_PLANT_GROWTH_ENABLED, SEASONAL_PLANT_GROWTH_AMPLITUDE } from "./Environment";
-import { petriStartZone } from "./Petri";
+import { petriSettings, petriStartZone } from "./Petri";
 import { IGNORE_FOOD_EFFICIENCY, preyVisibility, TWO_PLANT_TYPES } from "./Ecology";
 import { DIET_SWITCH_RATE, CLASSIC_NUM_SWIMBOTS, CLASSIC_NUM_FOODBITS, GARDEN_RADIUS, ENVIRONMENT_PLANT_SPREAD_RATE, ENVIRONMENT_SEEDS_PER_PERIOD, LOCAL_ENVIRONMENT_PLANT_GROWTH, PLANT_CELL_CAPACITY, PLANT_PARENT_SEED_FRACTION, PLANT_SEED_MIN_DISTANCE, PLANT_SEED_MAX_DISTANCE } from "./Parameters";
 
@@ -2152,6 +2152,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	this.getSwimbotPanelHTML     = function() { return buildSwimbotPanelHTML( this ); }
 	this.getGeneticClustersText  = function() { return geneticClustersText( this ); }
 	this.getFamilyTreeText       = function() { return buildFamilyTreeText( this ); }
+	this.getPetriSettings        = function() { return { zones: petriSettings.zones, layout: petriSettings.layout, softness: petriSettings.softness }; }
 	this.createSwimbotFromPreset = function( p ) { this.createNewSwimbotWithGenes( this.getPresetGenotype( p ).slice() ); }
 
 	// ask for something that may take a while or come from another thread:

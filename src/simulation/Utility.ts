@@ -36,6 +36,12 @@ import { gpRandom } from "./Globals";
         }
     }
     
+	// a failed check: a message box on the page, the console elsewhere
+	function report( text )
+	{
+		if ( typeof alert === "function" ) { alert( text ); } else { console.error( text ); }
+	}
+
 	//-----------------------------------
 	// assert
 	//-----------------------------------
@@ -43,7 +49,7 @@ import { gpRandom } from "./Globals";
 	{
 		if ( !assertion )
 		{
-			alert( "assertion failed: " + string );
+			report( "assertion failed: " + string );
 		} 
 	}
 
@@ -55,7 +61,7 @@ import { gpRandom } from "./Globals";
 	{
 		if ( !Number.isInteger( value ))    // (a number, finite, whole)
 		{
-			alert( "assertInteger: value not an integer! - " + string );
+			report( "assertInteger: value not an integer! - " + string );
 		} 
 	}
 	

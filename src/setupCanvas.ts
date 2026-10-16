@@ -4,5 +4,9 @@
 //------------------------------------------------------------------------------
 const canvasElement = document.getElementById( "Canvas" ) as HTMLCanvasElement;
 
+import { SIM_IN_THREAD } from "./threadMode";
+
 ( window as any ).canvasID = canvasElement;
-( window as any ).canvas   = canvasElement.getContext( "2d" );
+// (when the simulation thread draws, the page may not take a context:
+//  the canvas is handed over to the thread, see main.ts)
+( window as any ).canvas   = SIM_IN_THREAD ? null : canvasElement.getContext( "2d" );

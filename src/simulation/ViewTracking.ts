@@ -102,7 +102,7 @@ export function ViewTracking()
             {
                 _isTracking = true;
                 _trackingScale = 400;
-                document.getElementById( 'swimbotDataPanel' ).innerHTML = "";
+                if ( typeof document !== "undefined" ) { document.getElementById( 'swimbotDataPanel' ).innerHTML = ""; }
             }
         }
         //-----------------------------------------------
@@ -132,7 +132,7 @@ export function ViewTracking()
             
                 _isTracking = true;
                 _trackingScale = 500;
-                document.getElementById( 'swimbotDataPanel' ).innerHTML = "";
+                if ( typeof document !== "undefined" ) { document.getElementById( 'swimbotDataPanel' ).innerHTML = ""; }
             }
         } 
         //-----------------------------------------------
@@ -148,7 +148,7 @@ export function ViewTracking()
             
                 _isTracking = true;
                 _trackingScale = 500;
-                document.getElementById( 'swimbotDataPanel' ).innerHTML = "";
+                if ( typeof document !== "undefined" ) { document.getElementById( 'swimbotDataPanel' ).innerHTML = ""; }
             }
         }
         //-----------------------------------------------
@@ -164,7 +164,7 @@ export function ViewTracking()
             
                 _isTracking = true;
                 _trackingScale = 500;
-                document.getElementById( 'swimbotDataPanel' ).innerHTML = "";
+                if ( typeof document !== "undefined" ) { document.getElementById( 'swimbotDataPanel' ).innerHTML = ""; }
             }
         }
         //-----------------------------------------------
@@ -180,7 +180,7 @@ export function ViewTracking()
             
                 _isTracking = true;
                 _trackingScale = 500;
-                document.getElementById( 'swimbotDataPanel' ).innerHTML = "";
+                if ( typeof document !== "undefined" ) { document.getElementById( 'swimbotDataPanel' ).innerHTML = ""; }
             }
         }
         

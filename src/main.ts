@@ -34,6 +34,10 @@ import * as ui       from "./ui/ui";
 import { CapsuleRenderer } from "./render/CapsuleRenderer";
 import { ParallelRunner } from "./parallel/ParallelRunner";
 import { sharedState } from "./simulation/SharedState";
+import { SIM_IN_THREAD } from "./threadMode";
+import { createRemotePool } from "./RemotePool";
+import { WORLD_SCALE } from "./simulation/World";
+import { petriSettings } from "./simulation/Petri";
 
 //------------------------------------------------------------------------------
 // The HTML buttons call functions and constants by their global names
@@ -53,16 +57,21 @@ Object.assign( window,
 // graphics-card layer: same size and place as the pool canvas
 //------------------------------------------------------------------------------
 const glCanvas = document.getElementById( "GLCanvas" ) as HTMLCanvasElement;
-const capsuleRenderer = CapsuleRenderer.create( glCanvas );
-if ( capsuleRenderer === null ) { console.warn( "No WebGL2: drawing everything the old way." ); }
+const capsuleRenderer = SIM_IN_THREAD ? null : CapsuleRenderer.create( glCanvas );
+if ( !SIM_IN_THREAD && ( capsuleRenderer === null )) { console.warn( "No WebGL2: drawing everything the old way." ); }
 
 function resizeAll()
 {
     ui.resize();
-    glCanvas.width      = canvasID.width;
-    glCanvas.height     = canvasID.height;
-    glCanvas.style.left = canvasID.offsetLeft + "px";
-    glCanvas.style.top  = canvasID.offsetTop  + "px";
+    if ( !( window as any ).simThreadResize )      // (once handed to the thread, only the thread sizes it)
+    {
+        glCanvas.width  = canvasID.width;
+        glCanvas.height = canvasID.height;
+    }
+    glCanvas.style.width  = canvasID.style.width;
+    glCanvas.style.height = canvasID.style.height;
+    glCanvas.style.left   = canvasID.offsetLeft + "px";
+    glCanvas.style.top    = canvasID.offsetTop  + "px";
 }
 
 resizeAll();
@@ -152,8 +161,37 @@ function startBackgroundMetronome()
     };
 }
 
+//------------------------------------------------------------------------------
+// The whole simulation in its own thread (simhost.worker.ts): the canvases are
+// handed over, the page keeps only the panels (genePool is a stand-in, see
+// RemotePool.ts).
+//------------------------------------------------------------------------------
+function startGenePoolThread()
+{
+    const worker = new Worker( new URL( "./simhost.worker.ts", import.meta.url ), { type: "module", name: "world=" + WORLD_SCALE } );
+    worker.onerror = ( e ) => console.error( "simulation thread failed:", e.message );
+
+    const width  = canvasID.width, height = canvasID.height;
+    const canvas2D = ( canvasID as any ).transferControlToOffscreen();
+    const canvasGL = ( glCanvas as any ).transferControlToOffscreen();
+    const numWorkers = Math.max( 1, Math.min( 7, ( navigator.hardwareConcurrency || 2 ) - 1 ));
+    worker.postMessage({ type: "init", canvas: canvas2D, glCanvas: canvasGL, width, height, numWorkers,
+                         petri: { zones: petriSettings.zones, layout: petriSettings.layout, softness: petriSettings.softness }},
+                       [ canvas2D, canvasGL ] );
+
+    ( window as any ).genePool = createRemotePool( worker, () => ui.syncPetriPanel() );
+    ( window as any ).simThreadResize = ( w: number, h: number ) => worker.postMessage({ type: "resize", width: w, height: h });
+    document.addEventListener( "visibilitychange", () => worker.postMessage({ type: "visibility", hidden: document.hidden }));
+    resizeAll();
+
+    ui.showWorldSize();
+    ui.setupPetriPanel();
+}
+
 function startGenePool()
 {
+    if ( SIM_IN_THREAD ) { startGenePoolThread(); return; }
+
     const pool = new GenePoolModule.GenePool();
     ( window as any ).genePool = pool;
 

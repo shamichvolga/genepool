@@ -11,6 +11,8 @@ const isolationHeaders =
 export default defineConfig(
 {
     base: "./",
+    // the simulation thread starts its own worker threads: module workers
+    worker:  { format: "es" },
     server:  { port: 5173, headers: isolationHeaders },
     preview: { port: 4173, headers: isolationHeaders },
 });

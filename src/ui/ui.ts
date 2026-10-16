@@ -882,10 +882,17 @@ export function togglePanel()
 export function resize()
 {
     let rightMargin = document.body.classList.contains( "panelHidden" ) ? 0 : 400;
-    let width  = window.innerWidth  - rightMargin;
-    let height = window.innerHeight;
+    let width  = Math.max( 1, Math.floor( window.innerWidth  - rightMargin ));   // (a narrow window: at least 1)
+    let height = Math.max( 1, Math.floor( window.innerHeight - 15 ));
+    canvasID.style.width  = width  + "px";
+    canvasID.style.height = height + "px";
+
+    // the canvas was handed to the simulation thread: tell it the new size
+    const resizeThread = ( window as any ).simThreadResize;
+    if ( resizeThread ) { resizeThread( width, height ); return; }
+
     canvasID.width  = width;
-    canvasID.height = height - 15;
+    canvasID.height = height;
     let genePoolIsDefined = typeof genePool != 'undefined';
     if ( genePoolIsDefined )
     {
