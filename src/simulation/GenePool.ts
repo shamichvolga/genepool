@@ -3496,6 +3496,19 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
 
 
 	//----------------------------------------
+	// what the selected swimbot is after: a thin, see-through grey line
+	function renderTargetLine( line )
+	{
+	    if ( line === null ) return;
+	    canvas.lineWidth = 1.2 + 0.004 * _camera.getScale();
+	    canvas.strokeStyle = "rgba( 200, 200, 200, 0.35 )";
+	    canvas.beginPath();
+	    canvas.moveTo( line.fromX, line.fromY );
+	    canvas.lineTo( line.toX, line.toY );
+	    canvas.stroke();
+	    canvas.closePath();
+	}
+
 	function renderSelectCircle( x, y, r, m )
 	{
 	    let lineWidth = 1.6 + 0.005 * _camera.getScale();
@@ -3639,6 +3652,7 @@ this.renderFoodBits = function( useGraphicsCard )
 	            if (batchItem.isSelected)
 	            {
 	                renderSelectCircle(swimbot.getPosition().x, swimbot.getPosition().y, swimbot.getSelectRadius(), false);
+	                renderTargetLine( swimbot.getTargetLine() );
 	            }
 	            else
 	            {

@@ -271,6 +271,27 @@ this.setParent = function( parent )
 	//------------------------------------------------------------------------
 	this.getKernelEvents = function() { return _M[ _m + SS.M_EVENTS ]; }
 	this.getIsCannibalHunting = function() { return _M[ _m + SS.M_CANNIBAL ] === 1; }
+
+	//------------------------------------------------------------------------
+	// what am I after, for drawing a line to it: { fromX, fromY, toX, toY }
+	// (food or prey from the mouth, a mate from the genitals, a predator I
+	// flee from the body), or null
+	//------------------------------------------------------------------------
+	this.getTargetLine = function()
+	{
+	    const state = _brain.getState();
+	    const food = chosenFoodBit(), prey = chosenPrey(), mate = chosenMate();
+	    const line = ( from, to ) => ({ fromX: from.x, fromY: from.y, toX: to.x, toY: to.y });
+	    if (( state === BRAIN_STATE_PURSUING_MATE ) && ( mate != null ) && mate.getAlive() ) return line( _genitalPosition, mate.getGenitalPosition() );
+	    if ( state === BRAIN_STATE_FLEEING_PREDATOR )
+	    {
+	        const danger = ( nearestPredator() != null ) ? nearestPredator() : calmPredator();
+	        return (( danger != null ) && danger.getAlive() ) ? line( _position, danger.getPosition() ) : null;
+	    }
+	    if (( prey != null ) && prey.getAlive() && (( state === BRAIN_STATE_PURSUING_PREY ) || ( _M[ _m + SS.M_CANNIBAL ] === 1 ))) return line( _mouthPosition, prey.getPosition() );
+	    if (( food != null ) && food.getAlive() ) return line( _mouthPosition, food.getPosition() );
+	    return null;
+	}
 	this.getNumCannibalized   = function() { return _numCannibalized; }
 
 	//------------------------------------------------------------------------

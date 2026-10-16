@@ -1,6 +1,6 @@
 import { simClock, gpRandom } from "./Globals";
 import { NULL_INDEX, ONE, ONE_HALF, PI2, ZERO } from "./MathConstants";
-import { SPAWN_FOOD_RANDOMLY_IN_POOL } from "./Parameters";
+import { PLANT_OLD_AGE, PLANT_SPROUT_AGE, PLANT_STAGES_ENABLED, SPAWN_FOOD_RANDOMLY_IN_POOL } from "./Parameters";
 import { POOL_BOTTOM, POOL_HEIGHT, POOL_LEFT, POOL_RIGHT, POOL_TOP, POOL_WIDTH } from "./Pool";
 import { assert } from "./Utility";
 import { SplitVector2D, Vector2D } from "./Vector2D";
@@ -269,23 +269,66 @@ export function FoodBit()
 	//----------------------------------------------------
 	// hand this food bit to the graphics-card renderer
 	//----------------------------------------------------
+	//------------------------------------------------------------------
+	// how it looks: PLANT_STAGES_ENABLED - a sprout is small, an old plant
+	// bigger and drawn as a star of 8 rays (like the Claude logo)
+	//------------------------------------------------------------------
+	const stage = function()
+	{
+	    if ( !PLANT_STAGES_ENABLED || ( _ft[ _fi ] === 2 )) return 1;
+	    const age = simClock.step - _fb[ _fi ];
+	    return ( age < PLANT_SPROUT_AGE ) ? 0 : ( age > PLANT_OLD_AGE ) ? 2 : 1;
+	}
+	const STAGE_SIZE = [ 0.7, 1.0, 1.6 ];
+
 	this.writeCapsule = function( capsules, viewScale )
 	{
-	    let radius = FOOD_BIT_SIZE + viewScale * FOOD_BIT_SIZE_VIEW_SCALE * FOOD_BIT_SIZE_VIEW_SCALE;
-	    capsules.add( _position.x, _position.y, _position.x, _position.y, radius, _red, _green, _blue, opacity() );
+	    const st = stage();
+	    let radius = ( FOOD_BIT_SIZE + viewScale * FOOD_BIT_SIZE_VIEW_SCALE * FOOD_BIT_SIZE_VIEW_SCALE ) * STAGE_SIZE[ st ];
+	    if ( st !== 2 )
+	    {
+	        capsules.add( _position.x, _position.y, _position.x, _position.y, radius, _red, _green, _blue, opacity() );
+	        return;
+	    }
+	    // a star: 4 thin capsules through the middle (8 rays) and a small core
+	    const ray = radius * 1.8, w = radius * 0.28, r = _red * 0.8, g = _green * 0.8, b = _blue * 0.8;
+	    for (let k = 0; k < 4; k++)
+	    {
+	        const a = k * Math.PI / 4, dx = Math.cos( a ) * ray, dy = Math.sin( a ) * ray;
+	        capsules.add( _position.x - dx, _position.y - dy, _position.x + dx, _position.y + dy, w, r, g, b, opacity() );
+	    }
+	    capsules.add( _position.x, _position.y, _position.x, _position.y, radius * 0.55, r, g, b, opacity() );
 	}
 
 	this.render = function( vewScale )
 	{
-	    canvas.fillStyle
-        = "rgba( "
-        + Math.floor( _red   * 255 ) + ", "
-        + Math.floor( _green * 255 ) + ", "
-        + Math.floor( _blue  * 255 ) + ", "
+	    const st = stage();
+	    const color = "rgba( "
+        + Math.floor( _red   * 255 * ( st === 2 ? 0.8 : 1 )) + ", "
+        + Math.floor( _green * 255 * ( st === 2 ? 0.8 : 1 )) + ", "
+        + Math.floor( _blue  * 255 * ( st === 2 ? 0.8 : 1 )) + ", "
         + opacity() + ")";
+	    let radius = ( FOOD_BIT_SIZE + vewScale * FOOD_BIT_SIZE_VIEW_SCALE * FOOD_BIT_SIZE_VIEW_SCALE ) * STAGE_SIZE[ st ];
 
-	    let radius = FOOD_BIT_SIZE + vewScale * FOOD_BIT_SIZE_VIEW_SCALE * FOOD_BIT_SIZE_VIEW_SCALE;
+	    if ( st === 2 )
+	    {
+	        // a star of 8 rays
+	        canvas.strokeStyle = color;
+	        canvas.lineWidth   = radius * 0.56;
+	        canvas.lineCap     = "round";
+	        canvas.beginPath();
+	        for (let k = 0; k < 4; k++)
+	        {
+	            const a = k * Math.PI / 4, dx = Math.cos( a ) * radius * 1.8, dy = Math.sin( a ) * radius * 1.8;
+	            canvas.moveTo( _position.x - dx, _position.y - dy );
+	            canvas.lineTo( _position.x + dx, _position.y + dy );
+	        }
+	        canvas.stroke();
+	        canvas.closePath();
+	        return;
+	    }
 
+	    canvas.fillStyle = color;
         canvas.beginPath();
         canvas.arc( _position.x, _position.y, radius, 0, PI2, false );
         canvas.fill();
