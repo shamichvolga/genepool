@@ -833,7 +833,7 @@ export function updateUI()
                 + "<br>"
                 + "swimbots: " + genePool.getNumSwimbots() + " (predators: " + predators + ")"
                 + "<br>"
-                + speciesText()
+                + geneticClustersText()
                 + "<br>"
                 + "green plants: " + genePool.getNumFoodBitsOfType(0)
                 + ( TWO_PLANT_TYPES ? "<br>blue plants: " + genePool.getNumFoodBitsOfType(1) : "" )
@@ -1060,20 +1060,21 @@ export function showWorldSize()
 
 
 //----------------------------------------------------------
-// "species" by body, recounted every 5 seconds (it takes a moment)
+// Genetic clusters, not biological species; recounted every 5 seconds.
 //----------------------------------------------------------
-let _speciesText = "species: …";
-let _speciesTime = 0;
-function speciesText()
+let _geneticClustersText = "genetic clusters: …";
+let _geneticClustersTime = 0;
+function geneticClustersText()
 {
     const now = performance.now();
-    if ( now - _speciesTime > 5000 )
+    if ( now - _geneticClustersTime > 5000 )
     {
-        _speciesTime = now;
-        const result = genePool.estimateSpecies( 400 );
-        _speciesText = "species (by body): " + result.species + ", largest " + Math.round( result.largestShare * 100 ) + "%";
+        _geneticClustersTime = now;
+        const result = genePool.estimateGeneticClusters( 400 );
+        _geneticClustersText = "genetic clusters (used genes): " + result.geneticClusters
+            + ", largest " + Math.round( result.largestClusterShare * 100 ) + "%";
     }
-    return _speciesText;
+    return _geneticClustersText;
 }
 
 

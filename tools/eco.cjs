@@ -7,7 +7,7 @@
 //          (0 = no adaptation, 1 = perfect tracking),
 //   d~T: correlation of digestion with the local T (warm places = warm plants),
 //   occupied: share of 500x500 cells with at least one swimbot,
-//   body species (as in headless.cjs).
+//   genetic clusters, coarse morphotypes, and their effective diversity.
 //
 //   node tools/eco.cjs --seed 1 --steps 100000 --every 5000 [--flat 1] [--csv out.csv]
 //   --flat 1 = control C0 (no temperature differences, plants grow anywhere)
@@ -586,7 +586,7 @@ for ( let step = 1; step <= STEPS; step++ )
                       e.occupied.toFixed( 2 ), e.plantCellsOccupied, e.plantCellOccupancy.toFixed( 3 ), e.plantsPerOccupiedCell.toFixed( 2 ),
                       e.soilNutrientCells, e.soilNutrientMean.toFixed( 4 ), e.soilNutrientP10.toFixed( 4 ),
                       e.soilNutrientP50.toFixed( 4 ), e.soilNutrientP90.toFixed( 4 ),
-                      s.species, s.effSpecies.toFixed( 1 ), s.topShare.toFixed( 2 ),
+                      s.geneticClusters, s.effectiveGeneticClusters.toFixed( 1 ), s.largestGeneticClusterShare.toFixed( 2 ),
                       e.preyValueWeightMean.toFixed( 3 ), e.preyTravelWeightMean.toFixed( 3 ), e.preyBaitBiasMean.toFixed( 3 ),
                       ...eventKeys.map( key => events[ key ] ),
                       msPerStep.toFixed( 1 ) ].join( "," );
@@ -605,7 +605,7 @@ if ( META )
     const endedAt = new Date().toISOString();
     const durationMs = Number( process.hrtime.bigint() - runStartNs ) / 1e6;
     const metadata = {
-        schemaVersion: 15,
+        schemaVersion: 16,
         startedAt,
         endedAt,
         durationMs: Number( durationMs.toFixed( 1 )),
@@ -633,6 +633,14 @@ if ( META )
         morphologyMetrics: {
             type: "coarse bins from log mass, mean width, mean length, part count, and branch fraction; not biological species",
             widths: { logMass: 1, meanWidth: 2, meanLength: 10, partCount: 10, branchFraction: 0.5 },
+        },
+        geneticClusterMetrics: {
+            sample: "all living swimbots in eco/headless runs",
+            grouping: "greedy first-fit groups with mean absolute difference below 0.12 across used genes",
+            reportedCount: "clusters containing at least 5 living swimbots",
+            effectiveDiversity: "exponential Shannon diversity over all genetic clusters, including smaller clusters",
+            largestShare: "largest genetic cluster divided by the living population",
+            interpretation: "genetic clusters are not body-shape bins or biological species",
         },
         thermalMetrics: {
             unit: "normalized 0..1 temperature",

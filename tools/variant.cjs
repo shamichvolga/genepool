@@ -21,7 +21,7 @@ const run = createSimulation( seed, Object.fromEntries( overrides ) );
 const genePool = run.genePool;
 
 console.log( `steps=${steps} seed=${seed} ${overrides.map( o => o.join( "=" ) ).join( " " )}` );
-console.log( "step,alive,predators,plants,meat,mean_energy,births,species,eff_species,top_share" );
+console.log( "step,alive,predators,plants,meat,mean_energy,births,genetic_clusters,effective_genetic_clusters,largest_genetic_cluster_share" );
 
 let lastNodes = genePool.getFamilyTree().getNumNodes();
 
@@ -34,7 +34,7 @@ for ( let step = 1; step <= steps; step++ )
         const s = run.stats( genePool );
         const nodes = genePool.getFamilyTree().getNumNodes();
         console.log( [ step, s.alive, s.predators, s.food, s.meat, s.meanEnergy.toFixed( 1 ), nodes - lastNodes,
-                       s.species, s.effSpecies.toFixed( 1 ), s.topShare.toFixed( 2 ) ].join( "," ) );
+                       s.geneticClusters, s.effectiveGeneticClusters.toFixed( 1 ), s.largestGeneticClusterShare.toFixed( 2 ) ].join( "," ) );
         lastNodes = nodes;
     }
 }

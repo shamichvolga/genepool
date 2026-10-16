@@ -20,7 +20,6 @@ import { UniformGrid } from "./UniformGrid";
 import * as SS from "./SharedState";
 import { perceive, PerceptionScratch } from "./PerceptionKernel";
 import { physicsStep } from "./PhysicsKernel";
-import { FLAT_ENVIRONMENT } from "./Environment";
 import { Swimbot } from "./Swimbot";
 import { ATTRACTION_RANDOM, ATTRACTION_SIMILAR_COLOR, NUM_ATTRACTIONS, STARVING, SWIMBOT_MOUTH_LENGTH, SWIMBOT_VIEW_RADIUS } from "./SwimbotTypes";
 import { Touch, TouchState } from "./Touch";
@@ -1176,18 +1175,17 @@ if ( mode === SimulationStartMode.SPECIES )
 	this.getEnvironment = function() { return environment; }
 
 	//------------------------------------------------------------------------
-	// How many "species" by body (for the statistics panel): swimbots whose
-	// body genes differ on average by less than 12% go into one group (the
-	// same rule as tools/headless.cjs). Uses an even sample of at most
-	// `sampleSize` swimbots and no random numbers (does not disturb the run).
-	// Groups smaller than 3% of the sample are not counted as species.
+	// Estimate genetic clusters from used genes for the statistics panel.
+	// This is not a species estimate and is distinct from morphology bins.
+	// Uses an even sample of at most `sampleSize` swimbots and no random numbers;
+	// clusters below 3% of that sample are omitted from the displayed count.
 	//------------------------------------------------------------------------
-	this.estimateSpecies = function( sampleSize = 400 )
+	this.estimateGeneticClusters = function( sampleSize = 400 )
 	{
 	    const alive = [];
 	    for (let s = 0; s < MAX_SWIMBOTS; s++) { if ( _swimbots[s].getAlive() ) alive.push(s); }
 	    const n = alive.length;
-	    if ( n === 0 ) return { species: 0, largestShare: 0, sampled: 0 };
+	    if ( n === 0 ) return { geneticClusters: 0, largestClusterShare: 0, sampled: 0 };
 
 	    const stride = Math.max( 1, n / sampleSize );
 	    const groups = [];   // { genes, count }
@@ -1211,9 +1209,9 @@ if ( mode === SimulationStartMode.SPECIES )
 	        }
 	        sampled ++;
 	    }
-	    const big = groups.filter( g => g.count >= sampled * 0.03 );
+	    const largeClusters = groups.filter( g => g.count >= sampled * 0.03 );
 	    const largest = groups.reduce( ( m, g ) => Math.max( m, g.count ), 0 );
-	    return { species: big.length, largestShare: largest / sampled, sampled };
+	    return { geneticClusters: largeClusters.length, largestClusterShare: largest / sampled, sampled };
 	}
 
 	//------------------------------------------------------------------------

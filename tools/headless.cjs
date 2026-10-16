@@ -155,13 +155,13 @@ for ( const name in overrides )
 vm.runInContext( source, sandbox, { filename: "genepool-bundle.js" } );
 
 //------------------------------------------------
-// species clustering on the body genes
+// genetic clustering on used genes (not a biological species estimate)
 //------------------------------------------------
 const run = vm.runInContext( `
 (function()
 {
-    const SPECIES_DISTANCE = 0.12;  // mean gene difference that separates two clusters
-    const MIN_SPECIES_SIZE = 5;
+    const GENETIC_CLUSTER_DISTANCE = 0.12;  // mean used-gene difference
+    const MIN_GENETIC_CLUSTER_SIZE = 5;
 
     function geneDistance( a, b )
     {
@@ -176,11 +176,11 @@ const run = vm.runInContext( `
         {
             // older versions of the code: only totals are available
             const n = genePool.getNumSwimbots();
-            return { alive: n, predators: 0, food: genePool.getNumFoodBits(), meat: 0, meanEnergy: 0, species: 0, effSpecies: 0, topShare: 0 };
+            return { alive: n, predators: 0, food: genePool.getNumFoodBits(), meat: 0, meanEnergy: 0, geneticClusters: 0, effectiveGeneticClusters: 0, largestGeneticClusterShare: 0 };
         }
         const bots = genePool.getSwimbots();
         let alive = 0, predators = 0, energy = 0;
-        const reps = [];   // { genes, count, predators }
+        const clusters = [];   // greedy first-fit groups: { genes, count, predators }
 
         for ( let s = 0; s < bots.length; s++ )
         {
@@ -196,15 +196,15 @@ const run = vm.runInContext( `
             for ( let g = 0; g < NUM_GENES_USED; g++ ) { genes[g] = genotype.getGeneValue(g); }
 
             let found = null;
-            for ( const r of reps ) { if ( geneDistance( r.genes, genes ) < SPECIES_DISTANCE ) { found = r; break; } }
-            if ( found === null ) { reps.push({ genes, count: 1, predators: isPredator ? 1 : 0 }); }
+            for ( const r of clusters ) { if ( geneDistance( r.genes, genes ) < GENETIC_CLUSTER_DISTANCE ) { found = r; break; } }
+            if ( found === null ) { clusters.push({ genes, count: 1, predators: isPredator ? 1 : 0 }); }
             else { found.count ++; if ( isPredator ) found.predators ++; }
         }
 
         const hasTypes = ( typeof genePool.getNumFoodBitsOfType === 'function' );
-        const species = reps.filter( r => r.count >= MIN_SPECIES_SIZE ).sort( ( a, b ) => b.count - a.count );
+        const geneticClusters = clusters.filter( r => r.count >= MIN_GENETIC_CLUSTER_SIZE ).sort( ( a, b ) => b.count - a.count );
         let shannon = 0;
-        for ( const r of reps ) { const p = r.count / alive; shannon -= p * Math.log( p ); }
+        for ( const r of clusters ) { const p = r.count / alive; shannon -= p * Math.log( p ); }
 
         return {
             alive,
@@ -212,9 +212,9 @@ const run = vm.runInContext( `
             food        : hasTypes ? genePool.getNumFoodBitsOfType(0) + genePool.getNumFoodBitsOfType(1) : genePool.getNumFoodBits(),
             meat        : hasTypes ? genePool.getNumFoodBitsOfType(2) : 0,
             meanEnergy  : alive > 0 ? energy / alive : 0,
-            species     : species.length,
-            effSpecies  : alive > 0 ? Math.exp( shannon ) : 0,
-            topShare    : ( species.length > 0 && alive > 0 ) ? species[0].count / alive : 0,
+            geneticClusters: geneticClusters.length,
+            effectiveGeneticClusters: alive > 0 ? Math.exp( shannon ) : 0,
+            largestGeneticClusterShare: geneticClusters.length > 0 && alive > 0 ? geneticClusters[0].count / alive : 0,
         };
     }
 
@@ -243,7 +243,7 @@ const alerts = run.alerts;
 // main loop
 //------------------------------------------------
 const rows = [];
-const header = "step,ms_per_step,alive,predators,plants,meat,mean_energy,species,eff_species,top_share,heap_mb";
+const header = "step,ms_per_step,alive,predators,plants,meat,mean_energy,genetic_clusters,effective_genetic_clusters,largest_genetic_cluster_share,heap_mb";
 console.log( `seed=${SEED} steps=${STEPS} bots=${BOTS === null ? "default" : BOTS}` );
 console.log( header );
 
@@ -263,7 +263,7 @@ for ( let step = 1; step <= STEPS; step++ )
         const heap = process.memoryUsage().heapUsed / 1048576;
         const stepsInWindow = ( step % EVERY === 0 ) ? EVERY : ( step % EVERY );
         const row = [ step, ( ms / stepsInWindow ).toFixed( 2 ), s.alive, s.predators, s.food, s.meat,
-                      s.meanEnergy.toFixed( 1 ), s.species, s.effSpecies.toFixed( 1 ), s.topShare.toFixed( 2 ), heap.toFixed( 0 ) ].join( "," );
+                      s.meanEnergy.toFixed( 1 ), s.geneticClusters, s.effectiveGeneticClusters.toFixed( 1 ), s.largestGeneticClusterShare.toFixed( 2 ), heap.toFixed( 0 ) ].join( "," );
         rows.push( row );
         console.log( row );
         t0 = process.hrtime.bigint();
