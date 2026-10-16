@@ -2689,31 +2689,10 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
 	//----------------------------------------
 	this.findLowestDeadFoodBitInArray = function()
 	{
-        let f = NULL_INDEX;
-        let t = NULL_INDEX;
-
-        let looking = true;
-
-        while ( looking )
-        {
-            t ++;
-
-            if ( t < MAX_FOODBITS )
-            {
-                if ( ! _foodBits[t].getAlive() )
-                {
-                    f = t;
-                    assert( f < MAX_FOODBITS, "Genepool.js: findLowestDeadFoodBitInArray: f < MAX_FOODBITS" );
-                    looking = false;
-                }
-            }
-            else
-            {
-                looking = false;
-            }
-         }
-
-        return f;
+        // the lowest free slot (the alive flags are bytes in the shared state)
+        const live = _st.liveFood;
+        for (let f = 0; f < MAX_FOODBITS; f++) { if ( live[f] !== 1 ) return f; }
+        return NULL_INDEX;
     }
 
 
