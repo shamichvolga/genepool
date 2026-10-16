@@ -169,6 +169,7 @@ export class SharedState
     readonly foodType     : Uint8Array;     // 0, 1 = plants, 2 = meat
     readonly foodAlive    : Uint8Array;
     readonly foodEnergy    : Float64Array;
+    readonly foodBorn     : Float64Array;   // the step it appeared (its age = now - born)
 
     readonly background   : Float32Array;   // environment: brightness of the bottom
     readonly temperature  : Float32Array;   // environment: base temperature map (FIELD_SIZE²)
@@ -284,6 +285,7 @@ export class SharedState
         this.foodType   = u8 ( "foodType", MAX_FOODBITS );
         this.foodAlive  = u8 ( "foodAlive", MAX_FOODBITS );
         this.foodEnergy = f64( "foodEnergy", MAX_FOODBITS );
+        this.foodBorn   = f64( "foodBorn", MAX_FOODBITS );
 
         this.background = new Float32Array( make( "background", BACKGROUND_SIZE * BACKGROUND_SIZE * 4 ));
         this.temperature = new Float32Array( make( "temperature", FIELD_SIZE * FIELD_SIZE * 4 ));

@@ -10,7 +10,7 @@ import { BRIGHTNESS_FROM_GENES, Embryology } from "./Embryology";
 import { FamilyTree } from "./FamilyTree";
 import { DEFAULT_FOOD_BIT_ENERGY, DEFAULT_FOOD_BIT_MAX_SPAWN_RADIUS, FOOD_BIT_BOUNDARY_MARGIN, FOOD_BIT_GRAB_RADIUS, FoodBit, MAX_FOOD_BIT_ENERGY, MAX_FOOD_BIT_MAX_SPAWN_RADIUS, MIN_FOOD_BIT_ENERGY, MIN_FOOD_BIT_MAX_SPAWN_RADIUS } from "./FoodBit";
 import { Genotype, NUM_GENES, PRESET_GENOTYPE_DARWIN, PRESET_GENOTYPE_DENNETT, PRESET_GENOTYPE_MENDEL, PRESET_GENOTYPE_TURING, PRESET_GENOTYPE_WILSON } from "./Genotype";
-import { CameraNavigationAction, NUM_GENES_USED, SimulationStartMode, globalTweakers, gpRandom, resetSimulationCounters, simCounters } from "./Globals";
+import { CameraNavigationAction, NUM_GENES_USED, SimulationStartMode, globalTweakers, gpRandom, resetSimulationCounters, simClock, simCounters } from "./Globals";
 import { BYTE_SIZE, MILLISECONDS_PER_SECOND, NULL_INDEX, ONE, ONE_HALF, PI2, ZERO } from "./MathConstants";
 import { Obstacle } from "./Obstacle";
 import { BARRIER_EXPERIMENT, DEFAULT_CHILD_ENERGY_RATIO, DEFAULT_FOOD_REGENERATION_PERIOD, DEFAULT_GARDEN_OF_EDEN_RADIUS, DEFAULT_MAXIMUM_AGE, DEFAULT_SWIMBOT_HUNGER_THRESHOLD, FOOD_LOCAL_CAPACITY, FOOD_LOCAL_RADIUS, FOOD_RANDOM_SEED_CHANCE, FOOD_SPROUT_RATE, INITIAL_NUM_FOODBITS, INITIAL_NUM_SWIMBOTS, INITIAL_PREDATOR_FRACTION, LOCAL_PLANT_GROWTH, LOCAL_PLANT_SEED_RADIUS, MAX_CHILD_ENERGY_RATIO, MAX_FOODBITS, MAX_FOODBITS_PER_TYPE, MAX_FOOD_REGENERATION_PERIOD, MAX_MAXIMUM_AGE, MAX_SWIMBOTS, MAX_SWIMBOT_HUNGER_THRESHOLD, MEAT_DECAY_TIME, MIN_CHILD_ENERGY_RATIO, MIN_FOOD_REGENERATION_PERIOD, MIN_MAXIMUM_AGE, MIN_SWIMBOT_HUNGER_THRESHOLD, NON_REPRODUCING_JUNK_DNA_LIMIT, OBSTACLE_ENABLED, PREDATOR_LEVEL_THRESHOLD, PREY_MAX_MASS_RATIO, RANDOM_MATING_CONTROL, RENDER_SWIMBOT_AS_DOT, SWIMBOT_LEVEL_OF_DETAIL_DOT, SWIMBOT_LEVEL_OF_DETAIL_HIGH, SWIMBOT_LEVEL_OF_DETAIL_LOW, YOUNG_AGE_DURATION } from "./Parameters";
@@ -381,7 +381,7 @@ export function GenePool()
 	for (let f=0; f<MAX_FOODBITS; f++)
 	{
 		_foodBits[f] = new FoodBit();
-		_foodBits[f].bindLiveFlag( _st.liveFood, f );
+		_foodBits[f].bindShared( _st, f );
 	}
 
 	//-------------------------------------
@@ -956,6 +956,7 @@ if ( mode === SimulationStartMode.SPECIES )
 		// reset clock to 0
 		//---------------------------------
 		_clock = 0;
+		simClock.step = 0;
 	    resetSimulationCounters();
 	    resetHistory();
 	}
@@ -1754,6 +1755,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
         // advance clock...
         //--------------------
         _clock ++;
+        simClock.step = _clock;
         const stepStart = now();
 
         if ( environment.active )
@@ -2187,26 +2189,20 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
         rebuildAliveIndexCaches();
 
 	    // rebuild the swimbot grid from the living swimbots
+	    // (what does not move - predator level, brightness, mass... - the
+	    //  swimbot writes itself when it changes: Swimbot.writeStaticPerception)
 	    for (let i = 0; i < _aliveSwimbotIndices.length; i++)
 	    {
             let s = _aliveSwimbotIndices[i];
-            syncSwimbot(s);
+            syncSwimbotPosition(s);
+            _botAlive[s] = 1;
             _swimbotWasAlive[s] = true;
 	    }
         _swimbotGrid.build( _aliveSwimbotIndices, _aliveSwimbotIndices.length, _botX, _botY );
 
-	    // rebuild the food grid from the living food bits
-	    _st.foodAlive.fill( 0 );
-	    for (let i = 0; i < _aliveFoodBitIndices.length; i++)
-	    {
-            let f = _aliveFoodBitIndices[i];
-            _st.foodAlive[f] = 1;
-            const position = _foodBits[f].getPosition();
-            _foodX[f] = position.x;
-            _foodY[f] = position.y;
-            _foodType[f] = _foodBits[f].getType();
-	        _st.foodEnergy[f] = _foodBits[f].getEnergy();
-	    }
+	    // rebuild the food grid from the living food bits (their position, type
+	    // and energy are already in the shared state: FoodBit.bindShared)
+	    _st.foodAlive.set( _st.liveFood );
         _foodBitGrid.build( _aliveFoodBitIndices, _aliveFoodBitIndices.length, _foodX, _foodY );
 
         this.updateSwimbotsInPhases();
@@ -2331,18 +2327,18 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
         //-------------------------------------------------
         // general update for all food bits; meat rots
         //-------------------------------------------------
+        // (on the shared arrays: alive, type, position and birth of each food bit)
+        const live = _st.liveFood, foodType = _st.foodType, foodX = _st.foodX, foodY = _st.foodY, born = _st.foodBorn;
         for (let i = 0; i < _aliveFoodBitIndices.length; i++)
         {
             let f = _aliveFoodBitIndices[i];
-            if (!_foodBits[f].getAlive()) continue;
+            if ( live[f] !== 1 ) continue;
 
-            _foodBits[f].update();
-
-            let type = _foodBits[f].getType();
+            let type = foodType[f];
 
                  if ( type === 0 ) { numType0FoodBits ++; }
             else if ( type === 1 ) { numType1FoodBits ++; }
-            else if ( _foodBits[f].getAge() > MEAT_DECAY_TIME )
+            else if ( _clock - born[f] > MEAT_DECAY_TIME )
             {
                 simCounters.meatDecayEvents ++;
                 if ( counting && NUTRIENT_CYCLE_ENABLED )
@@ -2353,10 +2349,9 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
                 _foodBits[f].kill();
             }
 
-            if ( counting && ( type !== 2 ) && _foodBits[f].getAlive() )
+            if ( counting && ( type !== 2 ) && ( live[f] === 1 ))
             {
-                const position = _foodBits[f].getPosition();
-                environment.plantCount[ type ][ environment.plantCellIndex( position.x, position.y ) ] ++;
+                environment.plantCount[ type ][ environment.plantCellIndex( foodX[f], foodY[f] ) ] ++;
             }
         }
 
@@ -4494,6 +4489,7 @@ this.testPredation = function()
     // reset family tree and clock
     _familyTree.reset();
     _clock = 0;
+    simClock.step = 0;
     resetSimulationCounters();
     resetHistory();
 

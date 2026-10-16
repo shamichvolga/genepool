@@ -86,6 +86,9 @@ export var globalTweakers = new GlobalTweakers();
 //---------------------------------------------------------------
 // counters that several modules update
 //---------------------------------------------------------------
+// the simulation's step counter (GenePool keeps it up to date)
+export const simClock = { step: 0 };
+
 export const simCounters = {
     numDeadSwimbots: 0,
     attackCount: 0,

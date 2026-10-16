@@ -530,6 +530,10 @@ this.setParent = function( parent )
 	    st.preferred [s] = _phenotype.preferredFoodType;
 	    st.choosiness[s] = _choosiness;
 	    st.attraction[s] = _brain.getAttractionCriterion();
+	    st.predator  [s] = this.getPredatorLevel();
+	    st.brightness[s] = _brightness;
+	    st.mass      [s] = _phenotype.mass;
+	    st.eternal   [s] = this.isEternal() ? 1 : 0;
 	    const color = this.getAverageColor();
 	    st.colorR    [s] = color.red;
 	    st.colorG    [s] = color.green;
@@ -1878,7 +1882,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	this.getDynamicScanRadius           = function() { return _M[ _m + SS.M_SCAN_RADIUS ];                                  }
 	this.getEternal                     = function() { return ( _B[ _b + SS.B_ETERNAL ] === 1 );                                     }
 	this.isEternal                      = function() { return ( _B[ _b + SS.B_ETERNAL ] === 1 );                                     }
-	this.setEternal                     = function(e) { _B[ _b + SS.B_ETERNAL ] = e ? 1 : 0;                                       }
+	this.setEternal                     = function(e) { _B[ _b + SS.B_ETERNAL ] = e ? 1 : 0; if ( _slot >= 0 ) { _shared.eternal[ _slot ] = e ? 1 : 0; } }
 
 	//---------------------------------------
 	this.getPredatorLevel = function()

@@ -303,3 +303,37 @@ SharedVector2D.prototype.rebind = function( array: Float64Array, offset: number 
     this.x = x;
     this.y = y;
 }
+
+
+//------------------------------------------------------------------------------
+// A vector whose x lives in xs[ index ] and y in ys[ index ] (for example the
+// food positions of the shared state: foodX, foodY). All Vector2D methods.
+//------------------------------------------------------------------------------
+export function SplitVector2D( xs: Float64Array, ys: Float64Array, index: number )
+{
+    this.xs = xs;
+    this.ys = ys;
+    this.index = index;
+}
+
+SplitVector2D.prototype = Object.create( Vector2D.prototype );
+SplitVector2D.prototype.constructor = SplitVector2D;
+
+Object.defineProperty( SplitVector2D.prototype, "x", {
+    get: function() { return this.xs[ this.index ]; },
+    set: function( v ) { this.xs[ this.index ] = v; },
+});
+Object.defineProperty( SplitVector2D.prototype, "y", {
+    get: function() { return this.ys[ this.index ]; },
+    set: function( v ) { this.ys[ this.index ] = v; },
+});
+
+SplitVector2D.prototype.rebind = function( xs: Float64Array, ys: Float64Array, index: number )
+{
+    const x = this.x, y = this.y;
+    this.xs = xs;
+    this.ys = ys;
+    this.index = index;
+    this.x = x;
+    this.y = y;
+}

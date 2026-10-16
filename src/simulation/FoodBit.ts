@@ -1,9 +1,9 @@
-import { gpRandom } from "./Globals";
+import { simClock, gpRandom } from "./Globals";
 import { NULL_INDEX, ONE, ONE_HALF, PI2, ZERO } from "./MathConstants";
 import { SPAWN_FOOD_RANDOMLY_IN_POOL } from "./Parameters";
 import { POOL_BOTTOM, POOL_HEIGHT, POOL_LEFT, POOL_RIGHT, POOL_TOP, POOL_WIDTH } from "./Pool";
 import { assert } from "./Utility";
-import { Vector2D } from "./Vector2D";
+import { SplitVector2D, Vector2D } from "./Vector2D";
 
 export const FOOD_BIT_SIZE                     = 1.5; //default size
 export const MIN_FOOD_BIT_MAX_SPAWN_RADIUS     = 10;
@@ -26,15 +26,17 @@ export const FOOD_OPACITY_INCREMENT            = 0.01;
 //------------------------
 export function FoodBit()
 {
-    let _position       = new Vector2D();
-    let _energy         = ZERO;
-    let _type           = 0;
+    // position, type and energy live in the shared state once the food bit
+    // has its slot (see bindShared), so the threads see them without copying
+    let _fx = new Float64Array( 1 ), _fy = new Float64Array( 1 ), _fi = 0;
+    let _fe = new Float64Array( 1 );
+    let _ft = new Uint8Array( 1 );
+    const _position     = new SplitVector2D( _fx, _fy, 0 );
     let _red            = ZERO;
     let _green          = ZERO;
     let _blue           = ZERO;
-    let _opacity        = ZERO;
     let _index          = NULL_INDEX;
-    let _age            = 0;
+    let _fb = new Float64Array( 1 );   // the step it appeared (shared: foodBorn)
     let _maxSpawnRadius = DEFAULT_FOOD_BIT_MAX_SPAWN_RADIUS;
     let _autotomyDecoy  = false;
 
@@ -43,11 +45,19 @@ export function FoodBit()
     let _liveAt = 0;
     const markLive = function() { _live[ _liveAt ] = ( _index != NULL_INDEX ) ? 1 : 0; }
 
-    this.bindLiveFlag = function( array: Uint8Array, slot: number )
+    this.bindShared = function( st, slot: number )
     {
-        _live   = array;
+        _live   = st.liveFood;
         _liveAt = slot;
         markLive();
+        st.foodEnergy[ slot ] = _fe[ _fi ];
+        st.foodType  [ slot ] = _ft[ _fi ];
+        st.foodBorn  [ slot ] = _fb[ _fi ];
+        _fe = st.foodEnergy;
+        _fb = st.foodBorn;
+        _ft = st.foodType;
+        _fi = slot;
+        _position.rebind( st.foodX, st.foodY, slot );
     }
 
     //--------------------------------------------------------
@@ -56,13 +66,12 @@ export function FoodBit()
 	this.initialize = function(f)
 	{
         _index      = f;
-        _age        = 0;
-        _energy     = DEFAULT_FOOD_BIT_ENERGY;
+        _fb[ _fi ] = simClock.step;
+        _fe[ _fi ]     = DEFAULT_FOOD_BIT_ENERGY;
         _autotomyDecoy = false;
-        _opacity    = ZERO;
         _position.x = POOL_LEFT + gpRandom() * POOL_WIDTH;
         _position.y = POOL_TOP  + gpRandom() * POOL_HEIGHT;
-        _type       = 0;
+        _ft[ _fi ]       = 0;
         markLive();
     }
 
@@ -73,7 +82,7 @@ export function FoodBit()
 	{
 //assert ( ( n === 0 ) || ( n === 1 ), "Foodbit.js: setType: ( n === 0 ) || ( n === 1 )" );
 
-	    _type = n;
+	    _ft[ _fi ] = n;
 
         this.setColorAccordingToType();
 	}
@@ -86,9 +95,9 @@ export function FoodBit()
     //------------------------------------------------
 	this.setColorAccordingToType = function()
 	{
-       if ( _type === 0 ) { _red = 0.3; _green = 0.8; _blue = 0.2; }
-       if ( _type === 1 ) { _red = 0.3; _green = 0.5; _blue = 0.9; }
-       if ( _type === 2 ) { _red = 0.9; _green = 0.1; _blue = 0.1; }
+       if ( _ft[ _fi ] === 0 ) { _red = 0.3; _green = 0.8; _blue = 0.2; }
+       if ( _ft[ _fi ] === 1 ) { _red = 0.3; _green = 0.5; _blue = 0.9; }
+       if ( _ft[ _fi ] === 2 ) { _red = 0.9; _green = 0.1; _blue = 0.1; }
 	   }
 
 
@@ -102,10 +111,9 @@ export function FoodBit()
 
         _index      = childIndex;
         markLive();
-        _age        = 0;
-        _opacity    = ZERO;
-        _energy     = parentFoodBit.getEnergy();
-        _type       = childType;
+        _fb[ _fi ] = simClock.step;
+        _fe[ _fi ]     = parentFoodBit.getEnergy();
+        _ft[ _fi ]       = childType;
         _autotomyDecoy = false;
 
         this.setColorAccordingToType();
@@ -219,10 +227,10 @@ export function FoodBit()
     //----------------------------
 	this.setEnergy = function(e)
 	{
-	    _energy = e;
+	    _fe[ _fi ] = e;
 
-	    assert( _energy <= MAX_FOOD_BIT_ENERGY, "FoodBit:getMaxSpawnRadius setEnergy: _energy <= MAX_FOOD_BIT_ENERGY" );
-	    assert( _energy >= MIN_FOOD_BIT_ENERGY, "FoodBit:getMaxSpawnRadius setEnergy: _energy >= MIN_FOOD_BIT_ENERGY" );
+	    assert( _fe[ _fi ] <= MAX_FOOD_BIT_ENERGY, "FoodBit:getMaxSpawnRadius setEnergy: _fe[ _fi ] <= MAX_FOOD_BIT_ENERGY" );
+	    assert( _fe[ _fi ] >= MIN_FOOD_BIT_ENERGY, "FoodBit:getMaxSpawnRadius setEnergy: _fe[ _fi ] >= MIN_FOOD_BIT_ENERGY" );
 	   }
 
     //----------------------
@@ -236,33 +244,21 @@ export function FoodBit()
 	// getters
 	//----------------------------
 	this.getPosition    = function() { return _position;    }
-	this.getEnergy      = function() { return _energy;      }
-	this.getType   = function() { return _type;   }
+	this.getEnergy      = function() { return _fe[ _fi ];      }
+	this.getType   = function() { return _ft[ _fi ];   }
 	this.getAutotomyDecoy = function() { return _autotomyDecoy; }
 	this.getIndex       = function() { return _index;       }
-	this.getAge         = function() { return _age;         }
+	this.getAge         = function() { return simClock.step - _fb[ _fi ]; }
+
+	// a new food bit fades in
+	const opacity = function() { return Math.min( ONE, ( simClock.step - _fb[ _fi ] ) * FOOD_OPACITY_INCREMENT ); }
     this.getAlive       = function() { return ( _index != NULL_INDEX ); }
 
     // Add method for spatial grid support
     this.getBoundingRadius = function() { return FOOD_BIT_GRAB_RADIUS; }
 
-	//----------------------------
-	// update
-	//----------------------------
-	this.update = function()
-	{
-	    _age ++;
-
-	    if ( _opacity < ONE )
-	    {
-    	    _opacity += FOOD_OPACITY_INCREMENT;
-	        if ( _opacity > ONE )
-	        {
-	            _opacity = ONE;
-	        }
-        }
-    }
-
+	// (nothing to do every step: the age and the fading in follow from the clock)
+	this.update = function() {}
 
 	//--------------------------------
 	// render
@@ -273,7 +269,7 @@ export function FoodBit()
 	this.writeCapsule = function( capsules, viewScale )
 	{
 	    let radius = FOOD_BIT_SIZE + viewScale * FOOD_BIT_SIZE_VIEW_SCALE * FOOD_BIT_SIZE_VIEW_SCALE;
-	    capsules.add( _position.x, _position.y, _position.x, _position.y, radius, _red, _green, _blue, _opacity );
+	    capsules.add( _position.x, _position.y, _position.x, _position.y, radius, _red, _green, _blue, opacity() );
 	}
 
 	this.render = function( vewScale )
@@ -283,7 +279,7 @@ export function FoodBit()
         + Math.floor( _red   * 255 ) + ", "
         + Math.floor( _green * 255 ) + ", "
         + Math.floor( _blue  * 255 ) + ", "
-        + _opacity + ")";
+        + opacity() + ")";
 
 	    let radius = FOOD_BIT_SIZE + vewScale * FOOD_BIT_SIZE_VIEW_SCALE * FOOD_BIT_SIZE_VIEW_SCALE;
 
