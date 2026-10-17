@@ -1244,12 +1244,17 @@ _position.copyFrom( position );
             if ( !hasChild ) { _numTips ++; }
         }
 
-        // part colours in one dense array, for drawing on the graphics card
+        // part colours and the width at the part's start (a "splined" part
+        // grows from its parent's width, as the detailed drawing shows it),
+        // in dense arrays, for drawing on the graphics card
         for (let p=0; p<_phenotype.numParts; p++)
         {
             _partRGB[ p * 3     ] = _phenotype.parts[p].red;
             _partRGB[ p * 3 + 1 ] = _phenotype.parts[p].green;
             _partRGB[ p * 3 + 2 ] = _phenotype.parts[p].blue;
+            const parent = _phenotype.parts[p].parent;
+            _partStartWidth[p] = ( _phenotype.parts[p].splined && ( parent >= 0 ) && ( parent < _phenotype.numParts ))
+                               ? _phenotype.parts[ parent ].width : _phenotype.parts[p].width;
         }
 
 		//-----------------------------------------------------
@@ -2868,7 +2873,9 @@ console.log( "contributeToOffspring: _childEnergyRatio = " + _childEnergyRatio )
 	    const numParts = _B[ _b + SS.B_NUM_PARTS ];
 	    if ( numParts <= 1 ) { return; }
 	    let i = capsules.reserve( numParts - 1 );
-	    const d = capsules.reserved();
+	    const d = capsules.reserved(), stride = capsules.floatsPerCapsule;
+	    // (a newborn grows from an egg: its widths too, as in the detailed drawing)
+	    const growth = Math.min( ONE, _B[ _b + SS.B_GROWTH ] ), egg = 5.0 * ( ONE - growth );
 	    for (let p=1; p<numParts; p++)
 	    {
 	        const parent = _pParent[p];
@@ -2876,16 +2883,18 @@ console.log( "contributeToOffspring: _childEnergyRatio = " + _childEnergyRatio )
 	        else { d[ i ] = _pd[ parent * PS + P_X ]; d[ i + 1 ] = _pd[ parent * PS + P_Y ]; }
 	        d[ i + 2 ] = _pd[ p * PS + P_X ];
 	        d[ i + 3 ] = _pd[ p * PS + P_Y ];
-	        d[ i + 4 ] = _pWidth[p];
-	        d[ i + 5 ] = greyR + _partRGB[ p * 3     ] * keep;
-	        d[ i + 6 ] = greyG + _partRGB[ p * 3 + 1 ] * keep;
-	        d[ i + 7 ] = greyB + _partRGB[ p * 3 + 2 ] * keep;
-	        d[ i + 8 ] = 1;
-	        i += 9;
+	        d[ i + 4 ] = _partStartWidth[p] * growth + egg;
+	        d[ i + 5 ] = _pWidth[p]         * growth + egg;
+	        d[ i + 6 ] = greyR + _partRGB[ p * 3     ] * keep;
+	        d[ i + 7 ] = greyG + _partRGB[ p * 3 + 1 ] * keep;
+	        d[ i + 8 ] = greyB + _partRGB[ p * 3 + 2 ] * keep;
+	        d[ i + 9 ] = 1;
+	        i += stride;
 	    }
 	}
 	const _colorMix = { white: 0, dead: 0 };
 	const _partRGB  = new Float32Array( MAX_PARTS * 3 );   // part colours (filled in processPhenotype)
+	const _partStartWidth = new Float32Array( MAX_PARTS ); // width at the start of each part (ditto)
 
 	this.render = function( levelOfDetail )
 	{

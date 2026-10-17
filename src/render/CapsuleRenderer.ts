@@ -6,13 +6,16 @@
 // Each frame:   begin()  ->  add(...) for every capsule  ->  draw(view...)
 // A dot is a capsule whose two ends are the same point.
 //------------------------------------------------------------------------------
-const FLOATS_PER_CAPSULE = 9;   // ax ay bx by radius red green blue alpha
+// A body part is drawn tapered: thick at one end, thin at the other (as the
+// detailed 2D drawing does with its parts).
+const FLOATS_PER_CAPSULE = 10;  // ax ay bx by radiusA radiusB red green blue alpha
 
 const VERTEX_SHADER = `#version 300 es
 in vec2  corner;        // quad corner: (-1 | 1, -1 | 1)
 in vec2  endA;          // per capsule
 in vec2  endB;
-in float radius;
+in float radiusA;       // at endA
+in float radiusB;       // at endB
 in vec4  color;
 
 uniform vec2  viewOrigin;   // pool coordinates of the top-left corner of the view
@@ -21,7 +24,8 @@ uniform float pixelSize;    // pool units per screen pixel
 
 out vec2  vLocal;           // position along / across the capsule
 out float vLength;
-out float vRadius;
+out float vRadiusA;
+out float vRadiusB;
 out vec4  vColor;
 out float vPixel;
 
@@ -32,8 +36,9 @@ void main()
     vec2  dir = ( len > 1e-6 ) ? d / len : vec2( 1.0, 0.0 );
     vec2  nrm = vec2( -dir.y, dir.x );
 
-    float r   = max( radius, pixelSize * 0.6 );   // never thinner than ~1 pixel
-    float pad = r + pixelSize;                    // room for a soft edge
+    float rA  = max( radiusA, pixelSize * 0.6 );   // never thinner than ~1 pixel
+    float rB  = max( radiusB, pixelSize * 0.6 );
+    float pad = max( rA, rB ) + pixelSize;          // room for a soft edge
 
     float lx = ( corner.x < 0.0 ) ? -pad : len + pad;
     float ly = corner.y * pad;
@@ -44,7 +49,8 @@ void main()
 
     vLocal  = vec2( lx, ly );
     vLength = len;
-    vRadius = r;
+    vRadiusA = rA;
+    vRadiusB = rB;
     vColor  = color;
     vPixel  = pixelSize;
 }`;
@@ -54,20 +60,36 @@ precision highp float;
 
 in vec2  vLocal;
 in float vLength;
-in float vRadius;
+in float vRadiusA;
+in float vRadiusB;
 in vec4  vColor;
 in float vPixel;
 
 out vec4 outColor;
 
+// signed distance to a capsule whose ends have different radii
+// (along x from 0 to h; the "uneven capsule" of Inigo Quilez)
+float unevenCapsule( vec2 p, float r1, float r2, float h )
+{
+    if ( h < abs( r1 - r2 ) + 1e-4 )                  // one end swallows the other: a disc
+    {
+        return ( r1 > r2 ) ? length( p ) - r1 : length( p - vec2( h, 0.0 )) - r2;
+    }
+    vec2  q = vec2( abs( p.y ), p.x );               // (across, along)
+    float b = ( r1 - r2 ) / h;
+    float a = sqrt( 1.0 - b * b );
+    float k = dot( q, vec2( -b, a ));
+    if ( k < 0.0 )   return length( q ) - r1;
+    if ( k > a * h ) return length( q - vec2( 0.0, h )) - r2;
+    return dot( q, vec2( a, b )) - r1;
+}
+
 void main()
 {
-    // distance from this pixel to the capsule's middle line
-    float x = clamp( vLocal.x, 0.0, vLength );
-    float d = length( vec2( vLocal.x - x, vLocal.y ) );
+    float d = unevenCapsule( vLocal, vRadiusA, vRadiusB, vLength );
 
     // soft one-pixel edge
-    float coverage = clamp( ( vRadius - d ) / vPixel + 0.5, 0.0, 1.0 );
+    float coverage = clamp( 0.5 - d / vPixel, 0.0, 1.0 );
     if ( coverage <= 0.0 ) discard;
 
     float a = vColor.a * coverage;
@@ -139,8 +161,9 @@ export class CapsuleRenderer
         };
         attribute( "endA",   2, 0 );
         attribute( "endB",   2, 2 );
-        attribute( "radius", 1, 4 );
-        attribute( "color",  4, 5 );
+        attribute( "radiusA", 1, 4 );
+        attribute( "radiusB", 1, 5 );
+        attribute( "color",   4, 6 );
 
         gl.bindVertexArray( null );
     }
@@ -180,7 +203,7 @@ export class CapsuleRenderer
         let i = this.count * FLOATS_PER_CAPSULE;
         d[ i++ ] = ax;  d[ i++ ] = ay;
         d[ i++ ] = bx;  d[ i++ ] = by;
-        d[ i++ ] = radius;
+        d[ i++ ] = radius; d[ i++ ] = radius;
         d[ i++ ] = red; d[ i++ ] = green; d[ i++ ] = blue; d[ i++ ] = alpha;
         this.count ++;
     }
@@ -198,6 +221,7 @@ export class CapsuleRenderer
         return start;
     }
     reserved(): Float32Array { return this.data; }
+    readonly floatsPerCapsule = FLOATS_PER_CAPSULE;   // (ax ay bx by radiusA radiusB red green blue alpha)
 
     private grow( capsules: number ): void
     {
