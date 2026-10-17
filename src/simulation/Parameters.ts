@@ -310,7 +310,7 @@ export const SWIM_DIRECTION_SMOOTHING       = 0.05;   // how fast the remembered
 // rooted. With body hydrodynamics a heavy body is pushed less than a light one.
 //------------------------------------------------------------------------------
 export const CURRENTS_ENABLED               = false;
-export const CURRENT_SPEED                  = 0.15;   // per step in the middle of a stream (the median swimbot swims ~0.25)
+export const CURRENT_SPEED                  = 0.3;    // per step in the middle of a stream (the median swimbot swims ~0.25)
 
 //------------------------------------------------------------------------------
 // Plant genes (see PlantGenes.ts): one species, inherited growth speed and

@@ -311,8 +311,18 @@ export function physicsPartA( s: number, st: SharedState ): void
     {
         const push = motion.enabled ? Math.max( 0.6, Math.min( 1.4, Math.pow( 410 / Math.max( 1, bodyMass ), 1 / 6 ))) : ONE;
         currentAt( posX, posY );
-        posX += push * current * currentDriftX();
-        posY += push * current * currentDriftY();
+        const driftX = push * current * currentDriftX(), driftY = push * current * currentDriftY();
+        posX += driftX;
+        posY += driftY;
+        // the parts move with the water, not through it: shift where they
+        // were too, or the next step would take the drift for a stroke and
+        // the drag would cancel it
+        for (let p = 0; p < numParts; p++)
+        {
+            const i = o + p * PS;
+            pd[ i + P_X ] += driftX; pd[ i + P_Y ] += driftY;
+            pd[ i + M_X ] += driftX; pd[ i + M_Y ] += driftY;
+        }
     }
 
     //==================================================================
