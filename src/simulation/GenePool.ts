@@ -1232,6 +1232,7 @@ if ( mode === SimulationStartMode.SPECIES )
 	    const P = _st.params;
 	    P[ SS.PARAM_MAX_LIFESPAN ] = globalTweakers.maximumLifeSpan;
 	    P[ SS.PARAM_CURRENT      ] = _currentSpeed;
+	    P[ SS.PARAM_STEP         ] = _clock;
 	    P[ SS.PARAM_ENV_ACTIVE   ] = environment.active ? 1 : 0;
 	    P[ SS.PARAM_ENV_FIELDS   ] = ( environment.active && !FLAT_ENVIRONMENT ) ? 1 : 0;
 	    P[ SS.PARAM_FOOD_TYPES   ] = globalTweakers.numFoodTypes;
@@ -2007,6 +2008,13 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
                     const food = _swimbots[s].getChosenFoodBit();
                     if (( food != null ) && food.getAlive()) { _swimbots[s].eatChosenFoodBit(); }
                     else                                     { _swimbots[s].cancelEating(); }
+                }
+
+                // FILTER_FEEDING_ENABLED: a limb brushed a sprout
+                const sprout = _st.mind[ s * SS.MIND_STRIDE + SS.M_FILTER_FOOD ];
+                if (( sprout >= 0 ) && _foodBits[ sprout ].getAlive() && ( _foodBits[ sprout ].getType() !== 2 ))
+                {
+                    _swimbots[s].filterFeed( _foodBits[ sprout ] );
                 }
 
                 //-------------------------------------

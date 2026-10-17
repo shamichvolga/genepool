@@ -267,7 +267,7 @@ export const INHERITED_INVESTMENT_ENABLED   = true;   // gene: share of energy g
 export const SIZE_MATURITY_ENABLED          = false;  // grown up (may mate) at 1000 x clamp( mass / 410, 0.5, 4 ) steps
 export const SIZE_ASSORTATIVE_MATING_ENABLED = false; // mates chosen by color AND size (gene: how much size counts)
 export const PREDATOR_GAPE_CURVE_ENABLED    = false;  // attack success falls with prey/predator mass, big prey takes longer to eat
-export const CROWD_AWARE_FOOD_CHOICE_ENABLED = false; // a plant others are nearer to looks farther (gene "deference": how much)
+export const CROWD_AWARE_FOOD_CHOICE_ENABLED = true;   // (on since 17.10: the commission 4 of 4, round 3: diversity 4.6 vs 3.1) // a plant others are nearer to looks farther (gene "deference": how much)
 
 //------------------------------------------------------------------------------
 // The young (see docs/ТЗ_не_сделано.md)
@@ -327,3 +327,21 @@ export const PLANT_SEED_DISTANCE_NEAR       = 40;
 export const PLANT_SEED_DISTANCE_FAR        = 1500;
 export const PLANT_GENE_MUTATION            = 0.05;   // typical change of a gene from parent to seed
 export const PLANT_SEED_PARENT_TRIES        = 8;      // grown-up parents looked for before taking any plant
+
+//------------------------------------------------------------------------------
+// Ways for limbs to pay (experiments, off). No bonus "for N parts": each
+// limb does something, and costs strokes as before.
+//   FILTER_FEEDING: any body part that brushes a sprout eats it (a sieve):
+//     a big, branching body sweeps more water. Only sprouts (soft); grown-up
+//     and old plants still need the mouth. Less energy than eating it whole.
+//   LIMB_SPINES: every limb tip (a part with nothing growing from it) is a
+//     spine in the throat of a predator: each tip beyond two makes a bite a
+//     little less likely to succeed (but never below the floor).
+//------------------------------------------------------------------------------
+export const FILTER_FEEDING_ENABLED         = false;
+export const FILTER_FEEDING_EFFICIENCY      = 0.6;    // of the sprout's energy
+export const FILTER_FEEDING_PERIOD          = 4;      // each body checks its limbs every 4 steps
+export const FILTER_FEEDING_REACH           = 6;      // beyond the part's width
+export const LIMB_SPINES_ENABLED            = false;
+export const LIMB_SPINE_EFFECT              = 0.1;    // bite success x ( 1 - 0.1 x ( tips - 2 ))
+export const LIMB_SPINE_FLOOR               = 0.4;

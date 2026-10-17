@@ -1,3 +1,4 @@
+import { FILTER_FEEDING_EFFICIENCY, LIMB_SPINES_ENABLED, LIMB_SPINE_EFFECT, LIMB_SPINE_FLOOR } from "./Parameters";
 import { plantOldEnergy, plantSproutGrowth, plantStage } from "./PlantGenes";
 import { geneAverage, GENES_RUDDER, GENES_DEFERENCE, GENES_PERSISTENCE, GENES_INVESTMENT, GENES_SIZE_PICKINESS, setTrait, GENES_PREDATOR, GENES_SELF_FEED_WHICH, GENES_SELF_FEED_AMOUNT } from "./EcologyGenes";
 import { physicsPartA, physicsPartB } from "./PhysicsKernel";
@@ -294,6 +295,30 @@ this.setParent = function( parent )
 	    return null;
 	}
 	this.getNumCannibalized   = function() { return _numCannibalized; }
+
+	//------------------------------------------------------------------------
+	// FILTER_FEEDING_ENABLED: a limb brushed a sprout - eat it, less well
+	// than with the mouth (and a sprout is worth little anyway)
+	//------------------------------------------------------------------------
+	this.filterFeed = function( plant )
+	{
+	    const room = Math.max( ZERO, _M[ _m + SS.M_MAX_ENERGY ] - _B[ _b + SS.B_ENERGY ] );
+	    if ( room <= ZERO ) return;
+	    const grown = PLANT_EVOLUTION_ENABLED ? plantSproutGrowth( plant.getIndex(), plant.getAge() ) : 0;
+	    let energy = plant.getEnergy() * FILTER_FEEDING_EFFICIENCY * ( PLANT_STAGE_ENERGY[0] + ( PLANT_STAGE_ENERGY[1] - PLANT_STAGE_ENERGY[0] ) * grown );
+	    if ( environment.active ) { energy *= this.getDigestionEfficiency( plant.getType() ) * climateFoodFactor( _M[ _m + SS.M_THERMAL_FIT ], _M[ _m + SS.M_THERMAL_PEAK ] ); }
+	    _B[ _b + SS.B_ENERGY ] += Math.min( room, energy );
+	    plant.kill();
+	    _numFoodBitsEaten ++;
+	    _numFilterMeals ++;
+	    simCounters.plantMeals ++;
+	}
+	let _numFilterMeals = 0;
+	this.getNumFilterMeals = function() { return _numFilterMeals; }
+
+	// limb tips: parts with nothing growing from them (LIMB_SPINES_ENABLED)
+	let _numTips = 0;
+	this.getNumLimbTips = function() { return _numTips; }
 
 	//------------------------------------------------------------------------
 	// PLANT_STAGES_ENABLED: a sprout gives little, an old plant much; small
@@ -1210,6 +1235,15 @@ _position.copyFrom( position );
 	//---------------------------------------------------------------
     this.processPhenotype = function()
     {
+        // limb tips (parts nobody grows from)
+        _numTips = 0;
+        for (let p=1; p<_phenotype.numParts; p++)
+        {
+            let hasChild = false;
+            for (let q=1; q<_phenotype.numParts; q++) { if ( _phenotype.parts[q].parent === p ) { hasChild = true; break; } }
+            if ( !hasChild ) { _numTips ++; }
+        }
+
         // part colours in one dense array, for drawing on the graphics card
         for (let p=0; p<_phenotype.numParts; p++)
         {
@@ -2098,6 +2132,9 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
                 }
             }
 
+            // (a plant's age counts in the classic pools too)
+            if ( !environment.active && ( chosenFoodBit().getType() !== 2 )) { energyFromFoodBit *= this.plantStageFactor( chosenFoodBit() ); }
+
             //----------------------------------------------------------------------
             // with the environment on: digestion and climate decide how much
             // of the food's energy I actually get
@@ -2165,7 +2202,9 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	    //-----------------------------------------------
 	    // PREDATOR_GAPE_CURVE_ENABLED: big prey is harder to catch and takes longer
 	    const sizeRatio = chosenPrey().getPhenotypeMass() / Math.max( 1, _phenotype.mass );
-	    const gape = PREDATOR_GAPE_CURVE_ENABLED ? Math.min( ONE, Math.max( GAPE_SUCCESS_FLOOR, 1.5 - sizeRatio )) : ONE;
+	    let gape = PREDATOR_GAPE_CURVE_ENABLED ? Math.min( ONE, Math.max( GAPE_SUCCESS_FLOOR, 1.5 - sizeRatio )) : ONE;
+	    // LIMB_SPINES_ENABLED: every limb tip beyond two is a spine in the throat
+	    if ( LIMB_SPINES_ENABLED ) { gape *= Math.max( LIMB_SPINE_FLOOR, ONE - LIMB_SPINE_EFFECT * Math.max( 0, chosenPrey().getNumLimbTips() - 2 )); }
 	    if ( PREDATOR_GAPE_CURVE_ENABLED ) { _M[ _m + SS.M_HUNT_CD ] = ATTACK_COOLDOWN * ( 1 + GAPE_COOLDOWN_SLOPE * sizeRatio ); }
 	    if ( gpRandom() > ( environment.active ? ENVIRONMENT_ATTACK_SUCCESS_CHANCE : ATTACK_SUCCESS_CHANCE ) * gape )
 	    {

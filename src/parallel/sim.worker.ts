@@ -9,12 +9,14 @@ import "../simulation/Globals";
 import { SharedState } from "../simulation/SharedState";
 import { PerceptionScratch } from "../simulation/PerceptionKernel";
 import { MAX_FOODBITS } from "../simulation/Parameters";
+import { bindPlantGenes } from "../simulation/PlantGenes";
 import { CTRL_DONE, CTRL_GENERATION, CTRL_TASK, workOnList } from "./ParallelWork";
 
 self.onmessage = ( e: MessageEvent ) =>
 {
     const { buffers, maxSwimbots, control: controlBuffer, list: listBuffer, thread } = e.data;
     const st      = new SharedState( maxSwimbots, buffers );
+    bindPlantGenes( st );     // (the sieve reads plant ages: FILTER_FEEDING_ENABLED)
     const scratch = new PerceptionScratch( maxSwimbots, MAX_FOODBITS );
     const control = new Int32Array( controlBuffer );
     const list    = new Int32Array( listBuffer );

@@ -94,7 +94,8 @@ export const PARAM_OB_END_RADIUS= 13;
 export const PARAM_TIME         = 14;   // the environment's clock (seasons)
 export const PARAM_PETRI        = 15;   // 1 = the "petri" map (no seasons)
 export const PARAM_MAX_ENERGY   = 16;
-export const PARAM_CURRENT      = 17;   // how strong the currents are now (0 = off; the C key)
+export const PARAM_CURRENT      = 17;
+export const PARAM_STEP         = 18;   // the simulation step (plant ages in the threads)   // how strong the currents are now (0 = off; the C key)
 export const NUM_PARAMS         = 20;
 
 export * from "./MindLayout";

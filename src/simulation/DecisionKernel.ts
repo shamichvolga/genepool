@@ -19,6 +19,8 @@
 // Random numbers come from each swimbot's own generator (st.random), so the
 // result does not depend on the number of threads.
 //------------------------------------------------------------------------------
+import { FILTER_FEEDING_ENABLED, FILTER_FEEDING_PERIOD, FILTER_FEEDING_REACH } from "./Parameters";
+import { plantMatureAge } from "./PlantGenes";
 import * as SS from "./SharedState";
 import { SharedState } from "./SharedState";
 import { BRAIN_FOCUS_TARGET_SHIFT_STRENGTH, BRAIN_FOCUS_TARGET_SHIFT_THRESHOLD, BRAIN_SENSORY_UPDATE_PERIOD, BRAIN_STATE_FLEEING_PREDATOR, BRAIN_STATE_LOOKING_FOR_FOOD,
@@ -154,6 +156,30 @@ function edibleFoodAtMouth( st: SharedState, s: number, mouthX: number, mouthY: 
         if (( st.foodType[f] === 2 ) !== meatEater ) continue;
         const dx = st.foodX[f] - mouthX, dy = st.foodY[f] - mouthY;
         if ( dx * dx + dy * dy < EAT_RADIUS * EAT_RADIUS ) return f;
+    }
+    return -1;
+}
+
+// FILTER_FEEDING_ENABLED: a sprout (a plant not yet grown up) that one of
+// the limbs (parts from 2 on; part 1 carries the mouth) brushes, or -1
+function sproutAtLimbs( st: SharedState, s: number ): number
+{
+    const numParts = st.bots[ s * SS.BOT_STRIDE + SS.B_NUM_PARTS ];
+    const o = s * SS.PART_STRIDE, w = s * MAX_PARTS;
+    const step = st.params[ SS.PARAM_STEP ];
+    for (let k = 2; k < numParts; k++)
+    {
+        const reach = st.partWidth[ w + k ] + FILTER_FEEDING_REACH;
+        const x = st.parts[ o + k * SS.PS + SS.M_X ], y = st.parts[ o + k * SS.PS + SS.M_Y ];
+        const n = st.foodGrid.collect( x, y, reach, _touchBuffer );
+        for (let i = 0; i < n; i++)
+        {
+            const f = _touchBuffer[i];
+            if (( st.liveFood[f] !== 1 ) || ( st.foodType[f] === 2 )) continue;
+            if ( step - st.foodBorn[f] >= plantMatureAge( f )) continue;      // grown up: too tough for a sieve
+            const dx = st.foodX[f] - x, dy = st.foodY[f] - y;
+            if ( dx * dx + dy * dy < reach * reach ) return f;
+        }
     }
     return -1;
 }
@@ -512,6 +538,16 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
     {
         const touched = edibleFoodAtMouth( st, s, mouthX, mouthY );
         if ( touched >= 0 ) { M[ m + SS.M_FOOD ] = touched; M[ m + SS.M_TRY_EAT ] = 1; }
+    }
+
+    //-------------------------------------------------
+    // FILTER_FEEDING_ENABLED: a limb brushes a sprout (now and then)
+    //-------------------------------------------------
+    M[ m + SS.M_FILTER_FOOD ] = -1;
+    if ( FILTER_FEEDING_ENABLED && !isPredator( st, s ) && (( st.params[ SS.PARAM_STEP ] + s ) % FILTER_FEEDING_PERIOD === 0 )
+    &&   ( B[ b + SS.B_ENERGY ] < M[ m + SS.M_MAX_ENERGY ] ))
+    {
+        M[ m + SS.M_FILTER_FOOD ] = sproutAtLimbs( st, s );
     }
 
     //-------------------------------------------------
