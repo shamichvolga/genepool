@@ -1258,8 +1258,11 @@ _position.copyFrom( position );
             _partRGB[ p * 3 + 1 ] = _phenotype.parts[p].green;
             _partRGB[ p * 3 + 2 ] = _phenotype.parts[p].blue;
             const parent = _phenotype.parts[p].parent;
+            // (never thinner than half its own width: a part growing from the
+            // zero-width root would be a needle, and from afar a body of two or
+            // three such needles reads as a thin tick)
             _partStartWidth[p] = ( _phenotype.parts[p].splined && ( parent >= 0 ) && ( parent < _phenotype.numParts ))
-                               ? _phenotype.parts[ parent ].width : _phenotype.parts[p].width;
+                               ? Math.max( 0.5 * _phenotype.parts[p].width, _phenotype.parts[ parent ].width ) : _phenotype.parts[p].width;
         }
 
 		//-----------------------------------------------------
