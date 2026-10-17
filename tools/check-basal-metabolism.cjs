@@ -4,7 +4,7 @@
 const assert = require( "assert" );
 const { createSimulation } = require( "./headless.cjs" );
 
-const common = {
+const common = { START_ENERGY_FACTOR: 0.25,   // (an unsaturated start, as before 17.10)
     INITIAL_NUM_SWIMBOTS: "40",
     INITIAL_NUM_FOODBITS: "100",
     MAX_SWIMBOTS: "80",

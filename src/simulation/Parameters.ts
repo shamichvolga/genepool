@@ -367,3 +367,6 @@ export const DESPERATE_CANNIBALISM_ENABLED  = true;
 export const DESPERATE_ENERGY_SHARE         = 0.1;    // "near death": energy below this share of its full store
 export const DESPERATE_PARTS_MARGIN         = 2;
 export const LIMBS_CATCH_YOUNG_ENABLED      = true;
+
+// (17.10) the first generation starts with this many times a full energy store
+export const START_ENERGY_FACTOR            = 3;
