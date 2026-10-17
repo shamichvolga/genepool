@@ -686,7 +686,7 @@ if ( mode === SimulationStartMode.SPECIES )
             assert( ( initialAge <= globalTweakers.maximumLifeSpan ), "Genepool.js: startSimulation: ( initialAge <= globalTweakers.maximumLifeSpan )" );
 
             let initialAngle    = getRandomAngleInDegrees(); //-180.0 + gpRandom() * 360.0;
-            let initialEnergy   = DEFAULT_SWIMBOT_HUNGER_THRESHOLD;
+            let initialEnergy   = SWIMBOT_MAX_ENERGY * 3;   // (17.10: the first generation starts overfed, 300%)
 
             //--------------------------------------------------
             // set values according to sim type

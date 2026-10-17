@@ -34,7 +34,7 @@ export const MAX_SWIMBOTS = 1500 * WORLD_AREA_FACTOR;
 
 export const INITIAL_NUM_SWIMBOTS =  500 * WORLD_AREA_FACTOR;
 
-export const MAX_FOODBITS           = 2000 * WORLD_AREA_FACTOR;
+export const MAX_FOODBITS           = 4000 * WORLD_AREA_FACTOR;   // (x2 on 17.10: the first generation well fed)
 export const MAX_FOODBITS_PER_TYPE  = 1000 * WORLD_AREA_FACTOR;
 export const INITIAL_NUM_FOODBITS   = 1000 * WORLD_AREA_FACTOR;
 
