@@ -20,7 +20,7 @@ import { POOL_BOTTOM, POOL_HEIGHT, POOL_LEFT, POOL_RIGHT, POOL_TOP, POOL_WIDTH, 
 import { UniformGrid } from "./UniformGrid";
 import * as SS from "./SharedState";
 import { buildFamilyTreeText, buildSwimbotPanelHTML, geneticClustersText } from "../ui/panelTexts";
-import { doTask, TASK_DECIDE, TASK_LOOK, TASK_PHYSICS, TASK_PREPARE_LOOK } from "../parallel/ParallelWork";
+import { doTask, TASK_DECIDE, TASK_LOOK, TASK_PHYSICS, TASK_PREPARE_LOOK, TASK_RENDER_DATA } from "../parallel/ParallelWork";
 import { perceive, PerceptionScratch } from "./PerceptionKernel";
 import { physicsStep } from "./PhysicsKernel";
 import { Swimbot } from "./Swimbot";
@@ -3776,6 +3776,15 @@ this.renderFoodBits = function( useGraphicsCard )
         }
     }
 
+    // the bodies on the graphics card: their drawing data, made by all the
+    // threads at once (RenderData.ts) and then only copied, one block a body
+    const blocks = useGraphicsCard && ( _levelOfDetail !== SWIMBOT_LEVEL_OF_DETAIL_DOT );
+    if ( blocks )
+    {
+        for (let i = 0; i < _renderBatch.length; i++) { _renderList[i] = _renderBatch[i].swimbot.getIndex(); }
+        _runner.task( TASK_RENDER_DATA, _renderList, _renderBatch.length );
+    }
+
     // Если требуется сортировка (раскомментировать при необходимости)
     // _renderBatch.sort((a, b) => a.distance - b.distance);
 
@@ -3785,7 +3794,14 @@ this.renderFoodBits = function( useGraphicsCard )
         const batchItem = _renderBatch[i];
         const swimbot = batchItem.swimbot;
 
-	        if ( useGraphicsCard ) { swimbot.writeCapsules( _capsuleRenderer, _levelOfDetail === SWIMBOT_LEVEL_OF_DETAIL_DOT ); }
+	        if ( useGraphicsCard )
+	        {
+	            if ( blocks )
+	            {
+	                _capsuleRenderer.copyBlock( _st.renderParts, swimbot.getRenderBlockStart(), swimbot.getRenderBlockLength() );
+	            }
+	            else { swimbot.writeCapsules( _capsuleRenderer, _levelOfDetail === SWIMBOT_LEVEL_OF_DETAIL_DOT ); }
+	        }
 	        else                   { swimbot.render(_levelOfDetail); }
 
 	        if (batchItem.isSelected || batchItem.isMousedOver)
@@ -3808,6 +3824,8 @@ this.renderFoodBits = function( useGraphicsCard )
 	// mouths and genitals up close when the bodies are on the graphics card,
 	// the selection circles, the line to the selected swimbot's target
 	//------------------------------------------------------------------------
+	const _renderList = new Int32Array( MAX_SWIMBOTS );
+
 	this.renderSwimbotOverlays = function( useGraphicsCard )
 	{
 	    const details = useGraphicsCard && ( _levelOfDetail === SWIMBOT_LEVEL_OF_DETAIL_HIGH );

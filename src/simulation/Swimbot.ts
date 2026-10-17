@@ -1,3 +1,4 @@
+import { RENDER_FLOATS } from "./RenderData";
 import { FILTER_FEEDING_EFFICIENCY, LIMB_SPINES_ENABLED, LIMB_SPINE_EFFECT, LIMB_SPINE_FLOOR } from "./Parameters";
 import { plantOldEnergy, plantSproutGrowth, plantStage } from "./PlantGenes";
 import { geneAverage, GENES_RUDDER, GENES_DEFERENCE, GENES_PERSISTENCE, GENES_INVESTMENT, GENES_SIZE_PICKINESS, setTrait, GENES_PREDATOR, GENES_SELF_FEED_WHICH, GENES_SELF_FEED_AMOUNT } from "./EcologyGenes";
@@ -185,6 +186,8 @@ var    flopperYV = 0;
 	let _pd          = new Float64Array( MAX_PARTS * PS );
 	let _pLength     = new Float64Array( MAX_PARTS );
 	let _pWidth      = new Float64Array( MAX_PARTS );
+	let _partStartWidth = new Float32Array( MAX_PARTS );     // width at the start of each part (for drawing)
+	let _partRGB        = new Float32Array( MAX_PARTS * 3 ); // part colours (for drawing)
 	let _pMass       = new Float64Array( MAX_PARTS );
 	let _pAngle      = new Float64Array( MAX_PARTS );
 	let _pAmp        = new Float64Array( MAX_PARTS );
@@ -253,6 +256,8 @@ this.setParent = function( parent )
 	    _pd         = st.parts        .subarray( slot * SS.PART_STRIDE, ( slot + 1 ) * SS.PART_STRIDE );
 	    _pLength    = st.partLength   .subarray( from, to );
 	    _pWidth     = st.partWidth    .subarray( from, to );
+	    _partStartWidth = st.partStartWidth.subarray( from, to );
+	    _partRGB        = st.partRGB       .subarray( from * 3, to * 3 );
 	    _pMass      = st.partMass     .subarray( from, to );
 	    _pAngle     = st.partAngle    .subarray( from, to );
 	    _pAmp       = st.partAmp      .subarray( from, to );
@@ -2852,6 +2857,11 @@ console.log( "contributeToOffspring: _childEnergyRatio = " + _childEnergyRatio )
 	// hand the body to the graphics-card renderer: one capsule per part
 	// (or a single dot when far away)
 	//-------------------------------------------------------------------
+	// the block the physics threads wrote for drawing (RenderData.ts): its
+	// start in st.renderParts and its length (numbers)
+	this.getRenderBlockStart  = function() { return _slot * MAX_PARTS * RENDER_FLOATS; }
+	this.getRenderBlockLength = function() { return Math.max( 0, _B[ _b + SS.B_NUM_PARTS ] - 1 ) * RENDER_FLOATS; }
+
 	this.writeCapsules = function( capsules, asDot )
 	{
 	    _swimbotRenderer.prepareColors( _phenotype, _B[ _b + SS.B_AGE ], _B[ _b + SS.B_ENERGY ], _B[ _b + SS.B_GROWTH ], this );
@@ -2893,8 +2903,7 @@ console.log( "contributeToOffspring: _childEnergyRatio = " + _childEnergyRatio )
 	    }
 	}
 	const _colorMix = { white: 0, dead: 0 };
-	const _partRGB  = new Float32Array( MAX_PARTS * 3 );   // part colours (filled in processPhenotype)
-	const _partStartWidth = new Float32Array( MAX_PARTS ); // width at the start of each part (ditto)
+	// (part colours and start widths live in the shared state, bound with the slot)
 
 	// up close with the body on the graphics card: only mouth and genital in 2D
 	this.renderDetails = function()

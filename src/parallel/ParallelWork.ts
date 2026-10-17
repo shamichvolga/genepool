@@ -3,6 +3,7 @@
 // the control slots, the tasks, and "grab chunks of the list until it is
 // used up".
 //------------------------------------------------------------------------------
+import { writeRenderData } from "../simulation/RenderData";
 import { SharedState, BOT_STRIDE, B_POS_X, B_POS_Y, B_GENITAL_X, B_GENITAL_Y, NUM_COUNTERS } from "../simulation/SharedState";
 import { physicsStep } from "../simulation/PhysicsKernel";
 import { perceive, PerceptionScratch } from "../simulation/PerceptionKernel";
@@ -21,6 +22,7 @@ export const TASK_DECIDE       = 1;   // the brain (DecisionKernel.decideStep)
 export const TASK_PHYSICS      = 2;   // move the bodies (PhysicsKernel)
 export const TASK_PREPARE_LOOK = 3;   // after moving: who looks around (DecisionKernel.prepareLook)
 export const TASK_LOOK         = 4;   // look around and take it in (PerceptionKernel + DecisionKernel.takeInLook)
+export const TASK_RENDER_DATA  = 5;   // before a frame: the visible bodies for the graphics card (RenderData.ts)
 export const CHUNK             = 16;  // swimbots per grab
 
 //------------------------------------------------------------------------------
@@ -47,6 +49,10 @@ export function doTask( task: number, st: SharedState, scratch: PerceptionScratc
         st.genitalY[s] = B[ k + B_GENITAL_Y ];
         st.sensing [s] = 0;
         if ( st.alive[s] === 1 ) { prepareLook( st, s ); }    // (not if it died just now)
+    }
+    else if ( task === TASK_RENDER_DATA )
+    {
+        if ( st.liveSwimbot[s] === 1 ) { writeRenderData( s, st ); }
     }
     else if ( task === TASK_LOOK )
     {

@@ -230,6 +230,14 @@ export class CapsuleRenderer
         return start;
     }
     reserved(): Float32Array { return this.data; }
+
+    // a block of ready records (written by the physics threads, RenderData.ts)
+    copyBlock( source: Float32Array, start: number, length: number ): void
+    {
+        if ( length <= 0 ) return;
+        const at = this.reserve( length / FLOATS_PER_CAPSULE );
+        this.data.set( source.subarray( start, start + length ), at );
+    }
     readonly floatsPerCapsule = FLOATS_PER_CAPSULE;   // (ax ay bx by radiusA radiusB red green blue alpha)
 
     private grow( capsules: number ): void

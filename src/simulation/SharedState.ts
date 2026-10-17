@@ -121,6 +121,9 @@ export class SharedState
     readonly parts        : Float64Array;
     readonly partLength   : Float64Array;
     readonly partWidth    : Float64Array;
+    readonly partStartWidth : Float32Array;   // (drawing) width at the start of a part
+    readonly partRGB      : Float32Array;     // (drawing) part colours, 3 per part
+    readonly renderParts  : Float32Array;     // (drawing) see RenderData.ts
     readonly partMass     : Float64Array;
     readonly partAngle    : Float64Array;
     readonly partAmp      : Float64Array;
@@ -240,6 +243,9 @@ export class SharedState
         this.parts         = f64( "parts",         maxSwimbots * PART_STRIDE );
         this.partLength    = f64( "partLength",    partCount );
         this.partWidth     = f64( "partWidth",     partCount );
+        this.partStartWidth = new Float32Array( make( "partStartWidth", partCount * 4 ));
+        this.partRGB       = new Float32Array( make( "partRGB", partCount * 3 * 4 ));
+        this.renderParts   = new Float32Array( make( "renderParts", partCount * 10 * 4 ));
         this.partMass      = f64( "partMass",      partCount );
         this.partAngle     = f64( "partAngle",     partCount );
         this.partAmp       = f64( "partAmp",       partCount );
