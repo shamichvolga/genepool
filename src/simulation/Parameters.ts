@@ -262,6 +262,7 @@ export const PLANT_STAGES_ENABLED           = true;   // sprout / mature / old p
 export const PLANT_SPROUT_AGE               = 1500;
 export const PLANT_OLD_AGE                  = 6000;
 export const PLANT_ROT_AGE                  = 12000;
+export const PLANT_ROT_ENABLED              = false;  // (off since 17.10: the author - food should not vanish by itself)
 export const PLANT_STAGE_ENERGY             = [ 0.35, 1.0, 1.6 ];
 export const PLANT_STAGES_SHOWN             = false;  // draw sprouts small and old plants as stars (off: every plant a plain dot)
 export const INHERITED_INVESTMENT_ENABLED   = true;   // gene: share of energy given to a child (0.15..0.85) instead of the pool setting
@@ -351,5 +352,8 @@ export const LIMB_SPINE_FLOOR               = 0.4;
 //------------------------------------------------------------------------------
 export const NURSERY_ENABLED                = true;
 export const NURSERY_STEPS                  = 40000;
-export const NURSERY_START_FOOD_FACTOR      = 2.0;    // starting food in the gardens x2
+export const START_FOOD_FILL                 = 0.95;   // the world starts with this share of all food places filled
+export const START_FOOD_CLUMP               = 5;      // ... in little clumps of this many
+export const START_FOOD_CLUMP_RADIUS        = 30;
+export const NURSERY_START_FOOD_FACTOR      = 10;     // inside the starting gardens: 10 x as dense as elsewhere
 export const NURSERY_EXTRA_SEEDS            = 1.0;    // + this many extra seeds per seed (at the start), all in the gardens
