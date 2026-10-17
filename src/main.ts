@@ -58,6 +58,9 @@ Object.assign( window,
 // graphics-card layer: same size and place as the pool canvas
 //------------------------------------------------------------------------------
 const glCanvas = document.getElementById( "GLCanvas" ) as HTMLCanvasElement;
+// (it is not shown itself: the pool copies its picture into the 2D canvas, so
+// that selection circles and the like are drawn on top of the bodies)
+glCanvas.style.visibility = "hidden";
 const capsuleRenderer = SIM_IN_THREAD ? null : CapsuleRenderer.create( glCanvas );
 if ( !SIM_IN_THREAD && ( capsuleRenderer === null )) { console.warn( "No WebGL2: drawing everything the old way." ); }
 

@@ -832,6 +832,7 @@ function handleCommandKey( e ): boolean
         case "KeyR":   toggleRendering(); return true;
         case "KeyG":   toggleGoalOverlay(); return true;
         case "KeyC":   toggleCurrents(); return true;
+        case "KeyV":   genePool.toggleGpuUpClose(); return true;
         case "KeyH":   togglePanel(); return true;
         case "Tab":    nextTab(); return true;
         case "F1":     toggleHelp(); return true;

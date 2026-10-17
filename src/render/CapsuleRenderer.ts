@@ -65,6 +65,8 @@ in float vRadiusB;
 in vec4  vColor;
 in float vPixel;
 
+uniform float outline;      // 1 = up close: a dark rim, like the detailed 2D drawing
+
 out vec4 outColor;
 
 // signed distance to a capsule whose ends have different radii
@@ -92,8 +94,14 @@ void main()
     float coverage = clamp( 0.5 - d / vPixel, 0.0, 1.0 );
     if ( coverage <= 0.0 ) discard;
 
+    vec3 rgb = vColor.rgb;
+    if ( outline > 0.5 )
+    {
+        float rim = smoothstep( -2.2 * vPixel, -0.8 * vPixel, d );    // the last ~2 pixels inside the edge
+        rgb *= mix( 1.0, 0.45, rim );
+    }
     float a = vColor.a * coverage;
-    outColor = vec4( vColor.rgb * a, a );   // premultiplied alpha
+    outColor = vec4( rgb * a, a );   // premultiplied alpha
 }`;
 
 export class CapsuleRenderer
@@ -104,7 +112,7 @@ export class CapsuleRenderer
     private instanceBuffer: WebGLBuffer;
     private data          = new Float32Array( 4096 * FLOATS_PER_CAPSULE );
     private count         = 0;
-    private uniforms      : { viewOrigin: WebGLUniformLocation, viewSize: WebGLUniformLocation, pixelSize: WebGLUniformLocation };
+    private uniforms      : { viewOrigin: WebGLUniformLocation, viewSize: WebGLUniformLocation, pixelSize: WebGLUniformLocation, outline: WebGLUniformLocation };
     private hasContent    = false;
 
     //--------------------------------------------------------------------
@@ -135,6 +143,7 @@ export class CapsuleRenderer
             viewOrigin : gl.getUniformLocation( this.program, "viewOrigin" ),
             viewSize   : gl.getUniformLocation( this.program, "viewSize"   ),
             pixelSize  : gl.getUniformLocation( this.program, "pixelSize"  ),
+            outline    : gl.getUniformLocation( this.program, "outline"    ),
         };
 
         this.vao = gl.createVertexArray();
@@ -247,7 +256,9 @@ export class CapsuleRenderer
         gl.useProgram( this.program );
         gl.uniform2f( this.uniforms.viewOrigin, viewLeft, viewTop );
         gl.uniform2f( this.uniforms.viewSize, viewWidth, viewHeight );
-        gl.uniform1f( this.uniforms.pixelSize, viewWidth / Math.max( 1, gl.drawingBufferWidth ) );
+        const pixelSize = viewWidth / Math.max( 1, gl.drawingBufferWidth );
+        gl.uniform1f( this.uniforms.pixelSize, pixelSize );
+        gl.uniform1f( this.uniforms.outline, pixelSize < 0.9 ? 1 : 0 );   // (only up close, where the 2D drawing has rims)
 
         gl.enable( gl.BLEND );
         gl.blendFunc( gl.ONE, gl.ONE_MINUS_SRC_ALPHA );
@@ -273,4 +284,7 @@ export class CapsuleRenderer
     }
 
     getCount(): number { return this.count; }
+
+    // the canvas it draws into (GenePool copies its picture into the 2D canvas)
+    getCanvas(): HTMLCanvasElement | OffscreenCanvas { return this.gl.canvas; }
 }

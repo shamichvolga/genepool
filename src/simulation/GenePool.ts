@@ -3446,7 +3446,8 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
 		//----------------------------------
         // zoomed out (many swimbots on screen): bodies and food go to the
         // graphics card; zoomed in: the detailed 2D drawing as before
-        const useGraphicsCard = ( _capsuleRenderer !== null ) && ( _levelOfDetail !== SWIMBOT_LEVEL_OF_DETAIL_HIGH );
+        // (the V key: bodies on the graphics card up close too, details in 2D on top)
+        const useGraphicsCard = ( _capsuleRenderer !== null ) && (( _levelOfDetail !== SWIMBOT_LEVEL_OF_DETAIL_HIGH ) || _gpuUpClose );
         if ( useGraphicsCard ) { _capsuleRenderer.begin(); }
 
         let phaseStart = performance.now();
@@ -3480,11 +3481,19 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
                 _camera.getXDimension(),
                 _camera.getYDimension()
             );
+
+            // the graphics card's picture goes into this canvas, so that what
+            // is drawn next (selection, the line to the target, mouths) lies on top
+            _canvas.save();
+            _canvas.resetTransform();
+            _canvas.drawImage( _capsuleRenderer.getCanvas(), 0, 0, _canvasWidth, _canvasHeight );
+            _canvas.restore();
         }
         else if ( _capsuleRenderer !== null )
         {
             _capsuleRenderer.clear();
         }
+        this.renderSwimbotOverlays( useGraphicsCard );
         renderPhase( 3, phaseStart );
 
 		//-----------------------------------------------------------------------
@@ -3781,22 +3790,8 @@ this.renderFoodBits = function( useGraphicsCard )
 
 	        if (batchItem.isSelected || batchItem.isMousedOver)
 	        {
-	            if (batchItem.isSelected)
-	            {
-	                renderSelectCircle(swimbot.getPosition().x, swimbot.getPosition().y, swimbot.getSelectRadius(), false);
-	                renderTargetLine( swimbot.getTargetLine() );
-	            }
-	            else
-	            {
-	                renderSelectCircle(swimbot.getPosition().x, swimbot.getPosition().y, swimbot.getSelectRadius(), true);
-	            }
-
+	            // (the circle and the line to the target: renderSwimbotOverlays, on top)
 	            swimbot.setRenderingGoals(true);
-
-	            if (DEBUG_SHOW_SWIMBOT_TRAIL)
-	            {
-	                this.showSwimbotTrail(swimbot.getIndex());
-	            }
 	        }
 	        else
 	        {
@@ -3807,6 +3802,36 @@ this.renderFoodBits = function( useGraphicsCard )
 	        }
 	    }
 	}
+
+	//------------------------------------------------------------------------
+	// drawn after the bodies (on top of the graphics card's picture too):
+	// mouths and genitals up close when the bodies are on the graphics card,
+	// the selection circles, the line to the selected swimbot's target
+	//------------------------------------------------------------------------
+	this.renderSwimbotOverlays = function( useGraphicsCard )
+	{
+	    const details = useGraphicsCard && ( _levelOfDetail === SWIMBOT_LEVEL_OF_DETAIL_HIGH );
+	    for (let i = 0; i < _renderBatch.length; i++)
+	    {
+	        const item = _renderBatch[i], swimbot = item.swimbot;
+	        if ( details ) { swimbot.renderDetails(); }
+	        if ( item.isSelected )
+	        {
+	            renderSelectCircle( swimbot.getPosition().x, swimbot.getPosition().y, swimbot.getSelectRadius(), false );
+	            renderTargetLine( swimbot.getTargetLine() );
+	            if ( DEBUG_SHOW_SWIMBOT_TRAIL ) { this.showSwimbotTrail( swimbot.getIndex() ); }
+	        }
+	        else if ( item.isMousedOver )
+	        {
+	            renderSelectCircle( swimbot.getPosition().x, swimbot.getPosition().y, swimbot.getSelectRadius(), true );
+	        }
+	    }
+	}
+
+	// the V key: up close, bodies on the graphics card too (faster, a little plainer)
+	let _gpuUpClose = false;
+	this.toggleGpuUpClose = function() { _gpuUpClose = !_gpuUpClose; }
+	this.getGpuUpClose    = function() { return _gpuUpClose; }
 
 	//--------------------------------------
 	this.initializeDebugTrail = function(s)

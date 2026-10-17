@@ -2896,6 +2896,13 @@ console.log( "contributeToOffspring: _childEnergyRatio = " + _childEnergyRatio )
 	const _partRGB  = new Float32Array( MAX_PARTS * 3 );   // part colours (filled in processPhenotype)
 	const _partStartWidth = new Float32Array( MAX_PARTS ); // width at the start of each part (ditto)
 
+	// up close with the body on the graphics card: only mouth and genital in 2D
+	this.renderDetails = function()
+	{
+	    this.syncPartObjects();
+	    _swimbotRenderer.renderDetails( _phenotype, _brain, _B[ _b + SS.B_GROWTH ], _focusDirection, this );
+	}
+
 	this.render = function( levelOfDetail )
 	{
 	    this.syncPartObjects();

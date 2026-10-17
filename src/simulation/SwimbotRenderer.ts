@@ -210,6 +210,30 @@ var    flopperYV = 0;
 
 
 
+	//-------------------------------------------------------------------
+	// only the mouth and the genital (the body itself is on the graphics
+	// card): the same rules as at the end of render()
+	//-------------------------------------------------------------------
+	this.renderDetails = function( phenotype, brain, growthScale, focusDirection, swimbot )
+	{
+	    if ( !_renderingGenitalsAndMouths ) return;
+	    _phenotype      = phenotype;
+	    _brain          = brain;
+	    _growthScale    = growthScale;
+	    _focusDirection = focusDirection;
+	    _swimbot        = swimbot;
+	    const state = _brain.getState();
+	    if (( state == BRAIN_STATE_LOOKING_FOR_FOOD ) || ( state == BRAIN_STATE_PURSUING_FOOD )
+	    ||  ( state == BRAIN_STATE_LOOKING_FOR_PREY ) || ( state == BRAIN_STATE_PURSUING_PREY ))
+	    {
+	        this.renderMouth();
+	    }
+	    if (( state == BRAIN_STATE_LOOKING_FOR_MATE ) || ( state == BRAIN_STATE_PURSUING_MATE ))
+	    {
+	        this.renderGenital();
+	    }
+	}
+
 	//-----------------------------------
 	// render part normal (not splined)
 	//-----------------------------------
