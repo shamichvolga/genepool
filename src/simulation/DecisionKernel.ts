@@ -600,7 +600,7 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
             aim( B, b, B[ b + SS.B_POS_X ], B[ b + SS.B_POS_Y ], B[ d + SS.B_POS_X ], B[ d + SS.B_POS_Y ] );
         }
     }
-    else if (( state === BRAIN_STATE_LOOKING_FOR_FOOD ) && ( M[ m + SS.M_CANNIBAL ] === 1 ) && ( M[ m + SS.M_PREY ] >= 0 ) && ( st.liveSwimbot[ M[ m + SS.M_PREY ] ] === 1 ))
+    else if ((( state === BRAIN_STATE_LOOKING_FOR_FOOD ) || ( state === BRAIN_STATE_PURSUING_FOOD )) && ( M[ m + SS.M_CANNIBAL ] === 1 ) && ( M[ m + SS.M_PREY ] >= 0 ) && ( st.liveSwimbot[ M[ m + SS.M_PREY ] ] === 1 ))
     {
         const p = M[ m + SS.M_PREY ] * SS.BOT_STRIDE;
         aim( B, b, B[ p + SS.B_POS_X ], B[ p + SS.B_POS_Y ], mouthX, mouthY );
@@ -868,7 +868,12 @@ export function takeInLook( st: SharedState, s: number, counters: number ): void
     // for a young one of its kind with fewer body parts (the nearest)
     //------------------------------------------------------------
     M[ m + SS.M_CANNIBAL ] = 0;
-    if ( YOUNG_CANNIBALISM_ENABLED && !isPredator( st, s ) && !( foodOkay && !foodIsMeat )
+    // (18.10: a hungry body goes for the young one even when it sees a plant,
+    //  if the young one is nearer than the plant)
+    const plantSeen = foodOkay && !foodIsMeat;
+    const mouthAtX = B[ b + SS.B_MOUTH_X ], mouthAtY = B[ b + SS.B_MOUTH_Y ];
+    const plantDistance = plantSeen ? Math.hypot( st.foodX[f] - mouthAtX, st.foodY[f] - mouthAtY ) : Infinity;
+    if ( YOUNG_CANNIBALISM_ENABLED && !isPredator( st, s )
     &&   ( B[ b + SS.B_ENERGY ] < M[ m + SS.M_HUNGER ] ))
     {
         const myParts = B[ b + SS.B_NUM_PARTS ];
@@ -883,6 +888,7 @@ export function takeInLook( st: SharedState, s: number, counters: number ): void
             const youngOk     = young && ( theirParts < myParts );
             const desperateOk = desperate && ( theirParts <= myParts - DESPERATE_PARTS_MARGIN );
             if ( !youngOk && !desperateOk ) continue;
+            if ( Math.hypot( st.botX[o] - mouthAtX, st.botY[o] - mouthAtY ) > plantDistance ) continue;   // the plant is nearer
             M[ m + SS.M_PREY ] = o;
             M[ m + SS.M_CANNIBAL ] = 1;
             break;
