@@ -262,7 +262,8 @@ export const PLANT_STAGES_ENABLED           = true;   // sprout / mature / old p
 export const PLANT_SPROUT_AGE               = 1500;
 export const PLANT_OLD_AGE                  = 6000;
 export const PLANT_ROT_AGE                  = 12000;
-export const PLANT_STAGE_ENERGY             = [ 0.35, 1.0, 1.4 ];   // (old: the richest; with plant genes only the slowest plants reach it)
+export const PLANT_STAGE_ENERGY             = [ 0.35, 1.0, 1.6 ];
+export const PLANT_STAGES_SHOWN             = false;  // draw sprouts small and old plants as stars (off: every plant a plain dot)
 export const INHERITED_INVESTMENT_ENABLED   = true;   // gene: share of energy given to a child (0.15..0.85) instead of the pool setting
 export const SIZE_MATURITY_ENABLED          = false;  // grown up (may mate) at 1000 x clamp( mass / 410, 0.5, 4 ) steps
 export const SIZE_ASSORTATIVE_MATING_ENABLED = false; // mates chosen by color AND size (gene: how much size counts)
@@ -318,7 +319,7 @@ export const CURRENT_WAVELENGTH             = 4000;   // L: size of one pair of 
 // seed distance; only grown-up plants make seeds. Grown-up much later than
 // before (1500 steps): 4000 (fast) .. 16000 (slow) steps.
 //------------------------------------------------------------------------------
-export const PLANT_EVOLUTION_ENABLED        = true;
+export const PLANT_EVOLUTION_ENABLED        = false;  // (off since 17.10: the author - the pool makes the seeds anyway, so the genes decide little)
 export const PLANT_MATURE_AGE_FAST          = 4000;
 export const PLANT_MATURE_AGE_SLOW          = 16000;
 export const PLANT_OLD_AGE_FACTOR           = 2.5;    // old at 2.5 x the grown-up age
@@ -345,3 +346,13 @@ export const FILTER_FEEDING_REACH           = 6;      // beyond the part's width
 export const LIMB_SPINES_ENABLED            = false;
 export const LIMB_SPINE_EFFECT              = 0.1;    // bite success x ( 1 - 0.1 x ( tips - 2 ))
 export const LIMB_SPINE_FLOOR               = 0.4;
+
+//------------------------------------------------------------------------------
+// Nursery: the gardens where the first swimbots start get much more food at
+// first, so that complex, still clumsy forms are not starved out "in the
+// cradle" by simple cheap ones. Fades out over NURSERY_STEPS.
+//------------------------------------------------------------------------------
+export const NURSERY_ENABLED                = true;
+export const NURSERY_STEPS                  = 40000;
+export const NURSERY_START_FOOD_FACTOR      = 2.0;    // starting food in the gardens x2
+export const NURSERY_EXTRA_SEEDS            = 1.0;    // + this many extra seeds per seed (at the start), all in the gardens

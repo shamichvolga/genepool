@@ -3,7 +3,7 @@ import { geneAverage, convertOldGenes, GENE_LAYOUT_VERSION, setTrait, gaussian, 
 import { environment, FLAT_ENVIRONMENT, INITIAL_SOIL_NUTRIENT_PER_CELL, NUTRIENT_CYCLE_ENABLED, PLANT_TYPE_WARM, PLANT_TYPE_COLD, SEASONAL_PLANT_GROWTH_ENABLED, SEASONAL_PLANT_GROWTH_AMPLITUDE } from "./Environment";
 import { petriSettings, petriStartZone } from "./Petri";
 import { IGNORE_FOOD_EFFICIENCY, preyVisibility, TWO_PLANT_TYPES } from "./Ecology";
-import { PLANT_EVOLUTION_ENABLED, PLANT_SEED_PARENT_TRIES, CURRENTS_ENABLED, CURRENT_SPEED, CURRENT_WAVELENGTH, CLASSIC_SEED_RAIN_FRACTION, MEAT_PIECE_ENERGY, MEAT_PIECE_SCATTER, PLANT_STAGES_ENABLED, PLANT_ROT_AGE, DIET_SWITCH_RATE, CLASSIC_NUM_SWIMBOTS, CLASSIC_NUM_FOODBITS, GARDEN_RADIUS, ENVIRONMENT_PLANT_SPREAD_RATE, ENVIRONMENT_SEEDS_PER_PERIOD, LOCAL_ENVIRONMENT_PLANT_GROWTH, PLANT_CELL_CAPACITY, PLANT_PARENT_SEED_FRACTION, PLANT_SEED_MIN_DISTANCE, PLANT_SEED_MAX_DISTANCE } from "./Parameters";
+import { NURSERY_ENABLED, NURSERY_STEPS, NURSERY_START_FOOD_FACTOR, NURSERY_EXTRA_SEEDS, PLANT_EVOLUTION_ENABLED, PLANT_SEED_PARENT_TRIES, CURRENTS_ENABLED, CURRENT_SPEED, CURRENT_WAVELENGTH, CLASSIC_SEED_RAIN_FRACTION, MEAT_PIECE_ENERGY, MEAT_PIECE_SCATTER, PLANT_STAGES_ENABLED, PLANT_ROT_AGE, DIET_SWITCH_RATE, CLASSIC_NUM_SWIMBOTS, CLASSIC_NUM_FOODBITS, GARDEN_RADIUS, ENVIRONMENT_PLANT_SPREAD_RATE, ENVIRONMENT_SEEDS_PER_PERIOD, LOCAL_ENVIRONMENT_PLANT_GROWTH, PLANT_CELL_CAPACITY, PLANT_PARENT_SEED_FRACTION, PLANT_SEED_MIN_DISTANCE, PLANT_SEED_MAX_DISTANCE } from "./Parameters";
 
 import { BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_PREY } from "./Brain";
 import { Camera } from "./Camera";
@@ -154,7 +154,8 @@ export function GenePool()
     const _matingBrightnessDifference = new Float64Array( MATING_RECORD_SIZE );
     const _matingChoosinessMean = new Float64Array( MATING_RECORD_SIZE );
     let _matingCount         = 0;
-    let _gardens             = [];      // environment: one starting garden per biome type
+    let _gardens             = [];
+    let _nurseryDebt         = 0;       // (NURSERY_ENABLED)      // environment: one starting garden per biome type
     let _seedDebt            = 0;       // fractional seeds carried to the next step
     let _environmentImage    = null;    // picture of the temperature map (drawn behind the pool)
     const STARVING_FOOD_CHOICE = 15;   // below this energy a swimbot eats anything
@@ -1023,9 +1024,13 @@ if ( mode === SimulationStartMode.SPECIES )
 	    environment.clearPlantCounts();
 	    let placed = 0;
 
+	    // NURSERY_ENABLED: more food in the gardens at the start
+	    const inGardens = NURSERY_ENABLED ? Math.round( _numFoodBits * 0.6 * NURSERY_START_FOOD_FACTOR ) : Math.round( _numFoodBits * 0.6 );
+	    _numFoodBits = Math.min( MAX_FOODBITS, inGardens + Math.round( _numFoodBits * 0.4 ));
+
 	    for (let attempt = 0; ( placed < _numFoodBits ) && ( attempt < _numFoodBits * 50 ); attempt++)
 	    {
-	        if (( placed < _numFoodBits * 0.6 ) && !environment.petri )
+	        if (( placed < inGardens ) && !environment.petri )
 	        {
 	            const garden = _gardens[ placed % _gardens.length ];
 	            _vectorUtility.setToRandomLocationInDisk( garden, _gardenOfEdenRadius * 1.3 );
@@ -1120,6 +1125,29 @@ if ( mode === SimulationStartMode.SPECIES )
 	        parentSeedChance = totalRate > 0 ? localRate / totalRate : 0;
 	    }
 	    else { _seedDebt += ENVIRONMENT_SEEDS_PER_PERIOD * seasonalPlantGrowth / globalTweakers.foodRegenerationPeriod; }
+
+	    // NURSERY_ENABLED: at first extra seeds, all in the gardens (fading out)
+	    const nursery = ( NURSERY_ENABLED && !environment.petri && ( _gardens.length > 0 )) ? Math.max( 0, 1 - _clock / NURSERY_STEPS ) : 0;
+	    if ( nursery > 0 ) { _nurseryDebt += nursery * NURSERY_EXTRA_SEEDS * ENVIRONMENT_SEEDS_PER_PERIOD / globalTweakers.foodRegenerationPeriod; }
+	    while ( _nurseryDebt >= 1 )
+	    {
+	        _nurseryDebt -= 1;
+	        for (let attempt = 0; attempt < 12; attempt++)
+	        {
+	            _vectorUtility.setToRandomLocationInDisk( _gardens[ Math.floor( gpRandom() * _gardens.length ) ], _gardenOfEdenRadius * 1.3 );
+	            const type = this.choosePlantTypeAt( _vectorUtility.x, _vectorUtility.y );
+	            if ( !this.plantCanGrowAt( _vectorUtility.x, _vectorUtility.y, type )) continue;
+	            const child = this.findLowestDeadFoodBitInArray();
+	            if ( child === NULL_INDEX ) break;
+	            _foodBits[ child ].initialize( child );
+	            _foodBits[ child ].setType( type );
+	            _foodBits[ child ].setEnergy( globalTweakers.foodBitEnergy );
+	            _foodBits[ child ].setPosition( _vectorUtility );
+	            environment.plantCount[ type ][ environment.plantCellIndex( _vectorUtility.x, _vectorUtility.y ) ] ++;
+	            simCounters.nurserySprouts ++;
+	            break;
+	        }
+	    }
 
 	    while ( _seedDebt >= 1 )
 	    {
