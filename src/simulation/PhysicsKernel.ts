@@ -11,8 +11,9 @@
 //   physicsPartB: starvation check, walls
 // (between them the main thread may apply the climate drain)
 //------------------------------------------------------------------------------
+import { currentAt, currentDriftX, currentDriftY } from "./Currents";
 import { ONE, ONE_HALF, PI_OVER_180, ZERO } from "./MathConstants";
-import { CURRENT_WAVELENGTH, OLD_AGE_DURATION, RUDDER_COST_PER_DEGREE, RUDDER_ENABLED, STEER_BY_SWIM_DIRECTION_ENABLED, SWIM_DIRECTION_SMOOTHING, SWIMBOT_SELECT_RADIUS_SCALAR, YOUNG_AGE_DURATION } from "./Parameters";
+import { OLD_AGE_DURATION, RUDDER_COST_PER_DEGREE, RUDDER_ENABLED, STEER_BY_SWIM_DIRECTION_ENABLED, SWIM_DIRECTION_SMOOTHING, SWIMBOT_SELECT_RADIUS_SCALAR, YOUNG_AGE_DURATION } from "./Parameters";
 import { applyWaterDrag, bodyMotionFactors } from "./BodyPhysics";
 import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
 import { CONTINUAL_ENERGY_DRAIN, ENERGY_EFFICIENCY_MEASUREMENT_PERIOD, ENERGY_USED_UP_SWIMMING, GENITAL_INDEX, MAX_PARTS, MOUTH_INDEX, ROOT_PART, STARVING, STARVING_TIMER_DELTA, TIMER_DELTA_INCREASE_RATE, WALL_BOUNCE } from "./SwimbotTypes";
@@ -29,7 +30,6 @@ import {
 //------------------------------------------------------------------------------
 // part A
 //------------------------------------------------------------------------------
-const CURRENT_K = 2 * Math.PI / CURRENT_WAVELENGTH;   // (CURRENTS_ENABLED)
 
 export function physicsPartA( s: number, st: SharedState ): void
 {
@@ -310,8 +310,9 @@ export function physicsPartA( s: number, st: SharedState ): void
     if ( current > ZERO )
     {
         const push = motion.enabled ? Math.max( 0.6, Math.min( 1.4, Math.pow( 410 / Math.max( 1, bodyMass ), 1 / 6 ))) : ONE;
-        posX += push * current * Math.sin( CURRENT_K * posY );
-        posY += push * current * Math.cos( CURRENT_K * posX );
+        currentAt( posX, posY );
+        posX += push * current * currentDriftX();
+        posY += push * current * currentDriftY();
     }
 
     //==================================================================

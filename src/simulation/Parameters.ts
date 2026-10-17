@@ -304,15 +304,12 @@ export const STEER_BY_SWIM_DIRECTION_ENABLED = false;
 export const SWIM_DIRECTION_SMOOTHING       = 0.05;   // how fast the remembered swimming direction follows the velocity
 
 //------------------------------------------------------------------------------
-// Currents (experiment, off): the water slowly drifts in large eddies. The
-// field has no sinks (it is divergence-free), so it does not pile everyone up
-// in one place. Swimbots and meat drift; plants stay rooted. With body
-// hydrodynamics a heavy body is pushed less than a light one.
-//   drift = CURRENT_SPEED x ( sin( 2 pi y / L ), cos( 2 pi x / L ))
+// Currents (off at the start; the C key): a few big ring-shaped streams, like
+// the Gulf Stream (see Currents.ts). Swimbots and meat drift; plants stay
+// rooted. With body hydrodynamics a heavy body is pushed less than a light one.
 //------------------------------------------------------------------------------
 export const CURRENTS_ENABLED               = false;
-export const CURRENT_SPEED                  = 0.08;   // per step (the median swimbot swims ~0.25)
-export const CURRENT_WAVELENGTH             = 4000;   // L: size of one pair of eddies (the pool is 16000)
+export const CURRENT_SPEED                  = 0.15;   // per step in the middle of a stream (the median swimbot swims ~0.25)
 
 //------------------------------------------------------------------------------
 // Plant genes (see PlantGenes.ts): one species, inherited growth speed and

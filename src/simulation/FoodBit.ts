@@ -268,6 +268,7 @@ export function FoodBit()
 	// a new food bit fades in
 	const opacity = function() { return _shownFully ? ONE : Math.min( ONE, ( simClock.step - _fb[ _fi ] ) * FOOD_OPACITY_INCREMENT ); }
 	this.showFully = function() { _shownFully = true; }
+	this.getOpacity = function() { return opacity(); }
     this.getAlive       = function() { return ( _index != NULL_INDEX ); }
 
     // Add method for spatial grid support

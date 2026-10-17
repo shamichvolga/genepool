@@ -1,15 +1,16 @@
+import { currentAt, currentDriftX, currentDriftY, currentStrength, randomPointInCurrent } from "./Currents";
 import { bindPlantGenes, inheritPlantGenes, plantMatureAge, plantOldAge, plantRotAge, plantSeedDistance } from "./PlantGenes";
 import { geneAverage, convertOldGenes, GENE_LAYOUT_VERSION, setTrait, gaussian, thermalWidthToGene, preyTargetScore, GENES_PREDATOR, GENES_THERMAL_OPTIMUM, GENES_THERMAL_WIDTH, GENES_DIGESTION, GENES_BRIGHTNESS, GENES_CHOOSINESS, GENES_HUNGER, GENES_AUTOTOMY_BITE, GENES_AUTOTOMY_THREAT, GENES_AUTOTOMY_AMOUNT, GENES_AUTOTOMY_WHICH, GENES_PERSISTENCE, GENES_INVESTMENT, GENES_SIZE_PICKINESS, GENES_DEFERENCE, GENES_RUDDER } from "./EcologyGenes";
 import { environment, FLAT_ENVIRONMENT, INITIAL_SOIL_NUTRIENT_PER_CELL, NUTRIENT_CYCLE_ENABLED, PLANT_TYPE_WARM, PLANT_TYPE_COLD, SEASONAL_PLANT_GROWTH_ENABLED, SEASONAL_PLANT_GROWTH_AMPLITUDE } from "./Environment";
 import { petriSettings, petriStartZone } from "./Petri";
 import { IGNORE_FOOD_EFFICIENCY, preyVisibility, TWO_PLANT_TYPES } from "./Ecology";
-import { NURSERY_ENABLED, NURSERY_STEPS, NURSERY_START_FOOD_FACTOR, NURSERY_EXTRA_SEEDS, PLANT_EVOLUTION_ENABLED, PLANT_SEED_PARENT_TRIES, CURRENTS_ENABLED, CURRENT_SPEED, CURRENT_WAVELENGTH, CLASSIC_SEED_RAIN_FRACTION, MEAT_PIECE_ENERGY, MEAT_PIECE_SCATTER, PLANT_STAGES_ENABLED, PLANT_ROT_AGE, DIET_SWITCH_RATE, CLASSIC_NUM_SWIMBOTS, CLASSIC_NUM_FOODBITS, GARDEN_RADIUS, ENVIRONMENT_PLANT_SPREAD_RATE, ENVIRONMENT_SEEDS_PER_PERIOD, LOCAL_ENVIRONMENT_PLANT_GROWTH, PLANT_CELL_CAPACITY, PLANT_PARENT_SEED_FRACTION, PLANT_SEED_MIN_DISTANCE, PLANT_SEED_MAX_DISTANCE } from "./Parameters";
+import { PLANT_STAGES_SHOWN, NURSERY_ENABLED, NURSERY_STEPS, NURSERY_START_FOOD_FACTOR, NURSERY_EXTRA_SEEDS, PLANT_EVOLUTION_ENABLED, PLANT_SEED_PARENT_TRIES, CURRENTS_ENABLED, CURRENT_SPEED, CLASSIC_SEED_RAIN_FRACTION, MEAT_PIECE_ENERGY, MEAT_PIECE_SCATTER, PLANT_STAGES_ENABLED, PLANT_ROT_AGE, DIET_SWITCH_RATE, CLASSIC_NUM_SWIMBOTS, CLASSIC_NUM_FOODBITS, GARDEN_RADIUS, ENVIRONMENT_PLANT_SPREAD_RATE, ENVIRONMENT_SEEDS_PER_PERIOD, LOCAL_ENVIRONMENT_PLANT_GROWTH, PLANT_CELL_CAPACITY, PLANT_PARENT_SEED_FRACTION, PLANT_SEED_MIN_DISTANCE, PLANT_SEED_MAX_DISTANCE } from "./Parameters";
 
 import { BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_PREY } from "./Brain";
 import { Camera } from "./Camera";
 import { BRIGHTNESS_FROM_GENES, Embryology } from "./Embryology";
 import { FamilyTree } from "./FamilyTree";
-import { DEFAULT_FOOD_BIT_ENERGY, DEFAULT_FOOD_BIT_MAX_SPAWN_RADIUS, FOOD_BIT_BOUNDARY_MARGIN, FOOD_BIT_GRAB_RADIUS, FoodBit, MAX_FOOD_BIT_ENERGY, MAX_FOOD_BIT_MAX_SPAWN_RADIUS, MIN_FOOD_BIT_ENERGY, MIN_FOOD_BIT_MAX_SPAWN_RADIUS } from "./FoodBit";
+import { DEFAULT_FOOD_BIT_ENERGY, DEFAULT_FOOD_BIT_MAX_SPAWN_RADIUS, FOOD_BIT_BOUNDARY_MARGIN, FOOD_BIT_GRAB_RADIUS, FOOD_BIT_SIZE, FOOD_BIT_SIZE_VIEW_SCALE, FOOD_OPACITY_INCREMENT, FoodBit, MAX_FOOD_BIT_ENERGY, MAX_FOOD_BIT_MAX_SPAWN_RADIUS, MIN_FOOD_BIT_ENERGY, MIN_FOOD_BIT_MAX_SPAWN_RADIUS } from "./FoodBit";
 import { Genotype, NUM_GENES, PRESET_GENOTYPE_DARWIN, PRESET_GENOTYPE_DENNETT, PRESET_GENOTYPE_MENDEL, PRESET_GENOTYPE_TURING, PRESET_GENOTYPE_WILSON } from "./Genotype";
 import { CameraNavigationAction, NUM_GENES_USED, SimulationStartMode, globalTweakers, gpRandom, resetSimulationCounters, simClock, simCounters } from "./Globals";
 import { BYTE_SIZE, MILLISECONDS_PER_SECOND, NULL_INDEX, ONE, ONE_HALF, PI2, ZERO } from "./MathConstants";
@@ -1977,36 +1978,61 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	this.toggleCurrents  = function() { _currentSpeed = ( _currentSpeed > 0 ) ? 0 : CURRENT_SPEED; this.writePerceptionParams(); }
 	this.getCurrentsOn   = function() { return _currentSpeed > 0; }
 
+	//------------------------------------------------------------------------
+	// the currents seen: faint streaks that drift along the streams without
+	// stopping, each fading in and out (only where the camera looks)
+	//------------------------------------------------------------------------
+	const NUM_MARKS = 260;
+	const _marks = [];
+	let _lastMarkTime = 0;
+	const _markPoint = { x: 0, y: 0 };
 	function renderCurrents()
 	{
-	    if ( !( _currentSpeed > 0 )) return;
-	    const k = 2 * Math.PI / CURRENT_WAVELENGTH;
-	    const view = _camera.getXDimension();
-	    const spacing = Math.max( 150, view / 18 );                 // about 18 arrows across the screen
-	    const left = _camera.getPosition().x - view / 2, top = _camera.getPosition().y - _camera.getYDimension() / 2;
-	    const x0 = Math.max( POOL_LEFT, Math.floor( left / spacing ) * spacing + spacing / 2 );
-	    const y0 = Math.max( POOL_TOP,  Math.floor( top  / spacing ) * spacing + spacing / 2 );
-	    const x1 = Math.min( POOL_RIGHT,  left + view ), y1 = Math.min( POOL_BOTTOM, top + _camera.getYDimension() );
-	    const drift = ( _seconds * 0.6 ) % 1;                         // arrows creep along, so the flow is seen
-	    _canvas.strokeStyle = "rgba( 210, 230, 255, 0.22 )";
-	    _canvas.lineWidth   = Math.max( 1, view / 900 );
-	    _canvas.lineCap     = "round";
-	    _canvas.beginPath();
-	    for ( let y = y0; y < y1; y += spacing )
-	    for ( let x = x0; x < x1; x += spacing )
+	    if ( !( _currentSpeed > 0 )) { _marks.length = 0; return; }
+	    const now = performance.now();
+	    const dt = Math.min( 0.1, ( _lastMarkTime === 0 ) ? 0 : ( now - _lastMarkTime ) / 1000 );
+	    _lastMarkTime = now;
+
+	    const viewW = _camera.getXDimension(), viewH = _camera.getYDimension();
+	    const left = _camera.getPosition().x - viewW / 2, top = _camera.getPosition().y - viewH / 2;
+	    const inView = ( x, y ) => ( x > left ) && ( x < left + viewW ) && ( y > top ) && ( y < top + viewH );
+	    const speed = viewW * 0.06;             // (on screen: a steady drift, whatever the zoom)
+	    const random = () => Math.random();     // (drawing only: not the simulation's random numbers)
+
+	    // new marks where the camera looks, inside a stream
+	    while ( _marks.length < NUM_MARKS )
 	    {
-	        const vx = Math.sin( k * y ), vy = Math.cos( k * x );    // (-1..1)
-	        const len = spacing * 0.45 * Math.sqrt( vx * vx + vy * vy ) / Math.SQRT2;
-	        const n = Math.max( 1e-6, Math.sqrt( vx * vx + vy * vy ));
-	        const dx = vx / n, dy = vy / n;
-	        const sx = x + dx * spacing * 0.3 * ( drift - 0.5 ), sy = y + dy * spacing * 0.3 * ( drift - 0.5 );
-	        const ex = sx + dx * len, ey = sy + dy * len;
-	        _canvas.moveTo( sx, sy ); _canvas.lineTo( ex, ey );
-	        // arrow head
-	        _canvas.moveTo( ex, ey ); _canvas.lineTo( ex - ( dx * 0.8 - dy * 0.5 ) * len * 0.3, ey - ( dy * 0.8 + dx * 0.5 ) * len * 0.3 );
-	        _canvas.moveTo( ex, ey ); _canvas.lineTo( ex - ( dx * 0.8 + dy * 0.5 ) * len * 0.3, ey - ( dy * 0.8 - dx * 0.5 ) * len * 0.3 );
+	        let placed = false;
+	        for (let attempt = 0; attempt < 30 && !placed; attempt++)
+	        {
+	            randomPointInCurrent( random, _markPoint );
+	            if ( !inView( _markPoint.x, _markPoint.y )) continue;
+	            _marks.push({ x: _markPoint.x, y: _markPoint.y, age: 0, life: 2.5 + 2.5 * random() });
+	            placed = true;
+	        }
+	        if ( !placed ) break;      // (no stream in sight)
 	    }
-	    _canvas.stroke();
+
+	    _canvas.lineCap = "round";
+	    _canvas.lineWidth = Math.max( 1, viewW / 700 );
+	    for (let i = _marks.length - 1; i >= 0; i--)
+	    {
+	        const m = _marks[i];
+	        currentAt( m.x, m.y );
+	        const vx = currentDriftX(), vy = currentDriftY(), g = currentStrength();
+	        m.x += vx * speed * dt;
+	        m.y += vy * speed * dt;
+	        m.age += dt;
+	        if (( m.age > m.life ) || ( g < 0.05 ) || !inView( m.x, m.y )) { _marks.splice( i, 1 ); continue; }
+	        const fade = Math.min( 1, m.age / 0.6, ( m.life - m.age ) / 0.6 );
+	        const n = Math.max( 1e-6, Math.sqrt( vx * vx + vy * vy ));
+	        const tail = viewW * 0.025 * g;
+	        _canvas.strokeStyle = "rgba( 205, 228, 255, " + ( 0.32 * fade * Math.min( 1, g * 1.5 )).toFixed( 3 ) + " )";
+	        _canvas.beginPath();
+	        _canvas.moveTo( m.x - vx / n * tail, m.y - vy / n * tail );
+	        _canvas.lineTo( m.x, m.y );
+	        _canvas.stroke();
+	    }
 	}
 
 	// drawing time by part (milliseconds, smoothed): water and obstacle, food, swimbots, graphics card
@@ -2501,10 +2527,9 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
             else if ( _currentSpeed > 0 )
             {
                 // meat drifts with the water (plants are rooted)
-                const k = 2 * Math.PI / CURRENT_WAVELENGTH;
-                const x = foodX[f], y = foodY[f];
-                foodX[f] = Math.max( POOL_LEFT + 1, Math.min( POOL_RIGHT  - 1, x + _currentSpeed * Math.sin( k * y )));
-                foodY[f] = Math.max( POOL_TOP  + 1, Math.min( POOL_BOTTOM - 1, y + _currentSpeed * Math.cos( k * x )));
+                currentAt( foodX[f], foodY[f] );
+                foodX[f] = Math.max( POOL_LEFT + 1, Math.min( POOL_RIGHT  - 1, foodX[f] + _currentSpeed * currentDriftX() ));
+                foodY[f] = Math.max( POOL_TOP  + 1, Math.min( POOL_BOTTOM - 1, foodY[f] + _currentSpeed * currentDriftY() ));
             }
 
             if ( counting && ( type !== 2 ) && ( live[f] === 1 ))
@@ -3735,6 +3760,13 @@ if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
 	//-------------------------------
 this.renderFoodBits = function( useGraphicsCard )
 {
+        // plain dots on the graphics card: one tight loop over the shared
+        // arrays, straight into the renderer's buffer (no call per food bit)
+        if ( useGraphicsCard && !( PLANT_STAGES_ENABLED && PLANT_STAGES_SHOWN ) && !PLANT_EVOLUTION_ENABLED )
+        {
+            this.writeFoodDots();
+        }
+        else
         for (let i = 0; i < _aliveFoodBitIndices.length; i++)
         {
             let f = _aliveFoodBitIndices[i];
@@ -3757,6 +3789,42 @@ this.renderFoodBits = function( useGraphicsCard )
             }
         }
 }
+
+	const FOOD_RGB = [ 0.3, 0.8, 0.2,   0.3, 0.5, 0.9,   0.9, 0.1, 0.1 ];   // (as FoodBit.setColorAccordingToType)
+	this.writeFoodDots = function()
+	{
+	    const fx = _st.foodX, fy = _st.foodY, ft = _st.foodType, born = _st.foodBorn, live = _st.liveFood;
+	    const n = _aliveFoodBitIndices.length;
+	    const viewW = _camera.getXDimension(), viewH = _camera.getYDimension();
+	    const pad = FOOD_BIT_GRAB_RADIUS;
+	    const left = _camera.getPosition().x - viewW / 2 - pad, right = left + viewW + 2 * pad;
+	    const top  = _camera.getPosition().y - viewH / 2 - pad, bottom = top + viewH + 2 * pad;
+	    const radius = FOOD_BIT_SIZE + _camera.getScale() * FOOD_BIT_SIZE_VIEW_SCALE * FOOD_BIT_SIZE_VIEW_SCALE;
+	    const stride = _capsuleRenderer.floatsPerCapsule;
+	    let i = _capsuleRenderer.reserve( n );
+	    const d = _capsuleRenderer.reserved();
+	    let used = 0;
+	    for (let k = 0; k < n; k++)
+	    {
+	        const f = _aliveFoodBitIndices[k];
+	        if ( live[f] !== 1 ) continue;
+	        const x = fx[f], y = fy[f];
+	        if (( x < left ) || ( x > right ) || ( y < top ) || ( y > bottom )) continue;
+	        const t = ft[f] * 3;
+	        let alpha = ( _clock - born[f] ) * FOOD_OPACITY_INCREMENT;
+	        if ( alpha < 1 ) { alpha = _foodBits[f].getOpacity(); }       // (still fading in, or held in the hand)
+	        d[ i ] = x; d[ i + 1 ] = y; d[ i + 2 ] = x; d[ i + 3 ] = y;
+	        d[ i + 4 ] = radius; d[ i + 5 ] = radius;
+	        d[ i + 6 ] = FOOD_RGB[ t ]; d[ i + 7 ] = FOOD_RGB[ t + 1 ]; d[ i + 8 ] = FOOD_RGB[ t + 2 ];
+	        d[ i + 9 ] = alpha > 1 ? 1 : alpha;
+	        i += stride; used ++;
+	    }
+	    _capsuleRenderer.release( n - used );
+
+	    // the selected and the touched food bit: outlines in 2D
+	    if (( _selectedFoodBit   != NULL_INDEX ) && _foodBits[ _selectedFoodBit   ].getAlive()) { _foodBits[ _selectedFoodBit   ].renderSelectOutline( _camera.getScale() ); }
+	    if (( _mousedOverFoodBit != NULL_INDEX ) && _foodBits[ _mousedOverFoodBit ].getAlive()) { _foodBits[ _mousedOverFoodBit ].renderMousedOverOutline( _camera.getScale() ); }
+	}
 
 	//----------------------------------
 	// render swimbots with batching

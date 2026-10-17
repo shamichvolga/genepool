@@ -231,6 +231,9 @@ export class CapsuleRenderer
     }
     reserved(): Float32Array { return this.data; }
 
+    // give back reserved records that were not used
+    release( n: number ): void { this.count = Math.max( 0, this.count - n ); }
+
     // a block of ready records (written by the physics threads, RenderData.ts)
     copyBlock( source: Float32Array, start: number, length: number ): void
     {
