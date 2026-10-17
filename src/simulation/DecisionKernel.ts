@@ -32,7 +32,7 @@ import { BRAIN_SIZE, NUM_HIDDEN, NUM_INPUTS, NUM_OUTPUTS, DRIVE_OUTPUTS, THINK_P
          IN_PREY_DISTANCE, IN_PREY_REWARD, IN_PREY_SUCCESS, IN_PREY_CHASE, IN_BAIT_PRESENT, IN_BAIT_DISTANCE, IN_BAIT_REWARD,
          OUT_FOOD, OUT_MATE, OUT_FLEE, OUT_HUNT, OUT_CLIMATE, OUT_SOCIAL, OUT_EFFORT, OUT_STEER, OUT_SELF_EAT, OUT_PREY_VALUE, OUT_PREY_TRAVEL, OUT_PREY_BAIT,
          think, sigmoid } from "./NeuralBrain";
-import { YOUNG_CANNIBALISM_ENABLED, BITE_AT_CONTACT_ENABLED, CONTACT_EATING_ENABLED, AUTOTOMY_DECOY_SPAN, CLIMATE_PROBE_DISTANCE, CLIMATE_STEERING, SOCIAL_STEERING, BODY_TEMPERATURE_INERTIA_ENABLED, SELF_CANNIBALISM_ENABLED,
+import { DESPERATE_CANNIBALISM_ENABLED, DESPERATE_ENERGY_SHARE, DESPERATE_PARTS_MARGIN, LIMBS_CATCH_YOUNG_ENABLED, YOUNG_CANNIBALISM_ENABLED, BITE_AT_CONTACT_ENABLED, CONTACT_EATING_ENABLED, AUTOTOMY_DECOY_SPAN, CLIMATE_PROBE_DISTANCE, CLIMATE_STEERING, SOCIAL_STEERING, BODY_TEMPERATURE_INERTIA_ENABLED, SELF_CANNIBALISM_ENABLED,
          PREDATOR_TARGET_SELECTION_ENABLED, PREDATOR_FLEE_RADIUS, PREDATOR_LEVEL_THRESHOLD, PREY_SCAN_COOLDOWN, PREY_SCAN_RADIUS_GROWTH,
          PREY_SCAN_RADIUS_MAX_SCALE, SWIMBOT_MAX_ENERGY } from "./Parameters";
 import { thermalFit, EMERGENCY_PROBE_DISTANCE, EMERGENCY_THERMAL_FIT, KINESIS_MAX_TURN, KINESIS_PERIOD, KINESIS_TURN_CHANCE,
@@ -182,6 +182,19 @@ function sproutAtLimbs( st: SharedState, s: number ): number
         }
     }
     return -1;
+}
+
+// LIMBS_CATCH_YOUNG_ENABLED: does any of my limb ends touch a part of p?
+function limbsTouchBody( st: SharedState, s: number, p: number ): boolean
+{
+    const n = st.bots[ s * SS.BOT_STRIDE + SS.B_NUM_PARTS ];
+    const o = s * SS.PART_STRIDE, w = s * MAX_PARTS;
+    for (let k = 2; k < n; k++)
+    {
+        const x = st.parts[ o + k * SS.PS + SS.P_X ], y = st.parts[ o + k * SS.PS + SS.P_Y ];
+        if ( mouthTouchesBody( st, p, x, y )) return true;      // (same reach rule, from the limb's end)
+    }
+    return false;
 }
 
 // is the mouth at one of the body parts of swimbot p? (part ends and middles,
@@ -557,7 +570,8 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
     if ( YOUNG_CANNIBALISM_ENABLED && ( M[ m + SS.M_CANNIBAL ] === 1 ) && ( M[ m + SS.M_TRY_HUNT ] !== 1 ) && ( M[ m + SS.M_TRY_EAT ] !== 1 ))
     {
         const young = M[ m + SS.M_PREY ];
-        if (( young >= 0 ) && ( st.liveSwimbot[ young ] === 1 ) && ( M[ m + SS.M_HUNT_CD ] === 0 ) && mouthTouchesBody( st, young, mouthX, mouthY ))
+        if (( young >= 0 ) && ( st.liveSwimbot[ young ] === 1 ) && ( M[ m + SS.M_HUNT_CD ] === 0 )
+        &&  ( mouthTouchesBody( st, young, mouthX, mouthY ) || ( LIMBS_CATCH_YOUNG_ENABLED && limbsTouchBody( st, s, young ))))
         {
             M[ m + SS.M_TRY_HUNT ] = 1;
         }
@@ -858,12 +872,17 @@ export function takeInLook( st: SharedState, s: number, counters: number ): void
     &&   ( B[ b + SS.B_ENERGY ] < M[ m + SS.M_HUNGER ] ))
     {
         const myParts = B[ b + SS.B_NUM_PARTS ];
+        const desperate = DESPERATE_CANNIBALISM_ENABLED && ( B[ b + SS.B_ENERGY ] < M[ m + SS.M_MAX_ENERGY ] * DESPERATE_ENERGY_SHARE );
         for (let i = 0; i < count; i++)
         {
             const o = st.seen[ base + i ];
             if (( st.liveSwimbot[o] !== 1 ) || isPredator( st, o ) || ( st.eternal[o] === 1 )) continue;
-            if ( st.age[o] >= st.mind[ o * SS.MIND_STRIDE + SS.M_MATURE_AGE ] ) continue;           // only the young
-            if ( st.bots[ o * SS.BOT_STRIDE + SS.B_NUM_PARTS ] >= myParts ) continue;              // with fewer parts
+            const theirParts = st.bots[ o * SS.BOT_STRIDE + SS.B_NUM_PARTS ];
+            const young = st.age[o] < st.mind[ o * SS.MIND_STRIDE + SS.M_MATURE_AGE ];
+            // a young one with fewer parts; or, when I am starving to death, anyone with 2+ fewer
+            const youngOk     = young && ( theirParts < myParts );
+            const desperateOk = desperate && ( theirParts <= myParts - DESPERATE_PARTS_MARGIN );
+            if ( !youngOk && !desperateOk ) continue;
             M[ m + SS.M_PREY ] = o;
             M[ m + SS.M_CANNIBAL ] = 1;
             break;

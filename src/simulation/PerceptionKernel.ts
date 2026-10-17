@@ -459,6 +459,7 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
     // (all predators within view count, not only the nearest few swimbots:
     //  in a crowd a predator was easily "not seen")
     let threat = -1, anyPredator = -1;
+    const iAmYoung = JUVENILE_PREDATION_ENABLED && ( st.age[s] < st.mind[ s * MIND_STRIDE + M_MATURE_AGE ] );
     if ( !iAmPredator )
     {
         let threatDistance = Infinity, anyDistance = Infinity;
@@ -467,6 +468,10 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
             const o = nearby[i];
             if ( alive[o] === 0 ) continue;
             if ( predator[o] <= PREDATOR_LEVEL_THRESHOLD ) continue;
+
+            // a predator that could not eat me (I am too heavy for it, and not
+            // young any more) is no danger to me: the same rule it hunts by
+            if ( !iAmYoung && ( st.mass[s] > st.mass[o] * PREY_MAX_MASS_RATIO )) continue;
 
             const gx = myGenitalX - genitalX[o];
             const gy = myGenitalY - genitalY[o];

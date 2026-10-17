@@ -277,7 +277,7 @@ export const CROWD_AWARE_FOOD_CHOICE_ENABLED = true;   // (on since 17.10: the c
 export const JUVENILE_PREDATION_ENABLED     = true;   // a predator may bite a not yet grown-up prey even if it is heavier
 export const MEAT_PIECE_ENERGY              = 25;     // a body that is not eaten whole falls apart into pieces of this much
 export const MEAT_PIECE_SCATTER             = 40;     // ... lying this far around the place of death
-export const YOUNG_CANNIBALISM_ENABLED      = false;  // a hungry herbivore may eat a young one of its kind with fewer body parts
+export const YOUNG_CANNIBALISM_ENABLED      = true;   // (on since 18.10)  // a hungry herbivore may eat a young one of its kind with fewer body parts
 export const CLASSIC_SEED_RAIN_FRACTION     = 0.1;    // classic pools: share of new food landing anywhere (not next to other food)
 
 //------------------------------------------------------------------------------
@@ -357,3 +357,13 @@ export const START_FOOD_CLUMP               = 5;      // ... in little clumps of
 export const START_FOOD_CLUMP_RADIUS        = 30;
 export const NURSERY_START_FOOD_FACTOR      = 10;     // inside the starting gardens: 10 x as dense as elsewhere
 export const NURSERY_EXTRA_SEEDS            = 1.0;    // + this many extra seeds per seed (at the start), all in the gardens
+
+//------------------------------------------------------------------------------
+// (18.10) A body near starving to death may eat anyone with at least
+// DESPERATE_PARTS_MARGIN fewer body parts, young or grown up. And the young
+// one a hungry body is after is caught by any of its limbs too, like a sieve.
+//------------------------------------------------------------------------------
+export const DESPERATE_CANNIBALISM_ENABLED  = true;
+export const DESPERATE_ENERGY_SHARE         = 0.1;    // "near death": energy below this share of its full store
+export const DESPERATE_PARTS_MARGIN         = 2;
+export const LIMBS_CATCH_YOUNG_ENABLED      = true;
