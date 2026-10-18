@@ -75,6 +75,7 @@ export const M_GRAB_RADIUS   = 63;   // how near the mouth must be to food (SIZE
 export const M_FILTER_FOOD   = 64;   // a sprout one of my limbs brushes (FILTER_FEEDING_ENABLED), or -1
 export const M_NEXT_LOOK     = 65;   // the age at which it looks around next (EVENT_DRIVEN_LOOK_ENABLED)
 export const M_LAST_LOOK_STATE= 66;   // its brain state at the last look
+export const M_CANNIBAL_CD   = 67;   // steps until it may eat a young one again (CANNIBAL_COOLDOWN)
 export const MIND_STRIDE     = 72;
 
 // what the decision kernel asks the main thread to do (bits in M_EVENTS)

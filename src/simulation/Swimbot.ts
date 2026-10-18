@@ -1,3 +1,4 @@
+import { CANNIBAL_SUCCESS_SCALE, CANNIBAL_COOLDOWN } from "./Parameters";
 import { RENDER_FLOATS } from "./RenderData";
 import { FILTER_FEEDING_EFFICIENCY, LIMB_SPINES_ENABLED, LIMB_SPINE_EFFECT, LIMB_SPINE_FLOOR } from "./Parameters";
 import { plantOldEnergy, plantSproutGrowth, plantStage } from "./PlantGenes";
@@ -2219,6 +2220,8 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	    // LIMB_SPINES_ENABLED: every limb tip beyond two is a spine in the throat
 	    if ( LIMB_SPINES_ENABLED ) { gape *= Math.max( LIMB_SPINE_FLOOR, ONE - LIMB_SPINE_EFFECT * Math.max( 0, chosenPrey().getNumLimbTips() - 2 )); }
 	    if ( PREDATOR_GAPE_CURVE_ENABLED ) { _M[ _m + SS.M_HUNT_CD ] = ATTACK_COOLDOWN * ( 1 + GAPE_COOLDOWN_SLOPE * sizeRatio ); }
+	    // (a cannibal bite succeeds less often than a predator's)
+	    if ( _M[ _m + SS.M_CANNIBAL ] === 1 ) { gape *= CANNIBAL_SUCCESS_SCALE; }
 	    if ( gpRandom() > ( environment.active ? ENVIRONMENT_ATTACK_SUCCESS_CHANCE : ATTACK_SUCCESS_CHANCE ) * gape )
 	    {
 	        simCounters.failedAttacks ++;
@@ -2250,7 +2253,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	    simCounters.attackCount ++;
 	    _numPreyEaten ++;
 
-	    if ( _M[ _m + SS.M_CANNIBAL ] === 1 ) { simCounters.youngCannibalism ++; _numCannibalized ++; }
+	    if ( _M[ _m + SS.M_CANNIBAL ] === 1 ) { simCounters.youngCannibalism ++; _numCannibalized ++; _M[ _m + SS.M_CANNIBAL_CD ] = CANNIBAL_COOLDOWN; }
 	    let room = Math.max( ZERO, _M[ _m + SS.M_MAX_ENERGY ] - _B[ _b + SS.B_ENERGY ] );
 	    if ( energyFromPrey > room )
 	    {

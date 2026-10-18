@@ -382,3 +382,12 @@ export const START_ENERGY_FACTOR            = 1.5;
 export const EVENT_DRIVEN_LOOK_ENABLED      = true;
 export const EVENT_CALM_LOOK_PERIOD         = 6;
 export const EVENT_CALM_MIN_DISTANCE        = 150;    // looks often again when the target is nearer than this
+
+//------------------------------------------------------------------------------
+// (19.10) Cannibalism softened: eating the young of one's kind made every body
+// grow to 14-16 parts and halved the variety of forms (d6). Now a cannibal
+// bite succeeds only CANNIBAL_SUCCESS_SCALE as often as a predator's, and
+// after a cannibal meal the body cannot do it again for CANNIBAL_COOLDOWN steps.
+//------------------------------------------------------------------------------
+export const CANNIBAL_SUCCESS_SCALE         = 0.4;
+export const CANNIBAL_COOLDOWN              = 1500;

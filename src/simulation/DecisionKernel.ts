@@ -461,6 +461,7 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
     if ( st.imageStrength[s] > 0 ) { st.imageStrength[s] *= SEARCH_IMAGE_FORGETTING; }
 
     if ( M[ m + SS.M_HUNT_CD ] > 0 ) { M[ m + SS.M_HUNT_CD ] --; }
+    if ( M[ m + SS.M_CANNIBAL_CD ] > 0 ) { M[ m + SS.M_CANNIBAL_CD ] --; }
 
     if ( !EVENT_DRIVEN_LOOK_ENABLED )
     {
@@ -905,7 +906,7 @@ export function takeInLook( st: SharedState, s: number, counters: number ): void
     const plantSeen = foodOkay && !foodIsMeat;
     const mouthAtX = B[ b + SS.B_MOUTH_X ], mouthAtY = B[ b + SS.B_MOUTH_Y ];
     const plantDistance = plantSeen ? Math.hypot( st.foodX[f] - mouthAtX, st.foodY[f] - mouthAtY ) : Infinity;
-    if ( YOUNG_CANNIBALISM_ENABLED && !isPredator( st, s )
+    if ( YOUNG_CANNIBALISM_ENABLED && !isPredator( st, s ) && !( M[ m + SS.M_CANNIBAL_CD ] > 0 )
     &&   ( B[ b + SS.B_ENERGY ] < M[ m + SS.M_HUNGER ] ))
     {
         const myParts = B[ b + SS.B_NUM_PARTS ];
