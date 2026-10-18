@@ -32,7 +32,7 @@ import { BRAIN_SIZE, NUM_HIDDEN, NUM_INPUTS, NUM_OUTPUTS, DRIVE_OUTPUTS, THINK_P
          IN_PREY_DISTANCE, IN_PREY_REWARD, IN_PREY_SUCCESS, IN_PREY_CHASE, IN_BAIT_PRESENT, IN_BAIT_DISTANCE, IN_BAIT_REWARD,
          OUT_FOOD, OUT_MATE, OUT_FLEE, OUT_HUNT, OUT_CLIMATE, OUT_SOCIAL, OUT_EFFORT, OUT_STEER, OUT_SELF_EAT, OUT_PREY_VALUE, OUT_PREY_TRAVEL, OUT_PREY_BAIT,
          think, sigmoid } from "./NeuralBrain";
-import { EVENT_DRIVEN_LOOK_ENABLED, EVENT_CALM_LOOK_PERIOD, EVENT_CALM_MIN_DISTANCE, DESPERATE_CANNIBALISM_ENABLED, DESPERATE_ENERGY_SHARE, DESPERATE_PARTS_MARGIN, LIMBS_CATCH_YOUNG_ENABLED, YOUNG_CANNIBALISM_ENABLED, BITE_AT_CONTACT_ENABLED, CONTACT_EATING_ENABLED, AUTOTOMY_DECOY_SPAN, CLIMATE_PROBE_DISTANCE, CLIMATE_STEERING, SOCIAL_STEERING, BODY_TEMPERATURE_INERTIA_ENABLED, SELF_CANNIBALISM_ENABLED,
+import { EVENT_DRIVEN_LOOK_ENABLED, EVENT_CALM_LOOK_PERIOD, EVENT_CALM_MIN_DISTANCE, DESPERATE_CANNIBALISM_ENABLED, DESPERATE_ENERGY_SHARE, CANNIBAL_PREY_MASS_SHARE, DESPERATE_PREY_MASS_SHARE, LIMBS_CATCH_YOUNG_ENABLED, YOUNG_CANNIBALISM_ENABLED, BITE_AT_CONTACT_ENABLED, CONTACT_EATING_ENABLED, AUTOTOMY_DECOY_SPAN, CLIMATE_PROBE_DISTANCE, CLIMATE_STEERING, SOCIAL_STEERING, BODY_TEMPERATURE_INERTIA_ENABLED, SELF_CANNIBALISM_ENABLED,
          PREDATOR_TARGET_SELECTION_ENABLED, PREDATOR_FLEE_RADIUS, PREDATOR_LEVEL_THRESHOLD, PREY_SCAN_COOLDOWN, PREY_SCAN_RADIUS_GROWTH,
          PREY_SCAN_RADIUS_MAX_SCALE, SWIMBOT_MAX_ENERGY } from "./Parameters";
 import { thermalFit, EMERGENCY_PROBE_DISTANCE, EMERGENCY_THERMAL_FIT, KINESIS_MAX_TURN, KINESIS_PERIOD, KINESIS_TURN_CHANCE,
@@ -461,7 +461,6 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
     if ( st.imageStrength[s] > 0 ) { st.imageStrength[s] *= SEARCH_IMAGE_FORGETTING; }
 
     if ( M[ m + SS.M_HUNT_CD ] > 0 ) { M[ m + SS.M_HUNT_CD ] --; }
-    if ( M[ m + SS.M_CANNIBAL_CD ] > 0 ) { M[ m + SS.M_CANNIBAL_CD ] --; }
 
     if ( !EVENT_DRIVEN_LOOK_ENABLED )
     {
@@ -906,20 +905,19 @@ export function takeInLook( st: SharedState, s: number, counters: number ): void
     const plantSeen = foodOkay && !foodIsMeat;
     const mouthAtX = B[ b + SS.B_MOUTH_X ], mouthAtY = B[ b + SS.B_MOUTH_Y ];
     const plantDistance = plantSeen ? Math.hypot( st.foodX[f] - mouthAtX, st.foodY[f] - mouthAtY ) : Infinity;
-    if ( YOUNG_CANNIBALISM_ENABLED && !isPredator( st, s ) && !( M[ m + SS.M_CANNIBAL_CD ] > 0 )
+    if ( YOUNG_CANNIBALISM_ENABLED && !isPredator( st, s )
     &&   ( B[ b + SS.B_ENERGY ] < M[ m + SS.M_HUNGER ] ))
     {
-        const myParts = B[ b + SS.B_NUM_PARTS ];
         const desperate = DESPERATE_CANNIBALISM_ENABLED && ( B[ b + SS.B_ENERGY ] < M[ m + SS.M_MAX_ENERGY ] * DESPERATE_ENERGY_SHARE );
         for (let i = 0; i < count; i++)
         {
             const o = st.seen[ base + i ];
             if (( st.liveSwimbot[o] !== 1 ) || isPredator( st, o ) || ( st.eternal[o] === 1 )) continue;
-            const theirParts = st.bots[ o * SS.BOT_STRIDE + SS.B_NUM_PARTS ];
+            // what fits in the mouth: its mass now (a young one grows from an egg) against mine
             const young = st.age[o] < st.mind[ o * SS.MIND_STRIDE + SS.M_MATURE_AGE ];
-            // a young one with fewer parts; or, when I am starving to death, anyone with 2+ fewer
-            const youngOk     = young && ( theirParts < myParts );
-            const desperateOk = desperate && ( theirParts <= myParts - DESPERATE_PARTS_MARGIN );
+            const theirMassNow = st.mass[o] * Math.min( 1, st.bots[ o * SS.BOT_STRIDE + SS.B_GROWTH ] );
+            const youngOk     = young && ( theirMassNow < st.mass[s] * CANNIBAL_PREY_MASS_SHARE );
+            const desperateOk = desperate && ( theirMassNow < st.mass[s] * DESPERATE_PREY_MASS_SHARE );
             if ( !youngOk && !desperateOk ) continue;
             if ( Math.hypot( st.botX[o] - mouthAtX, st.botY[o] - mouthAtY ) > plantDistance ) continue;   // the plant is nearer
             M[ m + SS.M_PREY ] = o;

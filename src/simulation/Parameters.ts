@@ -359,13 +359,12 @@ export const NURSERY_START_FOOD_FACTOR      = 10;     // inside the starting gar
 export const NURSERY_EXTRA_SEEDS            = 1.0;    // + this many extra seeds per seed (at the start), all in the gardens
 
 //------------------------------------------------------------------------------
-// (18.10) A body near starving to death may eat anyone with at least
-// DESPERATE_PARTS_MARGIN fewer body parts, young or grown up. And the young
+// (18.10) A body near starving to death may eat anyone lighter than
+// DESPERATE_PREY_MASS_SHARE of its mass, young or grown up. And the young
 // one a hungry body is after is caught by any of its limbs too, like a sieve.
 //------------------------------------------------------------------------------
 export const DESPERATE_CANNIBALISM_ENABLED  = true;
 export const DESPERATE_ENERGY_SHARE         = 0.1;    // "near death": energy below this share of its full store
-export const DESPERATE_PARTS_MARGIN         = 2;
 export const LIMBS_CATCH_YOUNG_ENABLED      = true;
 
 // (17.10) the first generation starts with this many times a full energy store
@@ -384,10 +383,12 @@ export const EVENT_CALM_LOOK_PERIOD         = 6;
 export const EVENT_CALM_MIN_DISTANCE        = 150;    // looks often again when the target is nearer than this
 
 //------------------------------------------------------------------------------
-// (19.10) Cannibalism softened: eating the young of one's kind made every body
-// grow to 14-16 parts and halved the variety of forms (d6). Now a cannibal
-// bite succeeds only CANNIBAL_SUCCESS_SCALE as often as a predator's, and
-// after a cannibal meal the body cannot do it again for CANNIBAL_COOLDOWN steps.
+// (19.10) What fits in the mouth: a young one can be eaten only while it is
+// still small - its current mass (it grows from an egg) below
+// CANNIBAL_PREY_MASS_SHARE of the eater's. It grows, so the chance passes by
+// itself; the number of parts does not matter, only mass (which costs upkeep).
+// A body starving to death may eat anyone lighter than DESPERATE_PREY_MASS_SHARE
+// of its mass. (The "fewer parts" rule made every body grow to 14-16 parts.)
 //------------------------------------------------------------------------------
-export const CANNIBAL_SUCCESS_SCALE         = 0.4;
-export const CANNIBAL_COOLDOWN              = 1500;
+export const CANNIBAL_PREY_MASS_SHARE       = 0.33;
+export const DESPERATE_PREY_MASS_SHARE      = 0.5;
