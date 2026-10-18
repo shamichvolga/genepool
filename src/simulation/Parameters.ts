@@ -352,7 +352,7 @@ export const LIMB_SPINE_FLOOR               = 0.4;
 //------------------------------------------------------------------------------
 export const NURSERY_ENABLED                = true;
 export const NURSERY_STEPS                  = 40000;
-export const START_FOOD_FILL                 = 0.95;   // the world starts with this share of all food places filled
+export const START_FOOD_FILL                 = 0.5;    // the world starts with this share of all food places filled (18.10: 0.95 made a boom and then famine for all)
 export const START_FOOD_CLUMP               = 5;      // ... in little clumps of this many
 export const START_FOOD_CLUMP_RADIUS        = 30;
 export const NURSERY_START_FOOD_FACTOR      = 10;     // inside the starting gardens: 10 x as dense as elsewhere
@@ -369,4 +369,4 @@ export const DESPERATE_PARTS_MARGIN         = 2;
 export const LIMBS_CATCH_YOUNG_ENABLED      = true;
 
 // (17.10) the first generation starts with this many times a full energy store
-export const START_ENERGY_FACTOR            = 3;
+export const START_ENERGY_FACTOR            = 1.5;
