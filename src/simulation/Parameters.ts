@@ -370,3 +370,15 @@ export const LIMBS_CATCH_YOUNG_ENABLED      = true;
 
 // (17.10) the first generation starts with this many times a full energy store
 export const START_ENERGY_FACTOR            = 1.5;
+
+//------------------------------------------------------------------------------
+// Event-driven looking (18.10): a swimbot looks around every
+// BRAIN_SENSORY_UPDATE_PERIOD steps (2). When it is swimming steadily to a
+// food bit or a mate that is still there and far, and saw no predator last
+// time, it looks only every EVENT_CALM_LOOK_PERIOD steps; it looks at once
+// when something changes (its state changed, the target is gone, the target
+// came near).
+//------------------------------------------------------------------------------
+export const EVENT_DRIVEN_LOOK_ENABLED      = true;
+export const EVENT_CALM_LOOK_PERIOD         = 6;
+export const EVENT_CALM_MIN_DISTANCE        = 150;    // looks often again when the target is nearer than this

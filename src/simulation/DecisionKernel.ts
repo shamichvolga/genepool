@@ -32,7 +32,7 @@ import { BRAIN_SIZE, NUM_HIDDEN, NUM_INPUTS, NUM_OUTPUTS, DRIVE_OUTPUTS, THINK_P
          IN_PREY_DISTANCE, IN_PREY_REWARD, IN_PREY_SUCCESS, IN_PREY_CHASE, IN_BAIT_PRESENT, IN_BAIT_DISTANCE, IN_BAIT_REWARD,
          OUT_FOOD, OUT_MATE, OUT_FLEE, OUT_HUNT, OUT_CLIMATE, OUT_SOCIAL, OUT_EFFORT, OUT_STEER, OUT_SELF_EAT, OUT_PREY_VALUE, OUT_PREY_TRAVEL, OUT_PREY_BAIT,
          think, sigmoid } from "./NeuralBrain";
-import { DESPERATE_CANNIBALISM_ENABLED, DESPERATE_ENERGY_SHARE, DESPERATE_PARTS_MARGIN, LIMBS_CATCH_YOUNG_ENABLED, YOUNG_CANNIBALISM_ENABLED, BITE_AT_CONTACT_ENABLED, CONTACT_EATING_ENABLED, AUTOTOMY_DECOY_SPAN, CLIMATE_PROBE_DISTANCE, CLIMATE_STEERING, SOCIAL_STEERING, BODY_TEMPERATURE_INERTIA_ENABLED, SELF_CANNIBALISM_ENABLED,
+import { EVENT_DRIVEN_LOOK_ENABLED, EVENT_CALM_LOOK_PERIOD, EVENT_CALM_MIN_DISTANCE, DESPERATE_CANNIBALISM_ENABLED, DESPERATE_ENERGY_SHARE, DESPERATE_PARTS_MARGIN, LIMBS_CATCH_YOUNG_ENABLED, YOUNG_CANNIBALISM_ENABLED, BITE_AT_CONTACT_ENABLED, CONTACT_EATING_ENABLED, AUTOTOMY_DECOY_SPAN, CLIMATE_PROBE_DISTANCE, CLIMATE_STEERING, SOCIAL_STEERING, BODY_TEMPERATURE_INERTIA_ENABLED, SELF_CANNIBALISM_ENABLED,
          PREDATOR_TARGET_SELECTION_ENABLED, PREDATOR_FLEE_RADIUS, PREDATOR_LEVEL_THRESHOLD, PREY_SCAN_COOLDOWN, PREY_SCAN_RADIUS_GROWTH,
          PREY_SCAN_RADIUS_MAX_SCALE, SWIMBOT_MAX_ENERGY } from "./Parameters";
 import { thermalFit, EMERGENCY_PROBE_DISTANCE, EMERGENCY_THERMAL_FIT, KINESIS_MAX_TURN, KINESIS_PERIOD, KINESIS_TURN_CHANCE,
@@ -462,7 +462,39 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
 
     if ( M[ m + SS.M_HUNT_CD ] > 0 ) { M[ m + SS.M_HUNT_CD ] --; }
 
-    if ( age % BRAIN_SENSORY_UPDATE_PERIOD == 0 ) { M[ m + SS.M_READY ] = 1; }
+    if ( !EVENT_DRIVEN_LOOK_ENABLED )
+    {
+        if ( age % BRAIN_SENSORY_UPDATE_PERIOD == 0 ) { M[ m + SS.M_READY ] = 1; }
+    }
+    else
+    {
+        // look when it is due, or at once when something changed
+        const stateBefore = M[ m + SS.M_STATE ];
+        let due = ( age >= M[ m + SS.M_NEXT_LOOK ] ) || ( M[ m + SS.M_NEXT_LOOK ] > age + 4 * EVENT_CALM_LOOK_PERIOD );   // (the second: a row left from another body)
+        if ( !due && ( stateBefore !== M[ m + SS.M_LAST_LOOK_STATE ] )) { due = true; }
+        if ( !due && (( stateBefore === BRAIN_STATE_PURSUING_FOOD ) && !foodAlive )) { due = true; }
+        if ( !due && (( stateBefore === BRAIN_STATE_PURSUING_MATE ) && !mateAlive )) { due = true; }
+        if ( due )
+        {
+            M[ m + SS.M_READY ] = 1;
+            M[ m + SS.M_LAST_LOOK_STATE ] = stateBefore;
+            // steady and calm: far target that is still there, no predator seen
+            let calm = false;
+            if ( st.seenThreat[s] < 0 )
+            {
+                const mx = B[ b + SS.B_MOUTH_X ], my = B[ b + SS.B_MOUTH_Y ];
+                if (( stateBefore === BRAIN_STATE_PURSUING_FOOD ) && foodAlive )
+                {
+                    calm = Math.hypot( st.foodX[f] - mx, st.foodY[f] - my ) > EVENT_CALM_MIN_DISTANCE;
+                }
+                else if (( stateBefore === BRAIN_STATE_PURSUING_MATE ) && mateAlive )
+                {
+                    calm = Math.hypot( st.genitalX[ mate ] - B[ b + SS.B_GENITAL_X ], st.genitalY[ mate ] - B[ b + SS.B_GENITAL_Y ] ) > EVENT_CALM_MIN_DISTANCE;
+                }
+            }
+            M[ m + SS.M_NEXT_LOOK ] = age + ( calm ? EVENT_CALM_LOOK_PERIOD : BRAIN_SENSORY_UPDATE_PERIOD );
+        }
+    }
 
     // neural brain: think now and then
     if (( M[ m + SS.M_NEURAL ] === 1 ) && ((( age + index ) % THINK_PERIOD ) === 0 )) { neuralThink( st, s ); }

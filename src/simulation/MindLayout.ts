@@ -73,6 +73,8 @@ export const M_CANNIBAL      = 61;   // 1 = it is after a young one of its kind 
 export const M_VIEW_RADIUS   = 62;   // how far it sees (depends on mass when SIZE_SCALED_VISION_ENABLED)
 export const M_GRAB_RADIUS   = 63;   // how near the mouth must be to food (SIZE_SCALED_GRAB_ENABLED)
 export const M_FILTER_FOOD   = 64;   // a sprout one of my limbs brushes (FILTER_FEEDING_ENABLED), or -1
+export const M_NEXT_LOOK     = 65;   // the age at which it looks around next (EVENT_DRIVEN_LOOK_ENABLED)
+export const M_LAST_LOOK_STATE= 66;   // its brain state at the last look
 export const MIND_STRIDE     = 72;
 
 // what the decision kernel asks the main thread to do (bits in M_EVENTS)
