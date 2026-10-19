@@ -20,7 +20,7 @@ import { JUVENILE_PREDATION_ENABLED, CROWD_AWARE_FOOD_CHOICE_ENABLED, FOOD_TARGE
 import { MIND_STRIDE, M_VIEW_RADIUS, M_GRAB_RADIUS, M_DEFERENCE, M_FOOD, M_PERSIST, M_MATURE_AGE, M_SIZE_PICKY, M_MAX_ENERGY } from "./MindLayout";
 import { preyTargetScore } from "./EcologyGenes";
 import {
-    BACKGROUND_SIZE, B_VEL_X, B_VEL_Y, BOT_STRIDE, MAX_SEEN, PARAM_ENV_ACTIVE, PARAM_ENV_FIELDS, PARAM_FOOD_TYPES, PARAM_OBSTACLE_X1, PARAM_OBSTACLE_X2,
+    BACKGROUND_SIZE, B_GROWTH, B_VEL_X, B_VEL_Y, BOT_STRIDE, MAX_SEEN, PARAM_ENV_ACTIVE, PARAM_ENV_FIELDS, PARAM_FOOD_TYPES, PARAM_OBSTACLE_X1, PARAM_OBSTACLE_X2,
     PARAM_OBSTACLE_Y1, PARAM_OBSTACLE_Y2, SharedState
 } from "./SharedState";
 
@@ -519,6 +519,7 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
             if (( attractiveness > highest )
             &&  ( attractiveness > 0 )
             &&  ( st.age[o] > st.mind[ o * MIND_STRIDE + M_MATURE_AGE ] )
+            &&  ( st.bots[ o * BOT_STRIDE + B_GROWTH ] >= ONE )                    // (grown up: a stunted body does not mate)
             &&  ( st.energy[o] > STARVING )
             &&  (( predator[o] > PREDATOR_LEVEL_THRESHOLD ) === iAmPredator )     // predators mate with predators only
             &&  accepts( st, o, s, environmentOn ))

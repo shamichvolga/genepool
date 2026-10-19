@@ -392,3 +392,14 @@ export const EVENT_CALM_MIN_DISTANCE        = 150;    // looks often again when 
 //------------------------------------------------------------------------------
 export const CANNIBAL_PREY_MASS_SHARE       = 0.33;
 export const DESPERATE_PREY_MASS_SHARE      = 0.5;
+
+//------------------------------------------------------------------------------
+// (19.10) Growing a body costs energy. Before, a newborn grew to its full
+// mass for free (growth = age / 1000): a pair split its energy with a child,
+// the child grew a whole body out of nothing, and numbers exploded without
+// food. Now each bit of mass grown costs GROWTH_ENERGY_PER_MASS (the same
+// energy a predator gets back from that mass); with too little energy the
+// growing pauses, and only a grown-up body may mate.
+//------------------------------------------------------------------------------
+export const GROWTH_COSTS_ENERGY_ENABLED    = true;
+export const GROWTH_ENERGY_PER_MASS         = 0.06;   // (= PREY_BODY_ENERGY)

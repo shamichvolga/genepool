@@ -13,7 +13,7 @@
 //------------------------------------------------------------------------------
 import { currentAt, currentDriftX, currentDriftY } from "./Currents";
 import { ONE, ONE_HALF, PI_OVER_180, ZERO } from "./MathConstants";
-import { OLD_AGE_DURATION, RUDDER_COST_PER_DEGREE, RUDDER_ENABLED, STEER_BY_SWIM_DIRECTION_ENABLED, SWIM_DIRECTION_SMOOTHING, SWIMBOT_SELECT_RADIUS_SCALAR, YOUNG_AGE_DURATION } from "./Parameters";
+import { GROWTH_COSTS_ENERGY_ENABLED, GROWTH_ENERGY_PER_MASS, OLD_AGE_DURATION, RUDDER_COST_PER_DEGREE, RUDDER_ENABLED, STEER_BY_SWIM_DIRECTION_ENABLED, SWIM_DIRECTION_SMOOTHING, SWIMBOT_SELECT_RADIUS_SCALAR, YOUNG_AGE_DURATION } from "./Parameters";
 import { applyWaterDrag, bodyMotionFactors } from "./BodyPhysics";
 import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
 import { CONTINUAL_ENERGY_DRAIN, ENERGY_EFFICIENCY_MEASUREMENT_PERIOD, ENERGY_USED_UP_SWIMMING, GENITAL_INDEX, MAX_PARTS, MOUTH_INDEX, ROOT_PART, STARVING, STARVING_TIMER_DELTA, TIMER_DELTA_INCREASE_RATE, WALL_BOUNCE } from "./SwimbotTypes";
@@ -70,7 +70,18 @@ export function physicsPartA( s: number, st: SharedState ): void
     //==================================================================
     if (( age < oldAgeThreshold ) || eternal )
     {
-        growth = ( age < YOUNG_AGE_DURATION ) ? age / YOUNG_AGE_DURATION : ONE;
+        if ( !GROWTH_COSTS_ENERGY_ENABLED )
+        {
+            growth = ( age < YOUNG_AGE_DURATION ) ? age / YOUNG_AGE_DURATION : ONE;
+        }
+        else if ( growth < ONE )
+        {
+            // GROWTH_COSTS_ENERGY_ENABLED: a step of growing is paid for with
+            // the energy its new mass holds; no energy, no growing
+            const step = Math.min( ONE / YOUNG_AGE_DURATION, ONE - growth );
+            const cost = step * bodyMass * GROWTH_ENERGY_PER_MASS;
+            if ( energy > cost ) { growth += step; energy -= cost; }
+        }
 
         // slowing down because starving, but not to a full stop
         if ( energy < STARVING )
@@ -142,7 +153,7 @@ export function physicsPartA( s: number, st: SharedState ): void
 
         const radian = pd[ i + C_A ] * PI_OVER_180;
         let partLength = length[ k + p ];
-        if ( age < YOUNG_AGE_DURATION ) { partLength *= growth; }
+        if ( growth < ONE ) { partLength *= growth; }
 
         const x = partLength * Math.sin( radian );
         const y = partLength * Math.cos( radian );

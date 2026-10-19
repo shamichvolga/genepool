@@ -1070,6 +1070,8 @@ this.setParent = function( parent )
 	//-----------------------------------------------------------------------------------
 	this.create = function( index, age, position, angle, energy, genotype, embryology )
 	{
+	    // (a newborn starts as an egg; a founder of the pool is grown up)
+	    _B[ _b + SS.B_GROWTH ] = Math.min( ONE, age / YOUNG_AGE_DURATION );
 	    //---------------------------------------
 	    // clear out everything for starters...
 	    //---------------------------------------
