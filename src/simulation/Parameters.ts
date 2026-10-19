@@ -438,3 +438,11 @@ export const CANNIBAL_GENE_FOUNDER_MAX      = 0.4;
 // to looks farther, by the deference gene (as plants for herbivores).
 // Ecology: predator interference (Beddington-DeAngelis) softens the swings.
 export const PREDATOR_DEFERENCE_ENABLED     = false;
+
+//------------------------------------------------------------------------------
+// (20.10) The food pyramid: an eater keeps only MEAT_ASSIMILATION of the
+// energy in meat and prey (the rest is lost, as in nature, where 70-90 % is
+// lost at each step up). With all of it kept, predators became as many as
+// their prey, ate it out and died out with it (d14).
+//------------------------------------------------------------------------------
+export const MEAT_ASSIMILATION              = 0.4;

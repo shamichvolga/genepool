@@ -1,3 +1,4 @@
+import { MEAT_ASSIMILATION } from "./Parameters";
 import { RENDER_FLOATS } from "./RenderData";
 import { FILTER_FEEDING_EFFICIENCY, LIMB_SPINES_ENABLED, LIMB_SPINE_EFFECT, LIMB_SPINE_FLOOR } from "./Parameters";
 import { plantOldEnergy, plantSproutGrowth, plantStage } from "./PlantGenes";
@@ -2177,6 +2178,8 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
                                   * climateFoodFactor( _M[ _m + SS.M_THERMAL_FIT ], _M[ _m + SS.M_THERMAL_PEAK ] );
             }
 
+            // (meat: only part of it is kept - the food pyramid)
+            if ( chosenFoodBit().getType() === 2 ) { energyFromFoodBit *= MEAT_ASSIMILATION; }
             _B[ _b + SS.B_ENERGY ] += energyFromFoodBit;
 
             _numFoodBitsEaten ++;
@@ -2249,7 +2252,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	    if ( dropped !== null )
 	    {
 	        simCounters.autotomyBiteDrops ++;
-	        _B[ _b + SS.B_ENERGY ] += Math.min( Math.max( ZERO, _M[ _m + SS.M_MAX_ENERGY ] - _B[ _b + SS.B_ENERGY ] ), dropped.energy );
+	        _B[ _b + SS.B_ENERGY ] += Math.min( Math.max( ZERO, _M[ _m + SS.M_MAX_ENERGY ] - _B[ _b + SS.B_ENERGY ] ), dropped.energy * MEAT_ASSIMILATION );
 	        chosenPrey().notifyAttackedBy( this );
 	        _numPartsEaten ++;
 	        _B[ _b + SS.B_TIMER_DELTA ] = ZERO;
@@ -2260,6 +2263,8 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	    // (its body as it is now: a young one has grown only part of its mass -
 	    //  counting the grown-up mass made energy out of nothing, and bodies that
 	    //  bred and ate their young multiplied without food)
+	    // (MEAT_ASSIMILATION is applied to what I eat of it; what I cannot eat
+	    //  stays as meat for others, whole)
 	    let energyFromPrey = chosenPrey().getEnergy() * PREDATION_ENERGY_TRANSFER
 	                       + chosenPrey().getPhenotypeMass() * Math.min( ONE, chosenPrey().getGrowthScale() ) * PREY_BODY_ENERGY;
 
@@ -2271,16 +2276,11 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 
 	    if ( _M[ _m + SS.M_CANNIBAL ] === 1 ) { simCounters.youngCannibalism ++; _numCannibalized ++; }
 	    let room = Math.max( ZERO, _M[ _m + SS.M_MAX_ENERGY ] - _B[ _b + SS.B_ENERGY ] );
-	    if ( energyFromPrey > room )
-	    {
-	        // what I cannot eat falls apart into pieces around (others may eat them)
-	        _B[ _b + SS.B_ENERGY ] += room;
-	        _parent.spawnCarcass( preyPosition.x, preyPosition.y, energyFromPrey - room );
-	    }
-	    else
-	    {
-	        _B[ _b + SS.B_ENERGY ] += energyFromPrey;
-	    }
+	    // I eat as much of it as fills me (keeping MEAT_ASSIMILATION of what I eat);
+	    // what I cannot eat falls apart into pieces around (others may eat them)
+	    const eaten = Math.min( energyFromPrey, room / MEAT_ASSIMILATION );
+	    _B[ _b + SS.B_ENERGY ] += eaten * MEAT_ASSIMILATION;
+	    if ( energyFromPrey > eaten ) { _parent.spawnCarcass( preyPosition.x, preyPosition.y, energyFromPrey - eaten ); }
 	    _M[ _m + SS.M_CANNIBAL ] = 0;
 
 	    _B[ _b + SS.B_TIMER_DELTA ] = ZERO;
