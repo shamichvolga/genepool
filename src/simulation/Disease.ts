@@ -8,7 +8,7 @@
 // look-alikes have similar profiles, so a common form spreads the disease
 // among itself, while rare forms hardly catch it.
 //
-//   appears:  now and then, in a random swimbot; the key is that swimbot's
+//   appears:  now and then, in a random swimbot in a crowd; the key is that swimbot's
 //             profile with a little noise (it is aimed at its kind)
 //   spreads:  when bodies touch; chance = DISEASE_TRANSMISSION x likeness;
 //             now and then it changes a little (a new strain)
@@ -24,7 +24,7 @@
 //------------------------------------------------------------------------------
 import { gpRandom, simCounters } from "./Globals";
 import { DISEASE_CONTACT_SCALE, DISEASE_DRAIN, DISEASE_DURATION, DISEASE_KEY_WIDTH, DISEASE_MUTATION_CHANCE,
-         DISEASE_SPAWN_PERIOD, DISEASE_TRANSMISSION, DISEASE_IMMUNITY_LIKENESS } from "./Parameters";
+         DISEASE_SPAWN_PERIOD, DISEASE_TRANSMISSION, DISEASE_IMMUNITY_LIKENESS, DISEASE_CROWD_NEIGHBOURS } from "./Parameters";
 import { SharedState, BOT_STRIDE, B_ENERGY, B_SUM_LENGTHS } from "./SharedState";
 import { MIND_STRIDE, M_DISEASE, M_DISEASE_TIMER, M_IMMUNE_0, M_IMMUNE_MEMORY, NUM_IMMUNE_MEMORY } from "./MindLayout";
 
@@ -110,7 +110,9 @@ export function updateDiseases( st: SharedState, alive: ArrayLike<number>, numAl
     if (( numAlive > 0 ) && ( gpRandom() < 1 / DISEASE_SPAWN_PERIOD ))
     {
         const s = alive[ Math.floor( gpRandom() * numAlive ) ];
-        if ( !isSick( st, s ))
+        // (only in a crowd: a disease of crowding; where bodies are few it never starts)
+        const crowd = st.swimbotGrid.collect( st.botX[s], st.botY[s], st.bots[ s * BOT_STRIDE + B_SUM_LENGTHS ] * DISEASE_CONTACT_SCALE * 4 + 100, nearbyBuffer );
+        if ( !isSick( st, s ) && ( crowd > DISEASE_CROWD_NEIGHBOURS ))
         {
             infect( st, s, newStrain( profileOf( st, s, profileBuffer ), 0.05 ));
             simCounters.diseaseOutbreaks ++;

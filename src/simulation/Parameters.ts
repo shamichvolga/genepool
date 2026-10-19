@@ -425,6 +425,7 @@ export const DISEASE_DRAIN                  = 0.015;  // energy per step (2000 s
 export const DISEASE_KEY_WIDTH              = 0.3;    // how alike a profile must be to the key to catch it
 export const DISEASE_MUTATION_CHANCE        = 0.05;   // per passing on: a slightly changed strain
 export const DISEASE_IMMUNITY_LIKENESS      = 0.7;    // immunity covers strains at least this alike
+export const DISEASE_CROWD_NEIGHBOURS       = 8;      // a new disease appears only in a crowd: at least this many bodies close by
 
 // (19.10) Eating the young is an inherited ability (gene 169), not everyone's:
 // only a body whose gene is above CANNIBAL_GENE_THRESHOLD goes for the young.
