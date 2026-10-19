@@ -433,3 +433,8 @@ export const DISEASE_CROWD_NEIGHBOURS       = 8;      // a new disease appears o
 // only if it pays.
 export const CANNIBAL_GENE_THRESHOLD        = 0.5;
 export const CANNIBAL_GENE_FOUNDER_MAX      = 0.4;
+
+// (20.10) Hunters get in each other's way: a prey other predators are nearer
+// to looks farther, by the deference gene (as plants for herbivores).
+// Ecology: predator interference (Beddington-DeAngelis) softens the swings.
+export const PREDATOR_DEFERENCE_ENABLED     = false;

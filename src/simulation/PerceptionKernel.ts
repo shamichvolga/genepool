@@ -17,7 +17,7 @@ import { ATTACK_SUCCESS_CHANCE, ENVIRONMENT_ATTACK_SUCCESS_CHANCE, PREDATOR_LEVE
 import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
 import { ATTRACTION_SIMILAR_COLOR, STARVING, SWIMBOT_MOUTH_LENGTH, SWIMBOT_VIEW_RADIUS } from "./SwimbotTypes";
 import { FOOD_BIT_GRAB_RADIUS } from "./FoodBit";
-import { KIN_NOT_EATEN_ENABLED, OLD_AGE_DURATION, WEAK_PREY_ENABLED, WEAK_STARVING_SHARE, JUVENILE_PREDATION_ENABLED, CROWD_AWARE_FOOD_CHOICE_ENABLED, FOOD_TARGET_PERSISTENCE_ENABLED, FOOD_SWITCH_RATIO_MIN, FOOD_KEEP_RADIUS_SCALE, SIZE_ASSORTATIVE_MATING_ENABLED } from "./Parameters";
+import { PREDATOR_DEFERENCE_ENABLED, KIN_NOT_EATEN_ENABLED, OLD_AGE_DURATION, WEAK_PREY_ENABLED, WEAK_STARVING_SHARE, JUVENILE_PREDATION_ENABLED, CROWD_AWARE_FOOD_CHOICE_ENABLED, FOOD_TARGET_PERSISTENCE_ENABLED, FOOD_SWITCH_RATIO_MIN, FOOD_KEEP_RADIUS_SCALE, SIZE_ASSORTATIVE_MATING_ENABLED } from "./Parameters";
 import { M_DISEASE, M_WEAK_PREF, MIND_STRIDE, M_VIEW_RADIUS, M_GRAB_RADIUS, M_DEFERENCE, M_FOOD, M_PERSIST, M_MATURE_AGE, M_SIZE_PICKY, M_MAX_ENERGY } from "./MindLayout";
 import { preyTargetScore } from "./EcologyGenes";
 import {
@@ -411,7 +411,23 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
             const py = myMouthY - botY[o];
             const realDistance = Math.sqrt( px * px + py * py );
             // (a predator that prefers the weak - its gene - sees them as nearer)
-            const distance = weak ? realDistance / ( 1 + 2 * st.mind[ s * MIND_STRIDE + M_WEAK_PREF ] ) : realDistance;
+            let distance = weak ? realDistance / ( 1 + 2 * st.mind[ s * MIND_STRIDE + M_WEAK_PREF ] ) : realDistance;
+
+            // PREDATOR_DEFERENCE_ENABLED: other hunters nearer to this prey make it
+            // look farther (the same deference gene as with plants): many hunters
+            // get in each other's way, so they do not eat the prey out all at once
+            if ( PREDATOR_DEFERENCE_ENABLED )
+            {
+                let rivals = 0;
+                for (let j = 0; j < numNearby; j++)
+                {
+                    const q = nearby[j];
+                    if (( q === s ) || ( alive[q] === 0 ) || ( predator[q] <= PREDATOR_LEVEL_THRESHOLD )) continue;
+                    const qx = st.mouthX[q] - botX[o], qy = st.mouthY[q] - botY[o];
+                    if ( qx * qx + qy * qy < realDistance * realDistance ) rivals ++;
+                }
+                distance *= 1 + st.mind[ s * MIND_STRIDE + M_DEFERENCE ] * rivals;
+            }
             if ( distance > preyViewRadius ) continue;
             if ( obstructed( st, myMouthX, myMouthY, botX[o], botY[o] )) continue;   // (no seeing through the wall)
 
