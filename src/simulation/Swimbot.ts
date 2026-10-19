@@ -1949,6 +1949,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	this.getIsTryingToHunt              = function() { return _M[ _m + SS.M_TRY_HUNT ] === 1;                                }
 	this.getNumPreyEaten                = function() { return _numPreyEaten;                                }
 	this.getPhenotypeMass               = function() { return _phenotype.mass;                              }
+	this.getGrowthScale                 = function() { return _B[ _b + SS.B_GROWTH ]; }   // (0 an egg .. 1 grown up)
 	this.getMorphologySummary           = function()
 	{
 	    const numParts = _phenotype.numParts;
@@ -2242,7 +2243,11 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	    }
 
 	    // the prey's energy (a part) and its body
-	    let energyFromPrey = chosenPrey().getEnergy() * PREDATION_ENERGY_TRANSFER + chosenPrey().getPhenotypeMass() * PREY_BODY_ENERGY;
+	    // (its body as it is now: a young one has grown only part of its mass -
+	    //  counting the grown-up mass made energy out of nothing, and bodies that
+	    //  bred and ate their young multiplied without food)
+	    let energyFromPrey = chosenPrey().getEnergy() * PREDATION_ENERGY_TRANSFER
+	                       + chosenPrey().getPhenotypeMass() * Math.min( ONE, chosenPrey().getGrowthScale() ) * PREY_BODY_ENERGY;
 
 	    this.learnSearchImage( chosenPrey() );
 	    chosenPrey().die( "predation" );
