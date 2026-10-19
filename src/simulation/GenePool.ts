@@ -1,7 +1,8 @@
 import { WORLD_AREA_FACTOR } from "./World";
+import { CARCASS_ENABLED } from "./Parameters";
 import { currentAt, currentDriftX, currentDriftY, currentStrength, randomPointInCurrent } from "./Currents";
 import { bindPlantGenes, inheritPlantGenes, plantMatureAge, plantOldAge, plantRotAge, plantSeedDistance } from "./PlantGenes";
-import { geneAverage, convertOldGenes, GENE_LAYOUT_VERSION, setTrait, gaussian, thermalWidthToGene, preyTargetScore, GENES_PREDATOR, GENES_THERMAL_OPTIMUM, GENES_THERMAL_WIDTH, GENES_DIGESTION, GENES_BRIGHTNESS, GENES_CHOOSINESS, GENES_HUNGER, GENES_AUTOTOMY_BITE, GENES_AUTOTOMY_THREAT, GENES_AUTOTOMY_AMOUNT, GENES_AUTOTOMY_WHICH, GENES_PERSISTENCE, GENES_INVESTMENT, GENES_SIZE_PICKINESS, GENES_DEFERENCE, GENES_RUDDER } from "./EcologyGenes";
+import { geneAverage, convertOldGenes, GENE_LAYOUT_VERSION, setTrait, gaussian, thermalWidthToGene, preyTargetScore, GENES_PREDATOR, GENES_THERMAL_OPTIMUM, GENES_THERMAL_WIDTH, GENES_DIGESTION, GENES_BRIGHTNESS, GENES_CHOOSINESS, GENES_HUNGER, GENES_AUTOTOMY_BITE, GENES_AUTOTOMY_THREAT, GENES_AUTOTOMY_AMOUNT, GENES_AUTOTOMY_WHICH, GENES_PERSISTENCE, GENES_INVESTMENT, GENES_SIZE_PICKINESS, GENES_DEFERENCE, GENES_RUDDER, GENES_WEAK_PREY } from "./EcologyGenes";
 import { environment, FLAT_ENVIRONMENT, INITIAL_SOIL_NUTRIENT_PER_CELL, NUTRIENT_CYCLE_ENABLED, PLANT_TYPE_WARM, PLANT_TYPE_COLD, SEASONAL_PLANT_GROWTH_ENABLED, SEASONAL_PLANT_GROWTH_AMPLITUDE } from "./Environment";
 import { petriSettings, petriStartZone } from "./Petri";
 import { IGNORE_FOOD_EFFICIENCY, preyVisibility, TWO_PLANT_TYPES } from "./Ecology";
@@ -158,7 +159,8 @@ export function GenePool()
     let _matingCount         = 0;
     let _gardens             = [];
     let _nurseryDebt         = 0;       // (NURSERY_ENABLED)
-    let _classicSeedDebt     = 0;      // environment: one starting garden per biome type
+    let _classicSeedDebt     = 0;
+    let _serial              = 0;         // birth numbers (KIN_NOT_EATEN_ENABLED)
     let _seedDebt            = 0;       // fractional seeds carried to the next step
     let _environmentImage    = null;    // picture of the temperature map (drawn behind the pool)
     const STARVING_FOOD_CHOICE = 15;   // below this energy a swimbot eats anything
@@ -1012,6 +1014,7 @@ if ( mode === SimulationStartMode.SPECIES )
 	    setTrait( genotype, GENES_SIZE_PICKINESS,  gpRandom(),                  0 );
 	    setTrait( genotype, GENES_DEFERENCE,       gpRandom(),                  0 );
 	    setTrait( genotype, GENES_RUDDER,          gpRandom(),                  0 );
+	    setTrait( genotype, GENES_WEAK_PREY,       gpRandom(),                  0 );
 	    setTrait( genotype, GENES_AUTOTOMY_WHICH,  gpRandom(),                  0 );
 
 	    // hunger threshold factor around 1 (gene 1/3), a little different for each founder
@@ -2190,6 +2193,10 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
                                 let initialAngle = getRandomAngleInDegrees();
                                 _swimbots[ newBornSwimbotIndex ].create( newBornSwimbotIndex, 0, _vectorUtility, initialAngle, energyToOffspring, _childGenotype, _embryology )
                                 syncSwimbot( newBornSwimbotIndex );
+                                // (who its family is: KIN_NOT_EATEN_ENABLED; a founder gets its number now)
+                                if ( _swimbots[s].getSerial() <= 0 ) { _swimbots[s].setFamily( ++ _serial, 0, 0 ); }
+                                if ( _swimbots[ chosenMateIndex ].getSerial() <= 0 ) { _swimbots[ chosenMateIndex ].setFamily( ++ _serial, 0, 0 ); }
+                                _swimbots[ newBornSwimbotIndex ].setFamily( ++ _serial, _swimbots[s].getSerial(), _swimbots[ chosenMateIndex ].getSerial() );
                                 simCounters.births ++;
 
                                 // record successful parents for assortativity metrics
@@ -2351,11 +2358,17 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 
                 _swimbotWasAlive[s] = false;
 
-                // Мясо только от травоядных.
-                // Источник мяса:
-                // - смерть от старости (как раньше)
-                // - смерть от голода (новое)
-if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
+                // CARCASS_ENABLED: a body that died not eaten leaves its body as
+                // meat - the energy its mass holds (what growing it cost)
+                if ( CARCASS_ENABLED )
+                {
+                    if ( _swimbots[s].getDeathCause() !== "predation" )
+                    {
+                        const body = _swimbots[s].getPhenotypeMass() * Math.min( 1, _swimbots[s].getGrowthScale() ) * PREY_BODY_ENERGY;
+                        this.spawnCarcass( deadPosition.x, deadPosition.y, body );
+                    }
+                }
+                else if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
                 && ( _swimbots[s].getAge() >= _swimbots[s].getMaxAge() ) )
                 {
                     let meatIndex = this.findLowestDeadFoodBitInArray();

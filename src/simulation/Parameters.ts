@@ -142,7 +142,7 @@ export const PLANT_PARENT_SEED_FRACTION    = 0.7;                 // the rest is
 export const ENVIRONMENT_PLANT_SPREAD_RATE = 0.0007;
 // Research mode: local seed production grows with the number of parent plants.
 // A fixed seed-rain component remains, so plants can recolonize after extinction.
-export const LOCAL_ENVIRONMENT_PLANT_GROWTH = false;
+export const LOCAL_ENVIRONMENT_PLANT_GROWTH = true;   // (on since 19.10, idea 7: plants grow in patches from parents)
 export const PLANT_SEED_MIN_DISTANCE       = 300;
 export const PLANT_SEED_MAX_DISTANCE       = 600;
 
@@ -175,7 +175,7 @@ export const LOCAL_PLANT_SEED_RADIUS       = 1200.0;  // как далеко п�
 export const FOOD_RANDOM_SEED_CHANCE       = 0.02;    // вероятность за шаг
 
 // Мясо гниёт и исчезает через столько шагов.
-export const MEAT_DECAY_TIME               = 2000;
+export const MEAT_DECAY_TIME               = 6000;   // (2000 before 19.10: carcasses now last, for scavengers)
 
 // Базовый обмен веществ: каждый шаг бот тратит
 // BASAL_METABOLISM * (масса тела)^0.75 энергии — большое тело дороже в содержании
@@ -267,7 +267,7 @@ export const PLANT_STAGE_ENERGY             = [ 0.35, 1.0, 1.6 ];
 export const PLANT_STAGES_SHOWN             = false;  // draw sprouts small and old plants as stars (off: every plant a plain dot)
 export const INHERITED_INVESTMENT_ENABLED   = true;   // gene: share of energy given to a child (0.15..0.85) instead of the pool setting
 export const SIZE_MATURITY_ENABLED          = false;  // grown up (may mate) at 1000 x clamp( mass / 410, 0.5, 4 ) steps
-export const SIZE_ASSORTATIVE_MATING_ENABLED = false; // mates chosen by color AND size (gene: how much size counts)
+export const SIZE_ASSORTATIVE_MATING_ENABLED = true; // (on since 19.10, idea 6; now by form: size and number of parts) // mates chosen by color AND size (gene: how much size counts)
 export const PREDATOR_GAPE_CURVE_ENABLED    = false;  // attack success falls with prey/predator mass, big prey takes longer to eat
 export const CROWD_AWARE_FOOD_CHOICE_ENABLED = true;   // (on since 17.10: the commission 4 of 4, round 3: diversity 4.6 vs 3.1) // a plant others are nearer to looks farther (gene "deference": how much)
 
@@ -403,3 +403,12 @@ export const DESPERATE_PREY_MASS_SHARE      = 0.5;
 //------------------------------------------------------------------------------
 export const GROWTH_COSTS_ENERGY_ENABLED    = true;
 export const GROWTH_ENERGY_PER_MASS         = 0.06;   // (= PREY_BODY_ENERGY)
+
+//------------------------------------------------------------------------------
+// Coexistence of forms (19.10, docs/идеи_сосуществования.md, ideas 1-7)
+//------------------------------------------------------------------------------
+export const KIN_NOT_EATEN_ENABLED          = true;   // 1: no eating one's parent, child, brother or sister
+export const ONLY_GROWN_EAT_YOUNG_ENABLED   = true;   // 2: only a grown body eats the young, by its own present mass
+export const WEAK_PREY_ENABLED              = true;   // 3: a predator may take any old or starving body (preference: a gene)
+export const WEAK_STARVING_SHARE            = 0.15;   //    "starving": energy below this share of its full store
+export const CARCASS_ENABLED                = true;   // 4: every body that dies not eaten leaves its body as meat

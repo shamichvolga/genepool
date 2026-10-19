@@ -34,7 +34,8 @@ export const GENES_SELF_FEED_WHICH   = [ 160 ];
 export const GENES_SELF_FEED_AMOUNT  = [ 161 ];
 export const GENES_DEFERENCE         = [ 162 ];   // how much a plant others are nearer to is avoided (CROWD_AWARE_FOOD_CHOICE_ENABLED)
 export const GENES_RUDDER            = [ 163 ];   // how fast the whole body may turn towards its goal (RUDDER_ENABLED)
-export function isDeferenceGene( g ) { return ( g === GENES_DEFERENCE[0] ) || ( g === GENES_RUDDER[0] ); }   // (small-step genes outside the ecology block)
+export const GENES_WEAK_PREY          = [ 164 ];   // how much a predator prefers old and starving prey (WEAK_PREY_ENABLED)
+export function isDeferenceGene( g ) { return ( g === GENES_DEFERENCE[0] ) || ( g === GENES_RUDDER[0] ) || ( g === GENES_WEAK_PREY[0] ); }   // (small-step genes outside the ecology block)
 
 export function isSelfFeedingGene( g ): boolean
 {

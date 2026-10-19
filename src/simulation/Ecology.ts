@@ -89,8 +89,8 @@ export function climateFoodFactor( fit: number, peak: number ): number
 // many body forms and colors alive ("apostatic" selection).
 //------------------------------------------------------------------------------
 export const SEARCH_IMAGE_EFFECT        = 0.6;     // 0 = off; prey like the image seen up to 1 + 0.6 farther
-export const SEARCH_IMAGE_LEARNING      = 0.3;     // how much one meal changes the image
-export const SEARCH_IMAGE_GAIN          = 0.25;    // how much one meal strengthens it
+export const SEARCH_IMAGE_LEARNING      = 0.5;     // (0.3 before 19.10, idea 5)     // how much one meal changes the image
+export const SEARCH_IMAGE_GAIN          = 0.4;     // (0.25 before 19.10, idea 5)    // how much one meal strengthens it
 export const SEARCH_IMAGE_FORGETTING    = 0.9997;  // per step (half gone after ~2300 steps)
 export const SEARCH_IMAGE_WIDTH         = 0.18;    // how alike counts as "like the image"
 

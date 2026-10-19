@@ -16,11 +16,11 @@ import { ATTACK_SUCCESS_CHANCE, ENVIRONMENT_ATTACK_SUCCESS_CHANCE, PREDATOR_LEVE
 import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
 import { ATTRACTION_SIMILAR_COLOR, STARVING, SWIMBOT_MOUTH_LENGTH, SWIMBOT_VIEW_RADIUS } from "./SwimbotTypes";
 import { FOOD_BIT_GRAB_RADIUS } from "./FoodBit";
-import { JUVENILE_PREDATION_ENABLED, CROWD_AWARE_FOOD_CHOICE_ENABLED, FOOD_TARGET_PERSISTENCE_ENABLED, FOOD_SWITCH_RATIO_MIN, FOOD_KEEP_RADIUS_SCALE, SIZE_ASSORTATIVE_MATING_ENABLED } from "./Parameters";
-import { MIND_STRIDE, M_VIEW_RADIUS, M_GRAB_RADIUS, M_DEFERENCE, M_FOOD, M_PERSIST, M_MATURE_AGE, M_SIZE_PICKY, M_MAX_ENERGY } from "./MindLayout";
+import { OLD_AGE_DURATION, WEAK_PREY_ENABLED, WEAK_STARVING_SHARE, JUVENILE_PREDATION_ENABLED, CROWD_AWARE_FOOD_CHOICE_ENABLED, FOOD_TARGET_PERSISTENCE_ENABLED, FOOD_SWITCH_RATIO_MIN, FOOD_KEEP_RADIUS_SCALE, SIZE_ASSORTATIVE_MATING_ENABLED } from "./Parameters";
+import { M_WEAK_PREF, MIND_STRIDE, M_VIEW_RADIUS, M_GRAB_RADIUS, M_DEFERENCE, M_FOOD, M_PERSIST, M_MATURE_AGE, M_SIZE_PICKY, M_MAX_ENERGY } from "./MindLayout";
 import { preyTargetScore } from "./EcologyGenes";
 import {
-    BACKGROUND_SIZE, B_GROWTH, B_VEL_X, B_VEL_Y, BOT_STRIDE, MAX_SEEN, PARAM_ENV_ACTIVE, PARAM_ENV_FIELDS, PARAM_FOOD_TYPES, PARAM_OBSTACLE_X1, PARAM_OBSTACLE_X2,
+    BACKGROUND_SIZE, PARAM_MAX_LIFESPAN, B_NUM_PARTS, B_GROWTH, B_VEL_X, B_VEL_Y, BOT_STRIDE, MAX_SEEN, PARAM_ENV_ACTIVE, PARAM_ENV_FIELDS, PARAM_FOOD_TYPES, PARAM_OBSTACLE_X1, PARAM_OBSTACLE_X2,
     PARAM_OBSTACLE_Y1, PARAM_OBSTACLE_Y2, SharedState
 } from "./SharedState";
 
@@ -140,6 +140,14 @@ function backgroundAt( st: SharedState, x: number, y: number ): number
 //------------------------------------------------------------------------------
 // what swimbot s sees now
 //------------------------------------------------------------------------------
+// WEAK_PREY_ENABLED: old (its colour already darkening) or starving
+function isWeak( st: SharedState, o: number ): boolean
+{
+    if ( st.eternal[o] === 1 ) return false;
+    if ( st.age[o] > st.params[ PARAM_MAX_LIFESPAN ] - OLD_AGE_DURATION ) return true;
+    return st.energy[o] < st.mind[ o * MIND_STRIDE + M_MAX_ENERGY ] * WEAK_STARVING_SHARE;
+}
+
 export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): void
 {
     const viewRadius            = st.mind[ s * MIND_STRIDE + M_VIEW_RADIUS ];   // (grows with mass when SIZE_SCALED_VISION_ENABLED)
@@ -392,11 +400,15 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
             if ( st.eternal[o] === 1 ) continue;                        // immortals are not eaten
             // too big to bite (a not yet grown-up one can be bitten anyway)
             const young = JUVENILE_PREDATION_ENABLED && ( st.age[o] < st.mind[ o * MIND_STRIDE + M_MATURE_AGE ] );
-            if (( st.mass[o] > myMass * PREY_MAX_MASS_RATIO ) && !young ) continue;
+            // WEAK_PREY_ENABLED: old or starving prey can be taken whatever its size
+            const weak = WEAK_PREY_ENABLED && isWeak( st, o );
+            if (( st.mass[o] > myMass * PREY_MAX_MASS_RATIO ) && !young && !weak ) continue;
 
             const px = myMouthX - botX[o];
             const py = myMouthY - botY[o];
-            const distance = Math.sqrt( px * px + py * py );
+            const realDistance = Math.sqrt( px * px + py * py );
+            // (a predator that prefers the weak - its gene - sees them as nearer)
+            const distance = weak ? realDistance / ( 1 + 2 * st.mind[ s * MIND_STRIDE + M_WEAK_PREF ] ) : realDistance;
             if ( distance > preyViewRadius ) continue;
             if ( obstructed( st, myMouthX, myMouthY, botX[o], botY[o] )) continue;   // (no seeing through the wall)
 
@@ -460,6 +472,7 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
     //  in a crowd a predator was easily "not seen")
     let threat = -1, anyPredator = -1;
     const iAmYoung = JUVENILE_PREDATION_ENABLED && ( st.age[s] < st.mind[ s * MIND_STRIDE + M_MATURE_AGE ] );
+    const iAmWeak  = WEAK_PREY_ENABLED && isWeak( st, s );
     if ( !iAmPredator )
     {
         let threatDistance = Infinity, anyDistance = Infinity;
@@ -471,7 +484,7 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
 
             // a predator that could not eat me (I am too heavy for it, and not
             // young any more) is no danger to me: the same rule it hunts by
-            if ( !iAmYoung && ( st.mass[s] > st.mass[o] * PREY_MAX_MASS_RATIO )) continue;
+            if ( !iAmYoung && !iAmWeak && ( st.mass[s] > st.mass[o] * PREY_MAX_MASS_RATIO )) continue;
 
             const gx = myGenitalX - genitalX[o];
             const gy = myGenitalY - genitalY[o];
@@ -512,7 +525,10 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
             {
                 // how much a similar size counts: my own gene
                 const w = st.mind[ s * MIND_STRIDE + M_SIZE_PICKY ];
-                const sizeSimilarity = ONE - Math.min( ONE, Math.abs( Math.log( Math.max( 1, st.mass[o] ) / Math.max( 1, st.mass[s] ))) / 1.5 );
+                // (the form: size and number of parts)
+                const massSimilarity  = ONE - Math.min( ONE, Math.abs( Math.log( Math.max( 1, st.mass[o] ) / Math.max( 1, st.mass[s] ))) / 1.5 );
+                const partsSimilarity = ONE - Math.min( ONE, Math.abs( st.bots[ o * BOT_STRIDE + B_NUM_PARTS ] - st.bots[ s * BOT_STRIDE + B_NUM_PARTS ] ) / 8 );
+                const sizeSimilarity  = 0.5 * ( massSimilarity + partsSimilarity );
                 attractiveness = ( ONE - w ) * attractiveness + w * sizeSimilarity;
             }
 
