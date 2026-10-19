@@ -60,6 +60,7 @@ export function createRemotePool( worker: Worker, onPetriLoaded: () => void )
         getNumSwimbots:         () => S.numSwimbots,
         getStepsPerSecond:      () => S.stepsPerSecond,
         getRenderMs:            () => S.renderMs,
+        getNumSick:             () => S.numSick || 0,
         getCurrentsOn:          () => S.currentsOn,
         getNumThreads:          () => S.numThreads,
         getSpeedLevel:          () => S.speedLevel,

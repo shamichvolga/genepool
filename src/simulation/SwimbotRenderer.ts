@@ -645,6 +645,13 @@ var    flopperYV = 0;
         assert( _colorUtility.blue  >= ZERO, "_colorUtility.blue  >= ZERO" );
         assert( _colorUtility.blue  <= ONE,  "_colorUtility.blue  <= ONE"  );
 
+	    // sick (DISEASE_ENABLED): every other part pale - spots
+	    if ( _swimbot.getIsSick && _swimbot.getIsSick() && ( p % 2 === 1 ))
+	    {
+	        _colorUtility.red   = 0.5 * _colorUtility.red   + 0.5 * 0.9;
+	        _colorUtility.green = 0.5 * _colorUtility.green + 0.5 * 0.88;
+	        _colorUtility.blue  = 0.5 * _colorUtility.blue  + 0.5 * 0.55;
+	    }
 	    return _colorUtility;
 	}
 

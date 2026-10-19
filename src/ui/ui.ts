@@ -784,7 +784,8 @@ function updateHud()
         + "<br>"
         + "<span class='hudHerb'>herbivores " + herbivores + "</span> · "
         + "<span class='hudPred'>predators " + predators + "</span> · "
-        + "<span class='hudPlant'>plants " + plants + "</span>";
+        + "<span class='hudPlant'>plants " + plants + "</span>"
+        + (( genePool.getNumSick && genePool.getNumSick() > 0 ) ? " · <span style='color:#e6dc8c'>sick " + genePool.getNumSick() + "</span>" : "" );
 
     const hud = document.getElementById( "hud" );
     if ( hud && hud.innerHTML !== html ) { hud.innerHTML = html; }

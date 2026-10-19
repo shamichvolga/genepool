@@ -45,6 +45,7 @@ function makeSnapshot()
         numSwimbots       : pool.getNumSwimbots(),
         stepsPerSecond    : pool.getStepsPerSecond(),
         renderMs          : pool.getRenderMs(),
+        numSick           : pool.getNumSick(),
         currentsOn        : pool.getCurrentsOn(),
         numThreads        : pool.getNumThreads(),
         speedLevel        : pool.getSpeedLevel(),

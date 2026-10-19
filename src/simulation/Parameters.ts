@@ -412,3 +412,23 @@ export const ONLY_GROWN_EAT_YOUNG_ENABLED   = true;   // 2: only a grown body ea
 export const WEAK_PREY_ENABLED              = true;   // 3: a predator may take any old or starving body (preference: a gene)
 export const WEAK_STARVING_SHARE            = 0.15;   //    "starving": energy below this share of its full store
 export const CARCASS_ENABLED                = true;   // 4: every body that dies not eaten leaves its body as meat
+
+//------------------------------------------------------------------------------
+// Diseases (19.10, idea 12; see Disease.ts and docs/концепт_болезни.md)
+//------------------------------------------------------------------------------
+export const DISEASE_ENABLED                = true;
+export const DISEASE_SPAWN_PERIOD           = 20000;  // a new disease about once in this many steps
+export const DISEASE_TRANSMISSION           = 0.3;    // chance per touch (checked every 4 steps), times the likeness
+export const DISEASE_CONTACT_SCALE          = 0.3;    // touching: centres nearer than 0.3 x (sum of both bodies' lengths)
+export const DISEASE_DURATION               = 2000;   // steps until it is over
+export const DISEASE_DRAIN                  = 0.015;  // energy per step (2000 steps: 30)
+export const DISEASE_KEY_WIDTH              = 0.3;    // how alike a profile must be to the key to catch it
+export const DISEASE_MUTATION_CHANCE        = 0.05;   // per passing on: a slightly changed strain
+export const DISEASE_IMMUNITY_LIKENESS      = 0.7;    // immunity covers strains at least this alike
+
+// (19.10) Eating the young is an inherited ability (gene 169), not everyone's:
+// only a body whose gene is above CANNIBAL_GENE_THRESHOLD goes for the young.
+// The first swimbots have it low (0 .. CANNIBAL_GENE_FOUNDER_MAX): it spreads
+// only if it pays.
+export const CANNIBAL_GENE_THRESHOLD        = 0.5;
+export const CANNIBAL_GENE_FOUNDER_MAX      = 0.4;

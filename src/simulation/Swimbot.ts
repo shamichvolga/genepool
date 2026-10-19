@@ -1,7 +1,7 @@
 import { RENDER_FLOATS } from "./RenderData";
 import { FILTER_FEEDING_EFFICIENCY, LIMB_SPINES_ENABLED, LIMB_SPINE_EFFECT, LIMB_SPINE_FLOOR } from "./Parameters";
 import { plantOldEnergy, plantSproutGrowth, plantStage } from "./PlantGenes";
-import { geneAverage, GENES_WEAK_PREY, GENES_RUDDER, GENES_DEFERENCE, GENES_PERSISTENCE, GENES_INVESTMENT, GENES_SIZE_PICKINESS, setTrait, GENES_PREDATOR, GENES_SELF_FEED_WHICH, GENES_SELF_FEED_AMOUNT } from "./EcologyGenes";
+import { geneAverage, GENES_CANNIBAL, GENES_IMMUNE, GENES_WEAK_PREY, GENES_RUDDER, GENES_DEFERENCE, GENES_PERSISTENCE, GENES_INVESTMENT, GENES_SIZE_PICKINESS, setTrait, GENES_PREDATOR, GENES_SELF_FEED_WHICH, GENES_SELF_FEED_AMOUNT } from "./EcologyGenes";
 import { physicsPartA, physicsPartB } from "./PhysicsKernel";
 import { applyWaterDrag, bodyMotionFactors } from "./BodyPhysics";
 import { advanceBodyTemperature } from "./ThermalPhysics";
@@ -1070,6 +1070,9 @@ this.setParent = function( parent )
 	//-----------------------------------------------------------------------------------
 	this.create = function( index, age, position, angle, energy, genotype, embryology )
 	{
+	    // (healthy, and with no immunity: DISEASE_ENABLED)
+	    _M[ _m + SS.M_DISEASE ] = 0; _M[ _m + SS.M_DISEASE_TIMER ] = 0;
+	    for (let k = 0; k < SS.NUM_IMMUNE_MEMORY; k++) { _M[ _m + SS.M_IMMUNE_MEMORY + k ] = 0; }
 	    // (a newborn starts as an egg; a founder of the pool is grown up)
 	    _B[ _b + SS.B_GROWTH ] = Math.min( ONE, age / YOUNG_AGE_DURATION );
 	    //---------------------------------------
@@ -1376,6 +1379,8 @@ _position.copyFrom( position );
         _M[ _m + SS.M_SIZE_PICKY ]      = geneAverage( _genotype, GENES_SIZE_PICKINESS );
         _M[ _m + SS.M_DEFERENCE ]       = geneAverage( _genotype, GENES_DEFERENCE );
         _M[ _m + SS.M_WEAK_PREF ]       = geneAverage( _genotype, GENES_WEAK_PREY );
+        _M[ _m + SS.M_CANNIBAL_GENE ]   = geneAverage( _genotype, GENES_CANNIBAL );
+        for (let k = 0; k < 4; k++) { _M[ _m + SS.M_IMMUNE_0 + k ] = _genotype.getGeneValue( GENES_IMMUNE[k] ) / 255; }
         _B[ _b + SS.B_RUDDER ]          = RUDDER_MAX_TURN * geneAverage( _genotype, GENES_RUDDER );
         _M[ _m + SS.M_MATURE_AGE ]      = SIZE_MATURITY_ENABLED
             ? YOUNG_AGE_DURATION * Math.min( 4, Math.max( 0.5, _phenotype.mass / 410 ))
@@ -1953,6 +1958,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	this.getNumPreyEaten                = function() { return _numPreyEaten;                                }
 	this.getPhenotypeMass               = function() { return _phenotype.mass;                              }
 	let _deathCause = "";
+	this.getIsSick = function() { return _M[ _m + SS.M_DISEASE ] > 0; }
 	this.getDeathCause                  = function() { return _deathCause; }
 	// the family numbers (KIN_NOT_EATEN_ENABLED)
 	this.setFamily = function( serial, parentA, parentB ) { _M[ _m + SS.M_SERIAL ] = serial; _M[ _m + SS.M_PARENT_A ] = parentA; _M[ _m + SS.M_PARENT_B ] = parentB; }

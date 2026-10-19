@@ -79,7 +79,13 @@ export const M_SERIAL        = 67;   // a number given at birth, unique (KIN_NOT
 export const M_PARENT_A      = 68;   // the parents' numbers
 export const M_PARENT_B      = 69;
 export const M_WEAK_PREF     = 70;   // how much it prefers old and starving prey (a gene)
-export const MIND_STRIDE     = 72;
+export const M_IMMUNE_0      = 71;   // the 4 immune genes (71-74, DISEASE_ENABLED)
+export const M_DISEASE       = 75;   // the strain it is sick with (0 = healthy)
+export const M_DISEASE_TIMER = 76;   // steps until it is over
+export const M_IMMUNE_MEMORY = 77;   // strains it had (77-79)
+export const NUM_IMMUNE_MEMORY = 3;
+export const M_CANNIBAL_GENE = 80;   // the gene for eating the young (0..1)
+export const MIND_STRIDE     = 88;
 
 // what the decision kernel asks the main thread to do (bits in M_EVENTS)
 export const EVENT_REGROW    = 1;    // grow the dropped parts back

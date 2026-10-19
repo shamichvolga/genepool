@@ -35,7 +35,9 @@ export const GENES_SELF_FEED_AMOUNT  = [ 161 ];
 export const GENES_DEFERENCE         = [ 162 ];   // how much a plant others are nearer to is avoided (CROWD_AWARE_FOOD_CHOICE_ENABLED)
 export const GENES_RUDDER            = [ 163 ];   // how fast the whole body may turn towards its goal (RUDDER_ENABLED)
 export const GENES_WEAK_PREY          = [ 164 ];   // how much a predator prefers old and starving prey (WEAK_PREY_ENABLED)
-export function isDeferenceGene( g ) { return ( g === GENES_DEFERENCE[0] ) || ( g === GENES_RUDDER[0] ) || ( g === GENES_WEAK_PREY[0] ); }   // (small-step genes outside the ecology block)
+export const GENES_IMMUNE            = [ 165, 166, 167, 168 ];
+export const GENES_CANNIBAL          = [ 169 ];   // eating the young of one's kind (an ability)   // the immune profile (DISEASE_ENABLED)
+export function isDeferenceGene( g ) { return ( g === GENES_DEFERENCE[0] ) || ( g === GENES_RUDDER[0] ) || ( g === GENES_WEAK_PREY[0] ) || (( g >= 165 ) && ( g <= 169 )); }   // (small-step genes outside the ecology block)
 
 export function isSelfFeedingGene( g ): boolean
 {

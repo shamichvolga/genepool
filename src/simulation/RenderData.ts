@@ -12,6 +12,7 @@ import { OLD_AGE_DURATION, YOUNG_AGE_DURATION } from "./Parameters";
 import { SharedState, BOT_STRIDE, PART_STRIDE, PS, P_X, P_Y, PARAM_MAX_LIFESPAN,
          B_AGE, B_ENERGY, B_ETERNAL, B_GROWTH, B_NUM_PARTS, B_POS_X, B_POS_Y } from "./SharedState";
 import { MAX_PARTS, NULL_PART, STARVING } from "./SwimbotTypes";
+import { MIND_STRIDE, M_DISEASE } from "./MindLayout";
 
 export const RENDER_FLOATS = 10;   // (as CapsuleRenderer's FLOATS_PER_CAPSULE)
 
@@ -41,6 +42,7 @@ export function writeRenderData( s: number, st: SharedState ): void
     const greyR = white + dead * DEAD_RED, greyG = white + dead * DEAD_GREEN, greyB = white + dead * DEAD_BLUE;
     const growth = Math.min( 1, B[ b + B_GROWTH ] ), egg = EGG_SIZE * ( 1 - growth );
 
+    const sick = st.mind[ s * MIND_STRIDE + M_DISEASE ] > 0;
     let i = k * RENDER_FLOATS;
     for (let p = 1; p < numParts; p++)
     {
@@ -55,6 +57,13 @@ export function writeRenderData( s: number, st: SharedState ): void
         out[ i + 7 ] = greyG + st.partRGB[ ( k + p ) * 3 + 1 ] * keep;
         out[ i + 8 ] = greyB + st.partRGB[ ( k + p ) * 3 + 2 ] * keep;
         out[ i + 9 ] = 1;
+        // sick (DISEASE_ENABLED): every other part pale - spots
+        if ( sick && ( p % 2 === 1 ))
+        {
+            out[ i + 6 ] = 0.5 * out[ i + 6 ] + 0.45;
+            out[ i + 7 ] = 0.5 * out[ i + 7 ] + 0.44;
+            out[ i + 8 ] = 0.5 * out[ i + 8 ] + 0.275;
+        }
         i += RENDER_FLOATS;
     }
 }

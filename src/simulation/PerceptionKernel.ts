@@ -8,6 +8,7 @@
 // The arithmetic is the same as the old GenePool.giveSwimbotNearbyEnvironmentalStimuli
 // (checked by comparing both on the same state, see GenePool PERCEPTION_CHECK).
 //------------------------------------------------------------------------------
+import { areKin } from "./Kin";
 import { BRAIN_STATE_LOOKING_FOR_MATE, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_PREY } from "./Brain";
 import { IGNORE_FOOD_EFFICIENCY, mateAcceptance, pairRandom, preyVisibility, searchImageFactor, sizeSignature } from "./Ecology";
 import { PLANT_TYPE_WARM } from "./Environment";
@@ -16,8 +17,8 @@ import { ATTACK_SUCCESS_CHANCE, ENVIRONMENT_ATTACK_SUCCESS_CHANCE, PREDATOR_LEVE
 import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
 import { ATTRACTION_SIMILAR_COLOR, STARVING, SWIMBOT_MOUTH_LENGTH, SWIMBOT_VIEW_RADIUS } from "./SwimbotTypes";
 import { FOOD_BIT_GRAB_RADIUS } from "./FoodBit";
-import { OLD_AGE_DURATION, WEAK_PREY_ENABLED, WEAK_STARVING_SHARE, JUVENILE_PREDATION_ENABLED, CROWD_AWARE_FOOD_CHOICE_ENABLED, FOOD_TARGET_PERSISTENCE_ENABLED, FOOD_SWITCH_RATIO_MIN, FOOD_KEEP_RADIUS_SCALE, SIZE_ASSORTATIVE_MATING_ENABLED } from "./Parameters";
-import { M_WEAK_PREF, MIND_STRIDE, M_VIEW_RADIUS, M_GRAB_RADIUS, M_DEFERENCE, M_FOOD, M_PERSIST, M_MATURE_AGE, M_SIZE_PICKY, M_MAX_ENERGY } from "./MindLayout";
+import { KIN_NOT_EATEN_ENABLED, OLD_AGE_DURATION, WEAK_PREY_ENABLED, WEAK_STARVING_SHARE, JUVENILE_PREDATION_ENABLED, CROWD_AWARE_FOOD_CHOICE_ENABLED, FOOD_TARGET_PERSISTENCE_ENABLED, FOOD_SWITCH_RATIO_MIN, FOOD_KEEP_RADIUS_SCALE, SIZE_ASSORTATIVE_MATING_ENABLED } from "./Parameters";
+import { M_DISEASE, M_WEAK_PREF, MIND_STRIDE, M_VIEW_RADIUS, M_GRAB_RADIUS, M_DEFERENCE, M_FOOD, M_PERSIST, M_MATURE_AGE, M_SIZE_PICKY, M_MAX_ENERGY } from "./MindLayout";
 import { preyTargetScore } from "./EcologyGenes";
 import {
     BACKGROUND_SIZE, PARAM_MAX_LIFESPAN, B_NUM_PARTS, B_GROWTH, B_VEL_X, B_VEL_Y, BOT_STRIDE, MAX_SEEN, PARAM_ENV_ACTIVE, PARAM_ENV_FIELDS, PARAM_FOOD_TYPES, PARAM_OBSTACLE_X1, PARAM_OBSTACLE_X2,
@@ -144,6 +145,7 @@ function backgroundAt( st: SharedState, x: number, y: number ): number
 function isWeak( st: SharedState, o: number ): boolean
 {
     if ( st.eternal[o] === 1 ) return false;
+    if ( st.mind[ o * MIND_STRIDE + M_DISEASE ] > 0 ) return true;          // sick (DISEASE_ENABLED)
     if ( st.age[o] > st.params[ PARAM_MAX_LIFESPAN ] - OLD_AGE_DURATION ) return true;
     return st.energy[o] < st.mind[ o * MIND_STRIDE + M_MAX_ENERGY ] * WEAK_STARVING_SHARE;
 }
@@ -398,6 +400,7 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
             if ( alive[o] === 0 ) continue;
             if ( predator[o] > PREDATOR_LEVEL_THRESHOLD ) continue;      // predators don't hunt predators
             if ( st.eternal[o] === 1 ) continue;                        // immortals are not eaten
+            if ( KIN_NOT_EATEN_ENABLED && areKin( st, s, o )) continue;   // not my parent, child, brother or sister
             // too big to bite (a not yet grown-up one can be bitten anyway)
             const young = JUVENILE_PREDATION_ENABLED && ( st.age[o] < st.mind[ o * MIND_STRIDE + M_MATURE_AGE ] );
             // WEAK_PREY_ENABLED: old or starving prey can be taken whatever its size

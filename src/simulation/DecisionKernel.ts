@@ -19,6 +19,7 @@
 // Random numbers come from each swimbot's own generator (st.random), so the
 // result does not depend on the number of threads.
 //------------------------------------------------------------------------------
+import { areKin } from "./Kin";
 import { FILTER_FEEDING_ENABLED, FILTER_FEEDING_PERIOD, FILTER_FEEDING_REACH } from "./Parameters";
 import { plantMatureAge } from "./PlantGenes";
 import * as SS from "./SharedState";
@@ -32,7 +33,7 @@ import { BRAIN_SIZE, NUM_HIDDEN, NUM_INPUTS, NUM_OUTPUTS, DRIVE_OUTPUTS, THINK_P
          IN_PREY_DISTANCE, IN_PREY_REWARD, IN_PREY_SUCCESS, IN_PREY_CHASE, IN_BAIT_PRESENT, IN_BAIT_DISTANCE, IN_BAIT_REWARD,
          OUT_FOOD, OUT_MATE, OUT_FLEE, OUT_HUNT, OUT_CLIMATE, OUT_SOCIAL, OUT_EFFORT, OUT_STEER, OUT_SELF_EAT, OUT_PREY_VALUE, OUT_PREY_TRAVEL, OUT_PREY_BAIT,
          think, sigmoid } from "./NeuralBrain";
-import { KIN_NOT_EATEN_ENABLED, ONLY_GROWN_EAT_YOUNG_ENABLED, EVENT_DRIVEN_LOOK_ENABLED, EVENT_CALM_LOOK_PERIOD, EVENT_CALM_MIN_DISTANCE, DESPERATE_CANNIBALISM_ENABLED, DESPERATE_ENERGY_SHARE, CANNIBAL_PREY_MASS_SHARE, DESPERATE_PREY_MASS_SHARE, LIMBS_CATCH_YOUNG_ENABLED, YOUNG_CANNIBALISM_ENABLED, BITE_AT_CONTACT_ENABLED, CONTACT_EATING_ENABLED, AUTOTOMY_DECOY_SPAN, CLIMATE_PROBE_DISTANCE, CLIMATE_STEERING, SOCIAL_STEERING, BODY_TEMPERATURE_INERTIA_ENABLED, SELF_CANNIBALISM_ENABLED,
+import { CANNIBAL_GENE_THRESHOLD, KIN_NOT_EATEN_ENABLED, ONLY_GROWN_EAT_YOUNG_ENABLED, EVENT_DRIVEN_LOOK_ENABLED, EVENT_CALM_LOOK_PERIOD, EVENT_CALM_MIN_DISTANCE, DESPERATE_CANNIBALISM_ENABLED, DESPERATE_ENERGY_SHARE, CANNIBAL_PREY_MASS_SHARE, DESPERATE_PREY_MASS_SHARE, LIMBS_CATCH_YOUNG_ENABLED, YOUNG_CANNIBALISM_ENABLED, BITE_AT_CONTACT_ENABLED, CONTACT_EATING_ENABLED, AUTOTOMY_DECOY_SPAN, CLIMATE_PROBE_DISTANCE, CLIMATE_STEERING, SOCIAL_STEERING, BODY_TEMPERATURE_INERTIA_ENABLED, SELF_CANNIBALISM_ENABLED,
          PREDATOR_TARGET_SELECTION_ENABLED, PREDATOR_FLEE_RADIUS, PREDATOR_LEVEL_THRESHOLD, PREY_SCAN_COOLDOWN, PREY_SCAN_RADIUS_GROWTH,
          PREY_SCAN_RADIUS_MAX_SCALE, SWIMBOT_MAX_ENERGY } from "./Parameters";
 import { thermalFit, EMERGENCY_PROBE_DISTANCE, EMERGENCY_THERMAL_FIT, KINESIS_MAX_TURN, KINESIS_PERIOD, KINESIS_TURN_CHANCE,
@@ -182,20 +183,6 @@ function sproutAtLimbs( st: SharedState, s: number ): number
         }
     }
     return -1;
-}
-
-// KIN_NOT_EATEN_ENABLED: parent, child, brother or sister (by birth numbers;
-// the founders, numbered 0, have no known family)
-export function areKin( st: SharedState, a: number, b: number ): boolean
-{
-    const M = st.mind, ma = a * SS.MIND_STRIDE, mb = b * SS.MIND_STRIDE;
-    const sa = M[ ma + SS.M_SERIAL ], sb = M[ mb + SS.M_SERIAL ];
-    const a1 = M[ ma + SS.M_PARENT_A ], a2 = M[ ma + SS.M_PARENT_B ], b1 = M[ mb + SS.M_PARENT_A ], b2 = M[ mb + SS.M_PARENT_B ];
-    if (( sa > 0 ) && (( b1 === sa ) || ( b2 === sa ))) return true;      // b is my child
-    if (( sb > 0 ) && (( a1 === sb ) || ( a2 === sb ))) return true;      // b is my parent
-    if (( a1 > 0 ) && (( a1 === b1 ) || ( a1 === b2 ))) return true;      // a shared parent
-    if (( a2 > 0 ) && (( a2 === b1 ) || ( a2 === b2 ))) return true;
-    return false;
 }
 
 // LIMBS_CATCH_YOUNG_ENABLED: does any of my limb ends touch a part of p?
@@ -920,6 +907,7 @@ export function takeInLook( st: SharedState, s: number, counters: number ): void
     const mouthAtX = B[ b + SS.B_MOUTH_X ], mouthAtY = B[ b + SS.B_MOUTH_Y ];
     const plantDistance = plantSeen ? Math.hypot( st.foodX[f] - mouthAtX, st.foodY[f] - mouthAtY ) : Infinity;
     if ( YOUNG_CANNIBALISM_ENABLED && !isPredator( st, s )
+    &&   ( M[ m + SS.M_CANNIBAL_GENE ] > CANNIBAL_GENE_THRESHOLD )             // (an inherited ability, not everyone's)
     &&   !( ONLY_GROWN_EAT_YOUNG_ENABLED && ( B[ b + SS.B_GROWTH ] < 1 ))
     &&   ( B[ b + SS.B_ENERGY ] < M[ m + SS.M_HUNGER ] ))
     {

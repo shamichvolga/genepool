@@ -96,6 +96,8 @@ export const simCounters = {
     localPlantSprouts: 0,
     seedRainPlantSprouts: 0,
     nurserySprouts: 0,
+    diseaseInfections: 0,
+    diseaseOutbreaks: 0,
     nutrientLimitedPlantSeeds: 0,
     meatDecayEvents: 0,
     nutrientsFromMeatDecay: 0,
