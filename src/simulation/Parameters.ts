@@ -446,3 +446,12 @@ export const PREDATOR_DEFERENCE_ENABLED     = false;
 // their prey, ate it out and died out with it (d14).
 //------------------------------------------------------------------------------
 export const MEAT_ASSIMILATION              = 0.55;   // (d16: 0.4 lost the predators, 0.7 dipped to 147 bodies, 1.0 died out)
+
+//------------------------------------------------------------------------------
+// (20.10) Grazed plants grow back from their roots (grasses): with this chance
+// an eaten plant comes back as a sprout in the same place after
+// PLANT_REGROW_DELAY steps. Herds then cannot eat a pasture down to nothing
+// for good - the herbivore boom-and-famine swings should get shallower.
+//------------------------------------------------------------------------------
+export const PLANT_REGROW_CHANCE            = 0;      // (off until tested)
+export const PLANT_REGROW_DELAY             = 1500;

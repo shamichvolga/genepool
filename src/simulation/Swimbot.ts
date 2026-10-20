@@ -314,6 +314,7 @@ this.setParent = function( parent )
 	    let energy = plant.getEnergy() * FILTER_FEEDING_EFFICIENCY * ( PLANT_STAGE_ENERGY[0] + ( PLANT_STAGE_ENERGY[1] - PLANT_STAGE_ENERGY[0] ) * grown );
 	    if ( environment.active ) { energy *= this.getDigestionEfficiency( plant.getType() ) * climateFoodFactor( _M[ _m + SS.M_THERMAL_FIT ], _M[ _m + SS.M_THERMAL_PEAK ] ); }
 	    _B[ _b + SS.B_ENERGY ] += Math.min( room, energy );
+	    _parent.plantEaten( plant );
 	    plant.kill();
 	    _numFoodBitsEaten ++;
 	    _numFilterMeals ++;
@@ -2201,6 +2202,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 
             assert( _M[ _m + SS.M_FOOD ] != NULL_INDEX, "Swimbot:eatChosenFoodBit: _M[ _m + SS.M_FOOD ] != NULL_INDEX" );
 
+            _parent.plantEaten( chosenFoodBit() );
             chosenFoodBit().kill();
 
 // somehow, the swimbot is still looking for food even when it is too far away

@@ -1,5 +1,5 @@
 import { WORLD_AREA_FACTOR } from "./World";
-import { CARCASS_ENABLED, DISEASE_ENABLED, CANNIBAL_GENE_FOUNDER_MAX } from "./Parameters";
+import { CARCASS_ENABLED, DISEASE_ENABLED, CANNIBAL_GENE_FOUNDER_MAX, PLANT_REGROW_CHANCE, PLANT_REGROW_DELAY } from "./Parameters";
 import { updateDiseases } from "./Disease";
 import { currentAt, currentDriftX, currentDriftY, currentStrength, randomPointInCurrent } from "./Currents";
 import { bindPlantGenes, inheritPlantGenes, plantMatureAge, plantOldAge, plantRotAge, plantSeedDistance } from "./PlantGenes";
@@ -1990,6 +1990,34 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 
 	this.getStepsPerSecond = function() { return _stepsPerSecond; }
 	this.getRenderMs       = function() { return _renderMs; }
+
+	//------------------------------------------------------------------------
+	// PLANT_REGROW_CHANCE: an eaten plant may leave roots that sprout again in
+	// the same place after PLANT_REGROW_DELAY steps
+	//------------------------------------------------------------------------
+	const _roots = [];      // { x, y, type, due }
+	this.plantEaten = function( plant )
+	{
+	    if (( PLANT_REGROW_CHANCE <= 0 ) || ( plant.getType() === 2 )) return;
+	    if ( gpRandom() < PLANT_REGROW_CHANCE )
+	    {
+	        _roots.push({ x: plant.getPosition().x, y: plant.getPosition().y, type: plant.getType(), due: _clock + PLANT_REGROW_DELAY });
+	    }
+	}
+	this.sproutRoots = function()
+	{
+	    while (( _roots.length > 0 ) && ( _roots[0].due <= _clock ))
+	    {
+	        const root = _roots.shift();
+	        const f = this.findLowestDeadFoodBitInArray();
+	        if ( f === NULL_INDEX ) continue;
+	        _vectorUtility.setXY( root.x, root.y );
+	        _foodBits[f].initialize( f );
+	        _foodBits[f].setType( root.type );
+	        _foodBits[f].setEnergy( globalTweakers.foodBitEnergy );
+	        _foodBits[f].setPosition( _vectorUtility );
+	    }
+	}
 	let _numSick = 0;
 	this.getNumSick        = function() { return _numSick; }
 
@@ -2297,6 +2325,8 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	        if ( M[ s * SS.MIND_STRIDE + SS.M_EVENTS ] & ( SS.EVENT_DECOY | SS.EVENT_CHOOSE_MATE )) { _swimbots[s].handleEventsAfterLooking(); }
 	        this.interact(s);
 	    }
+	    // PLANT_REGROW_CHANCE: grazed plants sprout again from their roots
+	    if ( PLANT_REGROW_CHANCE > 0 ) { this.sproutRoots(); }
 	    // DISEASE_ENABLED: the sick pay, pass it on, get well
 	    if ( DISEASE_ENABLED ) { _numSick = updateDiseases( _st, _aliveSwimbotIndices, _aliveSwimbotIndices.length, _clock ); }
 	    phaseTime( 4, t );
