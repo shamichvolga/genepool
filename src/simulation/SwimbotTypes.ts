@@ -92,6 +92,7 @@ export const ENERGY_EFFICIENCY_MEASUREMENT_PERIOD  = 200;
 export function Part()
 {	
 	this.category			= 0;
+	this.origin				= 0;                 // its number when the body was grown from the genes (a saved world puts the parts back in order)
 	this.position			= new Vector2D();   //dynamic
 	this.velocity			= new Vector2D();   //dynamic
 	this.axis 		        = new Vector2D();   //dynamic

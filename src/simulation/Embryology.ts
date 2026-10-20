@@ -433,6 +433,9 @@ testNoEel = false;
         
         assert( phenotype.numParts > 1, "phenotype.numParts > 1"  );
 
+        // (autotomy reorders the parts: remember each one's first number, see Swimbot.restorePhenotypeOrder)
+        for (let p = 0; p < phenotype.numParts; p++) { phenotype.parts[p].origin = p; }
+
 		//-----------------------------------------------------
 		// re-order the parts for more sensible rendering 
 		//-----------------------------------------------------

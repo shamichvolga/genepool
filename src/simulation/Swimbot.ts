@@ -1968,6 +1968,61 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	let _deathCause = "";
 	this.getIsSick = function() { return _M[ _m + SS.M_DISEASE ] > 0; }
 	this.getDeathCause                  = function() { return _deathCause; }
+
+	//------------------------------------------------------------------------
+	// saving and loading a world (GenePool.saveWorld / loadWorld): what a
+	// swimbot keeps outside the shared arrays
+	//------------------------------------------------------------------------
+	const DEATH_CAUSES = [ "", "other", "starvation", "old_age", "predation" ];
+	this.PRIVATE_STATE_SIZE = 12;
+	this.getPrivateState = function( out, at )
+	{
+	    out[ at     ] = _numOffspring;     out[ at + 1 ] = _numFoodBitsEaten; out[ at + 2 ] = _numPreyEaten;
+	    out[ at + 3 ] = _numPartsEaten;    out[ at + 4 ] = _numCannibalized;  out[ at + 5 ] = _partsDropped;
+	    out[ at + 6 ] = _numFilterMeals;   out[ at + 7 ] = _species;          out[ at + 8 ] = _torque;
+	    out[ at + 9 ] = _baseHungerThreshold;
+	    out[ at + 10 ] = Math.max( 0, DEATH_CAUSES.indexOf( _deathCause ));
+	    out[ at + 11 ] = 0;
+	}
+	this.setPrivateState = function( src, at )
+	{
+	    _numOffspring = src[ at ];         _numFoodBitsEaten = src[ at + 1 ]; _numPreyEaten = src[ at + 2 ];
+	    _numPartsEaten = src[ at + 3 ];    _numCannibalized = src[ at + 4 ];  _partsDropped = src[ at + 5 ];
+	    _numFilterMeals = src[ at + 6 ];   _species = src[ at + 7 ];          _torque = src[ at + 8 ];
+	    _baseHungerThreshold = src[ at + 9 ];
+	    _deathCause = DEATH_CAUSES[ src[ at + 10 ] ] || "";
+	}
+
+	// the first numbers of the parts that are left, in their order (-1 = no part)
+	this.getPhenotypeOrigins = function( out, at )
+	{
+	    for (let p = 0; p < MAX_PARTS; p++) { out[ at + p ] = ( p < _phenotype.numParts ) ? _phenotype.parts[p].origin : -1; }
+	}
+
+	// a body grown from the genes (create) is put back as it was after autotomy:
+	// the parts that are left, in their order, the others behind them
+	this.restorePhenotypeOrder = function( origins, at )
+	{
+	    const kept = [];
+	    for (let p = 0; p < MAX_PARTS && origins[ at + p ] >= 0; p++) { kept.push( origins[ at + p ] ); }
+	    const fresh = _phenotype.parts;
+	    let identity = ( kept.length === _phenotype.numParts );
+	    for (let p = 0; identity && p < kept.length; p++) { identity = ( kept[p] === p ); }
+	    if ( identity || kept.length < 2 ) return;
+
+	    const newIndex = new Array( fresh.length ).fill( NULL_INDEX );
+	    kept.forEach( ( o, i ) => { newIndex[ o ] = i; } );
+	    const order = kept.map( o => fresh[ o ] );
+	    for ( const part of order )
+	    {
+	        part.parent = ( part.parent >= 0 ) ? newIndex[ part.parent ] : part.parent;
+	        part.child  = ( part.child  >= 0 ) ? newIndex[ part.child  ] : part.child;
+	    }
+	    for (let p = 0; p < fresh.length; p++) { if ( newIndex[p] === NULL_INDEX ) { order.push( fresh[p] ); } }
+	    _phenotype.parts    = order;
+	    _phenotype.numParts = kept.length;
+	    this.processPhenotype();
+	}
 	// the family numbers (KIN_NOT_EATEN_ENABLED)
 	this.setFamily = function( serial, parentA, parentB ) { _M[ _m + SS.M_SERIAL ] = serial; _M[ _m + SS.M_PARENT_A ] = parentA; _M[ _m + SS.M_PARENT_B ] = parentB; }
 	this.getSerial = function() { return _M[ _m + SS.M_SERIAL ]; }

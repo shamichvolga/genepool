@@ -95,3 +95,11 @@ export function syncParams(): void
         if ( !same ) { p.value = now; setParam( p.name, now ); }
     }
 }
+
+// the numbers that differ from the code's (a saved world keeps them)
+export function changedParams(): Record<string, any>
+{
+    const out: Record<string, any> = {};
+    for ( const p of PARAM_LIST ) { if ( JSON.stringify( p.value ) !== JSON.stringify( PARAM_DEFAULTS[ p.name ] )) { out[ p.name ] = p.value; } }
+    return out;
+}

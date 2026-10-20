@@ -31,6 +31,25 @@ import { MIND_STRIDE, M_DISEASE, M_DISEASE_TIMER, M_IMMUNE_0, M_IMMUNE_MEMORY, N
 export const KEY_SIZE = 7;
 const strains: Float32Array[] = [ new Float32Array( KEY_SIZE ) ];   // strain 0 = "healthy"
 const profileBuffer = new Float32Array( KEY_SIZE );
+
+// saving and loading a world: all the strains, one after the other
+export function exportStrains(): Float32Array
+{
+    const out = new Float32Array( strains.length * KEY_SIZE );
+    for (let i = 0; i < strains.length; i++) { out.set( strains[i], i * KEY_SIZE ); }
+    return out;
+}
+export function importStrains( all: ArrayLike<number> ): void
+{
+    strains.length = 0;
+    for (let i = 0; i < all.length; i += KEY_SIZE)
+    {
+        const key = new Float32Array( KEY_SIZE );
+        for (let k = 0; k < KEY_SIZE; k++) { key[k] = all[ i + k ]; }
+        strains.push( key );
+    }
+    if ( strains.length === 0 ) { strains.push( new Float32Array( KEY_SIZE )); }
+}
 const nearbyBuffer  = new Int32Array( 4096 );
 
 // a body's profile: its 4 immune genes and its colour

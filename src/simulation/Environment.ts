@@ -226,6 +226,23 @@ export class Environment
 
     setTime( step: number ): void { this.time = step; }
 
+    // saving and loading a world: the numbers that change as it runs (the map
+    // itself is rebuilt from getState). Reads nothing through the getters:
+    // they age the soil.
+    exportRaw()
+    {
+        return { time: this.time, soilNutrient: this.soilNutrient.slice(), nutrientUpdatedAt: this.nutrientUpdatedAt.slice(),
+                 plantCount0: this.plantCount[0].slice(), plantCount1: this.plantCount[1].slice() };
+    }
+    importRaw( raw ): void
+    {
+        this.time = raw.time;
+        this.soilNutrient.set( raw.soilNutrient );
+        this.nutrientUpdatedAt.set( raw.nutrientUpdatedAt );
+        this.plantCount[0].set( raw.plantCount0 );
+        this.plantCount[1].set( raw.plantCount1 );
+    }
+
     resetSoilNutrients( startingAmount: number ): void
     {
         const amount = Math.max( 0, Math.min( SOIL_NUTRIENT_CAPACITY_PER_CELL, startingAmount ));

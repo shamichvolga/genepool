@@ -47,6 +47,45 @@ export function FamilyTree()
         _nodes.length = 0;
     }
     
+    //----------------------------------------------------------------
+    // saving and loading a world: the nodes as columns of numbers
+    //----------------------------------------------------------------
+    this.exportState = function()
+    {
+        const n = _numNodes;
+        const length = ( n > 0 ) ? _nodes[0].genes.length : 0;
+        const cols  = new Float64Array( n * 8 );
+        const genes = new Uint8Array( n * length );
+        const traits = new Array( n );
+        for (let i = 0; i < n; i++)
+        {
+            const node = _nodes[i];
+            cols.set( [ node.poolIndex, node.parent1PoolIndex, node.parent2PoolIndex, node.parent1Index, node.parent2Index, node.birthTime, node.deathTime, node.alive ? 1 : 0 ], i * 8 );
+            genes.set( node.genes, i * length );
+            traits[i] = node.evolutionTraits;
+        }
+        return { n, length, cols, genes, traits: JSON.stringify( traits ) };
+    }
+
+    this.importState = function( state )
+    {
+        this.reset();
+        const traits = JSON.parse( state.traits );
+        for (let i = 0; i < state.n; i++)
+        {
+            const c = state.cols;
+            const node = new FamilyTreeNode;
+            node.poolIndex = c[ i * 8 ]; node.parent1PoolIndex = c[ i * 8 + 1 ]; node.parent2PoolIndex = c[ i * 8 + 2 ];
+            node.parent1Index = c[ i * 8 + 3 ]; node.parent2Index = c[ i * 8 + 4 ];
+            node.birthTime = c[ i * 8 + 5 ]; node.deathTime = c[ i * 8 + 6 ]; node.alive = c[ i * 8 + 7 ] === 1;
+            node.genes = state.genes.slice( i * state.length, ( i + 1 ) * state.length );
+            node.evolutionTraits = traits[i];
+            _nodes[i] = node;
+            _latestNodeForPoolIndex.set( node.poolIndex, i );
+        }
+        _numNodes = state.n;
+    }
+
     //----------------------------------------------------
     this.setDeathTime = function( poolIndex, deathTime )
     {
