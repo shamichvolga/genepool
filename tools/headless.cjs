@@ -155,6 +155,9 @@ for ( const name in overrides )
 }
 
 vm.runInContext( source, sandbox, { filename: "genepool-bundle.js" } );
+// the simulation has its own random numbers now (Globals.ts gpRandom): the same
+// generator and seed as before, so runs with the same --seed do not change
+if ( typeof sandbox.setRandomSeed === "function" ) { sandbox.setRandomSeed( seed ); }
 
 //------------------------------------------------
 // genetic clustering on used genes (not a biological species estimate)
