@@ -445,4 +445,4 @@ export const PREDATOR_DEFERENCE_ENABLED     = false;
 // lost at each step up). With all of it kept, predators became as many as
 // their prey, ate it out and died out with it (d14).
 //------------------------------------------------------------------------------
-export const MEAT_ASSIMILATION              = 0.4;
+export const MEAT_ASSIMILATION              = 0.55;   // (d16: 0.4 lost the predators, 0.7 dipped to 147 bodies, 1.0 died out)
