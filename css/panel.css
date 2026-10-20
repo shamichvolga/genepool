@@ -660,7 +660,7 @@ body.panelFloating #panelToggleButton { display: none; }
 }
 .dbgRow          { display: flex; align-items: center; gap: 8px; padding: 2px 6px; border-bottom: 1px solid #c4c6ba; }
 .dbgRow:hover    { background: #e6e8dc; }
-.dbgName         { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: Consolas, monospace; font-size: 11px; }
+.dbgName         { flex: 1; min-width: 0; line-height: 1.25; font-size: 12px; }
 .dbgRow input[type=text] { width: 120px; padding: 2px 5px; border: 1px solid #9a9a90; border-radius: 3px; font-family: Consolas, monospace; font-size: 11px; text-align: right; }
 .dbgRow.changed .dbgName { color: #1b5fa0; font-weight: bold; }
 .dbgRow.edited input     { background: #fff6c8; }

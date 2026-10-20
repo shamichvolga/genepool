@@ -7,6 +7,7 @@
 //------------------------------------------------------------------------------
 import { PARAM_DEFAULTS, PARAM_LIST } from "../simulation/ParamStore";
 import { lang } from "./lang";
+import { PARAM_TEXT } from "./paramNames";
 import { applyLayout, getLayout, makeWindow, resetLayout } from "./layout";
 
 const KEY_PARAMS  = "genepool.params";       // the numbers that differ from the code's: the last session
@@ -17,6 +18,18 @@ let windowEl: HTMLElement | null = null;
 const inputs: Record<string, HTMLInputElement> = {};
 
 const t = ( en: string, ru: string ) => lang() === "ru" ? ru : en;
+
+// what a person reads: a plain title and what it does (the code name stays in the tooltip)
+function titleOf( name: string ): string
+{
+    const x = ( PARAM_TEXT as any )[ name ];
+    return x ? ( lang() === "ru" ? x.ru : x.en ) : name.toLowerCase().replace( /_/g, " " );
+}
+function descOf( p: { name: string, note: string } ): string
+{
+    const x = ( PARAM_TEXT as any )[ p.name ];
+    return x ? ( lang() === "ru" ? x.descRu : x.descEn ) : p.note;
+}
 
 function read( key: string ): any { try { return JSON.parse( localStorage.getItem( key ) || "null" ); } catch ( e ) { return null; } }
 function write( key: string, value: any ): void { try { localStorage.setItem( key, JSON.stringify( value )); } catch ( e ) { /* (no storage) */ } }
@@ -180,7 +193,7 @@ function filterRows(): void
     for ( const p of PARAM_LIST )
     {
         const row = inputs[ p.name ].closest( ".dbgRow" ) as HTMLElement;
-        const hit = ( word === "" || p.name.toLowerCase().includes( word ) || p.note.toLowerCase().includes( word ))
+        const hit = ( word === "" || p.name.toLowerCase().includes( word ) || titleOf( p.name ).toLowerCase().includes( word ) || descOf( p ).toLowerCase().includes( word ))
                  && ( !onlyChanged || !same( current( p.name ), PARAM_DEFAULTS[ p.name ] ));
         row.style.display = hit ? "" : "none";
     }
@@ -205,7 +218,7 @@ function build(): HTMLElement
         +   "<button id='dbgDeletePreset' title='" + t( "delete the chosen preset", "удалить выбранный пресет" ) + "'>&#x1F5D1;</button>"
         +   "<button id='dbgResetLayout' title='" + t( "put the windows back in their places", "вернуть окна на места" ) + "'>" + t( "reset windows", "сбросить окна" ) + "</button>"
         + "</div>"
-        + "<div id='dbgSearch'><input id='dbgFilter' placeholder='" + t( "search by name or note", "поиск по названию или описанию" ) + "'>"
+        + "<div id='dbgSearch'><input id='dbgFilter' placeholder='" + t( "search by name or description", "поиск по названию или описанию" ) + "'>"
         +   "<label><input type='checkbox' id='dbgOnlyChanged'> " + t( "only changed", "только изменённые" ) + "</label></div>"
         + "<div id='dbgList'></div>";
     document.body.appendChild( el );
@@ -215,10 +228,10 @@ function build(): HTMLElement
     {
         const row = document.createElement( "label" );
         row.className = "dbgRow";
-        row.title = p.name + ( p.note ? "\n" + p.note : "" );
+        row.title = descOf( p ) + "\n(" + p.name + ")";
         const name = document.createElement( "span" );
         name.className = "dbgName";
-        name.textContent = p.name;
+        name.textContent = titleOf( p.name );
         const input = document.createElement( "input" );
         input.type = ( p.kind === "boolean" ) ? "checkbox" : "text";
         input.autocomplete = "off";
@@ -260,6 +273,17 @@ export function toggleDebug(): void
     const open = windowEl.classList.toggle( "open" );
     document.getElementById( "debugButton" )?.classList.toggle( "activeButton", open );
 }
+
+// another language: the window is built again (open, with what was typed lost)
+window.addEventListener( "genepool:language", () =>
+{
+    if ( !windowEl ) return;
+    const wasOpen = windowEl.classList.contains( "open" );
+    windowEl.remove();
+    windowEl = null;
+    for ( const k in inputs ) { delete inputs[ k ]; }
+    if ( wasOpen ) { toggleDebug(); }
+});
 
 // the numbers of the last session, known before the window is ever opened
 export function initializeDebug(): void
