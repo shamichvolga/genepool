@@ -24,7 +24,7 @@ import { Genotype, NUM_GENES, PRESET_GENOTYPE_DARWIN, PRESET_GENOTYPE_DENNETT, P
 import { CameraNavigationAction, NUM_GENES_USED, SimulationStartMode, getRandomState, globalTweakers, gpRandom, resetSimulationCounters, setRandomState, simClock, simCounters } from "./Globals";
 import { BYTE_SIZE, MILLISECONDS_PER_SECOND, NULL_INDEX, ONE, ONE_HALF, PI2, ZERO } from "./MathConstants";
 import { Obstacle } from "./Obstacle";
-import { BARRIER_EXPERIMENT, DEFAULT_CHILD_ENERGY_RATIO, DEFAULT_FOOD_REGENERATION_PERIOD, DEFAULT_GARDEN_OF_EDEN_RADIUS, DEFAULT_MAXIMUM_AGE, DEFAULT_SWIMBOT_HUNGER_THRESHOLD, FOOD_LOCAL_CAPACITY, FOOD_LOCAL_RADIUS, FOOD_RANDOM_SEED_CHANCE, FOOD_SPROUT_RATE, INITIAL_NUM_FOODBITS, INITIAL_NUM_SWIMBOTS, INITIAL_PREDATOR_FRACTION, LOCAL_PLANT_GROWTH, LOCAL_PLANT_SEED_RADIUS, MAX_CHILD_ENERGY_RATIO, MAX_FOODBITS, MAX_FOODBITS_PER_TYPE, MAX_FOOD_REGENERATION_PERIOD, MAX_MAXIMUM_AGE, MAX_SWIMBOTS, MAX_SWIMBOT_HUNGER_THRESHOLD, MEAT_DECAY_TIME, MIN_CHILD_ENERGY_RATIO, MIN_FOOD_REGENERATION_PERIOD, MIN_MAXIMUM_AGE, MIN_SWIMBOT_HUNGER_THRESHOLD, NON_REPRODUCING_JUNK_DNA_LIMIT, OBSTACLE_ENABLED, PREDATOR_LEVEL_THRESHOLD, PREY_MAX_MASS_RATIO, RANDOM_MATING_CONTROL, RENDER_SWIMBOT_AS_DOT, SWIMBOT_LEVEL_OF_DETAIL_DOT, SWIMBOT_LEVEL_OF_DETAIL_HIGH, SWIMBOT_LEVEL_OF_DETAIL_LOW, YOUNG_AGE_DURATION } from "./Parameters";
+import { BARRIER_EXPERIMENT, DEFAULT_CHILD_ENERGY_RATIO, DEFAULT_FOOD_REGENERATION_PERIOD, DEFAULT_GARDEN_OF_EDEN_RADIUS, DEFAULT_MAXIMUM_AGE, DEFAULT_SWIMBOT_HUNGER_THRESHOLD, FOOD_LOCAL_CAPACITY, FOOD_LOCAL_RADIUS, FOOD_RANDOM_SEED_CHANCE, FOOD_SPROUT_RATE, INITIAL_NUM_FOODBITS, INITIAL_NUM_SWIMBOTS, INITIAL_PREDATOR_FRACTION, LOCAL_PLANT_GROWTH, LOCAL_PLANT_SEED_RADIUS, MAX_CHILD_ENERGY_RATIO, MAX_FOODBITS, MAX_FOODBITS_PER_TYPE, MAX_FOOD_REGENERATION_PERIOD, MEAT_SLOT_SHARE, MAX_MAXIMUM_AGE, MAX_SWIMBOTS, MAX_SWIMBOT_HUNGER_THRESHOLD, MEAT_DECAY_TIME, MIN_CHILD_ENERGY_RATIO, MIN_FOOD_REGENERATION_PERIOD, MIN_MAXIMUM_AGE, MIN_SWIMBOT_HUNGER_THRESHOLD, NON_REPRODUCING_JUNK_DNA_LIMIT, OBSTACLE_ENABLED, PREDATOR_LEVEL_THRESHOLD, PREY_MAX_MASS_RATIO, RANDOM_MATING_CONTROL, RENDER_SWIMBOT_AS_DOT, SWIMBOT_LEVEL_OF_DETAIL_DOT, SWIMBOT_LEVEL_OF_DETAIL_HIGH, SWIMBOT_LEVEL_OF_DETAIL_LOW, YOUNG_AGE_DURATION } from "./Parameters";
 import { PhyloTree } from "./PhyloTree";
 import { POOL_BOTTOM, POOL_HEIGHT, POOL_LEFT, POOL_RIGHT, POOL_TOP, POOL_WIDTH, Pool } from "./Pool";
 import { UniformGrid } from "./UniformGrid";
@@ -1241,6 +1241,7 @@ if ( mode === SimulationStartMode.SPECIES )
 	}
 
 	this.getEnvironment = function() { return environment; }
+	this.getCameraView = function() { return { x: _camera.getPosition().x, y: _camera.getPosition().y, scale: _camera.getScale() }; }
 
 	//------------------------------------------------------------------------
 	// Dominant species (the species window, src/ui/species.ts). A species is a
@@ -1814,7 +1815,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
         position.setXY( x, y );
         for (let i = 0; i < count; i++)
         {
-            const f = this.findLowestDeadFoodBitInArray();
+            const f = this.findLowestDeadFoodBitInArray( true );
             if ( f === NULL_INDEX ) return;
             _foodBits[f].initialize( f );
             _foodBits[f].setType( 2 );
@@ -1837,7 +1838,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
         let rest = energy;
         while ( rest > 0.5 )
         {
-            const f = this.findLowestDeadFoodBitInArray();
+            const f = this.findLowestDeadFoodBitInArray( true );
             if ( f === NULL_INDEX ) return;
             const piece = Math.min( MEAT_PIECE_ENERGY, rest );
             rest -= piece;
@@ -1858,7 +1859,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 
         for (let i = 0; i < count; i++)
         {
-            let foodIndex = this.findLowestDeadFoodBitInArray();
+            let foodIndex = this.findLowestDeadFoodBitInArray( true );
             if (foodIndex === NULL_INDEX) return;
 
             _foodBits[foodIndex].initialize(foodIndex);
@@ -2561,7 +2562,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
                 else if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
                 && ( _swimbots[s].getAge() >= _swimbots[s].getMaxAge() ) )
                 {
-                    let meatIndex = this.findLowestDeadFoodBitInArray();
+                    let meatIndex = this.findLowestDeadFoodBitInArray( true );
                     if ( meatIndex !== NULL_INDEX )
                     {
                         _foodBits[meatIndex].initialize(meatIndex);
@@ -3150,11 +3151,16 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 
 
 	//----------------------------------------
-	this.findLowestDeadFoodBitInArray = function()
+	// The food slots are in two parts: plants in the first, meat in the last
+	// (MEAT_SLOT_SHARE of all), so that a mass die-off, with its carcasses,
+	// cannot take the places the plants grow in.
+	this.findLowestDeadFoodBitInArray = function( meat = false )
 	{
         // the lowest free slot (the alive flags are bytes in the shared state)
         const live = _st.liveFood;
-        for (let f = 0; f < MAX_FOODBITS; f++) { if ( live[f] !== 1 ) return f; }
+        const split = Math.floor( MAX_FOODBITS * ( 1 - MEAT_SLOT_SHARE ));
+        const from = meat ? split : 0, to = meat ? MAX_FOODBITS : split;
+        for (let f = from; f < to; f++) { if ( live[f] !== 1 ) return f; }
         return NULL_INDEX;
     }
 

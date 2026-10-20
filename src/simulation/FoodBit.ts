@@ -1,6 +1,6 @@
 import { simClock, gpRandom } from "./Globals";
 import { NULL_INDEX, ONE, ONE_HALF, PI2, ZERO } from "./MathConstants";
-import { PLANT_EVOLUTION_ENABLED, PLANT_STAGES_ENABLED, PLANT_STAGES_SHOWN, SPAWN_FOOD_RANDOMLY_IN_POOL } from "./Parameters";
+import { MEAT_PIECE_ENERGY, PLANT_EVOLUTION_ENABLED, PLANT_STAGES_ENABLED, PLANT_STAGES_SHOWN, SPAWN_FOOD_RANDOMLY_IN_POOL } from "./Parameters";
 import { plantGrowthOf, plantSpreadOf, plantSproutGrowth, plantStage, randomizePlantGenes } from "./PlantGenes";
 import { POOL_BOTTOM, POOL_HEIGHT, POOL_LEFT, POOL_RIGHT, POOL_TOP, POOL_WIDTH } from "./Pool";
 import { assert } from "./Utility";
@@ -300,10 +300,31 @@ export function FoodBit()
 	    return 0.45 + 0.55 * plantSproutGrowth( _fi, simClock.step - _fb[ _fi ] );
 	}
 
+	// A piece of meat that holds less than a whole piece (what is left of a
+	// carcass) is drawn as part of a dot: a half or a third. 1 = whole.
+	const portion = function(): number
+	{
+	    if ( _ft[ _fi ] !== 2 ) return 1;
+	    const share = _fe[ _fi ] / MEAT_PIECE_ENERGY;
+	    return ( share >= 0.8 ) ? 1 : ( share >= 0.42 ) ? 0.5 : 1 / 3;
+	}
+
 	this.writeCapsule = function( capsules, viewScale )
 	{
 	    const st = stage();
 	    let radius = ( FOOD_BIT_SIZE + viewScale * FOOD_BIT_SIZE_VIEW_SCALE * FOOD_BIT_SIZE_VIEW_SCALE ) * stageSize( st );
+	    const part = portion();
+	    if (( st !== 2 ) && ( part < 1 ))
+	    {
+	        // a wedge of a dot, as a fan of short thick capsules
+	        const rays = ( part === 0.5 ) ? 5 : 4, span = part * PI2, w = radius * ( part === 0.5 ? 0.62 : 0.5 );
+	        for (let k = 0; k < rays; k++)
+	        {
+	            const a = -span / 2 + k * span / ( rays - 1 );
+	            capsules.add( _position.x, _position.y, _position.x + Math.cos( a ) * radius * 0.75, _position.y + Math.sin( a ) * radius * 0.75, w, _red, _green, _blue, opacity() );
+	        }
+	        return;
+	    }
 	    if ( st !== 2 )
 	    {
 	        capsules.add( _position.x, _position.y, _position.x, _position.y, radius, _red, _green, _blue, opacity() );
@@ -349,7 +370,9 @@ export function FoodBit()
 
 	    canvas.fillStyle = color;
         canvas.beginPath();
-        canvas.arc( _position.x, _position.y, radius, 0, PI2, false );
+        const part = portion();
+        if ( part < 1 ) { canvas.moveTo( _position.x, _position.y ); canvas.arc( _position.x, _position.y, radius, -part * PI2 / 2, part * PI2 / 2, false ); }
+        else            { canvas.arc( _position.x, _position.y, radius, 0, PI2, false ); }
         canvas.fill();
         canvas.closePath();
     }

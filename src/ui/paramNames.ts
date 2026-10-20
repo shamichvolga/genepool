@@ -1,6 +1,7 @@
 // Понятные названия и описания параметров из src/simulation/Parameters.ts (для режима отладки).
 // Ключ — имя константы; en/ru — короткое название; descEn/descRu — что делает параметр.
 export const PARAM_TEXT: Record<string, { en: string, ru: string, descEn: string, descRu: string }> = {
+  MEAT_SLOT_SHARE: { en: "Share of food places for meat", ru: "Доля мест под мясо", descEn: "Plants and meat have separate places: this share of all food places is kept for meat. A mass die-off can no longer push the plants out.", descRu: "У растений и мяса отдельные места: эта доля всех мест отдана мясу. Массовое вымирание больше не вытесняет растения." },
   FOOD_TYPE_OFFSET: { en: "Food type colour spacing", ru: "Разнесение цветов типов еды", descEn: "How far apart the colours of different food types are. Bigger values make food types look more different.", descRu: "Насколько далеко друг от друга лежат цвета разных типов еды. Чем больше, тем заметнее отличаются типы." },
   DEFAULT_NUM_FOOD_TYPES: { en: "Default number of food types", ru: "Число типов еды по умолчанию", descEn: "How many kinds of food there are at the start. More kinds means food comes in several types.", descRu: "Сколько типов еды есть в начале. Больше типов — еда разных видов." },
   SWIMBOT_LEVEL_OF_DETAIL_DOT: { en: "Detail level: dot", ru: "Подробность: точка", descEn: "Drawing level where a swimbot is just a dot. Only changes how it looks on screen.", descRu: "Уровень прорисовки, где свимбот — просто точка. Меняет только картинку на экране." },
