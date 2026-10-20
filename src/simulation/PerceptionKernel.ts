@@ -443,7 +443,7 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
             let value = -distance + st.energy[o] * 0.001;
             if ( PREDATOR_TARGET_SELECTION_ENABLED )
             {
-                const room = Math.max( 0, SWIMBOT_MAX_ENERGY - st.energy[s] );
+                const room = Math.max( 0, st.mind[ s * MIND_STRIDE + M_MAX_ENERGY ] - st.energy[s] );
                 const potential = st.energy[o] * PREDATION_ENERGY_TRANSFER + st.mass[o] * PREY_BODY_ENERGY;
                 const reward = Math.min( room, potential ) / SWIMBOT_MAX_ENERGY;
                 const distanceCost = distance / Math.max( 1, preyViewRadius );

@@ -35,13 +35,13 @@ import { BRAIN_SIZE, NUM_HIDDEN, NUM_INPUTS, NUM_OUTPUTS, DRIVE_OUTPUTS, THINK_P
          think, sigmoid } from "./NeuralBrain";
 import { CANNIBAL_GENE_THRESHOLD, KIN_NOT_EATEN_ENABLED, ONLY_GROWN_EAT_YOUNG_ENABLED, EVENT_DRIVEN_LOOK_ENABLED, EVENT_CALM_LOOK_PERIOD, EVENT_CALM_MIN_DISTANCE, DESPERATE_CANNIBALISM_ENABLED, DESPERATE_ENERGY_SHARE, CANNIBAL_PREY_MASS_SHARE, DESPERATE_PREY_MASS_SHARE, LIMBS_CATCH_YOUNG_ENABLED, YOUNG_CANNIBALISM_ENABLED, BITE_AT_CONTACT_ENABLED, CONTACT_EATING_ENABLED, AUTOTOMY_DECOY_SPAN, CLIMATE_PROBE_DISTANCE, CLIMATE_STEERING, SOCIAL_STEERING, BODY_TEMPERATURE_INERTIA_ENABLED, SELF_CANNIBALISM_ENABLED,
          PREDATOR_TARGET_SELECTION_ENABLED, PREDATOR_FLEE_RADIUS, PREDATOR_LEVEL_THRESHOLD, PREY_SCAN_COOLDOWN, PREY_SCAN_RADIUS_GROWTH,
-         PREY_SCAN_RADIUS_MAX_SCALE, SWIMBOT_MAX_ENERGY } from "./Parameters";
+         PREY_SCAN_RADIUS_MAX_SCALE, SWIMBOT_MAX_ENERGY, BITE_ALONG_PARTS_ENABLED } from "./Parameters";
 import { thermalFit, EMERGENCY_PROBE_DISTANCE, EMERGENCY_THERMAL_FIT, KINESIS_MAX_TURN, KINESIS_PERIOD, KINESIS_TURN_CHANCE,
          SEARCH_IMAGE_FORGETTING, THERMAL_FIT_UPDATE_PERIOD, THERMAL_MISMATCH_DRAIN, THERMOMELANISM } from "./Ecology";
 import { advanceBodyTemperature } from "./ThermalPhysics";
 import { FIELD_SIZE, PLANT_CELL_SIZE, SEASON_PERIOD, SEASON_AMPLITUDE_EQUATOR, SEASON_AMPLITUDE_POLES } from "./Environment";
 import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
-import { MAX_PARTS, SWIMBOT_GENITAL_LENGTH, SWIMBOT_MOUTH_LENGTH, SWIMBOT_VIEW_RADIUS } from "./SwimbotTypes";
+import { MAX_PARTS, NULL_PART, SWIMBOT_GENITAL_LENGTH, SWIMBOT_MOUTH_LENGTH, SWIMBOT_VIEW_RADIUS } from "./SwimbotTypes";
 import { FOOD_BIT_GRAB_RADIUS } from "./FoodBit";
 
 const PI_OVER_180 = Math.PI / 180;
@@ -198,8 +198,10 @@ function limbsTouchBody( st: SharedState, s: number, p: number ): boolean
     return false;
 }
 
-// is the mouth at one of the body parts of swimbot p? (part ends and middles,
-// within the mouth length plus the part's width)
+// is the mouth at any part of swimbot p? Each part is a capsule from its
+// parent's end to its own end; the mouth touches it when it is nearer to that
+// line than the mouth length plus the part's width (anywhere along it, not
+// only at the ends and the middle)
 function mouthTouchesBody( st: SharedState, p: number, mouthX: number, mouthY: number ): boolean
 {
     const numParts = st.bots[ p * SS.BOT_STRIDE + SS.B_NUM_PARTS ];
@@ -208,10 +210,18 @@ function mouthTouchesBody( st: SharedState, p: number, mouthX: number, mouthY: n
     {
         const i = o + k * SS.PS;
         const reach = SWIMBOT_MOUTH_LENGTH + st.partWidth[ w + k ];
-        const ex = st.parts[ i + SS.P_X ] - mouthX, ey = st.parts[ i + SS.P_Y ] - mouthY;
-        if ( ex * ex + ey * ey < reach * reach ) return true;
-        const mx = st.parts[ i + SS.M_X ] - mouthX, my = st.parts[ i + SS.M_Y ] - mouthY;
-        if ( mx * mx + my * my < reach * reach ) return true;
+        const bx = st.parts[ i + SS.P_X ], by = st.parts[ i + SS.P_Y ];
+        const parent = st.partParent[ w + k ];
+        let ax = bx, ay = by;
+        if ( parent === NULL_PART ) { ax = st.bots[ p * SS.BOT_STRIDE + SS.B_POS_X ]; ay = st.bots[ p * SS.BOT_STRIDE + SS.B_POS_Y ]; }
+        else if ( parent >= 0 )     { ax = st.parts[ o + parent * SS.PS + SS.P_X ]; ay = st.parts[ o + parent * SS.PS + SS.P_Y ]; }
+        // the nearest point of the segment a-b to the mouth
+        const sx = bx - ax, sy = by - ay, len2 = sx * sx + sy * sy;
+        let t = len2 > 0 ? (( mouthX - ax ) * sx + ( mouthY - ay ) * sy ) / len2 : 0;
+        t = t < 0 ? 0 : ( t > 1 ? 1 : t );
+        if ( !BITE_ALONG_PARTS_ENABLED ) { t = ( t < 0.75 ) ? 0.5 : 1; }     // (the old rule: the middle or the end)
+        const dx = ax + t * sx - mouthX, dy = ay + t * sy - mouthY;
+        if ( dx * dx + dy * dy < reach * reach ) return true;
     }
     return false;
 }

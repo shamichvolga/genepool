@@ -253,11 +253,17 @@ export const FOOD_SWITCH_RATIO_MIN          = 0.4;    // most persistent: switch
 export const FOOD_KEEP_RADIUS_SCALE         = 1.5;    // a chosen plant is kept up to 1.5 x the view radius away
 export const CONTACT_EATING_ENABLED         = true;   // the mouth touches edible food: eat it, whatever the brain is doing
 export const BITE_AT_CONTACT_ENABLED        = true;   // a bite needs the mouth at a body part of the prey, not near its center
+export const BITE_ALONG_PARTS_ENABLED       = true;   // 20.10: anywhere along a part counts (before: only its end and middle)
 
 //------------------------------------------------------------------------------
 // Experiments for different body forms (off by default)
 //------------------------------------------------------------------------------
 export const MASS_SCALED_STOMACH_ENABLED    = false;  // maximum energy = 200 x (mass / 410)^0.75, at least 60
+// 20.10: a big body stores more: maximum energy grows with mass (fat reserves
+// grow as the body does), never below the usual 200. A 16-part hunter pays for
+// moving a long body; with the same 200 as a 5-part grazer it starved.
+export const BIG_BODY_STOMACH_ENABLED       = true;
+export const STOMACH_REFERENCE_MASS         = 410;    // a body of this mass (or lighter) keeps 200
 export const PLANT_STAGES_ENABLED           = true;   // sprout / mature / old plant; small bodies digest sprouts, big ones old plants better
 export const PLANT_SPROUT_AGE               = 1500;
 export const PLANT_OLD_AGE                  = 6000;
