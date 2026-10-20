@@ -35,6 +35,13 @@ const RU: Record<string, string> =
     "petri": "петри", "zones": "зоны", "border": "граница", "stripes": "полосы",
     "world size (starts a new random pool)": "размер мира (запускает новый случайный бассейн)",
     "small": "малый", "normal": "обычный", "large": "большой", "huge": "огромный",
+    "save the world": "сохранить мир",
+    "Everything goes into one file: every swimbot and plant, diseases, climate, the clock. A loaded world goes on from the same step.":
+        "Всё идёт в один файл: каждый свимбот и растение, болезни, климат, часы. Загруженный мир продолжится с того же шага.",
+    "save world": "сохранить мир", "load world…": "загрузить мир…", "with the family tree": "с родословной",
+    "download the whole world as a .gpworld file": "скачать весь мир одним файлом .gpworld",
+    "load a .gpworld file and go on from there": "загрузить файл .gpworld и продолжить с него",
+    "the family tree grows with every birth; it is not needed for the world to go on": "родословная растёт с каждым рождением; для продолжения мира она не нужна",
     "research data": "данные для исследований", "print swimbot data": "вывести данные свимботов",
     // swimbot tab
     "No swimbot is selected: click one in the pool. Or create one:": "Свимбот не выбран: щёлкните по нему в бассейне. Или создайте:",

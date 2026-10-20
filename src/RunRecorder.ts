@@ -47,6 +47,9 @@ export function startRunRecorder( pool: any, mode: () => string )
     const deaths = new Array( CAUSES.length * 2 ).fill( 0 );
     let sickDeaths = 0, ageSum = 0, numDeaths = 0;
 
+    // a loaded world is a new run (its clock may be ahead of the last one)
+    pool.onWorldLoaded = () => { runId = ""; lastStep = -1; };
+
     pool.onSwimbotDied = ( b: any ) =>
     {
         let c = CAUSES.indexOf( b.getDeathCause() );

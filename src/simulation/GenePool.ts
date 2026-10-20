@@ -4768,12 +4768,13 @@ this.renderFoodBits = function( useGraphicsCard )
 	    const slots = file.get( "botSlots" ), genes = file.get( "botGenes" ), brains = file.get( "botBrain" );
 	    const priv = file.get( "botPrivate" ), origin = file.get( "botOrigin" );
 	    const place = new Vector2D();
+	    const grown = new Genotype();      // (not _myGenotype: that one may be some swimbot's own genotype by now)
 	    for (let i = 0; i < slots.length; i++)
 	    {
 	        const s = slots[i];
-	        _myGenotype.setGenes( Array.from( genes.subarray( i * NUM_GENES, ( i + 1 ) * NUM_GENES )) );
-	        _myGenotype.setBrain( brains.subarray( i * BRAIN_SIZE, ( i + 1 ) * BRAIN_SIZE ));
-	        _swimbots[s].create( s, 0, place, 0, 0, _myGenotype, _embryology );
+	        grown.setGenes( Array.from( genes.subarray( i * NUM_GENES, ( i + 1 ) * NUM_GENES )) );
+	        grown.setBrain( brains.subarray( i * BRAIN_SIZE, ( i + 1 ) * BRAIN_SIZE ));
+	        _swimbots[s].create( s, 0, place, 0, 0, grown, _embryology );
 	        _swimbots[s].restorePhenotypeOrder( origin, i * MAX_PARTS );
 	        _swimbots[s].setPrivateState( priv, i * 12 );
 	    }

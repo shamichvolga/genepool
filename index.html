@@ -121,6 +121,14 @@
                         <button id = "world4Button" class = "basicButton" onClick = "setWorldSize(4);" title = "32000 × 32000, about 8000 swimbots (needs a fast computer)" >huge</button>
                     </div>
 
+                    <div class = "gpHeading">save the world</div>
+                    <div class = "gpNote">Everything goes into one file: every swimbot and plant, diseases, climate, the clock. A loaded world goes on from the same step.</div>
+                    <div class = "gpGrid2">
+                        <button id = "saveWorldButton" class = "basicButton" onClick = "saveWorldToFile();" title = "download the whole world as a .gpworld file" >save world</button>
+                        <button id = "loadWorldButton" class = "basicButton" onClick = "chooseWorldFile();" title = "load a .gpworld file and go on from there" >load world…</button>
+                    </div>
+                    <label class = "gpNote" title = "the family tree grows with every birth; it is not needed for the world to go on"><input id = "worldWithTree" type = "checkbox" checked> with the family tree</label>
+
                     <div class = "gpHeading">research data</div>
                     <div id = "saveLoadPanel" class = "gpNote">
                         Run a pool (for example "speciation") for tens of thousands of steps,
@@ -267,6 +275,7 @@
         </div>  <!--masterPanel-->
 
         <input type = "file" id = "loadSwimbotFile" accept = ".json" style = "display:none;">
+        <input type = "file" id = "loadWorldFile" accept = ".gpworld" style = "display:none;">
 
         <div id = "popUpPanel"  style="display:none;" >
             <div id = "PopupText" >

@@ -49,11 +49,21 @@ export function createRemotePool( worker: Worker, onPetriLoaded: () => void )
         pending.set( id, resolve );
         worker.postMessage({ type: "request", id, name, args });
     });
+    // the whole world as a file (gzip) and back: the thread answers with a "reply"
+    const ask = ( message: any, transfer: any[] = [] ) => new Promise<any>( ( resolve ) =>
+    {
+        const id = nextId ++;
+        pending.set( id, resolve );
+        worker.postMessage({ ...message, id }, transfer );
+    });
     const sel = ( id ) => ( S.selected && S.selected.id === id ) ? S.selected : null;
 
     const local: any =
     {
         request,
+
+        saveWorldFile: ( withFamilyTree = true ) => ask({ type: "saveWorld", withFamilyTree }),
+        loadWorldFile: ( bytes: Uint8Array ) => ask({ type: "loadWorld", bytes }, [ bytes.buffer ]),
 
         // read from the snapshot
         getTimeStep:            () => S.timeStep,

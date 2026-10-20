@@ -31,7 +31,7 @@ let glOffscreen: any = null;
 let hidden = false;
 let snapshotSoon = 0;
 
-const post = ( message: any ) => ( self as any ).postMessage( message );
+const post = ( message: any, transfer: any[] = [] ) => ( self as any ).postMessage( message, transfer );
 
 //------------------------------------------------------------
 // what the panels show
@@ -165,6 +165,45 @@ function init( message )
 //------------------------------------------------------------
 // messages from the page
 //------------------------------------------------------------
+//------------------------------------------------------------
+// the whole world to a file and back (gzip; see GenePool.saveWorld)
+//------------------------------------------------------------
+async function gzip( bytes: Uint8Array ): Promise<Uint8Array>
+{
+    const stream = new Blob([ bytes ]).stream().pipeThrough( new ( self as any ).CompressionStream( "gzip" ));
+    return new Uint8Array( await new Response( stream ).arrayBuffer() );
+}
+async function gunzip( bytes: Uint8Array ): Promise<Uint8Array>
+{
+    const stream = new Blob([ bytes ]).stream().pipeThrough( new ( self as any ).DecompressionStream( "gzip" ));
+    return new Uint8Array( await new Response( stream ).arrayBuffer() );
+}
+
+async function saveWorld( id: number, withFamilyTree: boolean )
+{
+    // (the snapshot is taken in one go, between two frames; the packing goes on while the world runs)
+    const raw = pool.saveWorld( withFamilyTree );
+    const clock = pool.getTimeStep();
+    let value: any;
+    try { value = { bytes: await gzip( raw ), clock }; }
+    catch ( error ) { value = { error: String( error ) }; }
+    post({ type: "reply", id, value }, value.bytes ? [ value.bytes.buffer ] : []);
+}
+
+async function loadWorld( id: number, bytes: Uint8Array )
+{
+    let value: any;
+    try
+    {
+        const raw = ( bytes[0] === 0x1f && bytes[1] === 0x8b ) ? await gunzip( bytes ) : bytes;   // (gzip, or a plain file)
+        value = pool.loadWorld( raw );
+        if ( value.ok && pool.onWorldLoaded ) { pool.onWorldLoaded(); }
+    }
+    catch ( error ) { console.error( "loadWorld failed:", error ); value = { ok: false, reason: String(( error && ( error as any ).stack ) || error ) }; }
+    post({ type: "reply", id, value });
+    snapshotAfterCall();
+}
+
 self.onmessage = ( e: MessageEvent ) =>
 {
     const m = e.data;
@@ -183,6 +222,8 @@ self.onmessage = ( e: MessageEvent ) =>
     {
         hidden = m.hidden;
     }
+    else if ( m.type === "saveWorld" ) { saveWorld( m.id, m.withFamilyTree !== false ); }
+    else if ( m.type === "loadWorld" ) { loadWorld( m.id, m.bytes ); }
     else if ( m.type === "params" )
     {
         for ( const name in m.values ) { setParameter( name, m.values[ name ] ); }
