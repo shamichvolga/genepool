@@ -464,8 +464,11 @@ export function GenePool()
 
 
 	//------------------------------------------
+	this.onSwimbotDied = null;
+	this.startMode = -1;
 	this.startSimulation = function( mode )
 	{
+	    this.startMode = mode;
 //looks like numOffspring didn't get reset. fix this! (and any other related side effects
 
 		//----------------------------
@@ -2394,6 +2397,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
                 let deadPosition = _swimbots[s].getPosition();
 
                 _swimbotWasAlive[s] = false;
+                if ( this.onSwimbotDied ) { this.onSwimbotDied( _swimbots[s] ); }     // (src/RunRecorder.ts)
 
                 // CARCASS_ENABLED: a body that died not eaten leaves its body as
                 // meat - the energy its mass holds (what growing it cost)

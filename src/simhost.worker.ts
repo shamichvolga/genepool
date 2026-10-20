@@ -17,6 +17,9 @@ import { CapsuleRenderer } from "./render/CapsuleRenderer";
 import { ParallelRunner } from "./parallel/ParallelRunner";
 import { sharedState } from "./simulation/SharedState";
 import { petriSettings } from "./simulation/Petri";
+import { startRunRecorder } from "./RunRecorder";
+import { SimulationStartMode } from "./simulation/Globals";
+import { WORLD_SCALE } from "./simulation/World";
 
 const SNAPSHOT_PERIOD_MS = 250;
 const TICK_MS            = 20;     // background ticks when no screen refresh comes
@@ -132,6 +135,13 @@ function init( message )
     post({ type: "ready", data: { numGeneCategories: numCategories, numGenesPerCategory: perCategory, geneNames }});
 
     setInterval( sendSnapshot, SNAPSHOT_PERIOD_MS );
+
+    // what happens in this pool is written to runs/ (src/RunRecorder.ts)
+    startRunRecorder( pool, () =>
+    {
+        const name = Object.keys( SimulationStartMode ).find( k => SimulationStartMode[ k ] === pool.startMode ) || "start";
+        return name.toLowerCase() + "-world" + WORLD_SCALE;
+    });
 
     // no screen refresh (a hidden page): keep simulating without drawing.
     // Ticks that piled up while a frame was computed are skipped.
