@@ -600,7 +600,9 @@ body.panelFloating #panelToggleButton { display: none; }
 #hud.floating { pointer-events: auto; right: auto; bottom: auto; }
 #hud          { pointer-events: auto; cursor: move; touch-action: none; user-select: none; }
 
-#debugButton { margin-left: auto; padding: 0 6px; font-size: 14px; cursor: pointer; }
+#speciesButton, #debugButton { padding: 0 6px; font-size: 14px; cursor: pointer; }
+#speciesButton { margin-left: auto; }
+#debugButton { margin-left: 4px; padding: 0 6px; font-size: 14px; cursor: pointer; }
 #debugButton.activeButton { background: #ffffee; }
 
 /* --------------------------------------------------- debug window --------- */
@@ -665,3 +667,57 @@ body.panelFloating #panelToggleButton { display: none; }
 .dbgRow.changed .dbgName { color: #1b5fa0; font-weight: bold; }
 .dbgRow.edited input     { background: #fff6c8; }
 .dbgRow input.bad        { border-color: #c03030; background: #ffd8d0; }
+
+/* ------------------------------------------------- species window --------- */
+#speciesPanel
+{
+    display:        none;
+    position:       fixed;
+    left:           30px;
+    top:            50px;
+    width:          640px;
+    height:         460px;
+    min-width:      300px;
+    min-height:     220px;
+    max-width:      100vw;
+    max-height:     100vh;
+    z-index:        24;
+    flex-direction: column;
+    gap:            6px;
+    padding:        8px;
+    overflow:       hidden;
+    resize:         both;
+    box-sizing:     border-box;
+    background:     #caccc2;
+    border:         1px solid #666659;
+    border-radius:  6px;
+    box-shadow:     0 4px 18px rgba( 0, 0, 0, 0.5 );
+    font-family:    Arial, sans-serif;
+    font-size:      12px;
+    color:          #404040;
+}
+#speciesPanel.open { display: flex; }
+#spTitle    { display: flex; align-items: center; gap: 10px; font-size: 14px; color: #112211; }
+#speciesInfo{ flex: 1; font-size: 11px; color: #666659; }
+#spClose    { background: #dcdcd0; border: 1px solid #7f7f77; border-radius: 3px; font-size: 16px; line-height: 1; padding: 0 7px; cursor: pointer; }
+#speciesCanvas { flex: 1 1 auto; min-height: 0; width: 100%; background: #3a3f36; border-radius: 4px; }
+#spHint     { font-size: 11px; color: #666659; }
+#speciesMenu
+{
+    display:        none;
+    position:       fixed;
+    z-index:        1000;
+    flex-direction: column;
+    min-width:      210px;
+    background:     #eeeedd;
+    border:         1px solid #666659;
+    border-radius:  5px;
+    box-shadow:     0 3px 12px rgba( 0, 0, 0, 0.45 );
+    font-family:    Arial, sans-serif;
+    font-size:      13px;
+    overflow:       hidden;
+}
+#speciesMenu div    { padding: 6px 12px; background: #caccc2; color: #112211; font-weight: bold; }
+#speciesMenu button { text-align: left; padding: 7px 12px; border: 0; background: transparent; cursor: pointer; font-size: 13px; }
+#speciesMenu button:hover { background: #dcdcc0; }
+#speciesMenu button.danger { color: #a02020; }

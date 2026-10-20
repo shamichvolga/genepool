@@ -36,6 +36,7 @@ const RU: Record<string, string> =
     "world size (starts a new random pool)": "размер мира (запускает новый случайный бассейн)",
     "small": "малый", "normal": "обычный", "large": "большой", "huge": "огромный",
     "debug mode: change any number of the world while it runs": "режим отладки: менять любые числа мира на ходу",
+    "dominant species: who lives in the pool": "доминирующие виды: кто живёт в бассейне",
     "save the world": "сохранить мир",
     "Everything goes into one file: every swimbot and plant, diseases, climate, the clock. A loaded world goes on from the same step.":
         "Всё идёт в один файл: каждый свимбот и растение, болезни, климат, часы. Загруженный мир продолжится с того же шага.",

@@ -1,15 +1,14 @@
 //------------------------------------------------------------------------------
 // Does a saved world go on exactly as the world it was saved from?
 //
-//   A  saving changes nothing: a run that saves at step WARM and goes on to
-//      WARM+AFTER ends as a run that never saved (same hashes of every array).
+//   A  saving changes nothing: a run that saves at step WARM and goes on ends as
+//      a run that never saved (only with --control: it costs a second long run).
 //   B  loading is exact: another world (another seed, run a while) loads the
-//      file, goes on AFTER steps, and ends as run A.
+//      file; it and the world the file came from are then stepped side by side,
+//      and the hashes of every array are compared (every step at first, then
+//      every 25th). The first step and the first parts that differ are shown.
 //
-// When B fails, both worlds are stepped one by one after the load, and the
-// first step and the first parts (chunks) that differ are shown.
-//
-//   node tools/save-load-check.cjs --seed 1 --warm 3000 --after 500 [--set "NAME=value"]
+//   node tools/save-load-check.cjs --seed 1 --warm 3000 --after 400 [--control] [--set "NAME=value"]
 //------------------------------------------------------------------------------
 "use strict";
 const zlib = require( "zlib" );
@@ -23,60 +22,51 @@ function arg( name, fallback )
 const SEED  = parseInt( arg( "seed",  "1"   ), 10 );
 const WARM  = parseInt( arg( "warm",  "3000" ), 10 );
 const AFTER = parseInt( arg( "after", "500"  ), 10 );
+const CONTROL = process.argv.includes( "--control" );
 const overrides = {};
 for ( const kv of ( arg( "set", "" ) || "" ).split( "," ).filter( Boolean )) { const [ k, v ] = kv.split( "=" ); overrides[ k.trim() ] = v.trim(); }
 
 function steps( run, n ) { for ( let i = 0; i < n; i++ ) { run.genePool.update(); } }
 function diff( a, b ) { return Object.keys( a ).filter( k => a[ k ] !== b[ k ] ); }
-
 const t0 = Date.now();
 const log = ( m ) => console.log( "[" + ( ( Date.now() - t0 ) / 1000 ).toFixed( 0 ) + "s] " + m );
 
-// run 1: warm up, save, go on
+// the world the file comes from: warm up, save
 const run1 = createSimulation( SEED, overrides );
 steps( run1, WARM );
-const bytes = Buffer.from( run1.genePool.saveWorld() );          // (a copy: the sandbox owns the original)
+const bytes = Buffer.from( run1.genePool.saveWorld() );
 const hashSaved = run1.genePool.worldHashes();
-const gz = zlib.gzipSync( bytes );
-log( "saved at step " + run1.genePool.getTimeStep() + ": " + ( bytes.length / 1048576 ).toFixed( 1 ) + " MB, gzip " + ( gz.length / 1048576 ).toFixed( 1 ) + " MB, alive " + run1.genePool.getNumSwimbots() );
-const savedAgain = run1.genePool.worldHashes();
-const changedBySaving = diff( hashSaved, savedAgain );
-steps( run1, AFTER );
-const hashA = run1.genePool.worldHashes();
+log( "saved at step " + run1.genePool.getTimeStep() + ": " + ( bytes.length / 1048576 ).toFixed( 1 ) + " MB, gzip " + ( zlib.gzipSync( bytes ).length / 1048576 ).toFixed( 1 ) + " MB, alive " + run1.genePool.getNumSwimbots() );
+const changedBySaving = diff( hashSaved, run1.genePool.worldHashes() );
 
-// run 2: the same without saving
-const run2 = createSimulation( SEED, overrides );
-steps( run2, WARM + AFTER );
-const hashB = run2.genePool.worldHashes();
-const badA = diff( hashA, hashB );
-log( "A (saving changes nothing): " + ( badA.length === 0 && changedBySaving.length === 0 ? "OK" : "FAILED " + badA.concat( changedBySaving ).join( "," ) ) );
+// another world loads it
+const run3 = createSimulation( SEED + 100, overrides );
+steps( run3, 500 );
+const result = run3.genePool.loadWorld( new Uint8Array( bytes ));
+log( "load: " + JSON.stringify( result ));
+let ok = result.ok && result.mismatches.length === 0 && changedBySaving.length === 0;
 
-// run 3: another world, loads the file
-function loaded( seed )
+// side by side
+let first = null;
+for ( let i = 1; i <= AFTER && first === null; i++ )
 {
-    const run = createSimulation( seed, overrides );
-    steps( run, 500 );
-    const result = run.genePool.loadWorld( new Uint8Array( bytes ));
-    return { run, result };
-}
-const r3 = loaded( SEED + 100 );
-log( "load: " + JSON.stringify( r3.result ));
-steps( r3.run, AFTER );
-const hashC = r3.run.genePool.worldHashes();
-const badB = diff( hashA, hashC );
-log( "B (loading is exact): " + ( badB.length === 0 ? "OK" : "FAILED in " + badB.join( "," )));
-
-if ( badB.length > 0 )
-{
-    // find where they part: step both one by one
-    const r1 = createSimulation( SEED, overrides );
-    steps( r1, WARM );
-    const r4 = loaded( SEED + 200 );
-    for ( let i = 1; i <= Math.min( AFTER, 60 ); i++ )
+    run1.genePool.update(); run3.genePool.update();
+    if ( i <= 10 || i % 25 === 0 || i === AFTER )
     {
-        r1.genePool.update(); r4.run.genePool.update();
-        const d = diff( r1.genePool.worldHashes(), r4.run.genePool.worldHashes() );
-        if ( d.length > 0 ) { log( "first difference after " + i + " step(s), in: " + d.join( ", " )); break; }
+        const d = diff( run1.genePool.worldHashes(), run3.genePool.worldHashes() );
+        if ( d.length > 0 ) { first = { step: i, chunks: d }; }
     }
 }
-process.exit( badA.length === 0 && changedBySaving.length === 0 && badB.length === 0 ? 0 : 1 );
+if ( first ) { ok = false; log( "B FAILED: first difference at step " + first.step + " after the load, in: " + first.chunks.join( ", " )); }
+else { log( "B (loading is exact): " + ( ok ? "OK" : "load already differed" ) + ", compared up to " + AFTER + " steps" ); }
+
+if ( CONTROL )
+{
+    const hashA = run1.genePool.worldHashes();
+    const run2 = createSimulation( SEED, overrides );
+    steps( run2, WARM + AFTER );
+    const badA = diff( hashA, run2.genePool.worldHashes() );
+    log( "A (saving changes nothing): " + ( badA.length === 0 ? "OK" : "FAILED in " + badA.join( "," )));
+    if ( badA.length > 0 ) ok = false;
+}
+process.exit( ok ? 0 : 1 );
