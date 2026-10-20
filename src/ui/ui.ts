@@ -24,6 +24,8 @@ import { ViewTrackingMode } from "../simulation/ViewTracking";
 import { Graph } from "./graph";
 import { getInfoText } from "./info";
 import { _chosenPoolToLoad, _username, setChosenPoolToLoad } from "./saveLoad";
+import { decorateSwimbotCard, setupHints, translateHTML, translatePage } from "./lang";
+import { USER_SWIMBOTS } from "./userSwimbots";
 
 
 //--------------------------
@@ -51,6 +53,11 @@ export function initializeUI()
     initializeEcosystemUI();    
     
     _graph.initialize();     
+    setupUserSwimbots();
+    setupHints();
+    translatePage();
+    // a new language: the parts the code fills are filled again
+    window.addEventListener( "genepool:language", () => { _lastSwimbotPanelHTML = ""; _lastGraphDataHTML = ""; showRunning(); });
   
     //--------------------------------------------------
     // This starts an update loop that is called 
@@ -156,7 +163,6 @@ export function setEcosystemValue( id )
     if ( id === "foodGrowthDelaySlider"    ) { genePool.setFoodGrowthDelay     ( input.value ); }
     else if ( id === "foodSpreadSlider"         ) { genePool.setFoodSpread          ( input.value ); }
     else if ( id === "foodBitEnergySlider"      ) { genePool.setFoodBitEnergy       ( input.value ); }
-    else if ( id === "energyToOffspringSlider"  ) { genePool.setOffspringEnergyRatio( input.value ); }
     else if ( id === "maxAgeSlider"             ) { genePool.setMaximumSwimbotAge   ( input.value ); }
     updateEcosystemUI();
 }
@@ -182,8 +188,6 @@ export function initializeEcosystemUI()
     document.getElementById( 'foodSpreadSlider'         ).max = MAX_FOOD_BIT_MAX_SPAWN_RADIUS;
     document.getElementById( 'foodBitEnergySlider'      ).min = MIN_FOOD_BIT_ENERGY;
     document.getElementById( 'foodBitEnergySlider'      ).max = MAX_FOOD_BIT_ENERGY;
-    document.getElementById( 'energyToOffspringSlider'  ).min = MIN_CHILD_ENERGY_RATIO;
-    document.getElementById( 'energyToOffspringSlider'  ).max = MAX_CHILD_ENERGY_RATIO;
     document.getElementById( 'maxAgeSlider'             ).min = MIN_MAXIMUM_AGE;
     document.getElementById( 'maxAgeSlider'             ).max = MAX_MAXIMUM_AGE;
     updateEcosystemUI();
@@ -200,8 +204,6 @@ export function updateEcosystemUI()
         document.getElementById( "foodSpreadValue"          ).innerHTML = genePool.getFoodSpread();
         document.getElementById( "foodBitEnergySlider"      ).value     = genePool.getFoodBitEnergy();
         document.getElementById( "foodBitEnergyValue"       ).innerHTML = genePool.getFoodBitEnergy();
-        document.getElementById( "energyToOffspringSlider"  ).value     = genePool.getEnergyToOffspring();
-        document.getElementById( "energyToOffspringValue"   ).innerHTML = genePool.getEnergyToOffspring();
         document.getElementById( "maxAgeSlider"             ).value     = genePool.getMaximumSwimbotAge();
         document.getElementById( "maxAgeValue"              ).innerHTML = genePool.getMaximumSwimbotAge();
         let radioButtons = document.getElementsByName( 'attractionRadioButton' );
@@ -427,25 +429,26 @@ export function closeErrorPanel()
 //----------------------------------
 export function toggleSimulationRunning()
 {
-    if ( genePool.getSimulationRunning() )
-    {
-        genePool.setSimulationRunning( false );
-        document.getElementById( "freezeButton" ).style.borderColor = ACTIVE_BORDER_COLOR;
-        document.getElementById( "freezeButton" ).style.borderWidth = "3px";
-    }
-    else
-    {
-        genePool.setSimulationRunning( true );
-        document.getElementById( "freezeButton" ).style = "border-color: " + DEFAULT_BASIC_BUTTON_BORDER_COLOR;
-    }
+    genePool.setSimulationRunning( !genePool.getSimulationRunning() );
+    showRunning();
+}
+
+// the pause button: lit while paused (the speed buttons dim)
+function showRunning()
+{
+    const paused = !genePool.getSimulationRunning();
+    document.getElementById( "freezeButton" ).classList.toggle( "activeButton", paused );
+    document.getElementById( "viewOptionsPanel" ).classList.toggle( "paused", paused );
 }
 
 //----------------------------------------------------------
-// simulation speed buttons:  >  >>  >>>
+// simulation speed buttons:  >  >>  >>>  (they also end a pause)
 //----------------------------------------------------------
 export function setSpeed( level )
 {
     genePool.setSpeedLevel( level );
+    if ( !genePool.getSimulationRunning() ) { genePool.setSimulationRunning( true ); }
+    showRunning();
     for ( let l = 1; l <= 3; l++ )
     {
         document.getElementById( "speed" + l + "Button" ).classList.toggle( "activeButton", l === level );
@@ -617,6 +620,32 @@ export function switchToChosenPresetPool()
     setRendering( true );
 }
 
+//------------------------------------------------------------
+// the user's own swimbots (src/ui/userSwimbots.ts): one button each
+//------------------------------------------------------------
+function setupUserSwimbots()
+{
+    const panel = document.getElementById( "userSwimbotsPanel" );
+    if ( !panel ) return;
+    panel.innerHTML = USER_SWIMBOTS.map( ( b, i ) =>
+        "<button class='basicButton userSwimbotName' title='" + b.name + "' onClick='loadUserSwimbot(" + i + ")'>" + b.name + "</button>" ).join( "" );
+}
+
+export function loadUserSwimbot( i )
+{
+    genePool.createNewSwimbotWithGenes( USER_SWIMBOTS[i].genes.slice() );
+}
+
+//------------------------------------------------------------
+// the graph: which stretch of time it shows
+//------------------------------------------------------------
+export function setGraphRange( steps )
+{
+    _graph.setRange( steps );
+    document.querySelectorAll( "#graphRange .rangeButton" ).forEach( ( b: any ) => b.classList.toggle( "activeButton", Number( b.dataset.range ) === steps ));
+    _graph.render();
+}
+
 //--------------------------------
 export function loadSwimbotFromPreset(p)
 {
@@ -718,7 +747,10 @@ export function updateUI()
 
                 if (swimbotPanelHTML !== _lastSwimbotPanelHTML)
                 {
-                    document.getElementById('swimbotDataPanel').innerHTML = swimbotPanelHTML;
+                    const card = document.getElementById( 'swimbotDataPanel' );
+                    // (a pinned hint stays: the card is not rebuilt under the pointer while a "?" is held)
+                    card.innerHTML = swimbotPanelHTML;
+                    decorateSwimbotCard( card );
                     _lastSwimbotPanelHTML = swimbotPanelHTML;
                 }
             }
@@ -751,7 +783,7 @@ export function updateUI()
                 + "meat: " + genePool.getNumFoodBitsOfType(2);
             if (graphDataHTML !== _lastGraphDataHTML)
             {
-                document.getElementById( 'graphData' ).innerHTML = graphDataHTML;
+                document.getElementById( 'graphData' ).innerHTML = translateHTML( graphDataHTML );
                 _lastGraphDataHTML = graphDataHTML;
             }
             _graph.render();
@@ -787,14 +819,15 @@ function updateHud()
         + "<span class='hudPlant'>plants " + plants + "</span>"
         + (( genePool.getNumSick && genePool.getNumSick() > 0 ) ? " · <span style='color:#e6dc8c'>sick " + genePool.getNumSick() + "</span>" : "" );
 
+    const shown = translateHTML( html );
     const hud = document.getElementById( "hud" );
-    if ( hud && hud.innerHTML !== html ) { hud.innerHTML = html; }
+    if ( hud && hud.innerHTML !== shown ) { hud.innerHTML = shown; }
 
     // the same, big, while the drawing is off (so it is clear what goes on)
     if ( !genePool.getRendering() )
     {
         const stats = document.getElementById( "noRenderStats" );
-        if ( stats && stats.innerHTML !== html ) { stats.innerHTML = html; }
+        if ( stats && stats.innerHTML !== shown ) { stats.innerHTML = shown; }
     }
 }
 

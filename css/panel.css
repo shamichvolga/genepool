@@ -459,3 +459,119 @@ body.panelHidden #noRenderPanel { left: 50% !important; }
 }
 .energyFill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; }
 .energyMark { position: absolute; top: -1px; bottom: -1px; width: 2px; background: #33402e; }
+
+/* ======================================================================= */
+/* 20.10: language, hints, pause, presets, interactive graph               */
+/* ======================================================================= */
+#langButton
+{
+    margin-left:    auto;
+    height:         22px;
+    padding:        0 8px;
+    border:         1px solid var(--button-edge);
+    border-radius:  11px;
+    background:     var(--button);
+    color:          #556050;
+    font-size:      11px;
+    cursor:         pointer;
+}
+#langButton:hover { background: var(--button-hover); }
+#langButton b     { color: var(--title); }
+
+/* view: tracking buttons in 4 columns, then one row of controls */
+#viewTrackingPanel .basicButton { font-size: 10px; }
+#masterPanel #viewTrackingPanel, #masterPanel #viewOptionsPanel { height: auto !important; width: auto !important; }
+#masterPanel #viewPanel { background-color: var(--panel); }
+#viewOptionsPanel
+{
+    grid-template-columns:  34px 34px 40px 48px 1fr;
+}
+#viewGoalButton { grid-column: 1 / span 3; }
+#currentsButton { grid-column: 4 / span 2; }
+#masterPanel .iconButton  { font-size: 13px; }
+#masterPanel .speedButton { font-size: 9px; letter-spacing: -2px; }
+#viewOptionsPanel.paused .speedButton.activeButton { border-color: var(--button-edge); background-color: var(--button); }
+#viewOptionsPanel.paused #freezeButton { background: #ffdd55; border-color: #8a6d00; color: #4a3a00; }
+
+/* the "?" of a hint, in the top right corner of what it explains */
+#masterPanel .hintLabel { position: relative !important; padding-right: 13px; display: inline-block; }
+#masterPanel label[data-hint] { position: relative !important; padding-right: 13px; }
+#masterPanel .hintMark
+{
+    position:       absolute !important;
+    top:            -3px !important;
+    right:          0 !important;
+    left:           auto !important;
+    width:          11px;
+    height:         11px;
+    border-radius:  50%;
+    background:     #8f9a84;
+    color:          #fff;
+    font-size:      8px;
+    font-weight:    bold;
+    line-height:    11px;
+    text-align:     center;
+    cursor:         help;
+    user-select:    none;
+    opacity:        0.75;
+}
+.hintMark:hover, .hintMark:focus { opacity: 1; background: #33402e; outline: none; }
+#hintBubble
+{
+    position:       fixed;
+    z-index:        50;
+    display:        none;
+    padding:        8px 10px;
+    border-radius:  6px;
+    background:     #263022;
+    color:          #eef0e4;
+    font-family:    Arial, sans-serif;
+    font-size:      12px;
+    line-height:    1.4;
+    box-shadow:     0 4px 16px rgba( 0, 0, 0, 0.35 );
+    pointer-events: none;
+}
+#hintBubble.shown { display: block; }
+
+/* the user's swimbots */
+.gpSubheading { margin: -3px 0 6px 0; font-size: 11px; color: #6a6a60; }
+.gpSubheading a { color: var(--link); }
+#userSwimbotsPanel .basicButton { font-weight: normal; }
+
+/* graph */
+.graphTop { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 4px; }
+.graphTop .gpHeading { margin: 0; }
+#graphRange { display: flex; gap: 3px; }
+#masterPanel #graphRange .basicButton { width: auto; height: 22px; padding: 0 6px; font-size: 10px; }
+#graphBox { margin-bottom: 6px; }
+#graphCanvas
+{
+    aspect-ratio:   16 / 10;
+    background:     none;
+    margin-bottom:  2px;
+    cursor:         crosshair;
+}
+#graphLegend { display: flex; flex-wrap: wrap; gap: 2px 10px; font-size: 11px; }
+.legendItem { cursor: pointer; user-select: none; white-space: nowrap; }
+.legendItem i { display: inline-block; width: 14px; height: 3px; margin: 0 4px 3px 0; vertical-align: middle; border-radius: 2px; }
+.legendItem.off { opacity: 0.35; text-decoration: line-through; }
+#masterPanel #graphBox.big
+{
+    position:       fixed !important;
+    left:           16px !important;
+    top:            16px !important;
+    width:          calc( 100vw - 430px );
+    z-index:        25;
+    padding:        10px;
+    background:     rgba( 202, 204, 194, 0.96 );
+    border:         1px solid var(--panel-edge);
+    border-radius:  6px;
+    box-shadow:     0 6px 24px rgba( 0, 0, 0, 0.35 );
+}
+#masterPanel #graphBox.big #graphCanvas { aspect-ratio: auto; height: calc( 60vh ) !important; }
+body.panelHidden #masterPanel #graphBox.big { display: none; }
+
+/* footer: the authors */
+#contactPanel { line-height: 1.5; }
+.ecoRow label { justify-self: start; }
+#masterPanel #viewTrackingPanel .basicButton { white-space: normal; line-height: 1.05; height: 28px; overflow: hidden; }

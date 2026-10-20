@@ -52,58 +52,29 @@
             <header id = "panelHeader">
                 <span id = "mainTitle">Gene Pool</span>
                 <a id = "swimbots_url" href = "http://www.swimbots.com" target = "_blank">swimbots.com</a>
+                <button id = "langButton" onClick = "toggleLanguage();" title = "English / Русский"><b>EN</b> · RU</button>
             </header>
 
             <!-- camera and view -->
             <section id = "viewPanel" class = "gpBox">
-                <div class = "gpRow">
-                    <div id = "viewNavPanel">
-                        <button id = "upNav"    class = "navigationButton" title = "move up (W)"
-                            onmousedown  = "genePool.startCameraNavigation( CameraNavigationAction.UP    ); clearViewModeButtons();"
-                            onmouseup    = "genePool.stopCameraNavigation ( CameraNavigationAction.UP    );"
-                            onmouseleave = "genePool.stopCameraNavigation ( CameraNavigationAction.UP    );" ></button>
-                        <button id = "leftNav"  class = "navigationButton" title = "move left (A)"
-                            onmousedown  = "genePool.startCameraNavigation( CameraNavigationAction.LEFT  ); clearViewModeButtons();"
-                            onmouseup    = "genePool.stopCameraNavigation ( CameraNavigationAction.LEFT  );"
-                            onmouseleave = "genePool.stopCameraNavigation ( CameraNavigationAction.LEFT  );" ></button>
-                        <button id = "rightNav" class = "navigationButton" title = "move right (D)"
-                            onmousedown  = "genePool.startCameraNavigation( CameraNavigationAction.RIGHT ); clearViewModeButtons();"
-                            onmouseup    = "genePool.stopCameraNavigation ( CameraNavigationAction.RIGHT );"
-                            onmouseleave = "genePool.stopCameraNavigation ( CameraNavigationAction.RIGHT );" ></button>
-                        <button id = "downNav"  class = "navigationButton" title = "move down (S)"
-                            onmousedown  = "genePool.startCameraNavigation( CameraNavigationAction.DOWN  ); clearViewModeButtons();"
-                            onmouseup    = "genePool.stopCameraNavigation ( CameraNavigationAction.DOWN  );"
-                            onmouseleave = "genePool.stopCameraNavigation ( CameraNavigationAction.DOWN  );" ></button>
-                        <button id = "inNav"    class = "navigationButton" title = "zoom in (E, mouse wheel)"
-                            onmousedown  = "genePool.startCameraNavigation( CameraNavigationAction.IN    ); clearViewModeButtons();"
-                            onmouseup    = "genePool.stopCameraNavigation ( CameraNavigationAction.IN    );"
-                            onmouseleave = "genePool.stopCameraNavigation ( CameraNavigationAction.IN    );" ></button>
-                        <button id = "outNav"   class = "navigationButton" title = "zoom out (Q, mouse wheel)"
-                            onmousedown  = "genePool.startCameraNavigation( CameraNavigationAction.OUT   ); clearViewModeButtons();"
-                            onmouseup    = "genePool.stopCameraNavigation ( CameraNavigationAction.OUT   );"
-                            onmouseleave = "genePool.stopCameraNavigation ( CameraNavigationAction.OUT   );" ></button>
-                    </div>
-
-                    <div id = "viewTrackingPanel" class = "gpGrid2">
-                        <button id = "viewWholePoolButton" class = "basicButton" onmousedown = "setViewMode( id, ViewTrackingMode.WHOLE_POOL );" >whole pool</button>
-                        <button id = "viewAutoTrackButton" class = "basicButton" onmousedown = "setViewMode( id, ViewTrackingMode.AUTOTRACK  );" >autotracking</button>
-                        <button id = "viewSelectedButton"  class = "basicButton" onmousedown = "setViewMode( id, ViewTrackingMode.SELECTED   );" >selected</button>
-                        <button id = "viewMutualButton"    class = "basicButton" onmousedown = "setViewMode( id, ViewTrackingMode.MUTUAL     );" >mutual love</button>
-                        <button id = "viewProlificButton"  class = "basicButton" onmousedown = "setViewMode( id, ViewTrackingMode.PROLIFIC   );" >most prolific</button>
-                        <button id = "viewEfficientButton" class = "basicButton" onmousedown = "setViewMode( id, ViewTrackingMode.EFFICIENT  );" >most efficient</button>
-                        <button id = "viewVirginButton"    class = "basicButton" onmousedown = "setViewMode( id, ViewTrackingMode.VIRGIN     );" >oldest virgin</button>
-                        <button id = "viewGluttonButton"   class = "basicButton" onmousedown = "setViewMode( id, ViewTrackingMode.HUNGRY     );" >glutton</button>
-                    </div>
+                <div id = "viewTrackingPanel" class = "gpGrid4">
+                    <button id = "viewWholePoolButton" class = "basicButton" onmousedown = "setViewMode( id, ViewTrackingMode.WHOLE_POOL );" >whole pool</button>
+                    <button id = "viewAutoTrackButton" class = "basicButton" onmousedown = "setViewMode( id, ViewTrackingMode.AUTOTRACK  );" >autotracking</button>
+                    <button id = "viewSelectedButton"  class = "basicButton" onmousedown = "setViewMode( id, ViewTrackingMode.SELECTED   );" >selected</button>
+                    <button id = "viewMutualButton"    class = "basicButton" onmousedown = "setViewMode( id, ViewTrackingMode.MUTUAL     );" >mutual love</button>
+                    <button id = "viewProlificButton"  class = "basicButton" onmousedown = "setViewMode( id, ViewTrackingMode.PROLIFIC   );" >most prolific</button>
+                    <button id = "viewEfficientButton" class = "basicButton" onmousedown = "setViewMode( id, ViewTrackingMode.EFFICIENT  );" >most efficient</button>
+                    <button id = "viewVirginButton"    class = "basicButton" onmousedown = "setViewMode( id, ViewTrackingMode.VIRGIN     );" >oldest virgin</button>
+                    <button id = "viewGluttonButton"   class = "basicButton" onmousedown = "setViewMode( id, ViewTrackingMode.HUNGRY     );" >glutton</button>
                 </div>
-
                 <div id = "viewOptionsPanel">
+                    <button id = "freezeButton"   class = "basicButton iconButton" onClick = "toggleSimulationRunning();" title = "pause / go on (space)" >&#x23F8;&#xFE0E;</button>
+                    <button id = "speed1Button"   class = "basicButton speedButton activeButton" onClick = "setSpeed(1);" title = "normal speed (50 steps per second)" >&#x25B6;&#xFE0E;</button>
+                    <button id = "speed2Button"   class = "basicButton speedButton" onClick = "setSpeed(2);" title = "fast (250 steps per second)" >&#x25B6;&#xFE0E;&#x25B6;&#xFE0E;</button>
+                    <button id = "speed3Button"   class = "basicButton speedButton" onClick = "setSpeed(3);" title = "as fast as the computer can" >&#x25B6;&#xFE0E;&#x25B6;&#xFE0E;&#x25B6;&#xFE0E;</button>
+                    <button id = "noRenderButton" class = "basicButton" onClick = "toggleRendering();" title = "drawing off: faster" >rendering OFF</button>
                     <button id = "viewGoalButton" class = "basicButton" onClick = "toggleGoalOverlay();"       >mouth/genital</button>
                     <button id = "currentsButton" class = "basicButton" onClick = "toggleCurrents();" title = "water currents: big slow eddies carry swimbots and meat (C)" >currents</button>
-                    <button id = "freezeButton"   class = "basicButton" onClick = "toggleSimulationRunning();" >freeze</button>
-                    <button id = "noRenderButton" class = "basicButton" onClick = "toggleRendering();"         >rendering OFF</button>
-                    <button id = "speed1Button"   class = "basicButton speedButton activeButton" onClick = "setSpeed(1);" title = "normal speed (50 steps per second)" >&gt;</button>
-                    <button id = "speed2Button"   class = "basicButton speedButton" onClick = "setSpeed(2);" title = "fast (250 steps per second)" >&gt;&gt;</button>
-                    <button id = "speed3Button"   class = "basicButton speedButton" onClick = "setSpeed(3);" title = "as fast as the computer can" >&gt;&gt;&gt;</button>
                 </div>
             </section>
 
@@ -178,6 +149,9 @@
                             <button id = "presetSwimbot7Button" class = "basicButton" onClick = "loadSwimbotFromPreset(6);" >Dawkins</button>
                             <button id = "presetSwimbot8Button" class = "basicButton" onClick = "loadSwimbotFromPreset(7);" >Dennett</button>
                         </div>
+                        <div class = "gpHeading">your swimbots</div>
+                        <div class = "gpSubheading">bred by <a href = "https://t.me/Lionsmane96" target = "_blank">@Lionsmane96</a></div>
+                        <div id = "userSwimbotsPanel" class = "gpGrid2"></div>
                     </div>
 
                     <div id = "selectedSwimbotPanel">
@@ -202,33 +176,28 @@
                     <div class = "gpHeading">ecosystem</div>
 
                     <div class = "ecoRow">
-                        <label id = "foodGrowthDelayLabel" for = "foodGrowthDelaySlider">food growth delay</label>
+                        <label data-hint = "food growth delay" id = "foodGrowthDelayLabel" for = "foodGrowthDelaySlider">food growth delay</label>
                         <span  id = "foodGrowthDelayValue" class = "ecoValue">–</span>
                         <input id = "foodGrowthDelaySlider" class = "EcoSlider" type = "range" step = "1" autocomplete = "off" oninput = "setEcosystemValue( id )">
                     </div>
                     <div class = "ecoRow">
-                        <label id = "foodSpreadLabel" for = "foodSpreadSlider">food spread</label>
+                        <label data-hint = "food spread" id = "foodSpreadLabel" for = "foodSpreadSlider">food spread</label>
                         <span  id = "foodSpreadValue" class = "ecoValue">–</span>
                         <input id = "foodSpreadSlider" class = "EcoSlider" type = "range" step = "1" autocomplete = "off" oninput = "setEcosystemValue( id )">
                     </div>
                     <div class = "ecoRow">
-                        <label id = "foodBitEnergyLabel" for = "foodBitEnergySlider">food bit energy</label>
+                        <label data-hint = "food bit energy" id = "foodBitEnergyLabel" for = "foodBitEnergySlider">food bit energy</label>
                         <span  id = "foodBitEnergyValue" class = "ecoValue">–</span>
                         <input id = "foodBitEnergySlider" class = "EcoSlider" type = "range" step = "10" autocomplete = "off" oninput = "setEcosystemValue( id )">
                     </div>
                     <div class = "ecoRow">
-                        <label id = "energyToOffspringLabel" for = "energyToOffspringSlider">offspring energy ratio</label>
-                        <span  id = "energyToOffspringValue" class = "ecoValue">–</span>
-                        <input id = "energyToOffspringSlider" class = "EcoSlider" type = "range" step = "0.1" autocomplete = "off" oninput = "setEcosystemValue( id )">
-                    </div>
-                    <div class = "ecoRow">
-                        <label id = "maxAgeLabel" for = "maxAgeSlider">maximum age</label>
+                        <label data-hint = "maximum age" id = "maxAgeLabel" for = "maxAgeSlider">maximum age</label>
                         <span  id = "maxAgeValue" class = "ecoValue">–</span>
                         <input id = "maxAgeSlider" class = "EcoSlider" type = "range" step = "0.1" autocomplete = "off" oninput = "setEcosystemValue( id )">
                     </div>
                     <button id = "tweakDefaultButton" class = "basicButton wide" onClick = "setEcosystemToDefaults();" >reset to defaults</button>
 
-                    <div class = "gpNote">hunger threshold, mate choosiness, diet and temperature preference are inherited genes now: see the swimbot tab.</div>
+                    <div class = "gpNote">hunger threshold, mate choosiness, diet, temperature preference and the energy given to a child are inherited genes now: see the swimbot tab.</div>
 
                     <details id = "attractionDetails">
                     <summary class = "gpHeading" title = "who a swimbot swims towards; whether the partner accepts is decided by its own genes">experiment: one mate-approach rule for everybody</summary>
@@ -256,8 +225,19 @@
 
                 <!-- ============================== graph ============================== -->
                 <div id = "graphPanel" class = "menuPanel">
-                    <div id = "graphTitle" class = "gpHeading">population</div>
-                    <canvas id = "graphCanvas" width = "500" height = "500"></canvas>
+                    <div class = "graphTop">
+                        <div id = "graphTitle" class = "gpHeading">population</div>
+                        <div id = "graphRange">
+                            <button class = "basicButton rangeButton activeButton" data-range = "0"     onClick = "setGraphRange( 0 );"     >all</button>
+                            <button class = "basicButton rangeButton"              data-range = "50000" onClick = "setGraphRange( 50000 );" >last 50k</button>
+                            <button class = "basicButton rangeButton"              data-range = "10000" onClick = "setGraphRange( 10000 );" >last 10k</button>
+                            <button id = "graphBigButton" class = "basicButton" title = "big graph over the pool (or double-click the graph)" >&#x2922;</button>
+                        </div>
+                    </div>
+                    <div id = "graphBox">
+                        <canvas id = "graphCanvas"></canvas>
+                        <div id = "graphLegend"></div>
+                    </div>
                     <div id = "graphData">(no data)</div>
                     <div class = "gpHeading">whole population</div>
                     <div class = "gpGrid2">
@@ -280,7 +260,8 @@
             </section>
 
             <footer id = "contactPanel">
-                &copy; 2021 Jeffrey Ventrella &nbsp;·&nbsp; <a href = "http://www.ventrella.com" target = "_blank">Ventrella.com</a>
+                <div>original by <a href = "http://www.ventrella.com" target = "_blank">Jeffrey Ventrella</a> &copy; 2021 · <a href = "http://www.swimbots.com" target = "_blank">swimbots.com</a></div>
+                <div>modified by <a href = "https://t.me/Lionsmane96" target = "_blank">@Lionsmane96</a></div>
             </footer>
         </div>  <!--masterPanel-->
 

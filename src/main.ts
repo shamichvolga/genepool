@@ -31,6 +31,7 @@ import * as info     from "./ui/info";
 import * as logger   from "./ui/logger";
 import * as saveLoad from "./ui/saveLoad";
 import * as ui       from "./ui/ui";
+import * as lang     from "./ui/lang";
 
 import { CapsuleRenderer } from "./render/CapsuleRenderer";
 import { ParallelRunner } from "./parallel/ParallelRunner";
@@ -49,7 +50,7 @@ Object.assign( window,
     Brain, Camera, Embryology, FamilyTree, FoodBit, GenePoolModule, Genotype, Globals,
     MathConstants, Obstacle, Parameters, PhyloTree, Pool, Swimbot,
     SwimbotRenderer, SwimbotTypes, Touch, Utility, Vector2D, ViewTracking,
-    graph, info, logger, saveLoad, ui );
+    graph, info, logger, saveLoad, ui, lang );
 
 //------------------------------------------------------------------------------
 // prepare the UI: turn on the info panel and set it to the first page

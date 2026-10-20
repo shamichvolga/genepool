@@ -7,7 +7,7 @@
 import { TWO_PLANT_TYPES } from "../simulation/Ecology";
 import { BRAIN_STATE_FLEEING_PREDATOR, BRAIN_STATE_LOOKING_FOR_FOOD, BRAIN_STATE_LOOKING_FOR_MATE, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_FOOD, BRAIN_STATE_PURSUING_MATE, BRAIN_STATE_PURSUING_PREY, BRAIN_STATE_RESTING } from "../simulation/Brain";
 import { NULL_INDEX } from "../simulation/MathConstants";
-import { PREDATOR_LEVEL_THRESHOLD } from "../simulation/Parameters";
+import { CANNIBAL_GENE_THRESHOLD, PREDATOR_LEVEL_THRESHOLD, YOUNG_CANNIBALISM_ENABLED } from "../simulation/Parameters";
 
 //------------------------------------------------------------
 // a bar: energy of the selected swimbot, with its hunger threshold
@@ -117,12 +117,15 @@ export function buildSwimbotPanelHTML( genePool ): string
         "<table class='swimbotTable'>" +
         row( "goal",              goalDescription ) +
         row( "age",               genePool.getSwimbotAge(selectedSwimbot) ) +
-        row( "energy",            Math.floor(genePool.getSwimbotEnergy(selectedSwimbot)) + " / " + maxEnergy ) +
+        row( "energy",            Math.floor(genePool.getSwimbotEnergy(selectedSwimbot)) + " / " + Math.round( maxEnergy ) ) +
         row( "hunger threshold",  threshold + " (" + ratioPercent + "%)" ) +
         row( "segments",          swimbot.getNumParts() ) +
         row( "food eaten",        Math.floor(genePool.getSwimbotNumFoodBitsEaten(selectedSwimbot)) ) +
         row( "prey eaten",        swimbot.getNumPreyEaten() ) +
         row( "offspring",         Math.floor(genePool.getSwimbotNumOffspring(selectedSwimbot)) ) +
+        row( "gives a child",     Math.round( swimbot.getInvestment() * 100 ) + "% of its energy" ) +
+        ( YOUNG_CANNIBALISM_ENABLED ? row( "eats young", ( swimbot.getCannibalGene() >= CANNIBAL_GENE_THRESHOLD ? "yes (gene " : "no (gene " ) + swimbot.getCannibalGene().toFixed( 2 ) + ")" ) : "" ) +
+        ( swimbot.getIsSick() ? row( "sick", "yes" ) : "" ) +
         foodRows +
         row( "attracted to",      genePool.getSwimbotAttractionDescription(selectedSwimbot) ) +
         "</table>";

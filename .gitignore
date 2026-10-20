@@ -5,3 +5,4 @@ tools/prof/
 tools/results/
 node_modules/
 dist/
+runs/
