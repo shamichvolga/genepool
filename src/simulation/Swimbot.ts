@@ -32,6 +32,7 @@ import { DEFAULT_FOOD_BIT_ENERGY, FOOD_BIT_GRAB_RADIUS, FoodBit } from "./FoodBi
 import { Genotype } from "./Genotype";
 import { globalTweakers, gpRandom, simCounters } from "./Globals";
 import { NULL_INDEX, ONE, ONE_HALF, ONE_THIRD, PI_OVER_180, ZERO } from "./MathConstants";
+import { BIG_BODY_STOMACH_ENABLED, STOMACH_REFERENCE_MASS } from "./Parameters";
 import { AUTOTOMY_REGROW_DELAY, AUTOTOMY_DECOY_SPAN, PREY_BODY_ENERGY, ATTACK_COOLDOWN, ATTACK_SUCCESS_CHANCE, ENVIRONMENT_ATTACK_SUCCESS_CHANCE, BASAL_METABOLISM, DEFAULT_SWIMBOT_HUNGER_THRESHOLD, FOOD_TYPE_OFFSET, OLD_AGE_DURATION, PREDATION_ENERGY_TRANSFER, PREDATOR_FLEE_RADIUS, PREDATOR_LEVEL_THRESHOLD, PREY_SCAN_COOLDOWN, PREY_SCAN_RADIUS_GROWTH, PREY_SCAN_RADIUS_MAX_SCALE, RANDOM_MATING_CONTROL, SWIMBOT_MAX_ENERGY, SWIMBOT_SELECT_RADIUS_SCALAR, YOUNG_AGE_DURATION } from "./Parameters";
 import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
 import { SwimbotRenderer } from "./SwimbotRenderer";
@@ -1391,7 +1392,9 @@ _position.copyFrom( position );
         _M[ _m + SS.M_GRAB_RADIUS ]     = SIZE_SCALED_GRAB_ENABLED ? FOOD_BIT_GRAB_RADIUS * Math.pow( Math.max( 1, _phenotype.mass ) / 410, 0.25 ) : FOOD_BIT_GRAB_RADIUS;
         _M[ _m + SS.M_MAX_ENERGY ]      = MASS_SCALED_STOMACH_ENABLED
             ? Math.max( 60, SWIMBOT_MAX_ENERGY * Math.pow( _phenotype.mass / 410, 0.75 ))
-            : SWIMBOT_MAX_ENERGY;
+            : BIG_BODY_STOMACH_ENABLED
+                ? SWIMBOT_MAX_ENERGY * Math.max( 1, _phenotype.mass / STOMACH_REFERENCE_MASS )
+                : SWIMBOT_MAX_ENERGY;
         if ( _slot >= 0 ) { _shared.brainWeights.set( _genotype.getBrain(), _slot * BRAIN_SIZE ); }
 
         // the inherited hunger threshold (environment pool; classic pools: the setting)
@@ -1959,6 +1962,9 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	this.getIsTryingToHunt              = function() { return _M[ _m + SS.M_TRY_HUNT ] === 1;                                }
 	this.getNumPreyEaten                = function() { return _numPreyEaten;                                }
 	this.getPhenotypeMass               = function() { return _phenotype.mass;                              }
+	this.getFrequency                   = function() { return _B[ _b + SS.B_FREQUENCY ];                    }
+	this.getInvestment                  = function() { return _M[ _m + SS.M_INVEST ];                       }
+	this.getCannibalGene                = function() { return _M[ _m + SS.M_CANNIBAL_GENE ];                }
 	let _deathCause = "";
 	this.getIsSick = function() { return _M[ _m + SS.M_DISEASE ] > 0; }
 	this.getDeathCause                  = function() { return _deathCause; }
