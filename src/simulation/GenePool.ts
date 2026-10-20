@@ -1,6 +1,12 @@
 import { WORLD_AREA_FACTOR } from "./World";
 import { CARCASS_ENABLED, DISEASE_ENABLED, CANNIBAL_GENE_FOUNDER_MAX, PLANT_REGROW_CHANCE, PLANT_REGROW_DELAY } from "./Parameters";
-import { updateDiseases } from "./Disease";
+import { exportStrains, importStrains, updateDiseases } from "./Disease";
+import { Chunk, WORLD_FORMAT, layoutFingerprint, packWorld, unpackWorld } from "./WorldFile";
+import { PARAM_DEFAULTS, PARAM_LIST, changedParams, setParameter } from "./ParamStore";
+import { BRAIN_SIZE } from "./NeuralBrain";
+import { WORLD_SCALE } from "./World";
+import { MAX_PARTS } from "./SwimbotTypes";
+declare const __GENEPOOL_VERSION__: string;
 import { currentAt, currentDriftX, currentDriftY, currentStrength, randomPointInCurrent } from "./Currents";
 import { bindPlantGenes, inheritPlantGenes, plantMatureAge, plantOldAge, plantRotAge, plantSeedDistance } from "./PlantGenes";
 import { geneAverage, convertOldGenes, GENE_LAYOUT_VERSION, setTrait, gaussian, thermalWidthToGene, preyTargetScore, GENES_PREDATOR, GENES_THERMAL_OPTIMUM, GENES_THERMAL_WIDTH, GENES_DIGESTION, GENES_BRIGHTNESS, GENES_CHOOSINESS, GENES_HUNGER, GENES_AUTOTOMY_BITE, GENES_AUTOTOMY_THREAT, GENES_AUTOTOMY_AMOUNT, GENES_AUTOTOMY_WHICH, GENES_PERSISTENCE, GENES_INVESTMENT, GENES_SIZE_PICKINESS, GENES_DEFERENCE, GENES_RUDDER, GENES_WEAK_PREY, GENES_IMMUNE, GENES_CANNIBAL } from "./EcologyGenes";
@@ -15,7 +21,7 @@ import { BRIGHTNESS_FROM_GENES, Embryology } from "./Embryology";
 import { FamilyTree } from "./FamilyTree";
 import { DEFAULT_FOOD_BIT_ENERGY, DEFAULT_FOOD_BIT_MAX_SPAWN_RADIUS, FOOD_BIT_BOUNDARY_MARGIN, FOOD_BIT_GRAB_RADIUS, FOOD_BIT_SIZE, FOOD_BIT_SIZE_VIEW_SCALE, FOOD_OPACITY_INCREMENT, FoodBit, MAX_FOOD_BIT_ENERGY, MAX_FOOD_BIT_MAX_SPAWN_RADIUS, MIN_FOOD_BIT_ENERGY, MIN_FOOD_BIT_MAX_SPAWN_RADIUS } from "./FoodBit";
 import { Genotype, NUM_GENES, PRESET_GENOTYPE_DARWIN, PRESET_GENOTYPE_DENNETT, PRESET_GENOTYPE_MENDEL, PRESET_GENOTYPE_TURING, PRESET_GENOTYPE_WILSON } from "./Genotype";
-import { CameraNavigationAction, NUM_GENES_USED, SimulationStartMode, globalTweakers, gpRandom, resetSimulationCounters, simClock, simCounters } from "./Globals";
+import { CameraNavigationAction, NUM_GENES_USED, SimulationStartMode, getRandomState, globalTweakers, gpRandom, resetSimulationCounters, setRandomState, simClock, simCounters } from "./Globals";
 import { BYTE_SIZE, MILLISECONDS_PER_SECOND, NULL_INDEX, ONE, ONE_HALF, PI2, ZERO } from "./MathConstants";
 import { Obstacle } from "./Obstacle";
 import { BARRIER_EXPERIMENT, DEFAULT_CHILD_ENERGY_RATIO, DEFAULT_FOOD_REGENERATION_PERIOD, DEFAULT_GARDEN_OF_EDEN_RADIUS, DEFAULT_MAXIMUM_AGE, DEFAULT_SWIMBOT_HUNGER_THRESHOLD, FOOD_LOCAL_CAPACITY, FOOD_LOCAL_RADIUS, FOOD_RANDOM_SEED_CHANCE, FOOD_SPROUT_RATE, INITIAL_NUM_FOODBITS, INITIAL_NUM_SWIMBOTS, INITIAL_PREDATOR_FRACTION, LOCAL_PLANT_GROWTH, LOCAL_PLANT_SEED_RADIUS, MAX_CHILD_ENERGY_RATIO, MAX_FOODBITS, MAX_FOODBITS_PER_TYPE, MAX_FOOD_REGENERATION_PERIOD, MAX_MAXIMUM_AGE, MAX_SWIMBOTS, MAX_SWIMBOT_HUNGER_THRESHOLD, MEAT_DECAY_TIME, MIN_CHILD_ENERGY_RATIO, MIN_FOOD_REGENERATION_PERIOD, MIN_MAXIMUM_AGE, MIN_SWIMBOT_HUNGER_THRESHOLD, NON_REPRODUCING_JUNK_DNA_LIMIT, OBSTACLE_ENABLED, PREDATOR_LEVEL_THRESHOLD, PREY_MAX_MASS_RATIO, RANDOM_MATING_CONTROL, RENDER_SWIMBOT_AS_DOT, SWIMBOT_LEVEL_OF_DETAIL_DOT, SWIMBOT_LEVEL_OF_DETAIL_HIGH, SWIMBOT_LEVEL_OF_DETAIL_LOW, YOUNG_AGE_DURATION } from "./Parameters";
@@ -4614,6 +4620,221 @@ this.renderFoodBits = function( useGraphicsCard )
 
 
 	//----------------------------
+	//------------------------------------------------------------------------
+	// Saving and loading the whole world, to continue exactly where it was
+	// (docs/схема_сохранения_мира.md). saveWorld() returns the bytes of a
+	// .gpworld file (not compressed); loadWorld( bytes ) puts them back.
+	//------------------------------------------------------------------------
+	const WORLD_ARRAYS = [
+	    "bots", "parts", "partLength", "partWidth", "partMass", "partAngle", "partAmp", "partPhase", "partTurnAmp", "partTurnPhase", "partMoment", "partParent",
+	    "botX", "botY", "genitalX", "genitalY", "mouthX", "mouthY", "predator", "mass", "brightness", "energy", "scanRadius", "effWarm", "effCold", "preferred",
+	    "alive", "liveSwimbot", "liveFood", "eternal", "sensing", "brainState", "age", "colorR", "colorG", "colorB", "choosiness", "attraction",
+	    "imageR", "imageG", "imageB", "imageSize", "imageStrength", "preyValueWeight", "preyTravelWeight", "preyBaitBias",
+	    "foodX", "foodY", "foodType", "foodEnergy", "foodBorn", "plantGrowth", "plantSpread",
+	    "mind", "nnInputs", "nnHidden", "nnOutputs", "random",
+	    "seenCount", "seen", "seenFood", "seenPrey", "targetPreyDistance", "targetPreyReward", "targetPreySuccess", "targetPreyChase",
+	    "targetBaitPresent", "targetBaitDistance", "targetBaitReward", "seenThreat", "seenPredator", "seenMate", "socialX", "socialY",
+	];
+
+	this.saveWorld = function( withFamilyTree = true )
+	{
+	    const chunks: Chunk[] = [];
+	    for ( const name of WORLD_ARRAYS ) { chunks.push({ name, data: ( _st as any )[ name ].slice() }); }
+
+	    // the swimbots that need their objects: alive, and those that died last step (their body is still needed)
+	    const slots: number[] = [];
+	    for (let s = 0; s < MAX_SWIMBOTS; s++) { if (( _st.liveSwimbot[s] === 1 ) || _swimbotWasAlive[s] ) slots.push( s ); }
+	    const n = slots.length;
+	    const genes = new Uint8Array( n * NUM_GENES ), brain = new Float32Array( n * BRAIN_SIZE );
+	    const priv = new Float64Array( n * 12 ), origin = new Int8Array( n * MAX_PARTS );
+	    slots.forEach( ( s, i ) =>
+	    {
+	        const genotype = _swimbots[s].getGenotype();
+	        genes.set( genotype.getGenes(), i * NUM_GENES );
+	        brain.set( genotype.getBrain(), i * BRAIN_SIZE );
+	        _swimbots[s].getPrivateState( priv, i * 12 );
+	        _swimbots[s].getPhenotypeOrigins( origin, i * MAX_PARTS );
+	    });
+	    const wasAlive = new Uint8Array( MAX_SWIMBOTS );
+	    for (let s = 0; s < MAX_SWIMBOTS; s++) { wasAlive[s] = _swimbotWasAlive[s] ? 1 : 0; }
+	    const decoy = new Uint8Array( MAX_FOODBITS );
+	    for (let f = 0; f < MAX_FOODBITS; f++) { decoy[f] = _foodBits[f].getAutotomyDecoy() ? 1 : 0; }
+	    chunks.push({ name: "botSlots", data: Int32Array.from( slots ) }, { name: "botGenes", data: genes }, { name: "botBrain", data: brain },
+	                { name: "botPrivate", data: priv }, { name: "botOrigin", data: origin }, { name: "wasAlive", data: wasAlive }, { name: "foodDecoy", data: decoy });
+
+	    // the rest of the world
+	    const raw = environment.exportRaw();
+	    chunks.push({ name: "diseaseStrains", data: exportStrains() },
+	                { name: "envSoil", data: raw.soilNutrient }, { name: "envSoilAt", data: raw.nutrientUpdatedAt },
+	                { name: "envPlants0", data: raw.plantCount0 }, { name: "envPlants1", data: raw.plantCount1 },
+	                { name: "matingRecord", data: _matingRecord.slice() }, { name: "matingBrightness", data: _matingBrightnessDifference.slice() },
+	                { name: "matingChoosiness", data: _matingChoosinessMean.slice() });
+
+	    // (the random numbers among them: the state everything above went on from)
+	    chunks.push({ name: "poolScalars", data: Float64Array.from( [
+	        _clock, getRandomState(), _seedDebt, _nurseryDebt, _classicSeedDebt, _serial, _gardenOfEdenRadius, _currentSpeed, _numSick,
+	        _matingCount, _simulationRunning ? 1 : 0, this.startMode ] ) });
+
+	    // every counter in one row (some are lists)
+	    const counterNames = Object.keys( simCounters ), counterValues: number[] = [], counterSizes: number[] = [];
+	    for ( const key of counterNames )
+	    {
+	        const value = ( simCounters as any )[ key ];
+	        const list = Array.isArray( value ) ? value : [ value ];
+	        counterSizes.push( Array.isArray( value ) ? list.length : -1 );
+	        for ( const x of list ) { counterValues.push( x ); }
+	    }
+	    chunks.push({ name: "counters", data: Float64Array.from( counterValues ) });
+
+	    let tree: any = null;
+	    if ( withFamilyTree )
+	    {
+	        tree = _familyTree.exportState();
+	        chunks.push({ name: "familyCols", data: tree.cols }, { name: "familyGenes", data: tree.genes });
+	    }
+
+	    const header: any =
+	    {
+	        code: ( typeof __GENEPOOL_VERSION__ !== "undefined" ) ? __GENEPOOL_VERSION__ : "headless", created: new Date().toISOString(),
+	        worldScale: WORLD_SCALE, clock: _clock, numAlive: slots.length,
+	        params: changedParams(), tweakers: { ...globalTweakers },
+	        counterNames, counterSizes,
+	        history: { interval: _history.interval, step: _history.step, herbivores: _history.herbivores, predators: _history.predators, plants: _history.plants, meat: _history.meat },
+	        environment: environment.getState(),
+	        gardens: _gardens.map( g => ({ x: g.x, y: g.y, type: g.type })),
+	        roots: _roots.map( r => ({ ...r })),
+	        obstacle: { x1: _obstacle.getEnd1Position().x, y1: _obstacle.getEnd1Position().y, x2: _obstacle.getEnd2Position().x, y2: _obstacle.getEnd2Position().y, enabled: _obstacle.getEnabled() },
+	        camera: { x: _camera.getPosition().x, y: _camera.getPosition().y, scale: _camera.getScale() },
+	        familyTree: tree ? { n: tree.n, length: tree.length, traits: tree.traits } : null,
+	    };
+	    return packWorld( header, chunks );
+	}
+
+	// the hashes of the parts of the world (to compare two worlds, and to check a load)
+	this.worldHashes = function()
+	{
+	    const header = unpackWorld( this.saveWorld( false )).header;
+	    const out: any = {};
+	    for ( const c of header.chunks ) { out[ c.name ] = c.hash; }
+	    return out;
+	}
+
+	this.loadWorld = function( bytes )
+	{
+	    let file;
+	    try { file = unpackWorld( bytes ); } catch ( e ) { return { ok: false, reason: "bad file: " + e.message }; }
+	    const header = file.header;
+	    if ( header.format !== WORLD_FORMAT ) { return { ok: false, reason: "format " + header.format + " is not " + WORLD_FORMAT }; }
+	    const mine: any = layoutFingerprint();
+	    if ( header.layout.WORLD_SCALE !== mine.WORLD_SCALE ) { return { ok: false, reason: "world size", needWorld: header.layout.WORLD_SCALE }; }
+	    for ( const key in mine )
+	    {
+	        if ( header.layout[ key ] !== mine[ key ] ) { return { ok: false, reason: "the code has other sizes now (" + key + "): load softly" }; }
+	    }
+
+	    // 1. the clock of the frames: no catching up after the load
+	    _stepDebt = 0; _lastFrameTime = 0;
+
+	    // 2. the changed numbers (the threads take them at the next phase); everything else as the code has it
+	    for ( const p of PARAM_LIST ) { setParameter( p.name, ( header.params && ( p.name in header.params )) ? header.params[ p.name ] : PARAM_DEFAULTS[ p.name ] ); }
+
+	    // 3. the settings (they go over all food and all swimbots: before the arrays are copied)
+	    const t = header.tweakers;
+	    this.setFoodGrowthDelay( t.foodRegenerationPeriod );
+	    this.setFoodSpread( t.foodSpread );
+	    this.setFoodBitEnergy( t.foodBitEnergy );
+	    this.setHungerThreshold( t.hungerThreshold );
+	    this.setAttraction( t.attractionCriterion );
+	    this.setOffspringEnergyRatio( t.childEnergyRatio );
+	    this.setMaximumSwimbotAge( t.maximumLifeSpan );
+	    globalTweakers.numFoodTypes = t.numFoodTypes;
+
+	    // 4. the map of the environment, then what changes in it
+	    const scalars = file.get( "poolScalars" );
+	    _clock = scalars[0]; simClock.step = _clock;
+	    environment.setState( header.environment );
+	    environment.importRaw({ time: _clock, soilNutrient: file.get( "envSoil" ), nutrientUpdatedAt: file.get( "envSoilAt" ),
+	                            plantCount0: file.get( "envPlants0" ), plantCount1: file.get( "envPlants1" ) });
+	    if ( environment.active ) { environment.copyBackgroundTo( _st.background ); }
+	    try { _environmentImage = environment.active ? environment.makeImage() : null; _pool.setBackgroundImage( _environmentImage ); } catch ( e ) { _environmentImage = null; }
+
+	    // 5. clear everything (dying counts and writes to the family tree: set right below)
+	    for (let f = 0; f < MAX_FOODBITS; f++) { _foodBits[f].kill(); }
+	    for (let s = 0; s < MAX_SWIMBOTS; s++) { _swimbots[s].die(); }
+	    _familyTree.reset();
+	    importStrains( file.get( "diseaseStrains" ));
+
+	    // 6. the objects: swimbots (grown from their genes, put back as autotomy left them), food
+	    const slots = file.get( "botSlots" ), genes = file.get( "botGenes" ), brains = file.get( "botBrain" );
+	    const priv = file.get( "botPrivate" ), origin = file.get( "botOrigin" );
+	    const place = new Vector2D();
+	    for (let i = 0; i < slots.length; i++)
+	    {
+	        const s = slots[i];
+	        _myGenotype.setGenes( Array.from( genes.subarray( i * NUM_GENES, ( i + 1 ) * NUM_GENES )) );
+	        _myGenotype.setBrain( brains.subarray( i * BRAIN_SIZE, ( i + 1 ) * BRAIN_SIZE ));
+	        _swimbots[s].create( s, 0, place, 0, 0, _myGenotype, _embryology );
+	        _swimbots[s].restorePhenotypeOrder( origin, i * MAX_PARTS );
+	        _swimbots[s].setPrivateState( priv, i * 12 );
+	    }
+	    const liveFood = file.get( "liveFood" ), decoy = file.get( "foodDecoy" );
+	    for (let f = 0; f < MAX_FOODBITS; f++)
+	    {
+	        if ( liveFood[f] !== 1 ) continue;
+	        _foodBits[f].initialize( f );
+	        _foodBits[f].setAutotomyDecoy( decoy[f] === 1 );
+	    }
+
+	    // 7. the numbers of the shared arrays, over everything the objects wrote (the arrays themselves stay: the threads hold them)
+	    for ( const name of WORLD_ARRAYS ) { ( _st as any )[ name ].set( file.get( name )); }
+	    for (let f = 0; f < MAX_FOODBITS; f++) { if ( liveFood[f] === 1 ) { _foodBits[f].setColorAccordingToType(); } }
+
+	    // 8. the rest of the pool
+	    const wasAlive = file.get( "wasAlive" );
+	    for (let s = 0; s < MAX_SWIMBOTS; s++) { _swimbotWasAlive[s] = wasAlive[s] === 1; }
+	    _seedDebt = scalars[2]; _nurseryDebt = scalars[3]; _classicSeedDebt = scalars[4]; _serial = scalars[5];
+	    _gardenOfEdenRadius = scalars[6]; _currentSpeed = scalars[7]; _numSick = scalars[8]; _matingCount = scalars[9];
+	    _simulationRunning = scalars[10] === 1; this.startMode = scalars[11];
+	    _matingRecord.set( file.get( "matingRecord" )); _matingBrightnessDifference.set( file.get( "matingBrightness" )); _matingChoosinessMean.set( file.get( "matingChoosiness" ));
+	    _gardens = header.gardens.map( g => ({ x: g.x, y: g.y, type: g.type }));
+	    _roots.length = 0;
+	    for ( const r of header.roots ) { _roots.push({ ...r }); }
+	    const h = header.history;
+	    _history.interval = h.interval;
+	    _history.step = h.step.slice(); _history.herbivores = h.herbivores.slice(); _history.predators = h.predators.slice(); _history.plants = h.plants.slice(); _history.meat = h.meat.slice();
+	    const end1 = new Vector2D(), end2 = new Vector2D();
+	    end1.setXY( header.obstacle.x1, header.obstacle.y1 ); end2.setXY( header.obstacle.x2, header.obstacle.y2 );
+	    _obstacle.setEndpointPositions( end1, end2 );
+	    _obstacle.setEnabled( header.obstacle.enabled );
+	    const cameraAt = new Vector2D(); cameraAt.setXY( header.camera.x, header.camera.y );
+	    _camera.setPosition( cameraAt );
+	    _camera.setScale( header.camera.scale );
+	    setSelectedSwimbot( NULL_INDEX );
+	    _viewTracking.reset();
+	    if ( header.familyTree && file.has( "familyCols" ))
+	    {
+	        _familyTree.importState({ ...header.familyTree, cols: file.get( "familyCols" ), genes: file.get( "familyGenes" ) });
+	    }
+
+	    // 9. the counters after everything that counted (die, create...), the caches, the random numbers last
+	    const counterValues = file.get( "counters" );
+	    let at = 0;
+	    header.counterNames.forEach( ( key, i ) =>
+	    {
+	        if ( header.counterSizes[i] < 0 ) { ( simCounters as any )[ key ] = counterValues[ at ++ ]; }
+	        else { for (let k = 0; k < header.counterSizes[i]; k++) { ( simCounters as any )[ key ][k] = counterValues[ at ++ ]; } }
+	    });
+	    this.writePerceptionParams();
+	    rebuildAliveIndexCaches();
+	    _numSwimbots = _aliveSwimbotIndices.length; _numFoodBits = _aliveFoodBitIndices.length;
+	    setRandomState( scalars[1] );
+
+	    // 10. is it the same world? (the parts of the file against the parts now)
+	    const now = this.worldHashes(), mismatches = [];
+	    for ( const c of header.chunks ) { if ( c.name in now && now[ c.name ] !== c.hash ) mismatches.push( c.name ); }
+	    return { ok: true, mismatches, code: header.code, clock: _clock };
+	}
+
 	this.getPoolData = function()
 	{
 	    //-----------------------------
