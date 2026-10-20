@@ -1073,6 +1073,7 @@ this.setParent = function( parent )
 	//-----------------------------------------------------------------------------------
 	this.create = function( index, age, position, angle, energy, genotype, embryology )
 	{
+	    _deathCause = "";      // (set again by die(); a newborn must not carry the last life of its slot)
 	    // (healthy, and with no immunity: DISEASE_ENABLED)
 	    _M[ _m + SS.M_DISEASE ] = 0; _M[ _m + SS.M_DISEASE_TIMER ] = 0;
 	    for (let k = 0; k < SS.NUM_IMMUNE_MEMORY; k++) { _M[ _m + SS.M_IMMUNE_MEMORY + k ] = 0; }
