@@ -20,6 +20,7 @@ import { petriSettings } from "./simulation/Petri";
 import { startRunRecorder } from "./RunRecorder";
 import { SimulationStartMode } from "./simulation/Globals";
 import { WORLD_SCALE } from "./simulation/World";
+import { setParameter } from "./simulation/ParamStore";
 
 const SNAPSHOT_PERIOD_MS = 250;
 const TICK_MS            = 20;     // background ticks when no screen refresh comes
@@ -100,6 +101,7 @@ function snapshotAfterCall()
 //------------------------------------------------------------
 function init( message )
 {
+    for ( const name in ( message.params || {} )) { setParameter( name, message.params[ name ] ); }   // (debug mode: the last settings)
     offscreen   = message.canvas;
     glOffscreen = message.glCanvas;
     offscreen.width  = glOffscreen.width  = message.width;
@@ -180,6 +182,10 @@ self.onmessage = ( e: MessageEvent ) =>
     else if ( m.type === "visibility" )
     {
         hidden = m.hidden;
+    }
+    else if ( m.type === "params" )
+    {
+        for ( const name in m.values ) { setParameter( name, m.values[ name ] ); }
     }
     else if ( m.type === "petri" )
     {

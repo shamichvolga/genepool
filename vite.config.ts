@@ -59,6 +59,50 @@ const keepTheWorldRunning: Plugin =
     },
 };
 
+// Debug mode (src/ui/debug.ts): the numbers of src/simulation/Parameters.ts can
+// be changed while the world runs. The file stays a plain list of constants for
+// the tools and for typescript; here (when the page is built) the numeric and
+// boolean ones become `let` (other modules see the change through the live
+// import), the numeric lists are changed in place, and the file gets
+//   __PARAMS    : name, value, kind, note
+//   __setParam  : name, value -> true
+const liveParameters: Plugin =
+{
+    name: "genepool-live-parameters",
+    enforce: "pre",
+    transform( code, id )
+    {
+        if ( !/simulation[\/]Parameters\.ts$/.test( id.split( "?" )[0] )) return null;
+
+        const params: { name: string, kind: string, note: string }[] = [];
+        const lines   = code.split( "\n" );
+        const literal = /^export const (\w+)(\s*:\s*[\w\[\]]+)?\s*=\s*(-?\d+(?:\.\d+)?(?:e[+-]?\d+)?|true|false|\[\s*-?[\d.\s,e+-]*\])\s*;(.*)$/;
+        let notes: string[] = [];
+        for (let i = 0; i < lines.length; i++)
+        {
+            const line = lines[i].trim();
+            if ( line.startsWith( "//" )) { notes.push( line.replace( /^\/\/+\s?/, "" )); continue; }
+            const m = literal.exec( lines[i] );
+            if ( m )
+            {
+                const kind = ( m[3] === "true" || m[3] === "false" ) ? "boolean" : m[3].startsWith( "[" ) ? "array" : "number";
+                let note = m[4].replace( /^\s*\/\/+\s?/, "" ).trim();
+                if ( note === "" ) { note = notes.join( " " ); }
+                params.push({ name: m[1], kind, note: note.slice( 0, 400 ) });
+                if ( kind !== "array" ) { lines[i] = lines[i].replace( "export const", "export let" ); }
+            }
+            notes = [];
+        }
+
+        const setters = params.map( p => p.kind === "array"
+            ? `case "${p.name}": ${p.name}.splice( 0, ${p.name}.length, ...v ); return true;`
+            : `case "${p.name}": ${p.name} = v; return true;` ).join( "\n        " );
+        const list = params.map( p => `{ name: "${p.name}", kind: "${p.kind}", value: ${p.name}, note: ${JSON.stringify( p.note )} }` ).join( ",\n    " );
+        const tail = `\n\nexport const __PARAMS = [\n    ${list}\n];\nexport function __setParam( name, v )\n{\n    switch ( name )\n    {\n        ${setters}\n    }\n    return false;\n}\n`;
+        return { code: lines.join( "\n" ) + tail, map: null };
+    },
+};
+
 // Cross-origin isolation headers: needed later for SharedArrayBuffer
 // (several worker threads sharing the simulation's memory).
 const isolationHeaders =
@@ -70,7 +114,7 @@ const isolationHeaders =
 export default defineConfig( ({ command }) => (
 {
     base: "./",
-    plugins: [ keepTheWorldRunning, runRecorderServer ],
+    plugins: [ liveParameters, keepTheWorldRunning, runRecorderServer ],
     define:  { __GENEPOOL_VERSION__: JSON.stringify( codeVersion( command === "serve" )) },
     // the simulation thread starts its own worker threads: module workers
     worker:  { format: "es" },

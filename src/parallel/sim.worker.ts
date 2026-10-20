@@ -10,11 +10,13 @@ import { SharedState } from "../simulation/SharedState";
 import { PerceptionScratch } from "../simulation/PerceptionKernel";
 import { MAX_FOODBITS } from "../simulation/Parameters";
 import { bindPlantGenes } from "../simulation/PlantGenes";
+import { attachParamBuffers, syncParams } from "../simulation/ParamStore";
 import { CTRL_DONE, CTRL_GENERATION, CTRL_TASK, workOnList } from "./ParallelWork";
 
 self.onmessage = ( e: MessageEvent ) =>
 {
-    const { buffers, maxSwimbots, control: controlBuffer, list: listBuffer, thread } = e.data;
+    const { buffers, maxSwimbots, control: controlBuffer, list: listBuffer, thread, params } = e.data;
+    if ( params ) { attachParamBuffers( params ); }
     const st      = new SharedState( maxSwimbots, buffers );
     bindPlantGenes( st );     // (the sieve reads plant ages: FILTER_FEEDING_ENABLED)
     const scratch = new PerceptionScratch( maxSwimbots, MAX_FOODBITS );
@@ -29,6 +31,7 @@ self.onmessage = ( e: MessageEvent ) =>
     {
         Atomics.wait( control, CTRL_GENERATION, generation );       // sleep until the next phase
         generation = Atomics.load( control, CTRL_GENERATION );
+        syncParams();
 
         workOnList( Atomics.load( control, CTRL_TASK ), st, scratch, control, list, thread );
         Atomics.add( control, CTRL_DONE, 1 );

@@ -924,7 +924,7 @@ export function togglePanel()
 //----------------------
 export function resize()
 {
-    let rightMargin = document.body.classList.contains( "panelHidden" ) ? 0 : 400;
+    let rightMargin = ( document.body.classList.contains( "panelHidden" ) || document.body.classList.contains( "panelFloating" )) ? 0 : 400;   // (a panel moved off the edge floats over the pool)
     let width  = Math.max( 1, Math.floor( window.innerWidth  - rightMargin ));   // (a narrow window: at least 1)
     let height = Math.max( 1, Math.floor( window.innerHeight - 15 ));
     canvasID.style.width  = width  + "px";

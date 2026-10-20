@@ -32,6 +32,9 @@ import * as logger   from "./ui/logger";
 import * as saveLoad from "./ui/saveLoad";
 import * as ui       from "./ui/ui";
 import * as lang     from "./ui/lang";
+import * as debug    from "./ui/debug";
+import { initializeLayout } from "./ui/layout";
+import { setParameter } from "./simulation/ParamStore";
 
 import { CapsuleRenderer } from "./render/CapsuleRenderer";
 import { ParallelRunner } from "./parallel/ParallelRunner";
@@ -50,7 +53,7 @@ Object.assign( window,
     Brain, Camera, Embryology, FamilyTree, FoodBit, GenePoolModule, Genotype, Globals,
     MathConstants, Obstacle, Parameters, PhyloTree, Pool, Swimbot,
     SwimbotRenderer, SwimbotTypes, Touch, Utility, Vector2D, ViewTracking,
-    graph, info, logger, saveLoad, ui, lang );
+    graph, info, logger, saveLoad, ui, lang, debug );
 
 //------------------------------------------------------------------------------
 // prepare the UI: turn on the info panel and set it to the first page
@@ -83,6 +86,8 @@ resizeAll();
 ui.openPanel( "menuInfoButton" );
 ui.setInfoPage( 2 );
 ui.initializeUI();
+initializeLayout();
+debug.initializeDebug();
 
 window.addEventListener( "resize", resizeAll );
 
@@ -177,10 +182,17 @@ function startGenePoolThread()
     worker.onerror = ( e ) => console.error( "simulation thread failed:", e.message );
 
     const width  = canvasID.width, height = canvasID.height;
+    const saved  = debug.savedParameters();
+    for ( const name in saved ) { setParameter( name, saved[ name ] ); }
+    ( window as any ).setSimulationParameters = ( values ) =>
+    {
+        for ( const name in values ) { setParameter( name, values[ name ] ); }
+        worker.postMessage({ type: "params", values });
+    };
     const canvas2D = ( canvasID as any ).transferControlToOffscreen();
     const canvasGL = ( glCanvas as any ).transferControlToOffscreen();
     const numWorkers = Math.max( 1, Math.min( 7, ( navigator.hardwareConcurrency || 2 ) - 1 ));
-    worker.postMessage({ type: "init", canvas: canvas2D, glCanvas: canvasGL, width, height, numWorkers,
+    worker.postMessage({ type: "init", canvas: canvas2D, glCanvas: canvasGL, width, height, numWorkers, params: saved,
                          petri: { zones: petriSettings.zones, layout: petriSettings.layout, softness: petriSettings.softness }},
                        [ canvas2D, canvasGL ] );
 
@@ -196,6 +208,10 @@ function startGenePoolThread()
 function startGenePool()
 {
     if ( SIM_IN_THREAD ) { startGenePoolThread(); return; }
+
+    const saved = debug.savedParameters();
+    for ( const name in saved ) { setParameter( name, saved[ name ] ); }
+    ( window as any ).setSimulationParameters = ( values ) => { for ( const name in values ) { setParameter( name, values[ name ] ); } };
 
     const pool = new GenePoolModule.GenePool();
     ( window as any ).genePool = pool;
