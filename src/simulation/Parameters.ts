@@ -80,6 +80,8 @@ export const AUTOTOMY_DECOY_SPAN           = 0.8;    // genes 0..1 -> drop when 
 // Когда добыча найдена, радиус замирает на PREY_SCAN_COOLDOWN шагов,
 // а когда хищник сыт — плавно возвращается к обычному.
 export const PREY_SCAN_RADIUS_MAX_SCALE    = 2.5;
+// how many times farther a predator sees its prey than a herbivore sees (the resting radius and the radar maximum both)
+export const PREDATOR_VISION_SCALE        = 3.0;
 export const PREY_SCAN_RADIUS_GROWTH       = 10.0;
 export const PREY_SCAN_COOLDOWN            = 50;
 

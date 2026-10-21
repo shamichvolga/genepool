@@ -35,7 +35,7 @@ import { BRAIN_SIZE, NUM_HIDDEN, NUM_INPUTS, NUM_OUTPUTS, DRIVE_OUTPUTS, THINK_P
          think, sigmoid } from "./NeuralBrain";
 import { CANNIBAL_GENE_THRESHOLD, KIN_NOT_EATEN_ENABLED, ONLY_GROWN_EAT_YOUNG_ENABLED, EVENT_DRIVEN_LOOK_ENABLED, EVENT_CALM_LOOK_PERIOD, EVENT_CALM_MIN_DISTANCE, DESPERATE_CANNIBALISM_ENABLED, DESPERATE_ENERGY_SHARE, CANNIBAL_PREY_MASS_SHARE, DESPERATE_PREY_MASS_SHARE, LIMBS_CATCH_YOUNG_ENABLED, YOUNG_CANNIBALISM_ENABLED, BITE_AT_CONTACT_ENABLED, CONTACT_EATING_ENABLED, AUTOTOMY_DECOY_SPAN, CLIMATE_PROBE_DISTANCE, CLIMATE_STEERING, SOCIAL_STEERING, BODY_TEMPERATURE_INERTIA_ENABLED, SELF_CANNIBALISM_ENABLED,
          PREDATOR_TARGET_SELECTION_ENABLED, PREDATOR_FLEE_RADIUS, PREDATOR_LEVEL_THRESHOLD, PREY_SCAN_COOLDOWN, PREY_SCAN_RADIUS_GROWTH,
-         PREY_SCAN_RADIUS_MAX_SCALE, SWIMBOT_MAX_ENERGY, BITE_ALONG_PARTS_ENABLED } from "./Parameters";
+         PREY_SCAN_RADIUS_MAX_SCALE, PREDATOR_VISION_SCALE, SWIMBOT_MAX_ENERGY, BITE_ALONG_PARTS_ENABLED } from "./Parameters";
 import { thermalFit, EMERGENCY_PROBE_DISTANCE, EMERGENCY_THERMAL_FIT, KINESIS_MAX_TURN, KINESIS_PERIOD, KINESIS_TURN_CHANCE,
          SEARCH_IMAGE_FORGETTING, THERMAL_FIT_UPDATE_PERIOD, THERMAL_MISMATCH_DRAIN, THERMOMELANISM } from "./Ecology";
 import { advanceBodyTemperature } from "./ThermalPhysics";
@@ -735,6 +735,7 @@ export function prepareLook( st: SharedState, s: number ): void
     {
         // scan radius: a hunting predator looks farther and farther
         const state = M[ m + SS.M_STATE ];
+        const reach = isPredator( st, s ) ? PREDATOR_VISION_SCALE : 1;      // a predator sees its prey this many times farther
         const hunting = isPredator( st, s ) && (( state === BRAIN_STATE_LOOKING_FOR_PREY ) || ( state === BRAIN_STATE_PURSUING_PREY ));
         if ( M[ m + SS.M_SCAN_CD ] > 0 )
         {
@@ -742,11 +743,11 @@ export function prepareLook( st: SharedState, s: number ): void
         }
         else if ( hunting && ( state === BRAIN_STATE_LOOKING_FOR_PREY ))
         {
-            M[ m + SS.M_SCAN_RADIUS ] = Math.min( M[ m + SS.M_SCAN_RADIUS ] + PREY_SCAN_RADIUS_GROWTH, M[ m + SS.M_VIEW_RADIUS ] * PREY_SCAN_RADIUS_MAX_SCALE );
+            M[ m + SS.M_SCAN_RADIUS ] = Math.min( M[ m + SS.M_SCAN_RADIUS ] + PREY_SCAN_RADIUS_GROWTH, M[ m + SS.M_VIEW_RADIUS ] * reach * PREY_SCAN_RADIUS_MAX_SCALE );
         }
         else if ( !hunting )
         {
-            M[ m + SS.M_SCAN_RADIUS ] = Math.max( M[ m + SS.M_SCAN_RADIUS ] - PREY_SCAN_RADIUS_GROWTH, M[ m + SS.M_VIEW_RADIUS ] );
+            M[ m + SS.M_SCAN_RADIUS ] = Math.max( M[ m + SS.M_SCAN_RADIUS ] - PREY_SCAN_RADIUS_GROWTH, M[ m + SS.M_VIEW_RADIUS ] * reach );
         }
         st.sensing[s] = 1;
     }
