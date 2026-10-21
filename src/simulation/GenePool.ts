@@ -858,7 +858,11 @@ if ( mode === SimulationStartMode.SPECIES )
                 }
                 else
                 {
-                    const garden = _gardens[ i % _gardens.length ];
+                    // one pile (garden) for each size of body: small, medium, and the
+                    // biggest (13 to 16 parts, the root counted); the body is already
+                    // known from the genes, the place only adapts the temperature genes
+                    const parts = _embryology.generatePhenotypeFromGenotype( _myGenotype ).numParts;
+                    const garden = _gardens[ ( parts >= 13 ? 2 : parts >= 9 ? 1 : 0 ) % _gardens.length ];
                     initialPosition.setToRandomLocationInDisk( garden, _gardenOfEdenRadius );
                     this.setEcologyGenesForPlace( _myGenotype, initialPosition.x, initialPosition.y );
                 }
