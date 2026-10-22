@@ -9,6 +9,8 @@
 //   zones    [{ kind: "plants" | "meat" | "warm" | "cold" | "mild" | "outline", points }]
 //   seeds    flat list x, y, code: code > 0 = this many parts; -1, -2, -3 = a
 //            pile of the vanilla start (small, medium, big bodies); 0 = any
+//   diets    one number per seed: 0 = as usual (about a tenth are born
+//            predators), 1 = herbivore, 2 = predator (missing = 0)
 //   barrier  { x1, y1, x2, y2 } or null: the wall (the obstacle)
 //   partsMin, partsMax  the number of parts the random founders may have
 //------------------------------------------------------------------------------

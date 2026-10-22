@@ -28,7 +28,7 @@ let preview: any = null;            // GenePool.getMapPreview: pool size, genera
 let map: any = null;                // what is being drawn (kept while the page lives)
 let fieldImage: HTMLCanvasElement | null = null;
 let undo: string[] = [];
-let tool = "pencil", fillKind = "plants", sprayParts = 16, brush = 500, sprayRate = 12;
+let tool = "pencil", fillKind = "plants", sprayParts = 16, sprayDiet = 0, brush = 500, sprayRate = 12;
 let stroke: number[] | null = null;
 let wall: number[] | null = null;
 let mouse: { x: number, y: number } | null = null;
@@ -56,7 +56,16 @@ function vanillaMap(): any
             seeds.push( g.x + Math.cos( a ) * r, g.y + Math.sin( a ) * r, -( c + 1 ));
         }
     }
-    return { version: 1, base: "vanilla", environment: preview.environment, zones: [], seeds, barrier: null, partsMin: 3, partsMax: 16 };
+    return { version: 1, base: "vanilla", environment: preview.environment, zones: [], seeds, diets: new Array( seeds.length / 3 ).fill( 0 ), barrier: null, partsMin: 3, partsMax: 16 };
+}
+
+// a map from a preset or a file made before the diets: one per seed
+function normalize( m: any ): any
+{
+    if ( !Array.isArray( m.diets )) m.diets = [];
+    while ( m.diets.length < m.seeds.length / 3 ) m.diets.push( 0 );
+    m.diets.length = m.seeds.length / 3;
+    return m;
 }
 
 function remember(): void
@@ -68,7 +77,7 @@ function remember(): void
 function takeBack(): void
 {
     const last = undo.pop();
-    if ( last ) { map = JSON.parse( last ); syncFields(); draw(); }
+    if ( last ) { map = normalize( JSON.parse( last )); syncFields(); draw(); }
 }
 
 //------------------------------------------------------------
@@ -166,8 +175,11 @@ function draw(): void
     const dot = Math.max( 1.5, Math.min( 3, size / 400 ));
     for (let i = 0; i < map.seeds.length; i += 3)
     {
+        const x = v.sx( map.seeds[i] ) - dot / 2, y = v.sy( map.seeds[ i + 1 ] ) - dot / 2;
+        const diet = map.diets[ i / 3 ] || 0;
+        if ( diet === 2 ) { g.fillStyle = "#000000"; g.fillRect( x - 1, y - 1, dot + 2, dot + 2 ); }     // predators: a black rim
         g.fillStyle = partsColor( map.seeds[ i + 2 ] );
-        g.fillRect( v.sx( map.seeds[i] ) - dot / 2, v.sy( map.seeds[ i + 1 ] ) - dot / 2, dot, dot );
+        g.fillRect( x, y, dot, dot );
     }
 
     // the wall
@@ -192,7 +204,9 @@ function draw(): void
     if ( info )
     {
         const n = map.seeds.length / 3;
+        const predators = map.diets.filter( ( d: number ) => d === 2 ).length, herbivores = map.diets.filter( ( d: number ) => d === 1 ).length;
         info.textContent = t( "Founders: ", "Существ: " ) + n + t( " of ", " из " ) + preview.maxSwimbots
+            + (( predators + herbivores > 0 ) ? " (" + t( "herbivores ", "травоядных " ) + herbivores + ", " + t( "predators ", "хищников " ) + predators + ")" : "" )
             + " · " + t( "zones: ", "зон: " ) + map.zones.length + ( map.barrier ? t( " · wall", " · барьер" ) : "" )
             + ( map.base === "blank" ? t( " · blank map", " · чистая карта" ) : "" );
     }
@@ -230,6 +244,7 @@ function spray(): void
         const x = Math.max( preview.left + 20, Math.min( preview.left + preview.width - 20, mouse.x + Math.cos( a ) * r ));
         const y = Math.max( preview.top + 20, Math.min( preview.top + preview.height - 20, mouse.y + Math.sin( a ) * r ));
         map.seeds.push( x, y, sprayParts );
+        map.diets.push( sprayDiet );
     }
     draw();
 }
@@ -237,13 +252,14 @@ function spray(): void
 function rub(): void
 {
     if ( !mouse ) return;
-    const kept: number[] = [], r2 = brush * brush;
+    const kept: number[] = [], keptDiets: number[] = [], r2 = brush * brush;
     for (let i = 0; i < map.seeds.length; i += 3)
     {
         const dx = map.seeds[i] - mouse.x, dy = map.seeds[ i + 1 ] - mouse.y;
-        if ( dx * dx + dy * dy > r2 ) kept.push( map.seeds[i], map.seeds[ i + 1 ], map.seeds[ i + 2 ] );
+        if ( dx * dx + dy * dy > r2 ) { kept.push( map.seeds[i], map.seeds[ i + 1 ], map.seeds[ i + 2 ] ); keptDiets.push( map.diets[ i / 3 ] || 0 ); }
     }
     map.seeds = kept;
+    map.diets = keptDiets;
     map.zones = map.zones.filter( z => !inside( mouse!.x, mouse!.y, z.points ));
     draw();
 }
@@ -327,7 +343,7 @@ function loadPreset( name: string ): void
 {
     const m = presets()[ name ];
     if ( !m ) return;
-    remember(); map = JSON.parse( JSON.stringify( m )); syncFields(); draw();
+    remember(); map = normalize( JSON.parse( JSON.stringify( m ))); syncFields(); draw();
 }
 
 function deletePreset(): void
@@ -356,7 +372,7 @@ function uploadMap( file: File ): void
         {
             const m = JSON.parse( text );
             if ( !m || !Array.isArray( m.seeds ) || !Array.isArray( m.zones )) throw new Error( "no map" );
-            remember(); map = m; syncFields(); draw();
+            remember(); map = normalize( m ); syncFields(); draw();
         }
         catch ( e ) { message = t( "This file is not a map.", "Этот файл — не карта." ); draw(); }
     });
@@ -395,6 +411,8 @@ function build(): void
         +   "</div>"
         +   "<div class='meHead'>" + t( "Seeder", "Сеялка" ) + "</div>"
         +   "<label>" + t( "parts", "члеников" ) + " <select id='meParts'>" + partsOptions + "</select></label>"
+        +   "<label>" + t( "diet", "питание" ) + " <select id='meDiet'><option value='0'>" + t( "as usual (a tenth predators)", "как обычно (десятая часть — хищники)" ) + "</option>"
+        +     "<option value='1'>" + t( "herbivores only", "только травоядные" ) + "</option><option value='2'>" + t( "predators only", "только хищники" ) + "</option></select></label>"
         +   "<label>" + t( "brush", "кисть" ) + " <input id='meBrush' type='range' min='50' max='3000' step='50'></label>"
         +   "<label>" + t( "density", "плотность" ) + " <input id='meRate' type='range' min='1' max='60' step='1'></label>"
         +   "<div class='meHead'>" + t( "Parts of the random founders", "Членики случайных существ" ) + "</div>"
@@ -432,7 +450,7 @@ function build(): void
     for ( const kind of [ "plants", "meat", "warm", "cold", "mild" ] ) { on( "meFill-" + kind, () => { fillKind = kind; tool = "fill"; syncFields(); draw(); }); }
     on( "meUndo", takeBack );
     on( "meVanilla", () => { remember(); map = vanillaMap(); syncFields(); draw(); });
-    on( "meClear", () => { remember(); map = { ...map, base: "blank", zones: [], seeds: [], barrier: null }; message = t( "A blank map: no food and no swimbots until you draw them.", "Чистая карта: ни еды, ни существ, пока вы их не нарисуете." ); draw(); });
+    on( "meClear", () => { remember(); map = { ...map, base: "blank", zones: [], seeds: [], diets: [], barrier: null }; message = t( "A blank map: no food and no swimbots until you draw them.", "Чистая карта: ни еды, ни существ, пока вы их не нарисуете." ); draw(); });
     on( "meSavePreset", savePreset );
     on( "meDeletePreset", deletePreset );
     on( "meDownload", downloadMap );
@@ -440,6 +458,7 @@ function build(): void
     ( overlay.querySelector( "#meFile" ) as HTMLInputElement ).onchange = ( e ) => { const f = ( e.target as HTMLInputElement ).files?.[0]; if ( f ) uploadMap( f ); ( e.target as HTMLInputElement ).value = ""; };
     ( overlay.querySelector( "#mePresets" ) as HTMLSelectElement ).onchange = ( e ) => { const v = ( e.target as HTMLSelectElement ).value; if ( v ) loadPreset( v ); };
     ( overlay.querySelector( "#meParts" ) as HTMLSelectElement ).onchange = ( e ) => { sprayParts = Number(( e.target as HTMLSelectElement ).value ); tool = "seeder"; syncFields(); };
+    ( overlay.querySelector( "#meDiet" ) as HTMLSelectElement ).onchange = ( e ) => { sprayDiet = Number(( e.target as HTMLSelectElement ).value ); tool = "seeder"; syncFields(); };
     ( overlay.querySelector( "#meBrush" ) as HTMLInputElement ).oninput = ( e ) => { brush = Number(( e.target as HTMLInputElement ).value ); draw(); };
     ( overlay.querySelector( "#meRate" ) as HTMLInputElement ).oninput = ( e ) => { sprayRate = Number(( e.target as HTMLInputElement ).value ); };
     const range = () =>
@@ -462,6 +481,7 @@ function syncFields(): void
     for ( const name of [ "pencil", "fill", "seeder", "wall", "eraser" ] ) { overlay.querySelector( "#meTool-" + name )!.classList.toggle( "on", tool === name ); }
     for ( const kind of [ "plants", "meat", "warm", "cold", "mild" ] ) { overlay.querySelector( "#meFill-" + kind )!.classList.toggle( "on", fillKind === kind ); }
     ( overlay.querySelector( "#meParts" ) as HTMLSelectElement ).value = String( sprayParts );
+    ( overlay.querySelector( "#meDiet" ) as HTMLSelectElement ).value = String( sprayDiet );
     ( overlay.querySelector( "#meBrush" ) as HTMLInputElement ).value = String( brush );
     ( overlay.querySelector( "#meRate" ) as HTMLInputElement ).value = String( sprayRate );
     if ( map )

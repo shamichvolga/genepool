@@ -268,7 +268,20 @@ export const MASS_SCALED_STOMACH_ENABLED    = false;  // maximum energy = 200 x 
 // moving a long body; with the same 200 as a 5-part grazer it starved.
 export const BIG_BODY_STOMACH_ENABLED       = true;
 export const STOMACH_REFERENCE_MASS         = 410;    // a body of this mass (or lighter) keeps 200
-export const PLANT_STAGES_ENABLED           = true;   // sprout / mature / old plant; small bodies digest sprouts, big ones old plants better
+export const PLANT_STAGES_ENABLED           = true;
+// PLANT_SIZE_ENABLED (22.10, docs/концепт_размер_пищи.md): a plant grows while nobody eats it and gets
+// tougher; eaters bite pieces off it (it lives on and grows back); only a strong enough bite (a big enough
+// body) gets through a tough plant; grown plants make the seeds. Replaces PLANT_STAGES when on.
+export const PLANT_SIZE_ENABLED             = false;
+export const PLANT_GROW_TIME                = 3000;   // steps: by then a plant is 63 % of a tree
+export const PLANT_SPROUT_ENERGY            = 10;     // a new sprout holds this much
+export const PLANT_TREE_ENERGY              = 150;    // a full-grown tree holds this much
+export const PLANT_LEAF_REGROWTH            = 0.002;  // share of the bitten-off part that grows back each step
+export const PLANT_MAX_TOUGHNESS            = 0.8;    // toughness of a full-grown tree (a sprout: 0)
+export const BITE_FORCE_AT_REFERENCE        = 0.5;    // the bite force of a body of BITE_REFERENCE_MASS (force grows as mass^(2/3))
+export const BITE_REFERENCE_MASS            = 410;
+export const BITE_ENERGY                    = 25;     // one bite takes this much x the bite force
+export const BITE_MARGIN                    = 0.15;   // the bite is full when the force is this much above the toughness   // sprout / mature / old plant; small bodies digest sprouts, big ones old plants better
 export const PLANT_SPROUT_AGE               = 1500;
 export const PLANT_OLD_AGE                  = 6000;
 export const PLANT_ROT_AGE                  = 12000;

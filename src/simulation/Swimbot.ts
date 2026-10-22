@@ -10,7 +10,8 @@ import * as SS from "./SharedState";
 import { decideStep, neuralThink, takeInLook } from "./DecisionKernel";
 import { BRAIN_SIZE, think, sigmoid, NUM_INPUTS, NUM_HIDDEN, NUM_OUTPUTS, DRIVE_OUTPUTS, THINK_PERIOD, DRIVE_HYSTERESIS, EFFORT_MIN, EFFORT_RANGE, IN_BIAS, IN_HUNGER, IN_ENERGY, IN_AGE, IN_FIT, IN_TREND, IN_FOOD, IN_MATE, IN_THREAT, IN_PREY, IN_CROWD, IN_PREDATOR, OUT_FOOD, OUT_MATE, OUT_FLEE, OUT_HUNT, OUT_CLIMATE, OUT_SOCIAL, OUT_EFFORT,
          IN_FOOD_SIDE, IN_FOOD_AHEAD, IN_NEAR_SIDE, IN_NEAR_AHEAD, IN_THREAT_SIDE, IN_THREAT_AHEAD, IN_KIN, IN_SEASON, IN_PREDATOR_NEAR, IN_PREY_DISTANCE, IN_PREY_REWARD, IN_PREY_SUCCESS, IN_PREY_CHASE, IN_BAIT_PRESENT, IN_BAIT_DISTANCE, IN_BAIT_REWARD, OUT_STEER, OUT_SELF_EAT, OUT_PREY_VALUE, OUT_PREY_TRAVEL, OUT_PREY_BAIT, STEER_MAX_DEGREES } from "./NeuralBrain";
-import { PLANT_EVOLUTION_ENABLED, RUDDER_MAX_TURN, SIZE_SCALED_VISION_ENABLED, SIZE_SCALED_GRAB_ENABLED, GAPE_SUCCESS_FLOOR, GAPE_COOLDOWN_SLOPE, MASS_SCALED_STOMACH_ENABLED, SIZE_MATURITY_ENABLED, INHERITED_INVESTMENT_ENABLED, PLANT_STAGES_ENABLED, PLANT_SPROUT_AGE, PLANT_OLD_AGE, PLANT_STAGE_ENERGY, PREDATOR_GAPE_CURVE_ENABLED, NEURAL_BRAIN_ENABLED, CLIMATE_STEERING, SOCIAL_STEERING, CLIMATE_PROBE_DISTANCE, BODY_TEMPERATURE_INERTIA_ENABLED, SELF_CANNIBALISM_ENABLED, PREDATOR_TARGET_SELECTION_ENABLED } from "./Parameters";
+import { biteEnergy } from "./PlantSize";
+import { PLANT_SIZE_ENABLED, PLANT_SPROUT_ENERGY, PLANT_EVOLUTION_ENABLED, RUDDER_MAX_TURN, SIZE_SCALED_VISION_ENABLED, SIZE_SCALED_GRAB_ENABLED, GAPE_SUCCESS_FLOOR, GAPE_COOLDOWN_SLOPE, MASS_SCALED_STOMACH_ENABLED, SIZE_MATURITY_ENABLED, INHERITED_INVESTMENT_ENABLED, PLANT_STAGES_ENABLED, PLANT_SPROUT_AGE, PLANT_OLD_AGE, PLANT_STAGE_ENERGY, PREDATOR_GAPE_CURVE_ENABLED, NEURAL_BRAIN_ENABLED, CLIMATE_STEERING, SOCIAL_STEERING, CLIMATE_PROBE_DISTANCE, BODY_TEMPERATURE_INERTIA_ENABLED, SELF_CANNIBALISM_ENABLED, PREDATOR_TARGET_SELECTION_ENABLED } from "./Parameters";
 import { environment, PLANT_TYPE_WARM, PLANT_TYPE_COLD } from "./Environment";
 import { sizeSignature, SEARCH_IMAGE_LEARNING, SEARCH_IMAGE_GAIN, SEARCH_IMAGE_FORGETTING, bodySize, sizeDietFactor, climateFoodFactor, digestionEfficiency, thermalFit, thermalPeak, THERMAL_MISMATCH_DRAIN, THERMAL_FIT_UPDATE_PERIOD, THERMOMELANISM, mateAcceptance, pairRandom, KINESIS_PERIOD, KINESIS_TURN_CHANCE, KINESIS_MAX_TURN, EMERGENCY_THERMAL_FIT, EMERGENCY_PROBE_DISTANCE } from "./Ecology";
 //--------------------------------------------------------------------------
@@ -334,7 +335,7 @@ this.setParent = function( parent )
 	//------------------------------------------------------------------------
 	this.plantStageFactor = function( plant )
 	{
-	    if ( !PLANT_STAGES_ENABLED ) return ONE;
+	    if ( !PLANT_STAGES_ENABLED || PLANT_SIZE_ENABLED ) return ONE;
 	    const size  = bodySize( _phenotype.mass );                // -1 small .. +1 big
 	    const stage = plantStage( plant.getIndex(), plant.getAge() );
 	    if ( stage === 0 )
@@ -2241,6 +2242,21 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
                                   * climateFoodFactor( _M[ _m + SS.M_THERMAL_FIT ], _M[ _m + SS.M_THERMAL_PEAK ] );
             }
 
+            // PLANT_SIZE_ENABLED: a bite off the plant, as much as the mouth takes
+            // and the stomach has room for; the plant lives on with the rest
+            let bitten = false;
+            if ( PLANT_SIZE_ENABLED && environment.active && ( chosenFoodBit().getType() !== 2 ))
+            {
+                const plant  = chosenFoodBit();
+                const gain   = Math.max( 0.05, energyFromFoodBit / Math.max( 1e-9, plant.getEnergy() ));     // (digestion and climate)
+                const room   = Math.max( ZERO, _M[ _m + SS.M_MAX_ENERGY ] - _B[ _b + SS.B_ENERGY ] );
+                const bite   = Math.min( biteEnergy( _phenotype.mass, plant.getAge(), plant.getEnergy() ), room / gain );
+                if ( bite <= ZERO ) { _M[ _m + SS.M_TRY_EAT ] = 0; return _M[ _m + SS.M_FOOD ]; }      // too tough for my mouth, or full
+                energyFromFoodBit = bite * gain;
+                plant.setEnergy( plant.getEnergy() - bite );
+                bitten = plant.getEnergy() >= PLANT_SPROUT_ENERGY * 0.1;
+            }
+
             // (meat: only part of it is kept - the food pyramid)
             if ( chosenFoodBit().getType() === 2 ) { energyFromFoodBit *= MEAT_ASSIMILATION; }
             _B[ _b + SS.B_ENERGY ] += energyFromFoodBit;
@@ -2264,8 +2280,11 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 
             assert( _M[ _m + SS.M_FOOD ] != NULL_INDEX, "Swimbot:eatChosenFoodBit: _M[ _m + SS.M_FOOD ] != NULL_INDEX" );
 
-            _parent.plantEaten( chosenFoodBit() );
-            chosenFoodBit().kill();
+            if ( !bitten )
+            {
+                _parent.plantEaten( chosenFoodBit() );
+                chosenFoodBit().kill();
+            }
 
 // somehow, the swimbot is still looking for food even when it is too far away
 // not sure if this is the right place to fix, but it needs fixing

@@ -2,6 +2,8 @@ import { WORLD_AREA_FACTOR } from "./World";
 import { CARCASS_ENABLED, DISEASE_ENABLED, CANNIBAL_GENE_FOUNDER_MAX, PLANT_REGROW_CHANCE, PLANT_REGROW_DELAY } from "./Parameters";
 import { exportStrains, importStrains, updateDiseases } from "./Disease";
 import { PILE_PARTS, PreparedZone, insideAny, prepareZones, randomPointInZone } from "./MapZones";
+import { plantFullEnergy, plantSize } from "./PlantSize";
+import { PLANT_SIZE_ENABLED, PLANT_GROW_TIME, PLANT_LEAF_REGROWTH } from "./Parameters";
 import { Environment } from "./Environment";
 import { Chunk, WORLD_FORMAT, layoutFingerprint, packWorld, unpackWorld } from "./WorldFile";
 import { PARAM_DEFAULTS, PARAM_LIST, changedParams, setParameter } from "./ParamStore";
@@ -893,7 +895,10 @@ if ( mode === SimulationStartMode.SPECIES )
                     initialPosition.setToRandomLocationInDisk( garden, _gardenOfEdenRadius );
                     this.setEcologyGenesForPlace( _myGenotype, initialPosition.x, initialPosition.y );
                 }
-                const bornPredator = gpRandom() < INITIAL_PREDATOR_FRACTION;
+                let bornPredator = gpRandom() < INITIAL_PREDATOR_FRACTION;
+                // the map editor's seeder may sow only herbivores (1) or only predators (2)
+                const diet = ( _map && _map.diets ) ? ( _map.diets[i] || 0 ) : 0;
+                if ( diet === 1 ) { bornPredator = false; } else if ( diet === 2 ) { bornPredator = true; }
                 setTrait( _myGenotype, GENES_PREDATOR, bornPredator ? 0.7 + 0.3 * gpRandom() : gpRandom() * PREDATOR_LEVEL_THRESHOLD * 0.8 );
             }
             //-------------------------------------------------------------------
@@ -1114,6 +1119,7 @@ if ( mode === SimulationStartMode.SPECIES )
 	            _foodBits[ placed ].initialize( placed );
 	            _foodBits[ placed ].setType( type );
 	            _foodBits[ placed ].setPosition( _vectorUtility );
+	            if ( PLANT_SIZE_ENABLED ) { startPlantAge( placed ); }
 	            environment.plantCount[ type ][ environment.plantCellIndex( _foodBits[ placed ].getPosition().x, _foodBits[ placed ].getPosition().y ) ] ++;
 	            placed ++;
 	        }
@@ -1181,6 +1187,7 @@ if ( mode === SimulationStartMode.SPECIES )
 	            _foodBits[f].setType( type );
 	            _foodBits[f].setEnergy( globalTweakers.foodBitEnergy );
 	            _foodBits[f].setPosition( _vectorUtility );
+	            if ( PLANT_SIZE_ENABLED ) { startPlantAge( f ); }
 	            environment.plantCount[ type ][ environment.plantCellIndex( _vectorUtility.x, _vectorUtility.y ) ] ++;
 	            _numFoodBits ++;
 	            k ++;
@@ -1255,6 +1262,14 @@ if ( mode === SimulationStartMode.SPECIES )
 	        environment: preview.getState(), gardens: gardens.map( g => ({ x: g.x, y: g.y })), gardenRadius: GARDEN_RADIUS,
 	        numSwimbots: INITIAL_NUM_SWIMBOTS, maxSwimbots: MAX_SWIMBOTS,
 	    };
+	}
+
+	// PLANT_SIZE_ENABLED: the plants of a new world have grown for a while already (0 .. 2 x PLANT_GROW_TIME)
+	function startPlantAge( f )
+	{
+	    const age = Math.floor( gpRandom() * 2 * PLANT_GROW_TIME );
+	    _st.foodBorn[f] = _clock - age;
+	    _st.foodEnergy[f] = plantFullEnergy( age );
 	}
 
 	// petri: a random point inside zone z (the whole zone, not just a garden)
@@ -1370,6 +1385,18 @@ if ( mode === SimulationStartMode.SPECIES )
 	                    const other = this.findRandomLivingPlant();
 	                    if ( other !== null ) { parent = other; }
 	                }
+	            }
+
+	            if ( PLANT_SIZE_ENABLED && ( parent !== null ))
+	            {
+	                // a plant makes seeds as it is grown: a sprout hardly, a tree surely
+	                let grown = gpRandom() < plantSize( parent.getAge() );
+	                for (let k = 0; ( k < PLANT_SEED_PARENT_TRIES ) && !grown; k++)
+	                {
+	                    const other = this.findRandomLivingPlant();
+	                    if ( other !== null ) { parent = other; grown = gpRandom() < plantSize( other.getAge() ); }
+	                }
+	                if ( !grown ) break;         // (no grown plant found: no seed this time)
 	            }
 
 	            if ( parent !== null )
@@ -2905,6 +2932,14 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
             // (PLANT_EVOLUTION_ENABLED: the first plants get mixed ages, so that they do not all grow up at once)
             if ( PLANT_EVOLUTION_ENABLED && ( _clock === 1 ) && ( type !== 2 )) { born[f] = 1 - gpRandom() * plantOldAge( f ); }
             if ( PLANT_STAGES_ENABLED && PLANT_ROT_ENABLED && ( type !== 2 ) && ( _clock - born[f] > plantRotAge( f ))) { _foodBits[f].kill(); continue; }
+
+            // PLANT_SIZE_ENABLED: a plant grows towards the worth of its size; a new
+            // sprout starts small; a bitten plant grows its leaves back
+            if ( PLANT_SIZE_ENABLED && ( type !== 2 ))
+            {
+                const full = plantFullEnergy( _clock - born[f] ), e = _st.foodEnergy[f];
+                _st.foodEnergy[f] = ( e > full ) ? full : e + ( full - e ) * PLANT_LEAF_REGROWTH;
+            }
 
                  if ( type === 0 ) { numType0FoodBits ++; }
             else if ( type === 1 ) { numType1FoodBits ++; }

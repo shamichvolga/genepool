@@ -9,6 +9,8 @@
 // (checked by comparing both on the same state, see GenePool PERCEPTION_CHECK).
 //------------------------------------------------------------------------------
 import { areKin } from "./Kin";
+import { biteEnergy } from "./PlantSize";
+import { PLANT_SIZE_ENABLED, PLANT_SPROUT_ENERGY } from "./Parameters";
 import { BRAIN_STATE_LOOKING_FOR_MATE, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_PREY } from "./Brain";
 import { IGNORE_FOOD_EFFICIENCY, mateAcceptance, pairRandom, preyVisibility, searchImageFactor, sizeSignature } from "./Ecology";
 import { PLANT_TYPE_WARM } from "./Environment";
@@ -21,7 +23,7 @@ import { PREDATOR_DEFERENCE_ENABLED, KIN_NOT_EATEN_ENABLED, OLD_AGE_DURATION, WE
 import { M_DISEASE, M_WEAK_PREF, MIND_STRIDE, M_VIEW_RADIUS, M_GRAB_RADIUS, M_DEFERENCE, M_FOOD, M_PERSIST, M_MATURE_AGE, M_SIZE_PICKY, M_MAX_ENERGY } from "./MindLayout";
 import { preyTargetScore } from "./EcologyGenes";
 import {
-    BACKGROUND_SIZE, PARAM_MAX_LIFESPAN, B_NUM_PARTS, B_GROWTH, B_VEL_X, B_VEL_Y, BOT_STRIDE, MAX_SEEN, PARAM_ENV_ACTIVE, PARAM_ENV_FIELDS, PARAM_FOOD_TYPES, PARAM_OBSTACLE_X1, PARAM_OBSTACLE_X2,
+    BACKGROUND_SIZE, PARAM_MAX_LIFESPAN, B_NUM_PARTS, B_GROWTH, B_VEL_X, B_VEL_Y, BOT_STRIDE, MAX_SEEN, PARAM_ENV_ACTIVE, PARAM_STEP, PARAM_ENV_FIELDS, PARAM_FOOD_TYPES, PARAM_OBSTACLE_X1, PARAM_OBSTACLE_X2,
     PARAM_OBSTACLE_Y1, PARAM_OBSTACLE_Y2, SharedState
 } from "./SharedState";
 
@@ -324,6 +326,15 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
             if ( viewDistanceSquared >= viewRadiusSquared ) continue;
             const e = ( type === PLANT_TYPE_WARM ) ? myEfficiencyWarm : myEfficiencyCold;
             let scaled = viewDistanceSquared / ( e * e );
+            if ( PLANT_SIZE_ENABLED )
+            {
+                // a plant too tough for my mouth is no food for me; otherwise it is
+                // worth what I can bite off it (not what it holds): nearer, if more
+                const bite = biteEnergy( myMass, st.params[ PARAM_STEP ] - st.foodBorn[f], st.foodEnergy[f] );
+                if ( bite <= 0 ) continue;
+                const worth = Math.min( 5, Math.max( 0.2, bite / PLANT_SPROUT_ENERGY ));
+                scaled /= worth * worth;
+            }
             if ( CROWD_AWARE_FOOD_CHOICE_ENABLED )
             {
                 // herbivores in sight whose mouth is nearer to this plant than mine
