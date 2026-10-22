@@ -52,6 +52,7 @@
             <header id = "panelHeader">
                 <span id = "mainTitle">Gene Pool</span>
                 <a id = "swimbots_url" href = "http://www.swimbots.com" target = "_blank">swimbots.com</a>
+                <button id = "mapEditorButton" onClick = "openMapEditor();" title = "map editor: draw the world before it starts">&#x1F5FA;&#xFE0E;</button>
                 <button id = "speciesButton" onClick = "toggleSpecies();" title = "dominant species: who lives in the pool">&#x1F9EC;&#xFE0E;</button>
                 <button id = "debugButton" onClick = "toggleDebug();" title = "debug mode: change any number of the world while it runs">&#x1F6E0;&#xFE0E;</button>
                 <button id = "langButton" onClick = "toggleLanguage();" title = "English / Русский"><b>EN</b> · RU</button>
@@ -104,6 +105,8 @@
                         <button id = "pool7Button" class = "basicButton" onClick = "choosePoolToLoad( SimulationStartMode.BARRIER      ); requestToLoadPoolFromPreset();" >genetic barrier</button>
                         <button id = "pool8Button" class = "basicButton" onClick = "choosePoolToLoad( SimulationStartMode.EMPTY        ); requestToLoadPoolFromPreset();" >empty</button>
                     </div>
+
+                    <button id = "mapEditorPoolButton" class = "basicButton wide" onClick = "openMapEditor();" title = "map editor: draw the world before it starts" >map editor…</button>
 
                     <div class = "gpHeading">petri: life starts in the mildest zone and must conquer the others</div>
                     <div id = "petriPanel">

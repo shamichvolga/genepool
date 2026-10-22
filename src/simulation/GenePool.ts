@@ -1,6 +1,8 @@
 import { WORLD_AREA_FACTOR } from "./World";
 import { CARCASS_ENABLED, DISEASE_ENABLED, CANNIBAL_GENE_FOUNDER_MAX, PLANT_REGROW_CHANCE, PLANT_REGROW_DELAY } from "./Parameters";
 import { exportStrains, importStrains, updateDiseases } from "./Disease";
+import { PILE_PARTS, PreparedZone, insideAny, prepareZones, randomPointInZone } from "./MapZones";
+import { Environment } from "./Environment";
 import { Chunk, WORLD_FORMAT, layoutFingerprint, packWorld, unpackWorld } from "./WorldFile";
 import { PARAM_DEFAULTS, PARAM_LIST, changedParams, setParameter } from "./ParamStore";
 import { BRAIN_SIZE } from "./NeuralBrain";
@@ -165,6 +167,11 @@ export function GenePool()
     const _matingChoosinessMean = new Float64Array( MATING_RECORD_SIZE );
     let _matingCount         = 0;
     let _gardens             = [];
+    let _map: any            = null;    // a drawn map (map editor): its zones keep working while the world runs
+    let _pendingMap: any     = null;
+    let _mapPlantZones: PreparedZone[] = [], _mapMeatZones: PreparedZone[] = [];
+    let _mapMeatRate         = 0;       // meat pieces per step that fall in the meat zones
+    let _meatZoneDebt        = 0;
     let _nurseryDebt         = 0;       // (NURSERY_ENABLED)
     let _classicSeedDebt     = 0;
     let _serial              = 0;         // birth numbers (KIN_NOT_EATEN_ENABLED)
@@ -475,6 +482,9 @@ export function GenePool()
 	this.startSimulation = function( mode )
 	{
 	    this.startMode = mode;
+	    _map = _pendingMap; _pendingMap = null;     // (only startSimulationWithMap starts with a map)
+	    _meatZoneDebt = 0;
+	    prepareMapZones();
 //looks like numOffspring didn't get reset. fix this! (and any other related side effects
 
 		//----------------------------
@@ -551,7 +561,13 @@ export function GenePool()
 
         if ( environment.active )
         {
-            environment.generate( petri );
+            if ( _map && _map.environment )
+            {
+                // the map it was drawn on, then the painted temperatures
+                environment.setState({ ..._map.environment, active: true, petri: null,
+                                       paint: { blank: _map.base === "blank", zones: _map.zones.filter( z => z.kind === "warm" || z.kind === "cold" || z.kind === "mild" ) } });
+            }
+            else { environment.generate( petri ); }
             environment.resetSoilNutrients( NUTRIENT_CYCLE_ENABLED ? INITIAL_SOIL_NUTRIENT_PER_CELL : 0 );
             environment.copyBackgroundTo( _st.background );
             _gardens = petri ? [ _poolCenter ] : environment.gardenCenters();
@@ -561,7 +577,10 @@ export function GenePool()
             _numSwimbots = INITIAL_NUM_SWIMBOTS;
             _numFoodBits = INITIAL_NUM_FOODBITS;
             globalTweakers.numFoodTypes = TWO_PLANT_TYPES ? 2 : 1;
-            this.setFoodToEnvironment();
+            if ( _map && (( _map.base === "blank" ) || ( _mapPlantZones.length > 0 ))) { environment.clearPlantCounts(); _numFoodBits = 0; }
+            else { this.setFoodToEnvironment(); }
+            if ( _map ) { this.fillMapZones(); }
+            if ( _map ) { _numSwimbots = Math.min( MAX_SWIMBOTS, Math.floor( _map.seeds.length / 3 )); }
         }
         else
         {
@@ -847,9 +866,17 @@ if ( mode === SimulationStartMode.SPECIES )
             // Predation is in the genes: about 10% of the founders are born
             // predators, the rest herbivores (as in the original random pool)
             //-------------------------------------------------------------------
+            if ( _map ) { this.growFounderForSeed( _map.seeds[ i * 3 + 2 ] ); }
+
             if ( environment.active )
             {
-                if ( petri )
+                if ( _map )
+                {
+                    // the place the map editor sowed it
+                    initialPosition.setXY( _map.seeds[ i * 3 ], _map.seeds[ i * 3 + 1 ] );
+                    this.setEcologyGenesForPlace( _myGenotype, initialPosition.x, initialPosition.y );
+                }
+                else if ( petri )
                 {
                     // everybody starts in the middle (mildest) zone, adapted to it only
                     this.randomPointInZone( initialPosition, petriStartZone( environment.petri.zones ));
@@ -952,6 +979,14 @@ if ( mode === SimulationStartMode.SPECIES )
 
 		_obstacle.setEndpointPositions( end1, end2 );
 		_obstacle.setEnabled( OBSTACLE_ENABLED );
+		if ( _map && _map.barrier )
+		{
+		    // the wall drawn on the map
+		    end1.setXY( _map.barrier.x1, _map.barrier.y1 );
+		    end2.setXY( _map.barrier.x2, _map.barrier.y2 );
+		    _obstacle.setEndpointPositions( end1, end2 );
+		    _obstacle.setEnabled( true );
+		}
 
         for (let m=0; m<10; m++)
         {
@@ -1087,6 +1122,141 @@ if ( mode === SimulationStartMode.SPECIES )
 	    _numFoodBits = placed;
 	}
 
+	//------------------------------------------------------------------------
+	// A drawn map (the map editor, src/ui/mapEditor.ts; the map is described
+	// in MapZones.ts). Green zones: plants grow only there (and nowhere on a
+	// blank map without them); red zones: no plants, meat at the start and
+	// falling there as fast as it rots; temperature zones are painted into
+	// the environment; each seed is one founder.
+	//------------------------------------------------------------------------
+	this.startSimulationWithMap = function( map )
+	{
+	    _pendingMap = map;
+	    this.startSimulation( SimulationStartMode.RANDOM );
+	}
+	this.getMap = function() { return _map; }
+
+	function prepareMapZones()
+	{
+	    _mapPlantZones = _map ? prepareZones( _map.zones, "plants" ) : [];
+	    _mapMeatZones  = _map ? prepareZones( _map.zones, "meat"   ) : [];
+	    const meatArea = _mapMeatZones.reduce( ( a, z ) => a + z.area, 0 );
+	    _mapMeatRate = ( meatArea > 0 ) ? meatArea * standardFoodDensity() / MEAT_DECAY_TIME : 0;
+	}
+
+	// food per unit of area at the start of a normal world
+	function standardFoodDensity() { return MAX_FOODBITS * START_FOOD_FILL / ( POOL_WIDTH * POOL_HEIGHT ); }
+
+	function mapAllowsPlantsAt( x, y )
+	{
+	    if ( insideAny( _mapMeatZones, x, y )) return false;
+	    if (( _map.base === "blank" ) || ( _mapPlantZones.length > 0 )) return insideAny( _mapPlantZones, x, y );
+	    return true;
+	}
+
+	// a zone, chosen by area
+	function pickZone( zones )
+	{
+	    const total = zones.reduce( ( a, z ) => a + z.area, 0 );
+	    let r = gpRandom() * total;
+	    for ( const z of zones ) { r -= z.area; if ( r <= 0 ) return z; }
+	    return zones[ zones.length - 1 ];
+	}
+
+	this.fillMapZones = function()
+	{
+	    const density = standardFoodDensity();
+	    // plants in the green zones, as dense as a normal world
+	    for ( const zone of _mapPlantZones )
+	    {
+	        const target = Math.round( zone.area * density );
+	        for (let k = 0, tries = 0; ( k < target ) && ( tries < target * 10 ); tries++)
+	        {
+	            if ( !randomPointInZone( zone, gpRandom, _vectorUtility )) break;
+	            const type = this.choosePlantTypeAt( _vectorUtility.x, _vectorUtility.y );
+	            if ( !this.plantCanGrowAt( _vectorUtility.x, _vectorUtility.y, type )) continue;
+	            const f = this.findLowestDeadFoodBitInArray();
+	            if ( f === NULL_INDEX ) return;
+	            _foodBits[f].initialize( f );
+	            _foodBits[f].setType( type );
+	            _foodBits[f].setEnergy( globalTweakers.foodBitEnergy );
+	            _foodBits[f].setPosition( _vectorUtility );
+	            environment.plantCount[ type ][ environment.plantCellIndex( _vectorUtility.x, _vectorUtility.y ) ] ++;
+	            _numFoodBits ++;
+	            k ++;
+	        }
+	    }
+	    // meat in the red zones
+	    for ( const zone of _mapMeatZones )
+	    {
+	        const target = Math.round( zone.area * density );
+	        for (let k = 0; k < target; k++) { if ( !this.placeMapMeat( zone )) break; }
+	    }
+	}
+
+	this.placeMapMeat = function( zone )
+	{
+	    if ( !randomPointInZone( zone, gpRandom, _vectorUtility )) return true;
+	    const f = this.findLowestDeadFoodBitInArray( true );
+	    if ( f === NULL_INDEX ) return false;
+	    _foodBits[f].initialize( f );
+	    _foodBits[f].setType( 2 );
+	    _foodBits[f].setPosition( _vectorUtility );
+	    _foodBits[f].setEnergy( globalTweakers.foodBitEnergy );
+	    return true;
+	}
+
+	// meat keeps falling in the red zones as fast as meat rots there
+	this.rainMapMeat = function()
+	{
+	    _meatZoneDebt += _mapMeatRate;
+	    while ( _meatZoneDebt >= 1 )
+	    {
+	        _meatZoneDebt -= 1;
+	        if ( !this.placeMapMeat( pickZone( _mapMeatZones ))) { _meatZoneDebt = 0; break; }
+	    }
+	}
+
+	// a founder for a seed: random genes, drawn again until the body has the
+	// number of parts the seed asks for (the vanilla piles: within the pile's
+	// range; the editor's range of parts limits both)
+	this.growFounderForSeed = function( code )
+	{
+	    let lo = _map.partsMin || 3, hi = _map.partsMax || 16;
+	    if ( code > 0 ) { lo = hi = code; }
+	    else if ( code < 0 )
+	    {
+	        const pile = PILE_PARTS[ Math.min( 2, -code - 1 ) ];
+	        const a = Math.max( lo, pile[0] ), b = Math.min( hi, pile[1] );
+	        if ( a <= b ) { lo = a; hi = b; }
+	    }
+	    for (let attempt = 0; attempt < 300; attempt++)
+	    {
+	        const parts = _embryology.generatePhenotypeFromGenotype( _myGenotype ).numParts;
+	        if ( parts >= lo && parts <= hi ) return;
+	        _myGenotype.randomize();
+	        for (let g = NUM_GENES_USED; g < NUM_GENES; g++) { _myGenotype.setGeneValue( g, 0 ); }
+	    }
+	}
+
+	// what the map editor draws first: a newly generated map (as a new world
+	// would get it), its gardens and sizes. Its random numbers do not touch
+	// the running world (the state is put back).
+	this.getMapPreview = function()
+	{
+	    const keep = getRandomState();
+	    const preview = new Environment();
+	    preview.active = true;
+	    preview.generate( false );
+	    const gardens = preview.gardenCenters();
+	    setRandomState( keep );
+	    return {
+	        left: POOL_LEFT, top: POOL_TOP, width: POOL_WIDTH, height: POOL_HEIGHT, field: preview.temperatureGrid(),
+	        environment: preview.getState(), gardens: gardens.map( g => ({ x: g.x, y: g.y })), gardenRadius: GARDEN_RADIUS,
+	        numSwimbots: INITIAL_NUM_SWIMBOTS, maxSwimbots: MAX_SWIMBOTS,
+	    };
+	}
+
 	// petri: a random point inside zone z (the whole zone, not just a garden)
 	this.randomPointInZone = function( v, z )
 	{
@@ -1129,6 +1299,7 @@ if ( mode === SimulationStartMode.SPECIES )
 	    if (( x < POOL_LEFT + FOOD_BIT_BOUNDARY_MARGIN ) || ( x > POOL_RIGHT  - FOOD_BIT_BOUNDARY_MARGIN )) return false;
 	    if (( y < POOL_TOP  + FOOD_BIT_BOUNDARY_MARGIN ) || ( y > POOL_BOTTOM - FOOD_BIT_BOUNDARY_MARGIN )) return false;
 
+	    if ( _map && !mapAllowsPlantsAt( x, y )) return false;
 	    const cell = environment.plantCellIndex( x, y );
 	    if ( environment.plantCount[0][ cell ] + environment.plantCount[1][ cell ] >= PLANT_CELL_CAPACITY ) return false;
 
@@ -2712,6 +2883,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	//----------------------------
 	this.updateFood = function()
 	{
+	    if ( _mapMeatRate > 0 ) { this.rainMapMeat(); }
         let numType0FoodBits = 0;
         let numType1FoodBits = 0;
         const counting = environment.active;
@@ -4826,7 +4998,7 @@ this.renderFoodBits = function( useGraphicsCard )
 	    // (the random numbers among them: the state everything above went on from)
 	    chunks.push({ name: "poolScalars", data: Float64Array.from( [
 	        _clock, getRandomState(), _seedDebt, _nurseryDebt, _classicSeedDebt, _serial, _gardenOfEdenRadius, _currentSpeed, _numSick,
-	        _matingCount, _simulationRunning ? 1 : 0, this.startMode ] ) });
+	        _matingCount, _simulationRunning ? 1 : 0, this.startMode, _meatZoneDebt ] ) });
 
 	    // every counter in one row (some are lists)
 	    const counterNames = Object.keys( simCounters ), counterValues: number[] = [], counterSizes: number[] = [];
@@ -4859,6 +5031,7 @@ this.renderFoodBits = function( useGraphicsCard )
 	        obstacle: { x1: _obstacle.getEnd1Position().x, y1: _obstacle.getEnd1Position().y, x2: _obstacle.getEnd2Position().x, y2: _obstacle.getEnd2Position().y, enabled: _obstacle.getEnabled() },
 	        camera: { x: _camera.getPosition().x, y: _camera.getPosition().y, scale: _camera.getScale() },
 	        familyTree: tree ? { n: tree.n, length: tree.length, traits: tree.traits } : null,
+	        map: _map,
 	    };
 	    return packWorld( header, chunks );
 	}
@@ -4949,6 +5122,7 @@ this.renderFoodBits = function( useGraphicsCard )
 	    _seedDebt = scalars[2]; _nurseryDebt = scalars[3]; _classicSeedDebt = scalars[4]; _serial = scalars[5];
 	    _gardenOfEdenRadius = scalars[6]; _currentSpeed = scalars[7]; _numSick = scalars[8]; _matingCount = scalars[9];
 	    _simulationRunning = scalars[10] === 1; this.startMode = scalars[11];
+	    _map = header.map || null; prepareMapZones(); _meatZoneDebt = ( scalars.length > 12 ) ? scalars[12] : 0;
 	    _matingRecord.set( file.get( "matingRecord" )); _matingBrightnessDifference.set( file.get( "matingBrightness" )); _matingChoosinessMean.set( file.get( "matingChoosiness" ));
 	    _gardens = header.gardens.map( g => ({ x: g.x, y: g.y, type: g.type }));
 	    _roots.length = 0;

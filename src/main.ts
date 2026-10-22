@@ -35,6 +35,7 @@ import * as lang     from "./ui/lang";
 import * as debug    from "./ui/debug";
 import * as worldFile from "./ui/worldFile";
 import * as species  from "./ui/species";
+import * as mapEditor from "./ui/mapEditor";
 import { initializeLayout } from "./ui/layout";
 import { setParameter } from "./simulation/ParamStore";
 
@@ -55,7 +56,7 @@ Object.assign( window,
     Brain, Camera, Embryology, FamilyTree, FoodBit, GenePoolModule, Genotype, Globals,
     MathConstants, Obstacle, Parameters, PhyloTree, Pool, Swimbot,
     SwimbotRenderer, SwimbotTypes, Touch, Utility, Vector2D, ViewTracking,
-    graph, info, logger, saveLoad, ui, lang, debug, worldFile, species );
+    graph, info, logger, saveLoad, ui, lang, debug, worldFile, species, mapEditor );
 
 //------------------------------------------------------------------------------
 // prepare the UI: turn on the info panel and set it to the first page

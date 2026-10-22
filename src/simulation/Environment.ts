@@ -15,6 +15,7 @@
 // how far a swimbot travels in its life, borders soft, changes slow).
 //------------------------------------------------------------------------------
 import { gpRandom } from "./Globals";
+import { ZONE_TEMPERATURE, pointInZone, zoneBounds } from "./MapZones";
 import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
 import { petriLevel, petriPosition, petriTemperature, petriSettings } from "./Petri";
 
@@ -73,6 +74,9 @@ export class Environment
     petri : { zones: number, layout: number, softness: number } | null = null;
     private zoneOfCell      = new Int8Array( FIELD_SIZE * FIELD_SIZE );
 
+    // a drawn map (map editor): flat or not, and the temperature zones painted over the generated map
+    paint : { blank: boolean, zones: { kind: string, points: number[] }[] } | null = null;
+
     readonly plantColumns   = Math.ceil( ( POOL_RIGHT  - POOL_LEFT ) / PLANT_CELL_SIZE );
     readonly plantRows      = Math.ceil( ( POOL_BOTTOM - POOL_TOP  ) / PLANT_CELL_SIZE );
     readonly plantCount     = [ new Int32Array( this.plantColumns * this.plantRows ),     // warm plants per cell
@@ -86,6 +90,7 @@ export class Environment
     generate( petri = false ): void
     {
         this.petri = petri ? { zones: petriSettings.zones, layout: petriSettings.layout, softness: petriSettings.softness } : null;
+        this.paint = null;
         if ( this.petri ) { this.biomeSeeds = []; this.computePetriField(); return; }
 
         //------------------------------------------------------------
@@ -118,7 +123,7 @@ export class Environment
     //--------------------------------------------------------------------
     getState()
     {
-        return { active: this.active, petri: this.petri, seeds: this.biomeSeeds.map( s => ({ x: s.x, y: s.y, type: s.type, shade: s.shade })) };
+        return { active: this.active, petri: this.petri, seeds: this.biomeSeeds.map( s => ({ x: s.x, y: s.y, type: s.type, shade: s.shade })), paint: this.paint };
     }
 
     // petri settings from a file: whole numbers in range, or the defaults
@@ -147,7 +152,8 @@ export class Environment
         }
         this.active     = !!( state && state.active && state.seeds && state.seeds.length > 0 );
         this.biomeSeeds = this.active ? state.seeds.map( s => ({ x: s.x, y: s.y, type: s.type, shade: ( s.shade !== undefined ) ? s.shade : 0.5 })) : [];
-        if ( this.active ) { this.computeField(); }
+        this.paint = ( state && state.paint ) ? state.paint : null;
+        if ( this.active ) { this.computeField(); this.applyPaint(); }
     }
 
     //--------------------------------------------------------------------
@@ -217,6 +223,40 @@ export class Environment
             }
         }
     }
+
+    //--------------------------------------------------------------------
+    // a drawn map: "blank" makes it flat (mild everywhere), then the
+    // temperature zones are painted over it (warm, cold, mild)
+    //--------------------------------------------------------------------
+    applyPaint(): void
+    {
+        if ( !this.paint ) return;
+        if ( this.paint.blank ) { this.baseTemperature.fill( 0.5 ); this.background.fill( 0.5 ); }
+        const width  = POOL_RIGHT  - POOL_LEFT;
+        const height = POOL_BOTTOM - POOL_TOP;
+        for ( const zone of this.paint.zones )
+        {
+            const value = ZONE_TEMPERATURE[ zone.kind ];
+            if ( value === undefined || zone.points.length < 6 ) continue;
+            const box = zoneBounds( zone.points );
+            const i0 = Math.max( 0, Math.floor(( box.left - POOL_LEFT ) / width * FIELD_SIZE )), i1 = Math.min( FIELD_SIZE - 1, Math.ceil(( box.right  - POOL_LEFT ) / width  * FIELD_SIZE ));
+            const j0 = Math.max( 0, Math.floor(( box.top  - POOL_TOP  ) / height * FIELD_SIZE )), j1 = Math.min( FIELD_SIZE - 1, Math.ceil(( box.bottom - POOL_TOP ) / height * FIELD_SIZE ));
+            for ( let j = j0; j <= j1; j++ )
+            {
+                for ( let i = i0; i <= i1; i++ )
+                {
+                    const x = POOL_LEFT + ( i + 0.5 ) / FIELD_SIZE * width, y = POOL_TOP + ( j + 0.5 ) / FIELD_SIZE * height;
+                    if ( !pointInZone( x, y, zone.points )) continue;
+                    const k = j * FIELD_SIZE + i;
+                    this.background[k] = this.background[k] - 0.5 * this.baseTemperature[k] + 0.5 * value;
+                    this.baseTemperature[k] = value;
+                }
+            }
+        }
+    }
+
+    // the base temperature of every cell (the map editor draws it)
+    temperatureGrid(): Float32Array { return this.baseTemperature.slice(); }
 
     // -1 at the top (north, cold) .. +1 at the bottom (south, hot)
     latitude( y: number ): number
