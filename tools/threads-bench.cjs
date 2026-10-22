@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 // Speed of the simulation with worker threads (stage 7), without a browser.
 //
-//   node --max-old-space-size=8000 tools/threads-bench.cjs <swimbots> [steps] [threads] [seed]
+//   node --max-old-space-size=8000 tools/threads-bench.cjs <swimbots> [steps] [threads] [seed] [worldScale]
 //
 // Runs the pool in the headless sandbox (like bench.cjs) and lets Node worker
 // threads do the heavy phases (moving bodies, looking around), the same way
@@ -19,12 +19,17 @@ const bots    = parseInt( process.argv[2] || "2000", 10 );
 const steps   = parseInt( process.argv[3] || "200",  10 );
 const threads = parseInt( process.argv[4] || "8",    10 );
 const seed    = parseInt( process.argv[5] || "1",    10 );
+const worldScale = Math.max( 1, Math.min( 4, parseInt( process.argv[6] || "2", 10 )));
 
-const maxSwimbots = Math.max( 6000, Math.ceil( bots * 1.6 ));
-const maxFoodBits = Math.max( 8000, bots * 4 );
+const worldAreaFactor = worldScale * worldScale;
+// Match the pool's normal capacities and food supply at this world scale.
+// Only raise the swimbot capacity when the requested initial population needs it.
+const maxSwimbots = Math.max( 1500 * worldAreaFactor, bots );
+const maxFoodBits = 4000 * worldAreaFactor;
 const overrides = {
+    WORLD_SCALE: worldScale,
     MAX_SWIMBOTS: maxSwimbots, INITIAL_NUM_SWIMBOTS: bots,
-    MAX_FOODBITS: maxFoodBits, MAX_FOODBITS_PER_TYPE: maxFoodBits / 2, INITIAL_NUM_FOODBITS: bots * 2,
+    MAX_FOODBITS: maxFoodBits, MAX_FOODBITS_PER_TYPE: 1000 * worldAreaFactor, INITIAL_NUM_FOODBITS: 1000 * worldAreaFactor,
 };
 
 //------------------------------------------------------------
@@ -72,6 +77,7 @@ async function main()
     const sb  = run.sandbox;
     const st  = sb.sharedState();
     const genePool = run.genePool;
+    if ( sb.WORLD_SCALE !== worldScale ) throw new Error( `world scale override failed: wanted ${ worldScale }, got ${ sb.WORLD_SCALE }` );
 
     //------------------------------------------------------------
     // workers
@@ -158,9 +164,10 @@ async function main()
     }
     const n = times[6];
     const f = ( x ) => ( x / n ).toFixed( 2 );
-    console.log( `swimbots=${ bots } alive=${ genePool.getNumSwimbots() } threads=${ threads } ms/step=${ ms.toFixed( 2 ) } steps/sec=${ ( 1000 / ms ).toFixed( 1 ) }` );
+    console.log( `world=${ worldScale } swimbots=${ bots } alive=${ genePool.getNumSwimbots() } maxSwimbots=${ maxSwimbots } food=${ 1000 * worldAreaFactor }/${ maxFoodBits } threads=${ threads } ms/step=${ ms.toFixed( 2 ) } steps/sec=${ ( 1000 / ms ).toFixed( 1 ) }` );
     console.log( `  decide ${ f( times[0] ) } | move ${ f( times[1] ) } | after ${ f( times[2] ) } | look ${ f( times[3] ) } | act ${ f( times[4] ) } | rest ${ f( times[5] - times[0] - times[1] - times[2] - times[3] - times[4] ) }` );
     console.log( `fingerprint=${ fingerprint.toFixed( 6 ) }` );
+    console.log( `worldHashes=${ JSON.stringify( genePool.worldHashes() ) }` );
     for ( const w of workers ) w.terminate();
 }
 
