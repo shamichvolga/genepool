@@ -3,7 +3,7 @@ import { CARCASS_ENABLED, DISEASE_ENABLED, CANNIBAL_GENE_FOUNDER_MAX, PLANT_REGR
 import { exportStrains, importStrains, updateDiseases } from "./Disease";
 import { PILE_PARTS, PreparedZone, insideAny, prepareZones, randomPointInZone } from "./MapZones";
 import { plantFullEnergy, plantLifespan, plantSize } from "./PlantSize";
-import { PLANT_SIZE_ENABLED, PLANT_GROW_TIME, PLANT_LEAF_REGROWTH, PLANT_LIFESPAN } from "./Parameters";
+import { PLANT_SIZE_ENABLED, PLANT_SEEDS_BY_SIZE, PLANT_GROW_TIME, PLANT_LEAF_REGROWTH, PLANT_LIFESPAN } from "./Parameters";
 import { Environment } from "./Environment";
 import { Chunk, WORLD_FORMAT, layoutFingerprint, packWorld, unpackWorld } from "./WorldFile";
 import { PARAM_DEFAULTS, PARAM_LIST, changedParams, setParameter } from "./ParamStore";
@@ -1388,7 +1388,7 @@ if ( mode === SimulationStartMode.SPECIES )
 	                }
 	            }
 
-	            if ( PLANT_SIZE_ENABLED && ( parent !== null ))
+	            if ( PLANT_SIZE_ENABLED && PLANT_SEEDS_BY_SIZE && ( parent !== null ))
 	            {
 	                // a plant makes seeds as it is grown: a sprout hardly, a tree surely
 	                let grown = gpRandom() < plantSize( parent.getAge() );

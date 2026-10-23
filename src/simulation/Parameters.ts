@@ -282,6 +282,7 @@ export const BITE_FORCE_AT_REFERENCE        = 0.5;    // the bite force of a bod
 export const BITE_REFERENCE_MASS            = 410;
 export const BITE_ENERGY                    = 25;     // one bite takes this much x the bite force
 export const BITE_MARGIN                    = 0.15;   // the bite is full when the force is this much above the toughness
+export const PLANT_SEEDS_BY_SIZE            = true;   // PLANT_SIZE_ENABLED: only grown plants make seeds (false: every plant, as without PLANT_SIZE)
 export const PLANT_LIFESPAN                 = 0;      // PLANT_SIZE_ENABLED: an old plant falls after about this many steps (each its own: 0.5 .. 1.5 x), its place is free for seedlings; 0 = plants live until eaten   // sprout / mature / old plant; small bodies digest sprouts, big ones old plants better
 export const PLANT_SPROUT_AGE               = 1500;
 export const PLANT_OLD_AGE                  = 6000;
