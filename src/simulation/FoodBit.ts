@@ -1,7 +1,7 @@
 import { simClock, gpRandom } from "./Globals";
 import { NULL_INDEX, ONE, ONE_HALF, PI2, ZERO } from "./MathConstants";
 import { plantSize } from "./PlantSize";
-import { MEAT_PIECE_ENERGY, PLANT_SIZE_ENABLED, PLANT_EVOLUTION_ENABLED, PLANT_STAGES_ENABLED, PLANT_STAGES_SHOWN, SPAWN_FOOD_RANDOMLY_IN_POOL } from "./Parameters";
+import { MEAT_PIECE_ENERGY, PLANT_SIZE_ENABLED, PLANT_TREE_ENERGY, PLANT_EVOLUTION_ENABLED, PLANT_STAGES_ENABLED, PLANT_STAGES_SHOWN, SPAWN_FOOD_RANDOMLY_IN_POOL } from "./Parameters";
 import { plantGrowthOf, plantSpreadOf, plantSproutGrowth, plantStage, randomizePlantGenes } from "./PlantGenes";
 import { POOL_BOTTOM, POOL_HEIGHT, POOL_LEFT, POOL_RIGHT, POOL_TOP, POOL_WIDTH } from "./Pool";
 import { assert } from "./Utility";
@@ -245,7 +245,8 @@ export function FoodBit()
 	{
 	    _fe[ _fi ] = e;
 
-	    assert( _fe[ _fi ] <= MAX_FOOD_BIT_ENERGY, "FoodBit:getMaxSpawnRadius setEnergy: _fe[ _fi ] <= MAX_FOOD_BIT_ENERGY" );
+	    // (PLANT_SIZE_ENABLED: a tree holds more than the food slider allows)
+	    assert( _fe[ _fi ] <= ( PLANT_SIZE_ENABLED ? Math.max( MAX_FOOD_BIT_ENERGY, PLANT_TREE_ENERGY ) : MAX_FOOD_BIT_ENERGY ), "FoodBit:getMaxSpawnRadius setEnergy: _fe[ _fi ] <= MAX_FOOD_BIT_ENERGY" );
 	    assert( _fe[ _fi ] >= MIN_FOOD_BIT_ENERGY, "FoodBit:getMaxSpawnRadius setEnergy: _fe[ _fi ] >= MIN_FOOD_BIT_ENERGY" );
 	   }
 

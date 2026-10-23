@@ -1,6 +1,7 @@
 // Понятные названия и описания параметров из src/simulation/Parameters.ts (для режима отладки).
 // Ключ — имя константы; en/ru — короткое название; descEn/descRu — что делает параметр.
 export const PARAM_TEXT: Record<string, { en: string, ru: string, descEn: string, descRu: string }> = {
+  PLANT_LIFESPAN: { en: "Lifespan of a plant", ru: "Срок жизни растения", descEn: "With growing plants: an old plant falls after about this many steps (each its own), and seedlings take its place. 0: plants live until eaten.", descRu: "Когда растения растут: старое растение падает примерно через столько шагов (у каждого свой срок), на его место приходят ростки. 0 — живут, пока не съедят." },
   PLANT_SIZE_ENABLED: { en: "Plants grow (who can eat them changes)", ru: "Растения растут (меняется, кто их ест)", descEn: "A plant grows and gets tougher while nobody eats it. Eaters bite pieces off it; only a strong bite (a big body) gets through a tough plant. Grown plants make the seeds.", descRu: "Растение растёт и грубеет, пока его не едят. Его откусывают по кусочку; жёсткое растение по зубам только сильному укусу (большому телу). Семена дают выросшие растения." },
   PLANT_GROW_TIME: { en: "Plant growing time", ru: "Время роста растения", descEn: "Steps after which a plant is about two thirds of a full-grown tree.", descRu: "Через столько шагов растение — примерно две трети взрослого дерева." },
   PLANT_SPROUT_ENERGY: { en: "Energy of a sprout", ru: "Энергия ростка", descEn: "How much a new sprout holds.", descRu: "Сколько энергии в новом ростке." },

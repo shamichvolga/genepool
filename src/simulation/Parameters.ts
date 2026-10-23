@@ -281,7 +281,8 @@ export const PLANT_MAX_TOUGHNESS            = 0.8;    // toughness of a full-gro
 export const BITE_FORCE_AT_REFERENCE        = 0.5;    // the bite force of a body of BITE_REFERENCE_MASS (force grows as mass^(2/3))
 export const BITE_REFERENCE_MASS            = 410;
 export const BITE_ENERGY                    = 25;     // one bite takes this much x the bite force
-export const BITE_MARGIN                    = 0.15;   // the bite is full when the force is this much above the toughness   // sprout / mature / old plant; small bodies digest sprouts, big ones old plants better
+export const BITE_MARGIN                    = 0.15;   // the bite is full when the force is this much above the toughness
+export const PLANT_LIFESPAN                 = 0;      // PLANT_SIZE_ENABLED: an old plant falls after about this many steps (each its own: 0.5 .. 1.5 x), its place is free for seedlings; 0 = plants live until eaten   // sprout / mature / old plant; small bodies digest sprouts, big ones old plants better
 export const PLANT_SPROUT_AGE               = 1500;
 export const PLANT_OLD_AGE                  = 6000;
 export const PLANT_ROT_AGE                  = 12000;

@@ -8,7 +8,7 @@
 //   bite force grows with the body (the mouth: mass^(2/3))
 // Only Parameters here: the threads use it too.
 //------------------------------------------------------------------------------
-import { BITE_ENERGY, BITE_FORCE_AT_REFERENCE, BITE_MARGIN, BITE_REFERENCE_MASS, PLANT_GROW_TIME, PLANT_MAX_TOUGHNESS,
+import { PLANT_LIFESPAN, BITE_ENERGY, BITE_FORCE_AT_REFERENCE, BITE_MARGIN, BITE_REFERENCE_MASS, PLANT_GROW_TIME, PLANT_MAX_TOUGHNESS,
          PLANT_SPROUT_ENERGY, PLANT_TREE_ENERGY } from "./Parameters";
 
 export function plantSize( age: number ): number { return ( age <= 0 ) ? 0 : 1 - Math.exp( -age / PLANT_GROW_TIME ); }
@@ -17,6 +17,13 @@ export function plantToughness( age: number ): number { return PLANT_MAX_TOUGHNE
 
 // what a plant of this age holds when nobody has bitten it
 export function plantFullEnergy( age: number ): number { return PLANT_SPROUT_ENERGY + ( PLANT_TREE_ENERGY - PLANT_SPROUT_ENERGY ) * plantSize( age ); }
+
+// how long a plant lives (PLANT_LIFESPAN): each its own, from its slot and birth (no random numbers used)
+export function plantLifespan( f: number, born: number ): number
+{
+    const h = ( Math.imul( f + 1, 0x9E3779B1 ) ^ Math.imul( Math.floor( born ) | 0, 0x85EBCA6B )) >>> 0;
+    return PLANT_LIFESPAN * ( 0.5 + ( h % 10007 ) / 10007 );
+}
 
 export function biteForce( mass: number ): number { return BITE_FORCE_AT_REFERENCE * Math.pow( Math.max( 1, mass ) / BITE_REFERENCE_MASS, 2 / 3 ); }
 

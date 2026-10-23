@@ -2,8 +2,8 @@ import { WORLD_AREA_FACTOR } from "./World";
 import { CARCASS_ENABLED, DISEASE_ENABLED, CANNIBAL_GENE_FOUNDER_MAX, PLANT_REGROW_CHANCE, PLANT_REGROW_DELAY } from "./Parameters";
 import { exportStrains, importStrains, updateDiseases } from "./Disease";
 import { PILE_PARTS, PreparedZone, insideAny, prepareZones, randomPointInZone } from "./MapZones";
-import { plantFullEnergy, plantSize } from "./PlantSize";
-import { PLANT_SIZE_ENABLED, PLANT_GROW_TIME, PLANT_LEAF_REGROWTH } from "./Parameters";
+import { plantFullEnergy, plantLifespan, plantSize } from "./PlantSize";
+import { PLANT_SIZE_ENABLED, PLANT_GROW_TIME, PLANT_LEAF_REGROWTH, PLANT_LIFESPAN } from "./Parameters";
 import { Environment } from "./Environment";
 import { Chunk, WORLD_FORMAT, layoutFingerprint, packWorld, unpackWorld } from "./WorldFile";
 import { PARAM_DEFAULTS, PARAM_LIST, changedParams, setParameter } from "./ParamStore";
@@ -2935,6 +2935,17 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 
             // PLANT_SIZE_ENABLED: a plant grows towards the worth of its size; a new
             // sprout starts small; a bitten plant grows its leaves back
+            // (PLANT_LIFESPAN: an old plant falls; what it holds goes back to the soil, its place is free)
+            if ( PLANT_SIZE_ENABLED && ( PLANT_LIFESPAN > 0 ) && ( type !== 2 ) && ( _clock - born[f] > plantLifespan( f, born[f] )))
+            {
+                if ( counting && NUTRIENT_CYCLE_ENABLED )
+                {
+                    const position = _foodBits[f].getPosition();
+                    environment.returnMeatDetritusAt( position.x, position.y, _foodBits[f].getEnergy() );
+                }
+                _foodBits[f].kill();
+                continue;
+            }
             if ( PLANT_SIZE_ENABLED && ( type !== 2 ))
             {
                 const full = plantFullEnergy( _clock - born[f] ), e = _st.foodEnergy[f];
