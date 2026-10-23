@@ -12,7 +12,10 @@
 //   tree), mean plant energy, meat,
 //   plant energy eaten per herbivore per step, and how it is split by eater
 //   size (3-5, 6-8, 9-12, 13-16 parts) and by plant size,
-//   age of the plants eaten whole (p10, p50, p90)
+//   age of the plants eaten whole (p10, p50, p90),
+//   currents (CURRENT_AWARENESS_ENABLED): share of swimbots in a stream, the mean
+//   gene "how the stream counts" (-1..+1) in a stream and out of it, and the mean
+//   weights of the brain from the current senses to steering and effort
 //------------------------------------------------------------------------------
 "use strict";
 const fs = require( "fs" );
@@ -64,7 +67,8 @@ for ( const b of bots )
 const header = [ "step", "alive", "predators", "herb_3_5", "herb_6_8", "herb_9_12", "herb_13_16", "eff_forms", "main_form_share", "herb_mass",
                  "plants_sprout", "plants_young", "plants_grown", "plants_tree", "plant_energy_mean", "meat", "intake_per_herb_step",
                  ...[ "3_5", "6_8", "9_12", "13_16" ].flatMap( c => [ "sprout", "young", "grown", "tree" ].map( p => "eat_" + c + "_" + p )),
-                 "eaten_age_p10", "eaten_age_p50", "eaten_age_p90" ].join( "," );
+                 "eaten_age_p10", "eaten_age_p50", "eaten_age_p90",
+                 "in_stream_share", "current_gene_in_stream", "current_gene_out", "w_steer_side", "w_steer_ahead", "w_effort_ahead" ].join( "," );
 const rows = [ header ];
 console.log( "seed=" + SEED + " steps=" + STEPS + " set=" + JSON.stringify( overrides ));
 console.log( header );
@@ -106,6 +110,28 @@ for ( let step = 1; step <= STEPS; step++ )
         plants[ sizeClass( sizeOf( now - st.foodBorn[f] )) ] ++;
         plantEnergy += st.foodEnergy[f]; numPlants ++;
     }
+    // currents: where they live, the gene, the brain's weights on the current senses
+    let inStream = 0, geneIn = 0, geneOut = 0, wSide = 0, wAhead = 0, wEffort = 0, counted = 0;
+    const hasCurrentSenses = ( typeof sb.IN_CURRENT_SIDE === "number" );
+    for ( let s = 0; s < bots.length; s++ )
+    {
+        if ( st.liveSwimbot[s] !== 1 ) continue;
+        counted ++;
+        sb.currentAt( st.botX[s], st.botY[s] );
+        const gene = st.mind[ s * sb.MIND_STRIDE + ( sb.M_CURRENT_W || 81 ) ];
+        if ( sb.currentStrength() > 0.3 ) { inStream ++; geneIn += gene; } else { geneOut += gene; }
+        if ( hasCurrentSenses )
+        {
+            const w = s * sb.BRAIN_SIZE;
+            wSide   += st.brainWeights[ w + sb.OUT_STEER  * sb.NUM_INPUTS + sb.IN_CURRENT_SIDE  ];
+            wAhead  += st.brainWeights[ w + sb.OUT_STEER  * sb.NUM_INPUTS + sb.IN_CURRENT_AHEAD ];
+            wEffort += st.brainWeights[ w + sb.OUT_EFFORT * sb.NUM_INPUTS + sb.IN_CURRENT_AHEAD ];
+        }
+    }
+    const currentCols = [ ( inStream / Math.max( 1, counted )).toFixed( 3 ), inStream ? ( geneIn / inStream ).toFixed( 3 ) : "",
+                          ( counted - inStream ) ? ( geneOut / ( counted - inStream )).toFixed( 3 ) : "",
+                          ( wSide / Math.max( 1, counted )).toFixed( 3 ), ( wAhead / Math.max( 1, counted )).toFixed( 3 ), ( wEffort / Math.max( 1, counted )).toFixed( 3 ) ];
+
     const totalEaten = eaten.reduce( ( a, x ) => a + x, 0 );
     wholeAges.sort( ( a, b ) => a - b );
     const q = ( p ) => wholeAges.length ? Math.round( wholeAges[ Math.min( wholeAges.length - 1, Math.floor( p * wholeAges.length )) ] ) : "";
@@ -113,7 +139,7 @@ for ( let step = 1; step <= STEPS; step++ )
                   ...plants, numPlants ? ( plantEnergy / numPlants ).toFixed( 1 ) : 0, meat,
                   ( totalEaten / Math.max( 1, herbStepSum )).toFixed( 4 ),
                   ...Array.from( eaten, x => ( totalEaten > 0 ? x / totalEaten : 0 ).toFixed( 3 )),
-                  q( 0.1 ), q( 0.5 ), q( 0.9 ) ].join( "," );
+                  q( 0.1 ), q( 0.5 ), q( 0.9 ), ...currentCols ].join( "," );
     rows.push( row );
     console.log( row + "  [" + (( Date.now() - t0 ) / 60000 ).toFixed( 1 ) + " min]" );
     fs.writeFileSync( path.join( OUT, "census.csv" ), rows.join( "\n" ) + "\n" );
