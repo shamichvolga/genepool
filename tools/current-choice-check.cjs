@@ -1,7 +1,7 @@
 //------------------------------------------------------------------------------
 // CURRENT_AWARENESS_ENABLED check: a predator in a stream, two prey at the same
-// distance, one down the stream and one up. With the gene "feel for the
-// current" 0 it takes either (the nearer one); with 1 the one down the stream.
+// distance, one down the stream and one up. The gene (-1..+1): 0 takes either
+// (the nearer one), +1 the one down the stream, -1 the one up the stream.
 //   node tools/current-choice-check.cjs
 //------------------------------------------------------------------------------
 const { createSimulation } = require( "./headless.cjs" );
@@ -35,11 +35,11 @@ function trial( w )
     return "none";
 }
 
-for ( const w of [ 0, 1 ] )
+for ( const w of [ -1, 0, 1 ] )
 {
     const count = { down: 0, up: 0, none: 0 };
     for ( let i = 0; i < 40; i++ ) count[ trial( w ) ] ++;
-    console.log( "feel for the current " + w + ": chose the prey down the stream " + count.down + ", up the stream " + count.up + ", none " + count.none );
+    console.log( "gene (how the stream counts) " + w + ": chose the prey down the stream " + count.down + ", up the stream " + count.up + ", none " + count.none );
 }
 console.log( 'factor down/up at speed 0.15:', sb.currentTravelFactor( 0, 0.3, 0, D, 0.15, 1 ).toFixed( 2 ), sb.currentTravelFactor( 0, 0.3, 0, -D, 0.15, 1 ).toFixed( 2 ));
 console.log( "drift at the predator:", ( sb.currentAt( px, py ), [ sb.currentDriftX().toFixed( 3 ), sb.currentDriftY().toFixed( 3 ) ] ));

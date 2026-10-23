@@ -49,7 +49,11 @@ export const IN_PREY_CHASE    = 24; // estimated travel/time cost to reach live 
 export const IN_BAIT_PRESENT  = 25; // edible meat is visible
 export const IN_BAIT_DISTANCE = 26; // distance to the best visible meat, / view radius
 export const IN_BAIT_REWARD   = 27; // energy available from the meat, 0..1
-export const NUM_INPUTS       = 28;
+// the water around it (currents on): how it flows, seen from the swimbot, as strong as the stream
+// (1 = the middle of a full stream). Innate weights 0: what to do about it is for evolution to find.
+export const IN_CURRENT_AHEAD = 28; // + flows the way I face, - against me
+export const IN_CURRENT_SIDE  = 29; // + pushes me to the right, - to the left
+export const NUM_INPUTS       = 30;
 
 //------------------------------------------------------------
 // outputs
@@ -97,6 +101,13 @@ const PRE_C12_W_IH = CORE_NUM_OUTPUTS * LEGACY_NUM_INPUTS;
 const PRE_C12_W_HH = PRE_C12_W_IH + NUM_HIDDEN * LEGACY_NUM_INPUTS;
 const PRE_C12_W_HO = PRE_C12_W_HH + NUM_HIDDEN * NUM_HIDDEN;
 const PRE_C12_BRAIN_SIZE = PRE_C12_W_HO + CORE_NUM_OUTPUTS * NUM_HIDDEN;
+// before the current senses (24.10): 28 inputs, the target-choice outputs appended
+const PRE_CURRENT_NUM_INPUTS = 28;
+const PRE_CURRENT_W_IH = CORE_NUM_OUTPUTS * PRE_CURRENT_NUM_INPUTS;
+const PRE_CURRENT_W_HH = PRE_CURRENT_W_IH + NUM_HIDDEN * PRE_CURRENT_NUM_INPUTS;
+const PRE_CURRENT_W_HO = PRE_CURRENT_W_HH + NUM_HIDDEN * NUM_HIDDEN;
+const PRE_CURRENT_CORE = PRE_CURRENT_W_HO + CORE_NUM_OUTPUTS * NUM_HIDDEN;
+const PRE_CURRENT_BRAIN_SIZE = PRE_CURRENT_CORE + ( NUM_OUTPUTS - CORE_NUM_OUTPUTS ) * ( PRE_CURRENT_NUM_INPUTS + NUM_HIDDEN );
 
 function copySavedNetwork( target: Float32Array, source: ArrayLike<number>, outputs: number,
                            inputs: number, wIH: number, wHH: number, wHO: number ): void
@@ -126,6 +137,17 @@ export function migrateLegacyBrainWeights( target: Float32Array, source: ArrayLi
         copySavedNetwork( target, source, LEGACY_NUM_OUTPUTS, LEGACY_NUM_INPUTS, LEGACY_W_IH, LEGACY_W_HH, LEGACY_W_HO );
     else if ( source.length === PRE_C12_BRAIN_SIZE )
         copySavedNetwork( target, source, CORE_NUM_OUTPUTS, LEGACY_NUM_INPUTS, PRE_C12_W_IH, PRE_C12_W_HH, PRE_C12_W_HO );
+    else if ( source.length === PRE_CURRENT_BRAIN_SIZE )
+    {
+        // (the weights of the current senses stay 0)
+        copySavedNetwork( target, source, CORE_NUM_OUTPUTS, PRE_CURRENT_NUM_INPUTS, PRE_CURRENT_W_IH, PRE_CURRENT_W_HH, PRE_CURRENT_W_HO );
+        for ( let o = CORE_NUM_OUTPUTS; o < NUM_OUTPUTS; o++ )
+        {
+            const from = PRE_CURRENT_CORE + ( o - CORE_NUM_OUTPUTS ) * ( PRE_CURRENT_NUM_INPUTS + NUM_HIDDEN );
+            for ( let i = 0; i < PRE_CURRENT_NUM_INPUTS; i++ ) target[ extraOutputInputIndex( o ) + i ] = Number( source[ from + i ] ) || 0;
+            for ( let h = 0; h < NUM_HIDDEN; h++ ) target[ extraOutputHiddenIndex( o ) + h ] = Number( source[ from + PRE_CURRENT_NUM_INPUTS + h ] ) || 0;
+        }
+    }
     else return false;
     return true;
 }
@@ -259,6 +281,12 @@ export function mutateBrain( w: Float32Array, rate: number, includeExtended = fa
 {
     const mutate = index => { if ( gpRandom() < rate ) w[index] = clampWeight( w[index] + gaussian() * BRAIN_MUTATION_STEP ); };
     forEachLegacyWeightIndex( mutate );
+    // the senses of the current: born 0, they change only by mutation (and selection keeps what helps)
+    for ( const i of [ IN_CURRENT_AHEAD, IN_CURRENT_SIDE ] )
+    {
+        for ( let o = 0; o < LEGACY_NUM_OUTPUTS; o++ ) mutate( W_IO + o * NUM_INPUTS + i );
+        for ( let h = 0; h < NUM_HIDDEN; h++ )         mutate( W_IH + h * NUM_INPUTS + i );
+    }
     if ( includeExtended )
     {
         for ( let i = 0; i < LEGACY_NUM_INPUTS; i++ )

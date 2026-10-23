@@ -30,12 +30,12 @@ import { BRAIN_FOCUS_TARGET_SHIFT_STRENGTH, BRAIN_FOCUS_TARGET_SHIFT_THRESHOLD, 
 import { BRAIN_SIZE, NUM_HIDDEN, NUM_INPUTS, NUM_OUTPUTS, DRIVE_OUTPUTS, THINK_PERIOD, DRIVE_HYSTERESIS, EFFORT_MIN, EFFORT_RANGE, STEER_MAX_DEGREES,
          IN_BIAS, IN_HUNGER, IN_ENERGY, IN_AGE, IN_FIT, IN_TREND, IN_FOOD, IN_MATE, IN_THREAT, IN_PREY, IN_CROWD, IN_PREDATOR,
          IN_FOOD_SIDE, IN_FOOD_AHEAD, IN_NEAR_SIDE, IN_NEAR_AHEAD, IN_THREAT_SIDE, IN_THREAT_AHEAD, IN_KIN, IN_SEASON, IN_PREDATOR_NEAR,
-         IN_PREY_DISTANCE, IN_PREY_REWARD, IN_PREY_SUCCESS, IN_PREY_CHASE, IN_BAIT_PRESENT, IN_BAIT_DISTANCE, IN_BAIT_REWARD,
+         IN_PREY_DISTANCE, IN_PREY_REWARD, IN_PREY_SUCCESS, IN_PREY_CHASE, IN_BAIT_PRESENT, IN_BAIT_DISTANCE, IN_BAIT_REWARD, IN_CURRENT_AHEAD, IN_CURRENT_SIDE,
          OUT_FOOD, OUT_MATE, OUT_FLEE, OUT_HUNT, OUT_CLIMATE, OUT_SOCIAL, OUT_EFFORT, OUT_STEER, OUT_SELF_EAT, OUT_PREY_VALUE, OUT_PREY_TRAVEL, OUT_PREY_BAIT,
          think, sigmoid } from "./NeuralBrain";
 import { biteEnergy } from "./PlantSize";
 import { currentAt, currentDriftX, currentDriftY, currentStrength } from "./Currents";
-import { CURRENT_AWARENESS_ENABLED, CURRENT_AWARE_MIN_SPEED, CURRENT_TRIGGER_CHANGE_MIN, CURRENT_TRIGGER_CHANGE_MAX } from "./Parameters";
+import { CURRENT_AWARENESS_ENABLED, CURRENT_SPEED, CURRENT_TRIGGER_CHANGE_MIN, CURRENT_TRIGGER_CHANGE_MAX } from "./Parameters";
 import { PLANT_SIZE_ENABLED } from "./Parameters";
 import { CANNIBAL_GENE_THRESHOLD, KIN_NOT_EATEN_ENABLED, ONLY_GROWN_EAT_YOUNG_ENABLED, EVENT_DRIVEN_LOOK_ENABLED, EVENT_CALM_LOOK_PERIOD, EVENT_CALM_MIN_DISTANCE, DESPERATE_CANNIBALISM_ENABLED, DESPERATE_ENERGY_SHARE, CANNIBAL_PREY_MASS_SHARE, DESPERATE_PREY_MASS_SHARE, LIMBS_CATCH_YOUNG_ENABLED, YOUNG_CANNIBALISM_ENABLED, BITE_AT_CONTACT_ENABLED, CONTACT_EATING_ENABLED, AUTOTOMY_DECOY_SPAN, CLIMATE_PROBE_DISTANCE, CLIMATE_STEERING, SOCIAL_STEERING, BODY_TEMPERATURE_INERTIA_ENABLED, SELF_CANNIBALISM_ENABLED,
          PREDATOR_TARGET_SELECTION_ENABLED, PREDATOR_FLEE_RADIUS, PREDATOR_LEVEL_THRESHOLD, PREY_SCAN_COOLDOWN, PREY_SCAN_RADIUS_GROWTH,
@@ -385,6 +385,16 @@ export function neuralThink( st: SharedState, s: number ): void
         toward( B[ p + SS.B_POS_X ], B[ p + SS.B_POS_Y ], IN_THREAT_SIDE, IN_THREAT_AHEAD );
     }
     x[ xi + IN_SEASON ] = ( st.params[ SS.PARAM_ENV_ACTIVE ] === 1 ) ? seasonPhase( st ) : 0;
+    // the water around it (CURRENT_AWARENESS_ENABLED): only a feeling - how to use it, the weights decide
+    x[ xi + IN_CURRENT_AHEAD ] = x[ xi + IN_CURRENT_SIDE ] = 0;
+    if ( CURRENT_AWARENESS_ENABLED && ( st.params[ SS.PARAM_CURRENT ] > 0 ))
+    {
+        currentAt( px, py );
+        const flow = st.params[ SS.PARAM_CURRENT ] / CURRENT_SPEED;
+        const dx = currentDriftX() * flow, dy = currentDriftY() * flow;
+        x[ xi + IN_CURRENT_AHEAD ] = dx * headingX + dy * headingY;
+        x[ xi + IN_CURRENT_SIDE  ] = dx * headingY - dy * headingX;
+    }
 
     const w = st.brainWeights.subarray( s * BRAIN_SIZE, ( s + 1 ) * BRAIN_SIZE );
     const inputs  = st.nnInputs.subarray( xi, xi + NUM_INPUTS );
@@ -498,7 +508,7 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
         {
             currentAt( B[ b + SS.B_POS_X ], B[ b + SS.B_POS_Y ] );
             felt = currentStrength();
-            const need = CURRENT_TRIGGER_CHANGE_MAX - ( CURRENT_TRIGGER_CHANGE_MAX - CURRENT_TRIGGER_CHANGE_MIN ) * M[ m + SS.M_CURRENT_W ];
+            const need = CURRENT_TRIGGER_CHANGE_MAX - ( CURRENT_TRIGGER_CHANGE_MAX - CURRENT_TRIGGER_CHANGE_MIN ) * Math.abs( M[ m + SS.M_CURRENT_W ] );
             if ( !due && ( Math.abs( felt - M[ m + SS.M_LAST_CURRENT ] ) > need )) { due = true; }
         }
         if ( due )
@@ -683,18 +693,23 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
     }
 
     //-------------------------------------------------
-    // CURRENT_AWARENESS_ENABLED: going after something in a stream, aim a
-    // little against the drift (as much as the gene "feel for the current")
+    // CURRENT_AWARENESS_ENABLED: in moving water the brain's own turn (the
+    // steering output) bends a chase too - as much as the water is felt.
+    // Whether it turns into the drift, with it, or not at all: the weights of
+    // the current senses, i.e. evolution, decide (they are born 0)
     //-------------------------------------------------
-    if ( CURRENT_AWARENESS_ENABLED && ( st.params[ SS.PARAM_CURRENT ] > 0 ) && ( M[ m + SS.M_CURRENT_W ] > 0 )
+    if ( CURRENT_AWARENESS_ENABLED && ( M[ m + SS.M_NEURAL ] === 1 ) && ( st.params[ SS.PARAM_CURRENT ] > 0 ) && ( M[ m + SS.M_STEER ] !== 0 )
     &&   (( state === BRAIN_STATE_PURSUING_FOOD ) || ( state === BRAIN_STATE_PURSUING_PREY ) || ( state === BRAIN_STATE_PURSUING_MATE )))
     {
         currentAt( B[ b + SS.B_POS_X ], B[ b + SS.B_POS_Y ] );
-        const c = st.params[ SS.PARAM_CURRENT ], w = M[ m + SS.M_CURRENT_W ];
-        const speed = Math.max( CURRENT_AWARE_MIN_SPEED, Math.hypot( B[ b + SS.B_VEL_X ], B[ b + SS.B_VEL_Y ] ));
-        const gx = B[ b + SS.B_GOAL_X ] - w * c * currentDriftX() / speed;
-        const gy = B[ b + SS.B_GOAL_Y ] - w * c * currentDriftY() / speed;
-        if ( Math.hypot( gx, gy ) > 0.2 ) { B[ b + SS.B_GOAL_X ] = gx; B[ b + SS.B_GOAL_Y ] = gy; normalize( B, b + SS.B_GOAL_X ); }
+        const turn = M[ m + SS.M_STEER ] * 0.1 * currentStrength();
+        if ( turn !== 0 )
+        {
+            const c = Math.cos( turn ), sn = Math.sin( turn );
+            const gx = B[ b + SS.B_GOAL_X ], gy = B[ b + SS.B_GOAL_Y ];
+            B[ b + SS.B_GOAL_X ] = gx * c - gy * sn;
+            B[ b + SS.B_GOAL_Y ] = gx * sn + gy * c;
+        }
     }
 
     //-------------------------------------------------

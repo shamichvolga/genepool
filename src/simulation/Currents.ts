@@ -49,10 +49,10 @@ export function currentAt( x: number, y: number ): void
 export function currentTravelFactor( driftX: number, driftY: number, wayX: number, wayY: number, speed: number, awareness: number ): number
 {
     const d = Math.sqrt( wayX * wayX + wayY * wayY );
-    if (( awareness <= 0 ) || ( d <= 0 )) return 1;
+    if (( awareness === 0 ) || ( d <= 0 )) return 1;
     const along = ( driftX * wayX + driftY * wayY ) / d;           // (negative: against the stream)
     const effective = Math.max( 0.2 * speed, speed + along );     // (against a strong stream: slowly, never back)
-    return 1 + awareness * ( speed / effective - 1 );
+    return Math.max( 0.2, 1 + awareness * ( speed / effective - 1 ));   // (a negative gene: the other way round)
 }
 
 // (functions: the numbers above are live only inside this module)

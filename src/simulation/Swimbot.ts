@@ -1385,7 +1385,7 @@ _position.copyFrom( position );
         _M[ _m + SS.M_DEFERENCE ]       = geneAverage( _genotype, GENES_DEFERENCE );
         _M[ _m + SS.M_WEAK_PREF ]       = geneAverage( _genotype, GENES_WEAK_PREY );
         _M[ _m + SS.M_CANNIBAL_GENE ]   = geneAverage( _genotype, GENES_CANNIBAL );
-        _M[ _m + SS.M_CURRENT_W ]       = geneAverage( _genotype, GENES_CURRENT );
+        _M[ _m + SS.M_CURRENT_W ]       = 2 * geneAverage( _genotype, GENES_CURRENT ) - 1;   // -1 .. +1: up the stream counts as nearer .. down the stream does
         for (let k = 0; k < 4; k++) { _M[ _m + SS.M_IMMUNE_0 + k ] = _genotype.getGeneValue( GENES_IMMUNE[k] ) / 255; }
         _B[ _b + SS.B_RUDDER ]          = RUDDER_MAX_TURN * geneAverage( _genotype, GENES_RUDDER );
         _M[ _m + SS.M_MATURE_AGE ]      = SIZE_MATURITY_ENABLED

@@ -257,12 +257,14 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
     const botOffset = s * BOT_STRIDE;
     const swimSpeed = Math.max( 0.05, Math.hypot( st.bots[ botOffset + B_VEL_X ], st.bots[ botOffset + B_VEL_Y ] ));
 
-    // CURRENT_AWARENESS_ENABLED: the drift here; a target down the stream is
-    // reached sooner (how much this counts: the gene "feel for the current")
+    // CURRENT_AWARENESS_ENABLED: the drift here. How the way along the stream
+    // counts in choosing a target is a gene (-1 .. +1): + down the stream counts
+    // as nearer, - up the stream does, 0 the stream is not noticed; founders
+    // differ at random, selection decides
     const currentNow = st.params[ PARAM_CURRENT ];
     let awareness = ( CURRENT_AWARENESS_ENABLED && ( currentNow > 0 )) ? st.mind[ s * MIND_STRIDE + M_CURRENT_W ] : 0;
     let driftX = 0, driftY = 0;
-    if ( awareness > 0 )
+    if ( awareness !== 0 )
     {
         currentAt( myX, myY );
         driftX = currentNow * currentDriftX(); driftY = currentNow * currentDriftY();
@@ -350,7 +352,7 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
                 const worth = Math.min( 5, Math.max( 0.2, bite / PLANT_SPROUT_ENERGY ));
                 scaled /= worth * worth;
             }
-            if ( awareness > 0 )
+            if ( awareness !== 0 )
             {
                 const k = currentTravelFactor( driftX, driftY, foodX[f] - myMouthX, foodY[f] - myMouthY, ownSpeed, awareness );
                 scaled *= k * k;
@@ -472,7 +474,7 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
             }
 
             // (the way down the stream is shorter in time: the gene "feel for the current")
-            const travel = ( awareness > 0 ) ? distance * currentTravelFactor( driftX, driftY, botX[o] - myMouthX, botY[o] - myMouthY, ownSpeed, awareness ) : distance;
+            const travel = ( awareness !== 0 ) ? distance * currentTravelFactor( driftX, driftY, botX[o] - myMouthX, botY[o] - myMouthY, ownSpeed, awareness ) : distance;
             let value = -travel + st.energy[o] * 0.001;
             if ( PREDATOR_TARGET_SELECTION_ENABLED )
             {
