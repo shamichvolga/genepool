@@ -335,6 +335,14 @@ export const SWIM_DIRECTION_SMOOTHING       = 0.05;   // how fast the remembered
 //------------------------------------------------------------------------------
 export const CURRENTS_ENABLED               = false;
 export const CURRENT_SPEED                  = 0.3;    // per step in the middle of a stream (the median swimbot swims ~0.25)
+// CURRENT_AWARENESS_ENABLED (24.10): the gene "feel for the current" (0..1) says how much a swimbot
+// takes the water into account: a target down the stream is reached sooner, so it counts as nearer;
+// it aims a little against the drift; and when the water around it changes, it looks around anew
+// (a trigger of the event-driven brain: a high gene feels a small change). Only with the currents on.
+export const CURRENT_AWARENESS_ENABLED      = true;
+export const CURRENT_AWARE_MIN_SPEED        = 0.15;   // (its own speed, at least this, for the time of a way)
+export const CURRENT_TRIGGER_CHANGE_MIN     = 0.15;   // change of the stream felt by the highest gene ...
+export const CURRENT_TRIGGER_CHANGE_MAX     = 0.75;   // ... and by the lowest (0..1: still water .. the middle of a stream)
 
 //------------------------------------------------------------------------------
 // Plant genes (see PlantGenes.ts): one species, inherited growth speed and

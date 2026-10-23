@@ -34,6 +34,8 @@ import { BRAIN_SIZE, NUM_HIDDEN, NUM_INPUTS, NUM_OUTPUTS, DRIVE_OUTPUTS, THINK_P
          OUT_FOOD, OUT_MATE, OUT_FLEE, OUT_HUNT, OUT_CLIMATE, OUT_SOCIAL, OUT_EFFORT, OUT_STEER, OUT_SELF_EAT, OUT_PREY_VALUE, OUT_PREY_TRAVEL, OUT_PREY_BAIT,
          think, sigmoid } from "./NeuralBrain";
 import { biteEnergy } from "./PlantSize";
+import { currentAt, currentDriftX, currentDriftY, currentStrength } from "./Currents";
+import { CURRENT_AWARENESS_ENABLED, CURRENT_AWARE_MIN_SPEED, CURRENT_TRIGGER_CHANGE_MIN, CURRENT_TRIGGER_CHANGE_MAX } from "./Parameters";
 import { PLANT_SIZE_ENABLED } from "./Parameters";
 import { CANNIBAL_GENE_THRESHOLD, KIN_NOT_EATEN_ENABLED, ONLY_GROWN_EAT_YOUNG_ENABLED, EVENT_DRIVEN_LOOK_ENABLED, EVENT_CALM_LOOK_PERIOD, EVENT_CALM_MIN_DISTANCE, DESPERATE_CANNIBALISM_ENABLED, DESPERATE_ENERGY_SHARE, CANNIBAL_PREY_MASS_SHARE, DESPERATE_PREY_MASS_SHARE, LIMBS_CATCH_YOUNG_ENABLED, YOUNG_CANNIBALISM_ENABLED, BITE_AT_CONTACT_ENABLED, CONTACT_EATING_ENABLED, AUTOTOMY_DECOY_SPAN, CLIMATE_PROBE_DISTANCE, CLIMATE_STEERING, SOCIAL_STEERING, BODY_TEMPERATURE_INERTIA_ENABLED, SELF_CANNIBALISM_ENABLED,
          PREDATOR_TARGET_SELECTION_ENABLED, PREDATOR_FLEE_RADIUS, PREDATOR_LEVEL_THRESHOLD, PREY_SCAN_COOLDOWN, PREY_SCAN_RADIUS_GROWTH,
@@ -488,8 +490,20 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
         if ( !due && ( stateBefore !== M[ m + SS.M_LAST_LOOK_STATE ] )) { due = true; }
         if ( !due && (( stateBefore === BRAIN_STATE_PURSUING_FOOD ) && !foodAlive )) { due = true; }
         if ( !due && (( stateBefore === BRAIN_STATE_PURSUING_MATE ) && !mateAlive )) { due = true; }
+        // CURRENT_AWARENESS_ENABLED: the water around it changed (it came into a
+        // stream or out of it) - look around anew; a high "feel" notices a small change
+        let felt = 0;
+        const currentOn = CURRENT_AWARENESS_ENABLED && ( st.params[ SS.PARAM_CURRENT ] > 0 );
+        if ( currentOn )
+        {
+            currentAt( B[ b + SS.B_POS_X ], B[ b + SS.B_POS_Y ] );
+            felt = currentStrength();
+            const need = CURRENT_TRIGGER_CHANGE_MAX - ( CURRENT_TRIGGER_CHANGE_MAX - CURRENT_TRIGGER_CHANGE_MIN ) * M[ m + SS.M_CURRENT_W ];
+            if ( !due && ( Math.abs( felt - M[ m + SS.M_LAST_CURRENT ] ) > need )) { due = true; }
+        }
         if ( due )
         {
+            M[ m + SS.M_LAST_CURRENT ] = felt;
             M[ m + SS.M_READY ] = 1;
             M[ m + SS.M_LAST_LOOK_STATE ] = stateBefore;
             // steady and calm: far target that is still there, no predator seen
@@ -666,6 +680,21 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
     else if ( state === BRAIN_STATE_PURSUING_FOOD )
     {
         if ( f >= 0 ) { aim( B, b, st.foodX[f], st.foodY[f], mouthX, mouthY ); }
+    }
+
+    //-------------------------------------------------
+    // CURRENT_AWARENESS_ENABLED: going after something in a stream, aim a
+    // little against the drift (as much as the gene "feel for the current")
+    //-------------------------------------------------
+    if ( CURRENT_AWARENESS_ENABLED && ( st.params[ SS.PARAM_CURRENT ] > 0 ) && ( M[ m + SS.M_CURRENT_W ] > 0 )
+    &&   (( state === BRAIN_STATE_PURSUING_FOOD ) || ( state === BRAIN_STATE_PURSUING_PREY ) || ( state === BRAIN_STATE_PURSUING_MATE )))
+    {
+        currentAt( B[ b + SS.B_POS_X ], B[ b + SS.B_POS_Y ] );
+        const c = st.params[ SS.PARAM_CURRENT ], w = M[ m + SS.M_CURRENT_W ];
+        const speed = Math.max( CURRENT_AWARE_MIN_SPEED, Math.hypot( B[ b + SS.B_VEL_X ], B[ b + SS.B_VEL_Y ] ));
+        const gx = B[ b + SS.B_GOAL_X ] - w * c * currentDriftX() / speed;
+        const gy = B[ b + SS.B_GOAL_Y ] - w * c * currentDriftY() / speed;
+        if ( Math.hypot( gx, gy ) > 0.2 ) { B[ b + SS.B_GOAL_X ] = gx; B[ b + SS.B_GOAL_Y ] = gy; normalize( B, b + SS.B_GOAL_X ); }
     }
 
     //-------------------------------------------------

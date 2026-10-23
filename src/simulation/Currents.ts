@@ -41,6 +41,20 @@ export function currentAt( x: number, y: number ): void
     }
 }
 
+// CURRENT_AWARENESS_ENABLED: how much farther (> 1) or nearer (< 1) a target
+// feels when the water flows. (driftX, driftY): the drift here; (wayX, wayY):
+// the way to the target; speed: my own swimming speed. The time of the way
+// at my speed with the drift added, as a share of the time in still water;
+// awareness 0 = the drift is not noticed (1), 1 = all of it.
+export function currentTravelFactor( driftX: number, driftY: number, wayX: number, wayY: number, speed: number, awareness: number ): number
+{
+    const d = Math.sqrt( wayX * wayX + wayY * wayY );
+    if (( awareness <= 0 ) || ( d <= 0 )) return 1;
+    const along = ( driftX * wayX + driftY * wayY ) / d;           // (negative: against the stream)
+    const effective = Math.max( 0.2 * speed, speed + along );     // (against a strong stream: slowly, never back)
+    return 1 + awareness * ( speed / effective - 1 );
+}
+
 // (functions: the numbers above are live only inside this module)
 export function currentDriftX(): number { return currentX; }
 export function currentDriftY(): number { return currentY; }

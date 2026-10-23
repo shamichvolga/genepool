@@ -85,6 +85,8 @@ export const M_DISEASE_TIMER = 76;   // steps until it is over
 export const M_IMMUNE_MEMORY = 77;   // strains it had (77-79)
 export const NUM_IMMUNE_MEMORY = 3;
 export const M_CANNIBAL_GENE = 80;   // the gene for eating the young (0..1)
+export const M_CURRENT_W     = 81;   // the gene: feel for the current (0..1, CURRENT_AWARENESS_ENABLED)
+export const M_LAST_CURRENT  = 82;   // how strong the stream was around it at the last look
 export const MIND_STRIDE     = 88;
 
 // what the decision kernel asks the main thread to do (bits in M_EVENTS)

@@ -9,6 +9,8 @@
 // (checked by comparing both on the same state, see GenePool PERCEPTION_CHECK).
 //------------------------------------------------------------------------------
 import { areKin } from "./Kin";
+import { currentAt, currentDriftX, currentDriftY, currentTravelFactor } from "./Currents";
+import { CURRENT_AWARENESS_ENABLED, CURRENT_AWARE_MIN_SPEED } from "./Parameters";
 import { biteEnergy } from "./PlantSize";
 import { PLANT_SIZE_ENABLED, PLANT_SPROUT_ENERGY } from "./Parameters";
 import { BRAIN_STATE_LOOKING_FOR_MATE, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_PREY } from "./Brain";
@@ -20,10 +22,10 @@ import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
 import { ATTRACTION_SIMILAR_COLOR, STARVING, SWIMBOT_MOUTH_LENGTH, SWIMBOT_VIEW_RADIUS } from "./SwimbotTypes";
 import { FOOD_BIT_GRAB_RADIUS } from "./FoodBit";
 import { PREDATOR_DEFERENCE_ENABLED, KIN_NOT_EATEN_ENABLED, OLD_AGE_DURATION, WEAK_PREY_ENABLED, WEAK_STARVING_SHARE, JUVENILE_PREDATION_ENABLED, CROWD_AWARE_FOOD_CHOICE_ENABLED, FOOD_TARGET_PERSISTENCE_ENABLED, FOOD_SWITCH_RATIO_MIN, FOOD_KEEP_RADIUS_SCALE, SIZE_ASSORTATIVE_MATING_ENABLED } from "./Parameters";
-import { M_DISEASE, M_WEAK_PREF, MIND_STRIDE, M_VIEW_RADIUS, M_GRAB_RADIUS, M_DEFERENCE, M_FOOD, M_PERSIST, M_MATURE_AGE, M_SIZE_PICKY, M_MAX_ENERGY } from "./MindLayout";
+import { M_CURRENT_W, M_DISEASE, M_WEAK_PREF, MIND_STRIDE, M_VIEW_RADIUS, M_GRAB_RADIUS, M_DEFERENCE, M_FOOD, M_PERSIST, M_MATURE_AGE, M_SIZE_PICKY, M_MAX_ENERGY } from "./MindLayout";
 import { preyTargetScore } from "./EcologyGenes";
 import {
-    BACKGROUND_SIZE, PARAM_MAX_LIFESPAN, B_NUM_PARTS, B_GROWTH, B_VEL_X, B_VEL_Y, BOT_STRIDE, MAX_SEEN, PARAM_ENV_ACTIVE, PARAM_STEP, PARAM_ENV_FIELDS, PARAM_FOOD_TYPES, PARAM_OBSTACLE_X1, PARAM_OBSTACLE_X2,
+    BACKGROUND_SIZE, PARAM_MAX_LIFESPAN, B_NUM_PARTS, B_GROWTH, B_VEL_X, B_VEL_Y, BOT_STRIDE, MAX_SEEN, PARAM_ENV_ACTIVE, PARAM_STEP, PARAM_CURRENT, PARAM_ENV_FIELDS, PARAM_FOOD_TYPES, PARAM_OBSTACLE_X1, PARAM_OBSTACLE_X2,
     PARAM_OBSTACLE_Y1, PARAM_OBSTACLE_Y2, SharedState
 } from "./SharedState";
 
@@ -255,6 +257,19 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
     const botOffset = s * BOT_STRIDE;
     const swimSpeed = Math.max( 0.05, Math.hypot( st.bots[ botOffset + B_VEL_X ], st.bots[ botOffset + B_VEL_Y ] ));
 
+    // CURRENT_AWARENESS_ENABLED: the drift here; a target down the stream is
+    // reached sooner (how much this counts: the gene "feel for the current")
+    const currentNow = st.params[ PARAM_CURRENT ];
+    let awareness = ( CURRENT_AWARENESS_ENABLED && ( currentNow > 0 )) ? st.mind[ s * MIND_STRIDE + M_CURRENT_W ] : 0;
+    let driftX = 0, driftY = 0;
+    if ( awareness > 0 )
+    {
+        currentAt( myX, myY );
+        driftX = currentNow * currentDriftX(); driftY = currentNow * currentDriftY();
+        if (( driftX === 0 ) && ( driftY === 0 )) awareness = 0;        // (still water here)
+    }
+    const ownSpeed = Math.max( CURRENT_AWARE_MIN_SPEED, swimSpeed );
+
     let chosenFood = -1;
     let smallestDistanceSquared = Number.MAX_SAFE_INTEGER;
     let bestMeatScore = -Infinity;
@@ -334,6 +349,11 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
                 if ( bite <= 0 ) continue;
                 const worth = Math.min( 5, Math.max( 0.2, bite / PLANT_SPROUT_ENERGY ));
                 scaled /= worth * worth;
+            }
+            if ( awareness > 0 )
+            {
+                const k = currentTravelFactor( driftX, driftY, foodX[f] - myMouthX, foodY[f] - myMouthY, ownSpeed, awareness );
+                scaled *= k * k;
             }
             if ( CROWD_AWARE_FOOD_CHOICE_ENABLED )
             {
@@ -451,14 +471,16 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
                 if ( distance > preyViewRadius * image * preyVisibility( st.brightness[o], backgroundAt( st, botX[o], botY[o] ))) continue;
             }
 
-            let value = -distance + st.energy[o] * 0.001;
+            // (the way down the stream is shorter in time: the gene "feel for the current")
+            const travel = ( awareness > 0 ) ? distance * currentTravelFactor( driftX, driftY, botX[o] - myMouthX, botY[o] - myMouthY, ownSpeed, awareness ) : distance;
+            let value = -travel + st.energy[o] * 0.001;
             if ( PREDATOR_TARGET_SELECTION_ENABLED )
             {
                 const room = Math.max( 0, st.mind[ s * MIND_STRIDE + M_MAX_ENERGY ] - st.energy[s] );
                 const potential = st.energy[o] * PREDATION_ENERGY_TRANSFER + st.mass[o] * PREY_BODY_ENERGY;
                 const reward = Math.min( room, potential ) / SWIMBOT_MAX_ENERGY;
                 const distanceCost = distance / Math.max( 1, preyViewRadius );
-                const chaseCost = Math.min( 1, distance / swimSpeed / Math.max( 1, PREY_SCAN_COOLDOWN ));
+                const chaseCost = Math.min( 1, travel / swimSpeed / Math.max( 1, PREY_SCAN_COOLDOWN ));
                 value = preyTargetScore( reward * attackChance, chaseCost, st.preyValueWeight[s],
                                          st.preyTravelWeight[s], st.preyBaitBias[s], false );
                 if ( value > bestPreyValue )

@@ -2,7 +2,7 @@ import { MEAT_ASSIMILATION } from "./Parameters";
 import { RENDER_FLOATS } from "./RenderData";
 import { FILTER_FEEDING_EFFICIENCY, LIMB_SPINES_ENABLED, LIMB_SPINE_EFFECT, LIMB_SPINE_FLOOR } from "./Parameters";
 import { plantOldEnergy, plantSproutGrowth, plantStage } from "./PlantGenes";
-import { geneAverage, GENES_CANNIBAL, GENES_IMMUNE, GENES_WEAK_PREY, GENES_RUDDER, GENES_DEFERENCE, GENES_PERSISTENCE, GENES_INVESTMENT, GENES_SIZE_PICKINESS, setTrait, GENES_PREDATOR, GENES_SELF_FEED_WHICH, GENES_SELF_FEED_AMOUNT } from "./EcologyGenes";
+import { geneAverage, GENES_CURRENT, GENES_CANNIBAL, GENES_IMMUNE, GENES_WEAK_PREY, GENES_RUDDER, GENES_DEFERENCE, GENES_PERSISTENCE, GENES_INVESTMENT, GENES_SIZE_PICKINESS, setTrait, GENES_PREDATOR, GENES_SELF_FEED_WHICH, GENES_SELF_FEED_AMOUNT } from "./EcologyGenes";
 import { physicsPartA, physicsPartB } from "./PhysicsKernel";
 import { applyWaterDrag, bodyMotionFactors } from "./BodyPhysics";
 import { advanceBodyTemperature } from "./ThermalPhysics";
@@ -1385,6 +1385,7 @@ _position.copyFrom( position );
         _M[ _m + SS.M_DEFERENCE ]       = geneAverage( _genotype, GENES_DEFERENCE );
         _M[ _m + SS.M_WEAK_PREF ]       = geneAverage( _genotype, GENES_WEAK_PREY );
         _M[ _m + SS.M_CANNIBAL_GENE ]   = geneAverage( _genotype, GENES_CANNIBAL );
+        _M[ _m + SS.M_CURRENT_W ]       = geneAverage( _genotype, GENES_CURRENT );
         for (let k = 0; k < 4; k++) { _M[ _m + SS.M_IMMUNE_0 + k ] = _genotype.getGeneValue( GENES_IMMUNE[k] ) / 255; }
         _B[ _b + SS.B_RUDDER ]          = RUDDER_MAX_TURN * geneAverage( _genotype, GENES_RUDDER );
         _M[ _m + SS.M_MATURE_AGE ]      = SIZE_MATURITY_ENABLED
@@ -1967,6 +1968,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	this.getFrequency                   = function() { return _B[ _b + SS.B_FREQUENCY ];                    }
 	this.getInvestment                  = function() { return _M[ _m + SS.M_INVEST ];                       }
 	this.getCannibalGene                = function() { return _M[ _m + SS.M_CANNIBAL_GENE ];                }
+	this.getCurrentAwareness            = function() { return _M[ _m + SS.M_CURRENT_W ];                    }
 	let _deathCause = "";
 	this.getIsSick = function() { return _M[ _m + SS.M_DISEASE ] > 0; }
 	this.getDeathCause                  = function() { return _deathCause; }

@@ -13,7 +13,7 @@ import { MAX_PARTS } from "./SwimbotTypes";
 declare const __GENEPOOL_VERSION__: string;
 import { currentAt, currentDriftX, currentDriftY, currentStrength, randomPointInCurrent } from "./Currents";
 import { bindPlantGenes, inheritPlantGenes, plantMatureAge, plantOldAge, plantRotAge, plantSeedDistance } from "./PlantGenes";
-import { geneAverage, convertOldGenes, GENE_LAYOUT_VERSION, setTrait, gaussian, thermalWidthToGene, preyTargetScore, GENES_PREDATOR, GENES_THERMAL_OPTIMUM, GENES_THERMAL_WIDTH, GENES_DIGESTION, GENES_BRIGHTNESS, GENES_CHOOSINESS, GENES_HUNGER, GENES_AUTOTOMY_BITE, GENES_AUTOTOMY_THREAT, GENES_AUTOTOMY_AMOUNT, GENES_AUTOTOMY_WHICH, GENES_PERSISTENCE, GENES_INVESTMENT, GENES_SIZE_PICKINESS, GENES_DEFERENCE, GENES_RUDDER, GENES_WEAK_PREY, GENES_IMMUNE, GENES_CANNIBAL } from "./EcologyGenes";
+import { geneAverage, convertOldGenes, GENE_LAYOUT_VERSION, setTrait, gaussian, thermalWidthToGene, preyTargetScore, GENES_PREDATOR, GENES_THERMAL_OPTIMUM, GENES_THERMAL_WIDTH, GENES_DIGESTION, GENES_BRIGHTNESS, GENES_CHOOSINESS, GENES_HUNGER, GENES_AUTOTOMY_BITE, GENES_AUTOTOMY_THREAT, GENES_AUTOTOMY_AMOUNT, GENES_AUTOTOMY_WHICH, GENES_PERSISTENCE, GENES_INVESTMENT, GENES_SIZE_PICKINESS, GENES_DEFERENCE, GENES_RUDDER, GENES_WEAK_PREY, GENES_IMMUNE, GENES_CANNIBAL, GENES_CURRENT } from "./EcologyGenes";
 import { environment, FLAT_ENVIRONMENT, INITIAL_SOIL_NUTRIENT_PER_CELL, NUTRIENT_CYCLE_ENABLED, PLANT_TYPE_WARM, PLANT_TYPE_COLD, SEASONAL_PLANT_GROWTH_ENABLED, SEASONAL_PLANT_GROWTH_AMPLITUDE } from "./Environment";
 import { petriSettings, petriStartZone } from "./Petri";
 import { IGNORE_FOOD_EFFICIENCY, preyVisibility, TWO_PLANT_TYPES } from "./Ecology";
@@ -1072,6 +1072,7 @@ if ( mode === SimulationStartMode.SPECIES )
 	    for (let k = 0; k < 4; k++) { setTrait( genotype, [ GENES_IMMUNE[k] ], gpRandom(), 0 ); }
 	    setTrait( genotype, GENES_CANNIBAL,        gpRandom() * CANNIBAL_GENE_FOUNDER_MAX, 0 );
 	    setTrait( genotype, GENES_AUTOTOMY_WHICH,  gpRandom(),                  0 );
+	    setTrait( genotype, GENES_CURRENT,         gpRandom(),                  0 );   // (the feel for the current: selection decides)
 
 	    // hunger threshold factor around 1 (gene 1/3), a little different for each founder
 	    setTrait( genotype, GENES_HUNGER,          1 / 3 + gaussian() * 0.06,   0 );
