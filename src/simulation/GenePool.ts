@@ -4250,22 +4250,28 @@ this.renderFoodBits = function( useGraphicsCard )
 	    let i = _capsuleRenderer.reserve( n );
 	    const d = _capsuleRenderer.reserved();
 	    let used = 0;
+	    const parts = [];
 	    for (let k = 0; k < n; k++)
 	    {
 	        const f = _aliveFoodBitIndices[k];
 	        if ( live[f] !== 1 ) continue;
 	        const x = fx[f], y = fy[f];
 	        if (( x < left ) || ( x > right ) || ( y < top ) || ( y > bottom )) continue;
+	        // (a piece of meat smaller than a whole one is drawn as a part of a dot, below)
+	        if (( ft[f] === 2 ) && ( _st.foodEnergy[f] < 0.8 * MEAT_PIECE_ENERGY )) { parts.push( f ); continue; }
 	        const t = ft[f] * 3;
 	        let alpha = ( _clock - born[f] ) * FOOD_OPACITY_INCREMENT;
 	        if ( alpha < 1 ) { alpha = _foodBits[f].getOpacity(); }       // (still fading in, or held in the hand)
 	        d[ i ] = x; d[ i + 1 ] = y; d[ i + 2 ] = x; d[ i + 3 ] = y;
-	        d[ i + 4 ] = radius; d[ i + 5 ] = radius;
+	        // PLANT_SIZE_ENABLED: a sprout is a small dot, a tree a big one
+	        const r = ( PLANT_SIZE_ENABLED && ( ft[f] !== 2 )) ? radius * ( 0.6 + 1.8 * plantSize( _clock - born[f] )) : radius;
+	        d[ i + 4 ] = r; d[ i + 5 ] = r;
 	        d[ i + 6 ] = FOOD_RGB[ t ]; d[ i + 7 ] = FOOD_RGB[ t + 1 ]; d[ i + 8 ] = FOOD_RGB[ t + 2 ];
 	        d[ i + 9 ] = alpha > 1 ? 1 : alpha;
 	        i += stride; used ++;
 	    }
 	    _capsuleRenderer.release( n - used );
+	    for ( const f of parts ) { _foodBits[f].writeCapsule( _capsuleRenderer, _camera.getScale() ); }
 
 	    // the selected and the touched food bit: outlines in 2D
 	    if (( _selectedFoodBit   != NULL_INDEX ) && _foodBits[ _selectedFoodBit   ].getAlive()) { _foodBits[ _selectedFoodBit   ].renderSelectOutline( _camera.getScale() ); }
