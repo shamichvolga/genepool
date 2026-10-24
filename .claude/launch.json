@@ -30,6 +30,18 @@
         "5199"
       ],
       "port": 5199
+    },
+    {
+      "name": "genepool-axis",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "vite",
+        "../GenePool Ось",
+        "--port",
+        "5181",
+        "--strictPort"
+      ],
+      "port": 5181
     }
   ]
 }
