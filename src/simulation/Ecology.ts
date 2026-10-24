@@ -11,6 +11,7 @@
 // elsewhere, a generalist does so-so everywhere.
 //------------------------------------------------------------------------------
 import { THERMAL_WIDTH_MIN } from "./EcologyGenes";
+import { TEMPERATURE_ENABLED } from "./Parameters";
 import { PLANT_TYPE_WARM } from "./Environment";
 
 export const THERMAL_TRADE_OFF          = 0.5;     // "a": 0 = no cost of being a generalist
@@ -67,6 +68,7 @@ export const EMERGENCY_PROBE_DISTANCE   = 300;
 
 export function thermalFit( temperature: number, optimum: number, width: number ): number
 {
+    if ( !TEMPERATURE_ENABLED ) return 1;             // (temperature off: everyone suits everywhere)
     const d = temperature - optimum;
     return Math.exp( -( d * d ) / ( 2 * width * width ));
 }
@@ -79,6 +81,7 @@ export function thermalPeak( width: number ): number
 // energy multiplier of food at a place: fit = thermalFit, peak = thermalPeak
 export function climateFoodFactor( fit: number, peak: number ): number
 {
+    if ( !TEMPERATURE_ENABLED ) return ENVIRONMENT_FOOD_BONUS;   // (temperature off: food is worth the same to all)
     return ENVIRONMENT_FOOD_BONUS * ( FOOD_BASE_FRACTION + ( 1 - FOOD_BASE_FRACTION ) * fit * peak );
 }
 

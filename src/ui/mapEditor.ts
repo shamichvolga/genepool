@@ -15,6 +15,9 @@
 // GenePool.startSimulationWithMap starts the world from it.
 //------------------------------------------------------------------------------
 import { lang } from "./lang";
+import { TEMPERATURE_ENABLED } from "../simulation/Parameters";
+
+const FILL_KINDS = TEMPERATURE_ENABLED ? [ "plants", "meat", "warm", "cold", "mild" ] : [ "plants", "meat" ];
 
 const PRESETS_KEY = "genepool.mapPresets";
 const PILE_SHARES = [ 0.406, 0.3085, 0.2855 ];     // the vanilla piles: share of founders (measured: 812 / 617 / 571 of 2000)
@@ -156,7 +159,7 @@ function draw(): void
     // the pool: grey, with the generated temperatures on the vanilla map
     g.fillStyle = "#8a8c84";
     g.fillRect( v.ox, v.oy, size, size );
-    if ( map.base === "vanilla" && fieldImage ) { g.imageSmoothingEnabled = true; g.globalAlpha = 0.85; g.drawImage( fieldImage, v.ox, v.oy, size, size ); g.globalAlpha = 1; }
+    if ( TEMPERATURE_ENABLED && map.base === "vanilla" && fieldImage ) { g.imageSmoothingEnabled = true; g.globalAlpha = 0.85; g.drawImage( fieldImage, v.ox, v.oy, size, size ); g.globalAlpha = 1; }
     g.strokeStyle = "#d8d8cc"; g.lineWidth = 1; g.strokeRect( v.ox + 0.5, v.oy + 0.5, size - 1, size - 1 );
 
     // zones (in the order they were made: later ones on top)
@@ -405,9 +408,12 @@ function build(): void
         +   "<div class='meGrid' id='meFillButtons'>"
         +     button( "meFill-plants", "<i style='background:#46be46'></i>" + t( "food", "еда" ), t( "plants grow here at the normal density (on a blank map: only here)", "здесь растут растения обычной плотности (на чистой карте — только здесь)" ))
         +     button( "meFill-meat", "<i style='background:#d23232'></i>" + t( "meat", "мясо" ), t( "only meat here: at the start and falling as fast as it rots", "здесь только мясо: при старте и потом, сколько сгнило" ))
-        +     button( "meFill-warm", "<i style='background:#e68c28'></i>" + t( "warm", "тепло" ), "" )
+        // (24.10: the temperature gradient is off - TEMPERATURE_ENABLED; the warm / cold / mild fills come back with it)
+        + ( TEMPERATURE_ENABLED
+        ?     button( "meFill-warm", "<i style='background:#e68c28'></i>" + t( "warm", "тепло" ), "" )
         +     button( "meFill-cold", "<i style='background:#3c78e6'></i>" + t( "cold", "холод" ), "" )
         +     button( "meFill-mild", "<i style='background:#a0a096'></i>" + t( "mild", "умеренно" ), "" )
+        : "" )
         +   "</div>"
         +   "<div class='meHead'>" + t( "Seeder", "Сеялка" ) + "</div>"
         +   "<label>" + t( "parts", "члеников" ) + " <select id='meParts'>" + partsOptions + "</select></label>"
@@ -447,7 +453,7 @@ function build(): void
 
     const on = ( id: string, handler: () => void ) => { ( overlay!.querySelector( "#" + id ) as HTMLElement ).onclick = handler; };
     for ( const name of [ "pencil", "fill", "seeder", "wall", "eraser" ] ) { on( "meTool-" + name, () => { tool = name; message = ""; syncFields(); draw(); }); }
-    for ( const kind of [ "plants", "meat", "warm", "cold", "mild" ] ) { on( "meFill-" + kind, () => { fillKind = kind; tool = "fill"; syncFields(); draw(); }); }
+    for ( const kind of FILL_KINDS ) { on( "meFill-" + kind, () => { fillKind = kind; tool = "fill"; syncFields(); draw(); }); }
     on( "meUndo", takeBack );
     on( "meVanilla", () => { remember(); map = vanillaMap(); syncFields(); draw(); });
     on( "meClear", () => { remember(); map = { ...map, base: "blank", zones: [], seeds: [], diets: [], barrier: null }; message = t( "A blank map: no food and no swimbots until you draw them.", "Чистая карта: ни еды, ни существ, пока вы их не нарисуете." ); draw(); });
@@ -479,7 +485,7 @@ function syncFields(): void
 {
     if ( !overlay ) return;
     for ( const name of [ "pencil", "fill", "seeder", "wall", "eraser" ] ) { overlay.querySelector( "#meTool-" + name )!.classList.toggle( "on", tool === name ); }
-    for ( const kind of [ "plants", "meat", "warm", "cold", "mild" ] ) { overlay.querySelector( "#meFill-" + kind )!.classList.toggle( "on", fillKind === kind ); }
+    for ( const kind of FILL_KINDS ) { overlay.querySelector( "#meFill-" + kind )!.classList.toggle( "on", fillKind === kind ); }
     ( overlay.querySelector( "#meParts" ) as HTMLSelectElement ).value = String( sprayParts );
     ( overlay.querySelector( "#meDiet" ) as HTMLSelectElement ).value = String( sprayDiet );
     ( overlay.querySelector( "#meBrush" ) as HTMLInputElement ).value = String( brush );

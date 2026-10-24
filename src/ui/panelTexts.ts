@@ -7,7 +7,7 @@
 import { TWO_PLANT_TYPES } from "../simulation/Ecology";
 import { BRAIN_STATE_FLEEING_PREDATOR, BRAIN_STATE_LOOKING_FOR_FOOD, BRAIN_STATE_LOOKING_FOR_MATE, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_FOOD, BRAIN_STATE_PURSUING_MATE, BRAIN_STATE_PURSUING_PREY, BRAIN_STATE_RESTING } from "../simulation/Brain";
 import { NULL_INDEX } from "../simulation/MathConstants";
-import { CANNIBAL_GENE_THRESHOLD, PREDATOR_LEVEL_THRESHOLD, YOUNG_CANNIBALISM_ENABLED } from "../simulation/Parameters";
+import { TEMPERATURE_ENABLED, CANNIBAL_GENE_THRESHOLD, PREDATOR_LEVEL_THRESHOLD, YOUNG_CANNIBALISM_ENABLED } from "../simulation/Parameters";
 
 //------------------------------------------------------------
 // a bar: energy of the selected swimbot, with its hunger threshold
@@ -65,9 +65,10 @@ export function buildSwimbotPanelHTML( genePool ): string
         const position = swimbot.getPosition();
         const here     = environment.temperatureAt( position.x, position.y );
         const percent  = ( x ) => Math.round( x * 100 ) + "%";
+        // (24.10: temperature off - TEMPERATURE_ENABLED: its rows are not shown)
         foodRows =
-            row( "likes temperature", swimbot.getThermalOptimum().toFixed(2) + " ± " + swimbot.getThermalWidth().toFixed(2) ) +
-            row( "temperature here",  here.toFixed(2) + " (suits " + percent( swimbot.getThermalFit() ) + ")" ) +
+            ( TEMPERATURE_ENABLED ? row( "likes temperature", swimbot.getThermalOptimum().toFixed(2) + " ± " + swimbot.getThermalWidth().toFixed(2) ) +
+                                    row( "temperature here",  here.toFixed(2) + " (suits " + percent( swimbot.getThermalFit() ) + ")" ) : "" ) +
             ( TWO_PLANT_TYPES ? row( "digests", "green " + percent( swimbot.getDigestionEfficiency(0) ) + " · blue " + percent( swimbot.getDigestionEfficiency(1) ) ) : "" ) +
             row( "brightness",        swimbot.getBrightness().toFixed(2) + " (picky " + percent( swimbot.getChoosiness() ) + ")" );
         const a = swimbot.getAutotomy();
@@ -96,7 +97,7 @@ export function buildSwimbotPanelHTML( genePool ): string
             foodRows +=
                 row( "brain",         "neural" ) +
                 row( "swims",         percent( swimbot.getEffort() ) + " effort" ) +
-                row( "climate pull",  percent( swimbot.getClimateWeight() ) ) +
+                ( TEMPERATURE_ENABLED ? row( "climate pull",  percent( swimbot.getClimateWeight() ) ) : "" ) +
                 row( "company",       ( social >= 0 ? "seeks " : "avoids " ) + percent( Math.abs( social ) ) );
         }
     }

@@ -16,12 +16,14 @@
 //------------------------------------------------------------------------------
 import { gpRandom } from "./Globals";
 import { ZONE_TEMPERATURE, pointInZone, zoneBounds } from "./MapZones";
+import { TEMPERATURE_ENABLED } from "./Parameters";
 import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
 import { petriLevel, petriPosition, petriTemperature, petriSettings } from "./Petri";
 
 // Control experiment "no environment": set to true and the map is flat
 // (T = 0.5 everywhere, plants grow anywhere) while all other rules stay.
-export const FLAT_ENVIRONMENT          = false;
+// (24.10: the temperature gradient is off - TEMPERATURE_ENABLED in Parameters.ts; flat = no map)
+export const FLAT_ENVIRONMENT          = !TEMPERATURE_ENABLED;
 
 // Optional matter cycle experiment: meat rot returns nutrients to the same
 // plant cell, and each successful sprout consumes one nutrient unit.

@@ -129,6 +129,11 @@ export const OBSTACLE_ENABLED               = true;
 
 // neural brain (stage 6): used in the environment ("random") pool
 export const NEURAL_BRAIN_ENABLED          = true;
+// TEMPERATURE_ENABLED (24.10, the owner: the temperature gradient did not prove itself - switched off
+// everywhere): false = no temperature map (Environment.FLAT_ENVIRONMENT), every swimbot suits every
+// place (thermal genes do nothing), food is worth the same everywhere, no pull towards a temperature,
+// no temperature fill in the map editor. true = as before.
+export const TEMPERATURE_ENABLED           = false;
 export const CLIMATE_STEERING              = 1.0;    // pull towards a better temperature (x brain output)
 export const SOCIAL_STEERING               = 0.6;    // pull towards / push from the others (x brain output)
 export const CLIMATE_PROBE_DISTANCE        = 150;
