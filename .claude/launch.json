@@ -42,6 +42,18 @@
         "--strictPort"
       ],
       "port": 5181
+    },
+    {
+      "name": "genepool-plus",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "vite",
+        "../GenePool плюс 7 — всё вместе",
+        "--port",
+        "5182",
+        "--strictPort"
+      ],
+      "port": 5182
     }
   ]
 }
