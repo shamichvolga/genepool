@@ -273,7 +273,15 @@ export const MASS_SCALED_STOMACH_ENABLED    = false;  // maximum energy = 200 x 
 // moving a long body; with the same 200 as a 5-part grazer it starved.
 export const BIG_BODY_STOMACH_ENABLED       = true;
 export const STOMACH_REFERENCE_MASS         = 410;    // a body of this mass (or lighter) keeps 200
-export const PLANT_STAGES_ENABLED           = true;
+// ORIGINAL_FOOD_ENABLED (25.10, the owner: "food as in the original"): the plants
+// appear and spread as in the original Gene Pool, scaled to the pool's size:
+// at the start INITIAL_NUM_FOODBITS anywhere in the pool, evenly; every
+// "food growth delay" steps one new plant per 8000 x 8000 of pool next to a
+// random living plant (offset along x and y = random x random x food spread,
+// either way, the spread scaled with the pool); at most 2 x MAX_FOODBITS_PER_TYPE
+// plants; each worth the same. (Off = the environment's own plant growth.)
+export const ORIGINAL_FOOD_ENABLED          = true;
+export const PLANT_STAGES_ENABLED           = false;  // (25.10: off with ORIGINAL_FOOD_ENABLED - the original's plants have no ages)
 // PLANT_SIZE_ENABLED (22.10, docs/концепт_размер_пищи.md): a plant grows while nobody eats it and gets
 // tougher; eaters bite pieces off it (it lives on and grows back); only a strong enough bite (a big enough
 // body) gets through a tough plant; grown plants make the seeds. Replaces PLANT_STAGES when on.

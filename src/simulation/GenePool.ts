@@ -37,6 +37,7 @@ import { buildFamilyTreeText, buildSwimbotPanelHTML, geneticClustersText } from 
 import { doTask, TASK_DECIDE, TASK_LOOK, TASK_PHYSICS, TASK_PREPARE_LOOK, TASK_RENDER_DATA } from "../parallel/ParallelWork";
 import { perceive, PerceptionScratch } from "./PerceptionKernel";
 import { physicsStep } from "./PhysicsKernel";
+import { ORIGINAL_FOOD_ENABLED } from "./Parameters";
 import { Swimbot } from "./Swimbot";
 import { ATTRACTION_RANDOM, ATTRACTION_SIMILAR_COLOR, NUM_ATTRACTIONS, STARVING, SWIMBOT_MOUTH_LENGTH, SWIMBOT_VIEW_RADIUS } from "./SwimbotTypes";
 import { Touch, TouchState } from "./Touch";
@@ -1086,6 +1087,25 @@ if ( mode === SimulationStartMode.SPECIES )
 	{
 	    environment.clearPlantCounts();
 
+	    // ORIGINAL_FOOD_ENABLED: as in the original - the starting plants anywhere in the pool, evenly
+	    if ( ORIGINAL_FOOD_ENABLED )
+	    {
+	        let placed = 0;
+	        for (let attempt = 0; ( placed < INITIAL_NUM_FOODBITS ) && ( attempt < INITIAL_NUM_FOODBITS * 20 ); attempt++)
+	        {
+	            this.randomPointInPool( _vectorUtility );
+	            if ( _obstacle.getObstruction( _vectorUtility, _vectorUtility ) ) continue;
+	            _foodBits[ placed ].initialize( placed );
+	            _foodBits[ placed ].setType( 0 );
+	            _foodBits[ placed ].setEnergy( globalTweakers.foodBitEnergy );
+	            _foodBits[ placed ].setPosition( _vectorUtility );
+	            environment.plantCount[0][ environment.plantCellIndex( _vectorUtility.x, _vectorUtility.y ) ] ++;
+	            placed ++;
+	        }
+	        _numFoodBits = placed;
+	        return;
+	    }
+
 	    // the world starts full of food (START_FOOD_FILL of all places), in
 	    // little clumps; inside the starting gardens NURSERY_START_FOOD_FACTOR
 	    // times as dense as elsewhere (petri: evenly)
@@ -1440,6 +1460,49 @@ if ( mode === SimulationStartMode.SPECIES )
 	            else { simCounters.seedRainPlantSprouts ++; }
 	            break;
 	        }
+	    }
+	}
+
+	//------------------------------------------------------------------------
+	// ORIGINAL_FOOD_ENABLED: plants grow as in the original Gene Pool. Every
+	// "food growth delay" steps, one new plant per 8000 x 8000 of pool, next to
+	// a random living plant: along x and y it lands (random x random) x spread
+	// away, either way (most near the parent, a few far), bouncing off the pool's
+	// edge; not behind the obstacle (10 tries, as the original). No living plant,
+	// no new one.
+	//------------------------------------------------------------------------
+	this.regrowFoodOriginal = function( numPlants )
+	{
+	    if ( _clock % globalTweakers.foodRegenerationPeriod !== 0 ) return;
+	    const spread = globalTweakers.foodSpread * WORLD_SCALE;
+	    const left = POOL_LEFT + FOOD_BIT_BOUNDARY_MARGIN, right  = POOL_RIGHT  - FOOD_BIT_BOUNDARY_MARGIN;
+	    const top  = POOL_TOP  + FOOD_BIT_BOUNDARY_MARGIN, bottom = POOL_BOTTOM - FOOD_BIT_BOUNDARY_MARGIN;
+	    for (let n = 0; n < WORLD_AREA_FACTOR; n++)
+	    {
+	        if ( numPlants >= 2 * MAX_FOODBITS_PER_TYPE ) return;
+	        const child = this.findLowestDeadFoodBitInArray();
+	        if ( child === NULL_INDEX ) return;
+	        const parent = this.findRandomLivingPlant();
+	        if ( parent === null ) return;
+	        const from = parent.getPosition();
+	        for (let attempt = 0; attempt < 10; attempt++)
+	        {
+	            let xx = gpRandom() * gpRandom(), yy = gpRandom() * gpRandom();
+	            if ( gpRandom() < ONE_HALF ) { xx = -xx; }
+	            if ( gpRandom() < ONE_HALF ) { yy = -yy; }
+	            let x = from.x + xx * spread, y = from.y + yy * spread;
+	            if ( y < top ) { y += ( top - y ) * 2; } else if ( y > bottom ) { y += ( bottom - y ) * 2; }
+	            if ( x > right ) { x += ( right - x ) * 2; } else if ( x < left ) { x += ( left - x ) * 2; }
+	            _vectorUtility.x = Math.min( right, Math.max( left, x ));
+	            _vectorUtility.y = Math.min( bottom, Math.max( top, y ));
+	            if ( !_obstacle.getObstruction( from, _vectorUtility ) ) break;
+	        }
+	        _foodBits[ child ].initialize( child );
+	        _foodBits[ child ].setType( parent.getType() );
+	        _foodBits[ child ].setEnergy( globalTweakers.foodBitEnergy );
+	        _foodBits[ child ].setPosition( _vectorUtility );
+	        environment.plantCount[ parent.getType() ][ environment.plantCellIndex( _vectorUtility.x, _vectorUtility.y ) ] ++;
+	        numPlants ++;
 	    }
 	}
 
@@ -2981,6 +3044,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 
         if ( environment.active )
         {
+            if ( ORIGINAL_FOOD_ENABLED ) { this.regrowFoodOriginal( numType0FoodBits + numType1FoodBits ); return; }
             this.regrowFoodEnvironment( numType0FoodBits, numType1FoodBits );
             return;
         }
