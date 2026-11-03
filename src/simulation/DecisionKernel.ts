@@ -977,9 +977,9 @@ export function takeInLook( st: SharedState, s: number, counters: number ): void
             const myMassNow   = st.mass[s] * ( ONLY_GROWN_EAT_YOUNG_ENABLED ? Math.min( 1, B[ b + SS.B_GROWTH ] ) : 1 );
             const youngOk     = young && ( theirMassNow < myMassNow * CANNIBAL_PREY_MASS_SHARE );
             const desperateOk = desperate && ( theirMassNow < myMassNow * DESPERATE_PREY_MASS_SHARE );
-            if ( KIN_NOT_EATEN_ENABLED && areKin( st, s, o )) continue;
             if ( !youngOk && !desperateOk ) continue;
             if ( Math.hypot( st.botX[o] - mouthAtX, st.botY[o] - mouthAtY ) > plantDistance ) continue;   // the plant is nearer
+            if ( KIN_NOT_EATEN_ENABLED && areKin( st, s, o )) continue;
             M[ m + SS.M_PREY ] = o;
             M[ m + SS.M_CANNIBAL ] = 1;
             break;
