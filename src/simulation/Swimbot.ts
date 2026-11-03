@@ -1159,6 +1159,7 @@ _position.copyFrom( position );
 		_nnHidden.fill( ZERO );
 		_nnNewHidden.fill( ZERO );
 		_nnOutputs.fill( ZERO );
+		if ( _slot >= 0 ) { _shared.preyChoiceReady[ _slot ] = 0; }
 		_B[ _b + SS.B_EFFORT ]         = ONE;
 		_M[ _m + SS.M_CLIMATE_W ]  = ZERO;
 		_M[ _m + SS.M_SOCIAL_W ]   = ZERO;

@@ -172,6 +172,7 @@ export class SharedState
     readonly preyValueWeight  : Float64Array;
     readonly preyTravelWeight : Float64Array;
     readonly preyBaitBias     : Float64Array;
+    readonly preyChoiceReady  : Uint8Array;   // derived target weights initialized for this slot
 
     readonly foodX        : Float64Array;
     readonly foodY        : Float64Array;
@@ -294,6 +295,7 @@ export class SharedState
         this.preyValueWeight  = f64( "preyValueWeight", n );
         this.preyTravelWeight = f64( "preyTravelWeight", n );
         this.preyBaitBias     = f64( "preyBaitBias", n );
+        this.preyChoiceReady  = u8 ( "preyChoiceReady", n );
 
         this.foodX      = f64( "foodX", MAX_FOODBITS );
         this.foodY      = f64( "foodY", MAX_FOODBITS );

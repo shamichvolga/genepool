@@ -397,6 +397,13 @@ export function neuralThink( st: SharedState, s: number ): void
     const outputs = st.nnOutputs.subarray( s * NUM_OUTPUTS, ( s + 1 ) * NUM_OUTPUTS );
     think( w, inputs, hidden, _newHidden, outputs );
 
+    // These outputs stay unchanged until the next thought, so their transfer
+    // functions are needed only here, not on every intervening step.
+    st.preyValueWeight [s] = sigmoid( outputs[ OUT_PREY_VALUE ] );
+    st.preyTravelWeight[s] = sigmoid( outputs[ OUT_PREY_TRAVEL ] );
+    st.preyBaitBias    [s] = Math.tanh( outputs[ OUT_PREY_BAIT ] );
+    st.preyChoiceReady [s] = 1;
+
     //------------------------------------------------------
     // the strongest possible drive wins (the current goal
     // gets a small bonus so the swimbot doesn't dither)
@@ -749,13 +756,16 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
     B[ b + SS.B_FOCUS_Y ] = fy;
     normalize( B, b + SS.B_FOCUS_X );
 
-    //-------------------------------------------------
-    // what the predator wants from a target (for the perception)
-    //-------------------------------------------------
-    const o = s * NUM_OUTPUTS, out = st.nnOutputs;
-    st.preyValueWeight [s] = sigmoid( out[ o + OUT_PREY_VALUE ] );
-    st.preyTravelWeight[s] = sigmoid( out[ o + OUT_PREY_TRAVEL ] );
-    st.preyBaitBias    [s] = Math.tanh( out[ o + OUT_PREY_BAIT ] );
+    // A new or loaded slot needs the old initial derivation once; afterwards
+    // neuralThink refreshes these values only when its outputs actually change.
+    if ( st.preyChoiceReady[s] === 0 )
+    {
+        const o = s * NUM_OUTPUTS, out = st.nnOutputs;
+        st.preyValueWeight [s] = sigmoid( out[ o + OUT_PREY_VALUE ] );
+        st.preyTravelWeight[s] = sigmoid( out[ o + OUT_PREY_TRAVEL ] );
+        st.preyBaitBias    [s] = Math.tanh( out[ o + OUT_PREY_BAIT ] );
+        st.preyChoiceReady [s] = 1;
+    }
 
     //-------------------------------------------------
     // the climate costs energy
