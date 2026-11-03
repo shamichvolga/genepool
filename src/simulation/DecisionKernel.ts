@@ -957,14 +957,14 @@ export function takeInLook( st: SharedState, s: number, counters: number ): void
     M[ m + SS.M_CANNIBAL ] = 0;
     // (18.10: a hungry body goes for the young one even when it sees a plant,
     //  if the young one is nearer than the plant)
-    const plantSeen = foodOkay && !foodIsMeat;
-    const mouthAtX = B[ b + SS.B_MOUTH_X ], mouthAtY = B[ b + SS.B_MOUTH_Y ];
-    const plantDistance = plantSeen ? Math.hypot( st.foodX[f] - mouthAtX, st.foodY[f] - mouthAtY ) : Infinity;
     if ( YOUNG_CANNIBALISM_ENABLED && !isPredator( st, s )
     &&   ( M[ m + SS.M_CANNIBAL_GENE ] > CANNIBAL_GENE_THRESHOLD )             // (an inherited ability, not everyone's)
     &&   !( ONLY_GROWN_EAT_YOUNG_ENABLED && ( B[ b + SS.B_GROWTH ] < 1 ))
     &&   ( B[ b + SS.B_ENERGY ] < M[ m + SS.M_HUNGER ] ))
     {
+        const plantSeen = foodOkay && !foodIsMeat;
+        const mouthAtX = B[ b + SS.B_MOUTH_X ], mouthAtY = B[ b + SS.B_MOUTH_Y ];
+        const plantDistance = plantSeen ? Math.hypot( st.foodX[f] - mouthAtX, st.foodY[f] - mouthAtY ) : Infinity;
         const desperate = DESPERATE_CANNIBALISM_ENABLED && ( B[ b + SS.B_ENERGY ] < M[ m + SS.M_MAX_ENERGY ] * DESPERATE_ENERGY_SHARE );
         for (let i = 0; i < count; i++)
         {
