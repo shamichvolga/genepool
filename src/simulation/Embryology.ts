@@ -85,6 +85,28 @@ export function isIterativeGrowthGene( g: number ): boolean
     return ITERATIVE_GROWTH_ENABLED && g >= ITERATIVE_GROWTH_FIRST_GENE && g <= ITERATIVE_GROWTH_LAST_GENE;
 }
 
+// Five independent GP6-inspired mechanics. The new loci start after the
+// iterative-growth block and are treated as junk unless their experiment is on.
+export const SECONDARY_BRANCHING_ENABLED = false;
+export const SEGMENT_REPLICATION_ENABLED = false;
+export const GROWTH_TURN_ENABLED         = false;
+export const BRANCH_AMP_FLIP_ENABLED     = false;
+export const SECONDARY_BRANCHING_GENE    = 184;
+export const SEGMENT_REPLICATION_FIRST_GENE = 185; // repeat + delay for each of four categories
+export const GROWTH_TURN_FIRST_GENE      = 193;    // amplitude + phase + phase acceleration per category
+export const BRANCH_AMP_FLIP_GENE        = 205;
+export function isGP6MechanicsGene( g: number ): boolean
+{
+    return ( SECONDARY_BRANCHING_ENABLED && g === SECONDARY_BRANCHING_GENE )
+        || ( SEGMENT_REPLICATION_ENABLED && g >= SEGMENT_REPLICATION_FIRST_GENE && g < GROWTH_TURN_FIRST_GENE )
+        || ( GROWTH_TURN_ENABLED && g >= GROWTH_TURN_FIRST_GENE && g < BRANCH_AMP_FLIP_GENE )
+        || ( BRANCH_AMP_FLIP_ENABLED && g === BRANCH_AMP_FLIP_GENE );
+}
+export function isExperimentalEmbryologyGene( g: number ): boolean
+{
+    return isIterativeGrowthGene( g ) || isGP6MechanicsGene( g );
+}
+
 
 export const GREATEST_POSSIBLE_SWIMBOT_MASS = MAX_PARTS * MAX_LENGTH * MAX_WIDTH
 
@@ -141,7 +163,8 @@ let testNoEel = true;
 	//-------------------------------------------------------------
     let _normalizedGenes        = new Array( NUM_GENES ); 
     let _geneNames              = new Array( NUM_GENES ); 
-    let _branchStatus           = new Array( MAX_PARTS ); 
+    let _branchStatus           = new Array( MAX_PARTS );
+    let _branchDepth            = new Array( MAX_PARTS );
     let _categoryValues         = new Array( NUM_CATEGORIES ); 
     let _partIndex              = ZERO;
     let _generating             = false;
@@ -185,6 +208,7 @@ let testNoEel = true;
 		for (let p=0; p<MAX_PARTS; p++)
 		{
 		    _branchStatus[p] = false;
+                _branchDepth[p]  = 0;
 		}
 
 	    //--------------------------------------------------------
@@ -342,6 +366,25 @@ let testNoEel = true;
             }
             _geneNames[ ITERATIVE_GROWTH_COLOR_GENE ] = "iterative color shift scale";
         }
+        if ( SECONDARY_BRANCHING_ENABLED ) { _geneNames[ SECONDARY_BRANCHING_GENE ] = "secondary branching"; }
+        if ( SEGMENT_REPLICATION_ENABLED )
+        {
+            for ( let c = 0; c < NUM_CATEGORIES; c++ )
+            {
+                _geneNames[ SEGMENT_REPLICATION_FIRST_GENE + c * 2     ] = "replicate number";
+                _geneNames[ SEGMENT_REPLICATION_FIRST_GENE + c * 2 + 1 ] = "replicate delay";
+            }
+        }
+        if ( GROWTH_TURN_ENABLED )
+        {
+            for ( let c = 0; c < NUM_CATEGORIES; c++ )
+            {
+                _geneNames[ GROWTH_TURN_FIRST_GENE + c * 3     ] = "growth turn amp";
+                _geneNames[ GROWTH_TURN_FIRST_GENE + c * 3 + 1 ] = "growth turn phase";
+                _geneNames[ GROWTH_TURN_FIRST_GENE + c * 3 + 2 ] = "growth turn phase acc";
+            }
+        }
+        if ( BRANCH_AMP_FLIP_ENABLED ) { _geneNames[ BRANCH_AMP_FLIP_GENE ] = "branch amp flip"; }
 
         //---------------------------------------
         // make sure this is kosher
@@ -425,8 +468,8 @@ testNoEel = false;
                     //--------------------------------------------
                     if ( _categoryValues[c].branchNumber === 1 )
                     {
-                        reflect = ONE; 
-                        this.generateBodySequence( phenotype, p, _categoryValues[c].branchAngle, c, reflect );   
+                        reflect = ONE;
+                        this.generateBodySequence( phenotype, p, _categoryValues[c].branchAngle, c, reflect, _branchDepth[p] + 1 );
                     }
                     else
                     {
@@ -435,16 +478,16 @@ testNoEel = false;
                         //---------------------------------------------------------------
                         for (let b=0; b<_categoryValues[c].branchNumber; b++)
                         {
-                            reflect = ONE; 
+                            reflect = ONE;
                             if ( b % _categoryValues[c].branchReflect === 0 )
                             {
                                 reflect = -ONE;
                             }
-                            
+
                             let f = -ONE + ( b / ( _categoryValues[c].branchNumber - 1 ) ) * 2;
 
-                            this.generateBodySequence( phenotype, p, _categoryValues[c].branchAngle * f, c, reflect );    
-                        }   
+                            this.generateBodySequence( phenotype, p, _categoryValues[c].branchAngle * f, c, reflect, _branchDepth[p] + 1 );
+                        }
                     }                    
                 }
             }
@@ -592,100 +635,124 @@ copyPart( testParts[p], phenotype.parts[p] );
 	//---------------------------------------------------------------------------------
 	// generate body sequence
 	//---------------------------------------------------------------------------------
-	this.generateBodySequence = function( phenotype, parent, branchAngle, c, reflect )
+	this.generateBodySequence = function( phenotype, parent, branchAngle, c, reflect, depth = 0 )
 	{
+        const secondaryTip = SECONDARY_BRANCHING_ENABLED && depth === 1
+            && _normalizedGenes[ SECONDARY_BRANCHING_GENE ] >= 0.25;
+        const replicateNumber = SEGMENT_REPLICATION_ENABLED
+            ? 1 + Math.min( 2, Math.floor( 3 * _normalizedGenes[ SEGMENT_REPLICATION_FIRST_GENE + c * 2 ] )) : 1;
+        const replicateDelay = SEGMENT_REPLICATION_ENABLED
+            ? 1 + Math.min( 2, Math.floor( 3 * _normalizedGenes[ SEGMENT_REPLICATION_FIRST_GENE + c * 2 + 1 ] )) : 1;
+        const growthAmp   = GROWTH_TURN_ENABLED ? 24 * ( _normalizedGenes[ GROWTH_TURN_FIRST_GENE + c * 3 ] - 0.5 ) : 0;
+        const growthPhase = GROWTH_TURN_ENABLED ? 2 * _normalizedGenes[ GROWTH_TURN_FIRST_GENE + c * 3 + 1 ] - 1 : 0;
+        const growthAcc   = GROWTH_TURN_ENABLED ? 0.5 * ( _normalizedGenes[ GROWTH_TURN_FIRST_GENE + c * 3 + 2 ] - 0.5 ) : 0;
+        let growthTurn = 0;
+
         for (let i=0; i<_categoryValues[c].sequenceCount; i++)
         {
             if ( _partIndex < _cutOff )
-            {        
+            {
                 //-------------------------
-                // increment _partIndex  
+                // increment _partIndex
                 //-------------------------
-                _partIndex ++;               
+                _partIndex ++;
                 assert( _partIndex < MAX_PARTS, "_partIndex < MAX_PARTS" );
-                
+                _branchDepth[ _partIndex ] = depth;
+
                 phenotype.parts[ _partIndex ].child = NULL_INDEX; //default
-            
+
                 //-------------------------------------------------------
-                // the first part is a branchpoint from the parent  
+                // the first part is a branchpoint from the parent
                 //-------------------------------------------------------
                 if ( i === 0 )
                 {
                     phenotype.parts[ _partIndex ].branch    = true;
                     phenotype.parts[ _partIndex ].parent    = parent;
-                    phenotype.parts[ _partIndex ].angle     = branchAngle; 
+                    phenotype.parts[ _partIndex ].angle     = branchAngle;
                     phenotype.parts[ _partIndex ].amp       = _categoryValues[c].branchAmp;
-                    phenotype.parts[ _partIndex ].phase     = _categoryValues[c].branchPhase * _partIndex; 
+                    phenotype.parts[ _partIndex ].phase     = _categoryValues[c].branchPhase * _partIndex;
                     phenotype.parts[ _partIndex ].turnAmp   = _categoryValues[c].branchTurnAmp;
-                    phenotype.parts[ _partIndex ].turnPhase = _categoryValues[c].branchTurnPhase * _partIndex;   
+                    phenotype.parts[ _partIndex ].turnPhase = _categoryValues[c].branchTurnPhase * _partIndex;
+                    if ( BRANCH_AMP_FLIP_ENABLED && _normalizedGenes[ BRANCH_AMP_FLIP_GENE ] >= 0.5 && reflect < 0 )
+                    {
+                        phenotype.parts[ _partIndex ].phase    = -phenotype.parts[ _partIndex ].phase;
+                        phenotype.parts[ _partIndex ].turnAmp  = -phenotype.parts[ _partIndex ].turnAmp;
+                    }
                 }
                 else
                 {
                     let parent = _partIndex - 1;
                     phenotype.parts[ parent ].child = _partIndex;
-                
+
                     phenotype.parts[ _partIndex ].branch    = false;
                     phenotype.parts[ _partIndex ].parent    = parent;
                     phenotype.parts[ _partIndex ].angle     = ZERO;
 
                     phenotype.parts[ _partIndex ].amp       = _categoryValues[c].amp;
-                    phenotype.parts[ _partIndex ].phase     = _categoryValues[c].phase * _partIndex; 
+                    phenotype.parts[ _partIndex ].phase     = _categoryValues[c].phase * _partIndex;
                     phenotype.parts[ _partIndex ].turnAmp   = _categoryValues[c].turnAmp;
-                    phenotype.parts[ _partIndex ].turnPhase = _categoryValues[c].turnPhase;   
+                    phenotype.parts[ _partIndex ].turnPhase = _categoryValues[c].turnPhase;
+                    if ( GROWTH_TURN_ENABLED )
+                    {
+                        growthTurn += growthAmp * ( growthPhase + i * growthAcc );
+                        phenotype.parts[ _partIndex ].angle = growthTurn;
+                    }
                 }
 
 
-                
+
 if ( testNoEel )
 {
     //console.log( "testNoEel" );
     phenotype.parts[ _partIndex ].turnAmp   = ZERO;
-    phenotype.parts[ _partIndex ].turnPhase = ZERO;   
+    phenotype.parts[ _partIndex ].turnPhase = ZERO;
 }
-        
+
                 //-----------------------------------------------
                 // apply reflection on amp
                 //-----------------------------------------------
                 phenotype.parts[ _partIndex ].amp *= reflect;
-                
+
                 //---------------------------------------------------
-                // set some other attributes  
+                // set some other attributes
                 //---------------------------------------------------
                 phenotype.parts[ _partIndex ].category      = c;
                 phenotype.parts[ _partIndex ].frequency     = phenotype.frequency;
                 phenotype.parts[ _partIndex ].splined       = _categoryValues[c].splined;
                 phenotype.parts[ _partIndex ].endCapSpline  = _categoryValues[c].endCapSpline;
- 
+
                 //----------------------------------------------------
                 // set attributes that interpolate over the sequence
                 //----------------------------------------------------
                 let fraction = ZERO;
-                
+
                 if ( _categoryValues[c].sequenceCount > 1 )
                 {
-                    fraction = i / ( _categoryValues[c].sequenceCount - 1 );     
+                    const delayed = Math.max( 0, i - replicateDelay + 1 );
+                    const source = Math.floor( delayed / replicateNumber ) * replicateNumber;
+                    fraction = source / ( _categoryValues[c].sequenceCount - 1 );
                 }
-                        
+
                 phenotype.parts[ _partIndex ].width  = _categoryValues[c].startWidth  + fraction * ( _categoryValues[c].endWidth  - _categoryValues[c].startWidth   );
-                phenotype.parts[ _partIndex ].length = _categoryValues[c].startLength + fraction * ( _categoryValues[c].endLength - _categoryValues[c].startLength  );   
+                phenotype.parts[ _partIndex ].length = _categoryValues[c].startLength + fraction * ( _categoryValues[c].endLength - _categoryValues[c].startLength  );
                 phenotype.parts[ _partIndex ].red    = _categoryValues[c].startRed    + fraction * ( _categoryValues[c].endRed    - _categoryValues[c].startRed     );
                 phenotype.parts[ _partIndex ].green  = _categoryValues[c].startGreen  + fraction * ( _categoryValues[c].endGreen  - _categoryValues[c].startGreen   );
                 phenotype.parts[ _partIndex ].blue   = _categoryValues[c].startBlue   + fraction * ( _categoryValues[c].endBlue   - _categoryValues[c].startBlue    );
-                
+
 			    assert( phenotype.parts[ _partIndex ].length > ZERO, "In Embryology: phenotype.parts[ _partIndex ].length > ZERO" );
-			    assert( phenotype.parts[ _partIndex ].width  > ZERO, "In Embryology: phenotype.parts[ _partIndex ].width  > ZERO" );              
+			    assert( phenotype.parts[ _partIndex ].width  > ZERO, "In Embryology: phenotype.parts[ _partIndex ].width  > ZERO" );
 
                 //---------------------------------------------------------------------------------
                 // determine if there is a branching
                 //---------------------------------------------------------------------------------
                 let mod = ( i + _categoryValues[c].branchShift ) % _categoryValues[c].branchPeriod;
-               
-                if ( mod === 0 )
+
+                if ( mod === 0 || ( secondaryTip && i === _categoryValues[c].sequenceCount - 1 ))
                 {
                     _generating = true;
         		    _branchStatus[ _partIndex ] = true;
                 }
-            }   
+            }
         }
     }
 

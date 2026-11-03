@@ -1,0 +1,18 @@
+{
+  "name": "gp6-five",
+  "steps": 20000,
+  "every": 2000,
+  "seeds": [ 1, 2, 3, 4 ],
+  "world": 1,
+  "arms": [
+    { "name": "ctl", "set": {} },
+    { "name": "all5", "set": {
+      "SECONDARY_BRANCHING_ENABLED": "true",
+      "SEGMENT_REPLICATION_ENABLED": "true",
+      "GROWTH_TURN_ENABLED": "true",
+      "BRANCH_AMP_FLIP_ENABLED": "true",
+      "NUTRIENT_CYCLE_ENABLED": "true",
+      "SWIMMING_ENERGY_RECYCLE_ENABLED": "true"
+    } }
+  ]
+}

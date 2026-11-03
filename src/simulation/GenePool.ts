@@ -14,18 +14,18 @@ declare const __GENEPOOL_VERSION__: string;
 import { currentAt, currentDriftX, currentDriftY, currentStrength, randomPointInCurrent } from "./Currents";
 import { bindPlantGenes, inheritPlantGenes, plantMatureAge, plantOldAge, plantRotAge, plantSeedDistance } from "./PlantGenes";
 import { geneAverage, convertOldGenes, GENE_LAYOUT_VERSION, setTrait, gaussian, thermalWidthToGene, preyTargetScore, GENES_PREDATOR, GENES_THERMAL_OPTIMUM, GENES_THERMAL_WIDTH, GENES_DIGESTION, GENES_BRIGHTNESS, GENES_CHOOSINESS, GENES_HUNGER, GENES_AUTOTOMY_BITE, GENES_AUTOTOMY_THREAT, GENES_AUTOTOMY_AMOUNT, GENES_AUTOTOMY_WHICH, GENES_PERSISTENCE, GENES_INVESTMENT, GENES_SIZE_PICKINESS, GENES_DEFERENCE, GENES_RUDDER, GENES_WEAK_PREY, GENES_IMMUNE, GENES_CANNIBAL, GENES_CURRENT } from "./EcologyGenes";
-import { environment, FLAT_ENVIRONMENT, INITIAL_SOIL_NUTRIENT_PER_CELL, NUTRIENT_CYCLE_ENABLED, PLANT_TYPE_WARM, PLANT_TYPE_COLD, SEASONAL_PLANT_GROWTH_ENABLED, SEASONAL_PLANT_GROWTH_AMPLITUDE } from "./Environment";
+import { environment, FLAT_ENVIRONMENT, INITIAL_SOIL_NUTRIENT_PER_CELL, NUTRIENT_CYCLE_ENABLED, SWIMMING_ENERGY_RECYCLE_ENABLED, PLANT_TYPE_WARM, PLANT_TYPE_COLD, SEASONAL_PLANT_GROWTH_ENABLED, SEASONAL_PLANT_GROWTH_AMPLITUDE } from "./Environment";
 import { petriSettings, petriStartZone } from "./Petri";
 import { IGNORE_FOOD_EFFICIENCY, preyVisibility, TWO_PLANT_TYPES } from "./Ecology";
 import { START_ENERGY_FACTOR, PLANT_ROT_ENABLED, START_FOOD_FILL, START_FOOD_CLUMP, START_FOOD_CLUMP_RADIUS, PLANT_STAGES_SHOWN, NURSERY_ENABLED, NURSERY_STEPS, NURSERY_START_FOOD_FACTOR, NURSERY_EXTRA_SEEDS, PLANT_EVOLUTION_ENABLED, PLANT_SEED_PARENT_TRIES, CURRENTS_ENABLED, CURRENT_SPEED, CLASSIC_SEED_RAIN_FRACTION, MEAT_PIECE_ENERGY, MEAT_PIECE_SCATTER, PLANT_STAGES_ENABLED, PLANT_ROT_AGE, DIET_SWITCH_RATE, CLASSIC_NUM_SWIMBOTS, CLASSIC_NUM_FOODBITS, GARDEN_RADIUS, ENVIRONMENT_PLANT_SPREAD_RATE, ENVIRONMENT_SEEDS_PER_PERIOD, LOCAL_ENVIRONMENT_PLANT_GROWTH, PLANT_CELL_CAPACITY, PLANT_PARENT_SEED_FRACTION, PLANT_SEED_MIN_DISTANCE, PLANT_SEED_MAX_DISTANCE } from "./Parameters";
 
 import { BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_PREY } from "./Brain";
 import { Camera } from "./Camera";
-import { BRIGHTNESS_FROM_GENES, Embryology, isIterativeGrowthGene } from "./Embryology";
+import { BRIGHTNESS_FROM_GENES, Embryology, isExperimentalEmbryologyGene } from "./Embryology";
 import { FamilyTree } from "./FamilyTree";
 import { DEFAULT_FOOD_BIT_ENERGY, DEFAULT_FOOD_BIT_MAX_SPAWN_RADIUS, FOOD_BIT_BOUNDARY_MARGIN, FOOD_BIT_GRAB_RADIUS, FOOD_BIT_SIZE, FOOD_BIT_SIZE_VIEW_SCALE, FOOD_OPACITY_INCREMENT, FoodBit, MAX_FOOD_BIT_ENERGY, MAX_FOOD_BIT_MAX_SPAWN_RADIUS, MIN_FOOD_BIT_ENERGY, MIN_FOOD_BIT_MAX_SPAWN_RADIUS } from "./FoodBit";
 import { Genotype, NUM_GENES, PRESET_GENOTYPE_DARWIN, PRESET_GENOTYPE_DENNETT, PRESET_GENOTYPE_MENDEL, PRESET_GENOTYPE_TURING, PRESET_GENOTYPE_WILSON } from "./Genotype";
-import { CameraNavigationAction, NUM_GENES_USED, SimulationStartMode, getRandomState, globalTweakers, gpRandom, resetSimulationCounters, setRandomState, simClock, simCounters } from "./Globals";
+import { CameraNavigationAction, NUM_GENES_USED, SimulationStartMode, energyCycleCounters, getRandomState, globalTweakers, gpRandom, resetSimulationCounters, setRandomState, simClock, simCounters } from "./Globals";
 import { BYTE_SIZE, MILLISECONDS_PER_SECOND, NULL_INDEX, ONE, ONE_HALF, PI2, ZERO } from "./MathConstants";
 import { Obstacle } from "./Obstacle";
 import { BARRIER_EXPERIMENT, DEFAULT_CHILD_ENERGY_RATIO, DEFAULT_FOOD_REGENERATION_PERIOD, DEFAULT_GARDEN_OF_EDEN_RADIUS, DEFAULT_MAXIMUM_AGE, DEFAULT_SWIMBOT_HUNGER_THRESHOLD, FOOD_LOCAL_CAPACITY, FOOD_LOCAL_RADIUS, FOOD_RANDOM_SEED_CHANCE, FOOD_SPROUT_RATE, INITIAL_NUM_FOODBITS, INITIAL_NUM_SWIMBOTS, INITIAL_PREDATOR_FRACTION, LOCAL_PLANT_GROWTH, LOCAL_PLANT_SEED_RADIUS, MAX_CHILD_ENERGY_RATIO, MAX_FOODBITS, MAX_FOODBITS_PER_TYPE, MAX_FOOD_REGENERATION_PERIOD, MEAT_SLOT_SHARE, MAX_MAXIMUM_AGE, MAX_SWIMBOTS, MAX_SWIMBOT_HUNGER_THRESHOLD, MEAT_DECAY_TIME, MIN_CHILD_ENERGY_RATIO, MIN_FOOD_REGENERATION_PERIOD, MIN_MAXIMUM_AGE, MIN_SWIMBOT_HUNGER_THRESHOLD, NON_REPRODUCING_JUNK_DNA_LIMIT, OBSTACLE_ENABLED, PREDATOR_LEVEL_THRESHOLD, PREY_MAX_MASS_RATIO, RANDOM_MATING_CONTROL, RENDER_SWIMBOT_AS_DOT, SWIMBOT_LEVEL_OF_DETAIL_DOT, SWIMBOT_LEVEL_OF_DETAIL_HIGH, SWIMBOT_LEVEL_OF_DETAIL_LOW, YOUNG_AGE_DURATION } from "./Parameters";
@@ -179,6 +179,7 @@ export function GenePool()
     let _classicSeedDebt     = 0;
     let _serial              = 0;         // birth numbers (KIN_NOT_EATEN_ENABLED)
     let _seedDebt            = 0;       // fractional seeds carried to the next step
+    const _energyBeforePhysics = SWIMMING_ENERGY_RECYCLE_ENABLED ? new Float64Array( MAX_SWIMBOTS ) : null;
     let _environmentImage    = null;    // picture of the temperature map (drawn behind the pool)
     const STARVING_FOOD_CHOICE = 15;   // below this energy a swimbot eats anything
 	let _levelOfDetail	        = SWIMBOT_LEVEL_OF_DETAIL_LOW;
@@ -860,7 +861,7 @@ if ( mode === SimulationStartMode.SPECIES )
             //--------------------------------------------------
             for (let g=NUM_GENES_USED; g<NUM_GENES; g++)
             {
-                if ( !isIterativeGrowthGene( g )) { _myGenotype.setGeneValue( g, 0 ); }
+                if ( !isExperimentalEmbryologyGene( g )) { _myGenotype.setGeneValue( g, 0 ); }
             }
 
             //-------------------------------------------------------------------
@@ -1263,7 +1264,7 @@ if ( mode === SimulationStartMode.SPECIES )
 	        const parts = _embryology.generatePhenotypeFromGenotype( _myGenotype ).numParts;
 	        if ( parts >= lo && parts <= hi ) return;
 	        _myGenotype.randomize();
-	        for (let g = NUM_GENES_USED; g < NUM_GENES; g++) { if ( !isIterativeGrowthGene( g )) { _myGenotype.setGeneValue( g, 0 ); } }
+	        for (let g = NUM_GENES_USED; g < NUM_GENES; g++) { if ( !isExperimentalEmbryologyGene( g )) { _myGenotype.setGeneValue( g, 0 ); } }
 	    }
 	}
 
@@ -1380,6 +1381,11 @@ if ( mode === SimulationStartMode.SPECIES )
 	            if ( !this.plantCanGrowAt( _vectorUtility.x, _vectorUtility.y, type )) continue;
 	            const child = this.findLowestDeadFoodBitInArray();
 	            if ( child === NULL_INDEX ) break;
+                    if ( NUTRIENT_CYCLE_ENABLED && !environment.takeSoilNutrientForSproutAt( _vectorUtility.x, _vectorUtility.y ))
+                    {
+                        simCounters.nutrientLimitedPlantSeeds ++;
+                        continue;
+                    }
 	            _foodBits[ child ].initialize( child );
 	            _foodBits[ child ].setType( type );
 	            _foodBits[ child ].setEnergy( globalTweakers.foodBitEnergy );
@@ -2714,11 +2720,28 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	    t = phaseTime( 0, t );
 
 	    // 2. move (many threads)
+        const B = _st.bots;
+        if ( _energyBeforePhysics !== null && environment.active )
+        {
+            for ( let i = 0; i < n; i++ )
+            {
+                const s = list[i];
+                _energyBeforePhysics[s] = B[ s * SS.BOT_STRIDE + SS.B_ENERGY ];
+            }
+        }
 	    _runner.task( TASK_PHYSICS, list, n );
+        if ( _energyBeforePhysics !== null && environment.active )
+        {
+            for ( let i = 0; i < n; i++ )
+            {
+                const s = list[i], b = s * SS.BOT_STRIDE;
+                const spent = Math.max( 0, _energyBeforePhysics[s] - Math.max( 0, B[ b + SS.B_ENERGY ] ));
+                energyCycleCounters.nutrientsFromSwimming += environment.returnSwimmingEnergyAt( B[ b + SS.B_POS_X ], B[ b + SS.B_POS_Y ], spent );
+            }
+        }
 	    t = phaseTime( 1, t );
 
 	    // 3. died of old age or hunger while moving
-	    const B = _st.bots;
 	    for (let i = 0; i < n; i++)
 	    {
 	        const s = list[i];
@@ -2911,7 +2934,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	    let num = 0;
         for (let g=NUM_GENES_USED; g<NUM_GENES; g++)
         {
-            if ( isIterativeGrowthGene( g )) { continue; }
+            if ( isExperimentalEmbryologyGene( g )) { continue; }
             diff += Math.abs( genotype1.getGeneValue(g) - genotype2.getGeneValue(g) ) / BYTE_SIZE;
             num ++;
         }
@@ -5591,7 +5614,7 @@ this.testPredation = function()
 
         // clear junk dna
         for (let g = NUM_GENES_USED; g < NUM_GENES; g++) {
-            if ( !isIterativeGrowthGene( g )) { _myGenotype.setGeneValue(g, 0); }
+            if ( !isExperimentalEmbryologyGene( g )) { _myGenotype.setGeneValue(g, 0); }
         }
 
         setPredatorGene(_myGenotype, predatorGeneValue255);

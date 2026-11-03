@@ -28,6 +28,8 @@ export const FLAT_ENVIRONMENT          = !TEMPERATURE_ENABLED;
 // Optional matter cycle experiment: meat rot returns nutrients to the same
 // plant cell, and each successful sprout consumes one nutrient unit.
 export const NUTRIENT_CYCLE_ENABLED              = false;
+export const SWIMMING_ENERGY_RECYCLE_ENABLED     = false; // requires NUTRIENT_CYCLE_ENABLED
+export const SWIMMING_ENERGY_TO_NUTRIENT         = 0.05;
 export const INITIAL_SOIL_NUTRIENT_PER_CELL      = 3.0;
 export const SOIL_NUTRIENT_CAPACITY_PER_CELL     = 12.0;
 export const SOIL_NUTRIENT_PER_SPROUT            = 1.0;
@@ -311,6 +313,19 @@ export class Environment
         const returned = Math.min(
             Math.max( 0, SOIL_NUTRIENT_CAPACITY_PER_CELL - this.soilNutrient[ cell ] ),
             meatEnergy * MEAT_DETRITUS_YIELD
+        );
+        this.soilNutrient[ cell ] += returned;
+        return returned;
+    }
+
+    returnSwimmingEnergyAt( x: number, y: number, energy: number ): number
+    {
+        if ( !NUTRIENT_CYCLE_ENABLED || !SWIMMING_ENERGY_RECYCLE_ENABLED || !( energy > 0 )) return 0;
+        const cell = this.plantCellIndex( x, y );
+        this.ageSoilNutrient( cell );
+        const returned = Math.min(
+            Math.max( 0, SOIL_NUTRIENT_CAPACITY_PER_CELL - this.soilNutrient[ cell ] ),
+            energy * SWIMMING_ENERGY_TO_NUTRIENT
         );
         this.soilNutrient[ cell ] += returned;
         return returned;

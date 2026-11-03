@@ -119,8 +119,13 @@ export const simCounters = {
     otherDeaths: 0,
 };
 
+// Experimental telemetry stays outside simCounters because worldHashes() hashes
+// that object's keys as well as the physical state of the world.
+export const energyCycleCounters = { nutrientsFromSwimming: 0 };
+
 export function resetSimulationCounters(): void
 {
+    energyCycleCounters.nutrientsFromSwimming = 0;
     simCounters.numDeadSwimbots = 0;
     simCounters.attackCount = 0;
     simCounters.births = 0;

@@ -185,7 +185,9 @@ function save()
     fs.writeFileSync( path.join( OUT, "deaths.csv" ), deaths.join( "\n" ) + "\n" );
     fs.writeFileSync( path.join( OUT, "births.csv" ), births.join( "\n" ) + "\n" );
     fs.writeFileSync( path.join( OUT, "summary.json" ), JSON.stringify({ seed: SEED, stepsDone: gp.getTimeStep(), stepsAsked: STEPS, deaths: deaths.length - 1, births: births.length - 1,
-        counters: Object.fromEntries( Object.entries( sb.simCounters ).filter( ([ k, v ]) => typeof v === "number" )), secondsSoFar: ( Date.now() - t0 ) / 1000 }, null, 2 ));
+        counters: { ...Object.fromEntries( Object.entries( sb.simCounters ).filter( ([ k, v ]) => typeof v === "number" )),
+            nutrientsFromSwimming: sb.energyCycleCounters ? sb.energyCycleCounters.nutrientsFromSwimming : 0 },
+        secondsSoFar: ( Date.now() - t0 ) / 1000 }, null, 2 ));
 }
 
 const t0 = Date.now();
