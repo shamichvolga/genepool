@@ -233,11 +233,6 @@ function mouthTouchesBody( st: SharedState, p: number, mouthX: number, mouthY: n
 
 function isPredator( st: SharedState, s: number ): boolean { return st.predator[s] > PREDATOR_LEVEL_THRESHOLD; }
 
-function foodIsMeatAndAlive( st: SharedState, f: number ): boolean
-{
-    return ( f >= 0 ) && ( st.liveFood[f] === 1 ) && ( st.foodType[f] === 2 );
-}
-
 function normalize( B: Float64Array, k: number ): void
 {
     const x = B[k], y = B[k + 1];
@@ -467,6 +462,7 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
 
     const f = M[ m + SS.M_FOOD ], mate = M[ m + SS.M_MATE ];
     const foodAlive = ( f >= 0 ) && ( st.liveFood[f] === 1 );
+    const meatAlive = foodAlive && ( st.foodType[f] === 2 );
     const mateAlive = ( mate >= 0 ) && ( st.liveSwimbot[ mate ] === 1 );
 
     // age
@@ -549,7 +545,7 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
         M[ m + SS.M_SELF_FEED_CD ] = THINK_PERIOD;
     }
 
-    if (( state === BRAIN_STATE_PURSUING_PREY ) && foodIsMeatAndAlive( st, f ))
+    if (( state === BRAIN_STATE_PURSUING_PREY ) && meatAlive)
     {
         if ( f !== M[ m + SS.M_LAST_MEAT ] ) st.counters[ counters + SS.K_MEAT_TARGETS_PURSUING ] ++;
         M[ m + SS.M_LAST_MEAT ] = f;
@@ -583,7 +579,7 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
     {
         // meat it touches while pursuing prey is eaten first
         const meatX = f >= 0 ? st.foodX[f] - mouthX : 0, meatY = f >= 0 ? st.foodY[f] - mouthY : 0;
-        if ( foodIsMeatAndAlive( st, f ) && ( Math.sqrt( meatX * meatX + meatY * meatY ) < SWIMBOT_MOUTH_LENGTH + M[ m + SS.M_GRAB_RADIUS ] ))
+        if ( meatAlive && ( Math.sqrt( meatX * meatX + meatY * meatY ) < SWIMBOT_MOUTH_LENGTH + M[ m + SS.M_GRAB_RADIUS ] ))
         {
             M[ m + SS.M_TRY_EAT ] = 1;
         }
@@ -606,7 +602,7 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
     else if ( state === BRAIN_STATE_LOOKING_FOR_PREY )
     {
         // a hungry predator with no prey in sight eats meat it sees
-        if ( foodIsMeatAndAlive( st, f ))
+        if ( meatAlive)
         {
             const xx = st.foodX[f] - mouthX, yy = st.foodY[f] - mouthY;
             if ( Math.sqrt( xx * xx + yy * yy ) < SWIMBOT_MOUTH_LENGTH + M[ m + SS.M_GRAB_RADIUS ] ) { M[ m + SS.M_TRY_EAT ] = 1; }
@@ -652,7 +648,7 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
     //-------------------------------------------------
     if ( state === BRAIN_STATE_LOOKING_FOR_PREY )
     {
-        if ( foodIsMeatAndAlive( st, f )) { aim( B, b, st.foodX[f], st.foodY[f], mouthX, mouthY ); }
+        if ( meatAlive) { aim( B, b, st.foodX[f], st.foodY[f], mouthX, mouthY ); }
         else                              { wanderFocus( st, s ); }
     }
     else if ( state === BRAIN_STATE_PURSUING_PREY )
