@@ -85,25 +85,64 @@ function selectNearestCandidates( count: number, limit: number, sc: PerceptionSc
 {
     const ci = sc.candidateIndices, cd = sc.candidateDistances;
     const ni = sc.nearestIndices,   nd = sc.nearestDistances;
+
+    // Keep the worst of the retained candidates at the root of a max-heap.
+    // Unlike insertion into a sorted 20-element list, a new candidate moves
+    // only O(log limit) entries. The comparator (including the index tie-break)
+    // and the final ascending order are exactly the same as before.
     let kept = 0;
     for (let i = 0; i < count; i++)
     {
         const index = ci[i];
         const d     = cd[i];
 
-        if (( kept === limit ) && !isCloser( d, index, nd[ kept - 1 ], ni[ kept - 1 ] )) continue;
-
-        let j = ( kept < limit ) ? kept : kept - 1;
-        if ( kept < limit ) kept ++;
-
-        while ( j > 0 && isCloser( d, index, nd[j - 1], ni[j - 1] ))
+        if ( kept < limit )
         {
-            ni[j] = ni[j - 1];
-            nd[j] = nd[j - 1];
-            j--;
+            let j = kept++;
+            while ( j > 0 )
+            {
+                const parent = ( j - 1 ) >> 1;
+                if ( isCloser( d, index, nd[parent], ni[parent] )) break;
+                ni[j] = ni[parent];
+                nd[j] = nd[parent];
+                j = parent;
+            }
+            ni[j] = index;
+            nd[j] = d;
+            continue;
+        }
+
+        if ( !isCloser( d, index, nd[0], ni[0] )) continue;
+        let j = 0;
+        while ( true )
+        {
+            const left = j * 2 + 1;
+            if ( left >= limit ) break;
+            const right = left + 1;
+            let worst = left;
+            if (( right < limit ) && isCloser( nd[left], ni[left], nd[right], ni[right] )) worst = right;
+            if ( !isCloser( d, index, nd[worst], ni[worst] )) break;
+            ni[j] = ni[worst];
+            nd[j] = nd[worst];
+            j = worst;
         }
         ni[j] = index;
         nd[j] = d;
+    }
+
+    // The consumers expect nearest-first order, not heap order.
+    for (let i = 1; i < kept; i++)
+    {
+        const index = ni[i], d = nd[i];
+        let j = i - 1;
+        while (( j >= 0 ) && isCloser( d, index, nd[j], ni[j] ))
+        {
+            ni[j + 1] = ni[j];
+            nd[j + 1] = nd[j];
+            j--;
+        }
+        ni[j + 1] = index;
+        nd[j + 1] = d;
     }
     return kept;
 }
