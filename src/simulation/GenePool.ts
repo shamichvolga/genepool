@@ -21,7 +21,7 @@ import { START_ENERGY_FACTOR, PLANT_ROT_ENABLED, START_FOOD_FILL, START_FOOD_CLU
 
 import { BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_PREY } from "./Brain";
 import { Camera } from "./Camera";
-import { BRIGHTNESS_FROM_GENES, Embryology } from "./Embryology";
+import { BRIGHTNESS_FROM_GENES, Embryology, isIterativeGrowthGene } from "./Embryology";
 import { FamilyTree } from "./FamilyTree";
 import { DEFAULT_FOOD_BIT_ENERGY, DEFAULT_FOOD_BIT_MAX_SPAWN_RADIUS, FOOD_BIT_BOUNDARY_MARGIN, FOOD_BIT_GRAB_RADIUS, FOOD_BIT_SIZE, FOOD_BIT_SIZE_VIEW_SCALE, FOOD_OPACITY_INCREMENT, FoodBit, MAX_FOOD_BIT_ENERGY, MAX_FOOD_BIT_MAX_SPAWN_RADIUS, MIN_FOOD_BIT_ENERGY, MIN_FOOD_BIT_MAX_SPAWN_RADIUS } from "./FoodBit";
 import { Genotype, NUM_GENES, PRESET_GENOTYPE_DARWIN, PRESET_GENOTYPE_DENNETT, PRESET_GENOTYPE_MENDEL, PRESET_GENOTYPE_TURING, PRESET_GENOTYPE_WILSON } from "./Genotype";
@@ -860,7 +860,7 @@ if ( mode === SimulationStartMode.SPECIES )
             //--------------------------------------------------
             for (let g=NUM_GENES_USED; g<NUM_GENES; g++)
             {
-                _myGenotype.setGeneValue( g, 0 );
+                if ( !isIterativeGrowthGene( g )) { _myGenotype.setGeneValue( g, 0 ); }
             }
 
             //-------------------------------------------------------------------
@@ -1263,7 +1263,7 @@ if ( mode === SimulationStartMode.SPECIES )
 	        const parts = _embryology.generatePhenotypeFromGenotype( _myGenotype ).numParts;
 	        if ( parts >= lo && parts <= hi ) return;
 	        _myGenotype.randomize();
-	        for (let g = NUM_GENES_USED; g < NUM_GENES; g++) { _myGenotype.setGeneValue( g, 0 ); }
+	        for (let g = NUM_GENES_USED; g < NUM_GENES; g++) { if ( !isIterativeGrowthGene( g )) { _myGenotype.setGeneValue( g, 0 ); } }
 	    }
 	}
 
@@ -2911,6 +2911,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	    let num = 0;
         for (let g=NUM_GENES_USED; g<NUM_GENES; g++)
         {
+            if ( isIterativeGrowthGene( g )) { continue; }
             diff += Math.abs( genotype1.getGeneValue(g) - genotype2.getGeneValue(g) ) / BYTE_SIZE;
             num ++;
         }
@@ -5590,7 +5591,7 @@ this.testPredation = function()
 
         // clear junk dna
         for (let g = NUM_GENES_USED; g < NUM_GENES; g++) {
-            _myGenotype.setGeneValue(g, 0);
+            if ( !isIterativeGrowthGene( g )) { _myGenotype.setGeneValue(g, 0); }
         }
 
         setPredatorGene(_myGenotype, predatorGeneValue255);

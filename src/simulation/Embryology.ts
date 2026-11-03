@@ -72,6 +72,19 @@ export const MAX_CUT_OFF           =   MAX_PARTS - 1;
 export const MIN_SEQUENCE_COUNT    =   MIN_PARTS;
 export const MAX_SEQUENCE_COUNT    =   5;
 
+// GP6-inspired experiment: refine an already generated body over several
+// passes. It is deliberately separate from topology generation, so the
+// control and experiment have exactly the same parts and branches.
+export const ITERATIVE_GROWTH_ENABLED = false;
+export const ITERATIVE_GROWTH_PASSES  = 16;
+const ITERATIVE_GROWTH_FIRST_GENE     = 171; // outside the body, ecology and experimental blocks through 170
+const ITERATIVE_GROWTH_COLOR_GENE     = 183; // 12 per-category genes, then one global color-shift scale
+const ITERATIVE_GROWTH_LAST_GENE      = ITERATIVE_GROWTH_COLOR_GENE;
+export function isIterativeGrowthGene( g: number ): boolean
+{
+    return ITERATIVE_GROWTH_ENABLED && g >= ITERATIVE_GROWTH_FIRST_GENE && g <= ITERATIVE_GROWTH_LAST_GENE;
+}
+
 
 export const GREATEST_POSSIBLE_SWIMBOT_MASS = MAX_PARTS * MAX_LENGTH * MAX_WIDTH
 
@@ -318,6 +331,17 @@ let testNoEel = true;
         // important: set _numGenesUsed
         //---------------------------------------
         _numGenesUsed = g + 1;
+        if ( ITERATIVE_GROWTH_ENABLED )
+        {
+            for ( let c = 0; c < NUM_CATEGORIES; c++ )
+            {
+                const gene = ITERATIVE_GROWTH_FIRST_GENE + c * 3;
+                _geneNames[ gene     ] = "iterative width growth";
+                _geneNames[ gene + 1 ] = "iterative length growth";
+                _geneNames[ gene + 2 ] = "iterative category shift";
+            }
+            _geneNames[ ITERATIVE_GROWTH_COLOR_GENE ] = "iterative color shift scale";
+        }
 
         //---------------------------------------
         // make sure this is kosher
@@ -435,6 +459,8 @@ testNoEel = false;
 
         // (autotomy reorders the parts: remember each one's first number, see Swimbot.restorePhenotypeOrder)
         for (let p = 0; p < phenotype.numParts; p++) { phenotype.parts[p].origin = p; }
+
+        if ( ITERATIVE_GROWTH_ENABLED ) { refineBodyIteratively( phenotype ); }
 
 		//-----------------------------------------------------
 		// re-order the parts for more sensible rendering 
@@ -660,6 +686,48 @@ if ( testNoEel )
         		    _branchStatus[ _partIndex ] = true;
                 }
             }   
+        }
+    }
+
+    // A bounded GP6-inspired treatment of geometry, not a wholesale port of
+    // its embryology. Existing end colors double as signed color-shift genes;
+    // this reuses the current genome without moving the ecology gene block.
+    function refineBodyIteratively( phenotype )
+    {
+        const colorScale = 0.02 + 0.18 * _normalizedGenes[ ITERATIVE_GROWTH_COLOR_GENE ];
+        for ( let pass = 0; pass < ITERATIVE_GROWTH_PASSES; pass++ )
+        {
+            for ( let p = 1; p < phenotype.numParts; p++ ) // the root stays fixed, as in GP6
+            {
+                const part = phenotype.parts[p];
+                const c = part.category;
+                const gene = ITERATIVE_GROWTH_FIRST_GENE + c * 3;
+
+                part.width += 0.09 * _normalizedGenes[ gene ];
+                if      ( part.width > MAX_WIDTH ) { part.width = MIN_WIDTH; }
+                else if ( part.width < MIN_WIDTH ) { part.width = MAX_WIDTH; }
+
+                part.length += 0.3 * _normalizedGenes[ gene + 1 ];
+                if      ( part.length > MAX_LENGTH ) { part.length = MIN_LENGTH; }
+                else if ( part.length < MIN_LENGTH ) { part.length = MAX_LENGTH; }
+
+                if ( !phenotype.isPredator )
+                {
+                    const values = _categoryValues[c];
+                    part.red   += colorScale * ( values.endRed   - 0.5 );
+                    part.green += colorScale * ( values.endGreen - 0.5 );
+                    part.blue  += colorScale * ( values.endBlue  - 0.5 );
+                    if      ( part.red   > ONE  ) { part.red   = ZERO; }
+                    else if ( part.red   < ZERO ) { part.red   = ONE;  }
+                    if      ( part.green > ONE  ) { part.green = ZERO; }
+                    else if ( part.green < ZERO ) { part.green = ONE;  }
+                    if      ( part.blue  > ONE  ) { part.blue  = ZERO; }
+                    else if ( part.blue  < ZERO ) { part.blue  = ONE;  }
+                }
+
+                const shift = Math.floor( 6 * _normalizedGenes[ gene + 2 ] ) - 3;
+                part.category = ( c + shift + 2 * NUM_CATEGORIES ) % NUM_CATEGORIES;
+            }
         }
     }
 

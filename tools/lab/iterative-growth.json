@@ -1,0 +1,12 @@
+{
+  "name": "iterative-growth",
+  "steps": 20000,
+  "every": 2000,
+  "seeds": [ 1, 2, 3, 4 ],
+  "world": 1,
+  "arms": [
+    { "name": "ctl",    "set": { "ITERATIVE_GROWTH_ENABLED": "false" } },
+    { "name": "grow8",  "set": { "ITERATIVE_GROWTH_ENABLED": "true", "ITERATIVE_GROWTH_PASSES": "8" } },
+    { "name": "grow16", "set": { "ITERATIVE_GROWTH_ENABLED": "true", "ITERATIVE_GROWTH_PASSES": "16" } }
+  ]
+}
