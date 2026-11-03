@@ -1,13 +1,14 @@
 //------------------------------------------------------------------------------
 // Speed of the simulation with worker threads (stage 7), without a browser.
 //
-//   node --max-old-space-size=8000 tools/threads-bench.cjs <swimbots> [steps] [threads] [seed] [worldScale]
+//   node --max-old-space-size=8000 tools/threads-bench.cjs <swimbots> [steps] [threads] [seed] [worldScale] [hashEvery]
 //
 // Runs the pool in the headless sandbox (like bench.cjs) and lets Node worker
 // threads do the heavy phases (moving bodies, looking around), the same way
 // src/parallel/ParallelRunner.ts does in the browser. threads = 1 means no
 // workers. Prints ms per step for every phase and a fingerprint of the state
-// (it must not depend on the number of threads).
+// (it must not depend on the number of threads). hashEvery > 0 also prints
+// worldHashes at equal intervals for deterministic before/after comparisons.
 //------------------------------------------------------------------------------
 const path = require( "path" );
 const fs = require( "fs" );
@@ -20,6 +21,7 @@ const steps   = parseInt( process.argv[3] || "200",  10 );
 const threads = parseInt( process.argv[4] || "8",    10 );
 const seed    = parseInt( process.argv[5] || "1",    10 );
 const worldScale = Math.max( 1, Math.min( 4, parseInt( process.argv[6] || "2", 10 )));
+const hashEvery = parseInt( process.argv[7] || "0", 10 );
 
 const worldAreaFactor = worldScale * worldScale;
 // Match the pool's normal capacities and food supply at this world scale.
@@ -152,7 +154,14 @@ async function main()
     const times = genePool.getPhaseTimes();
     times.fill( 0 );
     const t0 = process.hrtime.bigint();
-    for ( let i = 0; i < steps; i++ ) genePool.update();
+    for ( let i = 0; i < steps; i++ )
+    {
+        genePool.update();
+        if (( hashEvery > 0 ) && ((( i + 1 ) % hashEvery ) === 0 ))
+        {
+            console.log( `step=${ i + 1 } worldHashes=${ JSON.stringify( genePool.worldHashes() ) }` );
+        }
+    }
     const ms = Number( process.hrtime.bigint() - t0 ) / 1e6 / steps;
 
     let fingerprint = 0;
