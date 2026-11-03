@@ -615,6 +615,7 @@ this.setParent = function( parent )
 	    st.predator  [s] = this.getPredatorLevel();
 	    st.brightness[s] = _brightness;
 	    st.mass      [s] = _phenotype.mass;
+	    st.sizeSignature[s] = sizeSignature( _phenotype.mass );
 	    st.eternal   [s] = this.isEternal() ? 1 : 0;
 	    const color = this.getAverageColor();
 	    st.colorR    [s] = color.red;

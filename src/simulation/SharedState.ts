@@ -145,6 +145,7 @@ export class SharedState
     readonly mouthY       : Float64Array;
     readonly predator     : Float64Array;   // predator level 0..1
     readonly mass         : Float64Array;
+    readonly sizeSignature: Float64Array;   // cached Ecology.sizeSignature(mass)
     readonly brightness   : Float64Array;
     readonly energy       : Float64Array;
     readonly scanRadius   : Float64Array;   // how far a predator looks for prey
@@ -266,6 +267,7 @@ export class SharedState
         this.mouthY     = f64( "mouthY", n );
         this.predator   = f64( "predator", n );
         this.mass       = f64( "mass", n );
+        this.sizeSignature = f64( "sizeSignature", n );
         this.brightness = f64( "brightness", n );
         this.energy     = f64( "energy", n );
         this.scanRadius = f64( "scanRadius", n );

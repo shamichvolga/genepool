@@ -14,7 +14,7 @@ import { CURRENT_AWARENESS_ENABLED, CURRENT_AWARE_MIN_SPEED } from "./Parameters
 import { biteEnergy } from "./PlantSize";
 import { PLANT_SIZE_ENABLED, PLANT_SPROUT_ENERGY } from "./Parameters";
 import { BRAIN_STATE_LOOKING_FOR_MATE, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_PREY } from "./Brain";
-import { IGNORE_FOOD_EFFICIENCY, mateAcceptance, pairRandom, preyVisibility, searchImageFactor, sizeSignature } from "./Ecology";
+import { IGNORE_FOOD_EFFICIENCY, mateAcceptance, pairRandom, preyVisibility, searchImageFactor } from "./Ecology";
 import { PLANT_TYPE_WARM } from "./Environment";
 import { ONE, ONE_THIRD } from "./MathConstants";
 import { ATTACK_SUCCESS_CHANCE, ENVIRONMENT_ATTACK_SUCCESS_CHANCE, PREDATOR_LEVEL_THRESHOLD, PREY_MAX_MASS_RATIO, PREY_SCAN_COOLDOWN, SWIMBOT_MAX_ENERGY, PREDATION_ENERGY_TRANSFER, PREY_BODY_ENERGY, YOUNG_AGE_DURATION, PREDATOR_TARGET_SELECTION_ENABLED } from "./Parameters";
@@ -510,7 +510,7 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
             if ( environmentOn )
             {
                 const image = searchImageFactor( imageStrength,
-                    st.colorR[o] - imageR, st.colorG[o] - imageG, st.colorB[o] - imageB, sizeSignature( st.mass[o] ) - imageSize );
+                    st.colorR[o] - imageR, st.colorG[o] - imageG, st.colorB[o] - imageB, st.sizeSignature[o] - imageSize );
                 if ( distance > preyViewRadius * image * preyVisibility( st.brightness[o], backgroundAt( st, botX[o], botY[o] ))) continue;
             }
 
