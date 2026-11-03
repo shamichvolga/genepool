@@ -433,7 +433,6 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
             if ( alive[o] === 0 ) continue;
             if ( predator[o] > PREDATOR_LEVEL_THRESHOLD ) continue;      // predators don't hunt predators
             if ( st.eternal[o] === 1 ) continue;                        // immortals are not eaten
-            if ( KIN_NOT_EATEN_ENABLED && areKin( st, s, o )) continue;   // not my parent, child, brother or sister
             // too big to bite (a not yet grown-up one can be bitten anyway)
             const young = JUVENILE_PREDATION_ENABLED && ( st.age[o] < st.mind[ o * MIND_STRIDE + M_MATURE_AGE ] );
             // WEAK_PREY_ENABLED: old or starving prey can be taken whatever its size
@@ -463,6 +462,9 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
             }
             if ( distance > preyViewRadius ) continue;
             if ( obstructed( st, myMouthX, myMouthY, botX[o], botY[o] )) continue;   // (no seeing through the wall)
+            // Kinship is pure and comparatively costly: check it only after the
+            // cheap distance, size and visibility tests have accepted the prey.
+            if ( KIN_NOT_EATEN_ENABLED && areKin( st, s, o )) continue;   // not my parent, child, brother or sister
 
             // camouflage: prey that matches the bottom is seen only up close;
             // the search image: prey like the last meals is seen from farther
