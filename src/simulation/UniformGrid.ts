@@ -124,14 +124,15 @@ export class UniformGrid
 
     //--------------------------------------------------------------------
     // collect: writes into `out` every item whose cell overlaps the square
-    // around (x, y), and returns how many. The caller checks real distances.
+    // around (x, y). With xs/ys it also applies the caller's strict circle test.
     // Extras come last; an item moved to the extras is not listed twice.
     //--------------------------------------------------------------------
-    collect( x: number, y: number, radius: number, out: Int32Array ): number
+    collect( x: number, y: number, radius: number, out: Int32Array, xs?: Float64Array, ys?: Float64Array ): number
     {
         const c0 = this.column( x - radius ), c1 = this.column( x + radius );
         const r0 = this.row   ( y - radius ), r1 = this.row   ( y + radius );
         const cols = this.cols, cellStart = this.cellStart, sorted = this.sorted;
+        const radiusSquared = radius * radius;
         let n = 0;
 
         for ( let c = c0; c <= c1; c++ )
@@ -143,7 +144,13 @@ export class UniformGrid
                 for ( let k = cellStart[ cell ]; k < end; k++ )
                 {
                     const item = sorted[k];
-                    if ( this.isExtra[ item ] === 0 ) out[ n ++ ] = item;
+                    if ( this.isExtra[ item ] !== 0 ) continue;
+                    if ( xs !== undefined && ys !== undefined )
+                    {
+                        const dx = xs[item] - x, dy = ys[item] - y;
+                        if ( dx * dx + dy * dy >= radiusSquared ) continue;
+                    }
+                    out[ n ++ ] = item;
                 }
             }
         }
@@ -151,7 +158,13 @@ export class UniformGrid
         const numExtras = this.numExtras;
         for ( let e = 0; e < numExtras; e++ )
         {
-            out[ n ++ ] = this.extras[e];
+            const item = this.extras[e];
+            if ( xs !== undefined && ys !== undefined )
+            {
+                const dx = xs[item] - x, dy = ys[item] - y;
+                if ( dx * dx + dy * dy >= radiusSquared ) continue;
+            }
+            out[ n ++ ] = item;
         }
 
         return n;

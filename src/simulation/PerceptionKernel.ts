@@ -36,7 +36,6 @@ export const STARVING_FOOD_CHOICE = 15;   // below this energy a swimbot eats an
 //------------------------------------------------------------
 export class PerceptionScratch
 {
-    readonly gridResult         : Int32Array;
     readonly foodGridResult     : Int32Array;
     readonly nearbyIndices      : Int32Array;
     readonly candidateIndices   : Int32Array;
@@ -46,7 +45,6 @@ export class PerceptionScratch
 
     constructor( maxSwimbots: number, maxFoodBits: number )
     {
-        this.gridResult         = new Int32Array  ( maxSwimbots * 2 );
         this.foodGridResult     = new Int32Array  ( maxFoodBits * 2 );
         this.nearbyIndices      = new Int32Array  ( maxSwimbots );
         this.candidateIndices   = new Int32Array  ( maxSwimbots );
@@ -214,19 +212,16 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
     //------------------------------------------------------------------
     // everybody within the search radius (wider for a hunting predator)
     //------------------------------------------------------------------
-    const searchRadius        = iAmPredator ? preyViewRadius : viewRadius;
-    const searchRadiusSquared = searchRadius * searchRadius;
+    const searchRadius = iAmPredator ? preyViewRadius : viewRadius;
     const nearby = sc.nearbyIndices;
     let numNearby = 0;
-    const numInCells = st.swimbotGrid.collect( myX, myY, searchRadius, sc.gridResult );
+    const numInCells = st.swimbotGrid.collect( myX, myY, searchRadius, nearby, botX, botY );
 
+    // Keep the grid's order while removing this swimbot itself.
     for (let k = 0; k < numInCells; k++)
     {
-        const o = sc.gridResult[k];
-        if ( o === s ) continue;
-        const dx = botX[o] - myX;
-        const dy = botY[o] - myY;
-        if ( dx * dx + dy * dy < searchRadiusSquared ) { nearby[ numNearby ++ ] = o; }
+        const o = nearby[k];
+        if ( o !== s ) nearby[ numNearby ++ ] = o;
     }
 
     //------------------------------------------------------------------
