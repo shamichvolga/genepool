@@ -30,6 +30,8 @@ const SEED  = parseInt( arg( "seed", "1" ), 10 );
 const STEPS = parseInt( arg( "steps", "40000" ), 10 );
 const EVERY = parseInt( arg( "every", "1000" ), 10 );
 const OUT   = arg( "out", path.join( __dirname, "results", "census-" + SEED ));
+const ROOT  = arg( "root", path.join( __dirname, ".." ));
+const BOTS  = arg( "bots", null );
 const SAMPLE = 20;   // steps between position / spin samples
 
 fs.mkdirSync( OUT, { recursive: true });
@@ -37,7 +39,8 @@ fs.mkdirSync( OUT, { recursive: true });
 // --set "NAME=value,NAME2=value": constants of the simulation for this run
 const overrides = {};
 for ( const kv of ( arg( "set", "" ) || "" ).split( "," ).filter( Boolean )) { const [ k, v ] = kv.split( "=" ); overrides[ k.trim() ] = v.trim(); }
-const run = createSimulation( SEED, overrides );
+if ( BOTS !== null ) { overrides.INITIAL_NUM_SWIMBOTS = parseInt( BOTS, 10 ); }
+const run = createSimulation( SEED, overrides, ROOT );
 const sb  = run.sandbox;
 const gp  = run.genePool;
 const st  = sb.sharedState();
@@ -113,9 +116,9 @@ for ( let s = 0; s < N; s++ )
     };
 
     const realGive = b.contributeToOffspring.bind( b );
-    b.contributeToOffspring = function()
+    b.contributeToOffspring = function( ...args )
     {
-        const given = realGive();
+        const given = realGive( ...args );
         if ( rec[s] ) { rec[s].given += given; }
         contributors.push( s );
         return given;

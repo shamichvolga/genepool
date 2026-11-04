@@ -185,6 +185,7 @@ const run = vm.runInContext( `
         }
         const bots = genePool.getSwimbots();
         let alive = 0, predators = 0, energy = 0;
+        let parts = 0, mass = 0, simple = 0, medium = 0, complex = 0;
         const clusters = [];   // greedy first-fit groups: { genes, count, predators }
 
         for ( let s = 0; s < bots.length; s++ )
@@ -193,6 +194,10 @@ const run = vm.runInContext( `
             if ( !b.getAlive() ) continue;
             alive ++;
             energy += b.getEnergy();
+            const numParts = b.getNumParts();
+            parts += numParts;
+            mass += b.getPhenotypeMass();
+            if ( numParts <= 5 ) simple ++; else if ( numParts <= 9 ) medium ++; else complex ++;
             const isPredator = ( typeof b.getPredatorLevel === 'function' ) && ( b.getPredatorLevel() > PREDATOR_LEVEL_THRESHOLD );
             if ( isPredator ) predators ++;
 
@@ -217,6 +222,11 @@ const run = vm.runInContext( `
             food        : hasTypes ? genePool.getNumFoodBitsOfType(0) + genePool.getNumFoodBitsOfType(1) : genePool.getNumFoodBits(),
             meat        : hasTypes ? genePool.getNumFoodBitsOfType(2) : 0,
             meanEnergy  : alive > 0 ? energy / alive : 0,
+            meanParts   : alive > 0 ? parts / alive : 0,
+            meanMass    : alive > 0 ? mass / alive : 0,
+            simpleShare : alive > 0 ? simple / alive : 0,
+            mediumShare : alive > 0 ? medium / alive : 0,
+            complexShare: alive > 0 ? complex / alive : 0,
             geneticClusters: geneticClusters.length,
             effectiveGeneticClusters: alive > 0 ? Math.exp( shannon ) : 0,
             largestGeneticClusterShare: geneticClusters.length > 0 && alive > 0 ? geneticClusters[0].count / alive : 0,
@@ -248,7 +258,7 @@ const alerts = run.alerts;
 // main loop
 //------------------------------------------------
 const rows = [];
-const header = "step,ms_per_step,alive,predators,plants,meat,mean_energy,genetic_clusters,effective_genetic_clusters,largest_genetic_cluster_share,heap_mb";
+const header = "step,ms_per_step,alive,predators,plants,meat,mean_energy,mean_parts,mean_mass,simple_share,medium_share,complex_share,genetic_clusters,effective_genetic_clusters,largest_genetic_cluster_share,heap_mb";
 console.log( `seed=${SEED} steps=${STEPS} bots=${BOTS === null ? "default" : BOTS}` );
 console.log( header );
 
@@ -268,7 +278,9 @@ for ( let step = 1; step <= STEPS; step++ )
         const heap = process.memoryUsage().heapUsed / 1048576;
         const stepsInWindow = ( step % EVERY === 0 ) ? EVERY : ( step % EVERY );
         const row = [ step, ( ms / stepsInWindow ).toFixed( 2 ), s.alive, s.predators, s.food, s.meat,
-                      s.meanEnergy.toFixed( 1 ), s.geneticClusters, s.effectiveGeneticClusters.toFixed( 1 ), s.largestGeneticClusterShare.toFixed( 2 ), heap.toFixed( 0 ) ].join( "," );
+                      s.meanEnergy.toFixed( 1 ), s.meanParts.toFixed( 2 ), s.meanMass.toFixed( 1 ),
+                      s.simpleShare.toFixed( 3 ), s.mediumShare.toFixed( 3 ), s.complexShare.toFixed( 3 ),
+                      s.geneticClusters, s.effectiveGeneticClusters.toFixed( 1 ), s.largestGeneticClusterShare.toFixed( 2 ), heap.toFixed( 0 ) ].join( "," );
         rows.push( row );
         console.log( row );
         t0 = process.hrtime.bigint();
