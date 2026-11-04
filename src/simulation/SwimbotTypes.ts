@@ -78,7 +78,7 @@ export const WALL_BOUNCE = 0.1;
 //---------------------------------------------------
 //  energy 
 //---------------------------------------------------
-export const ENERGY_USED_UP_SWIMMING				= 0.01;
+export const ENERGY_USED_UP_SWIMMING				= 0.008; // 20% less: complex bodies can afford controlled swimming
 export const STARVING								= 4.0;
 export const CONTINUAL_ENERGY_DRAIN				= 0.0001;
 

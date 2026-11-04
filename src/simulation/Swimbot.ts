@@ -1230,7 +1230,7 @@ _position.copyFrom( position );
         // the pool's hunger setting (was always the default 50, even after the
         // slider moved) times this swimbot's inherited factor
         _baseHungerThreshold = globalTweakers.hungerThreshold;
-        _brain.setHungerThreshold( _baseHungerThreshold * this.getHungerFactor() );
+        _brain.setHungerThreshold( _baseHungerThreshold * this.getHungerFactor() * Math.max( 1, _M[ _m + SS.M_MAX_ENERGY ] / SWIMBOT_MAX_ENERGY ) );
         _brain.setPredatorLevel( this.getPredatorLevel() );
         _brain.setEnergyLevel( _B[ _b + SS.B_ENERGY ] );
         _brain.update();
@@ -1241,8 +1241,9 @@ _position.copyFrom( position );
     this.setHungerThreshold = function(t)
     {
         // the pool's setting t, times this swimbot's own (inherited) factor
+        // and the reserve required by its scaled stomach
         _baseHungerThreshold = t;
-        t = t * this.getHungerFactor();
+        t = t * this.getHungerFactor() * Math.max( 1, _M[ _m + SS.M_MAX_ENERGY ] / SWIMBOT_MAX_ENERGY );
         _brain.setHungerThreshold(t);
     }
 
@@ -1402,8 +1403,11 @@ _position.copyFrom( position );
                 : SWIMBOT_MAX_ENERGY;
         if ( _slot >= 0 ) { _shared.brainWeights.set( _genotype.getBrain(), _slot * BRAIN_SIZE ); }
 
-        // the inherited hunger threshold (environment pool; classic pools: the setting)
-        _brain.setHungerThreshold( _baseHungerThreshold * this.getHungerFactor() );
+        // A larger stomach also needs a larger reserve before mating: with the
+        // small-body threshold, a massive swimbot feels fed until it has too
+        // little energy left to reach another plant.
+        const stomachScale = Math.max( 1, _M[ _m + SS.M_MAX_ENERGY ] / SWIMBOT_MAX_ENERGY );
+        _brain.setHungerThreshold( _baseHungerThreshold * this.getHungerFactor() * stomachScale );
 
         //-----------------------------------------------------
         // the predator gene may have changed (zap, gene tweak)
