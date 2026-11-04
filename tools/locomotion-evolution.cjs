@@ -26,6 +26,9 @@ const FINAL_TRIALS = Number(arg("final-trials", "4"));
 const FOOD_DISTANCE = Number(arg("food-distance", "220"));
 const FROM = arg("from", null);   // previous result: skip training, re-evaluate its descendants
 const HOLDOUT_SALT = Number(arg("holdout-salt", "0x51f15e00"));
+const LIFE_STAGE = arg("life-stage", "adult");   // adult or newborn
+const INITIAL_ENERGY = arg("initial-energy", null);
+if ( LIFE_STAGE !== "adult" && LIFE_STAGE !== "newborn" ) throw new Error("Unknown life stage");
 fs.mkdirSync(OUT, { recursive: true });
 
 function arg(name, fallback) {
@@ -129,8 +132,16 @@ function episode(genes, seed, steps) {
     gp.setMaximumSwimbotAge(Math.max(45000, steps + 5000));
     gp.createNewSwimbotWithGenes(genes);
     const bot = gp.getSwimbotAt(0);
-    const initialEnergy = s.SWIMBOT_MAX_ENERGY * s.START_ENERGY_FACTOR;
-    s.sharedState().bots[s.B_ENERGY] = initialEnergy;
+    const initialEnergy = INITIAL_ENERGY === null
+        ? ( LIFE_STAGE === "newborn" ? 50 : s.SWIMBOT_MAX_ENERGY * s.START_ENERGY_FACTOR )
+        : Number(INITIAL_ENERGY);
+    const st = s.sharedState();
+    st.bots[s.B_ENERGY] = initialEnergy;
+    if ( LIFE_STAGE === "newborn" )
+    {
+        st.bots[s.B_AGE] = 0;
+        st.bots[s.B_GROWTH] = 0;
+    }
     let foodSlot = spawnFood(run, bot, random);
     let minMouthDistance = Infinity;
     let survived = 0;
@@ -203,7 +214,8 @@ function save(complete) {
         settings: { seed: SEED, count: COUNT, minParts: MIN_PARTS, maxParts: MAX_PARTS,
             generations: GENERATIONS, offspring: OFFSPRING, trainSteps: TRAIN_STEPS,
             trainTrials: TRAIN_TRIALS, finalSteps: FINAL_STEPS, finalTrials: FINAL_TRIALS,
-            foodDistance: FOOD_DISTANCE, from: FROM, holdoutSalt: HOLDOUT_SALT },
+            foodDistance: FOOD_DISTANCE, from: FROM, holdoutSalt: HOLDOUT_SALT,
+            lifeStage: LIFE_STAGE, initialEnergy: INITIAL_ENERGY },
         total, results,
     };
     fs.writeFileSync(path.join(OUT, OUTPUT), JSON.stringify(document, null, 2) + "\n");
