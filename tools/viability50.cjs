@@ -55,12 +55,9 @@ if (arg("rudder", "false") === "true") overrides.RUDDER_ENABLED = true;
 if (arg("steer-by-swim", "false") === "true") overrides.STEER_BY_SWIM_DIRECTION_ENABLED = true;
 if (arg("rudder-free", "false") === "true") overrides.RUDDER_COST_PER_DEGREE = 0;
 if (arg("hydrodynamics", "false") === "true") overrides.BODY_HYDRODYNAMICS_ENABLED = true;
-if (arg("directed-swim", "false") === "true") overrides.DIRECTED_SWIMMING_ENABLED = true;
 if (process.argv.includes("--swim-cost")) overrides.ENERGY_USED_UP_SWIMMING = Number(arg("swim-cost", "0.01"));
 if (process.argv.includes("--rudder-max")) overrides.RUDDER_MAX_TURN = Number(arg("rudder-max", "1.5"));
 if (process.argv.includes("--angular-drag")) overrides.ANGULAR_WATER_DRAG = Number(arg("angular-drag", "0.08"));
-if (process.argv.includes("--directed-speed")) overrides.DIRECTED_SWIM_SPEED = Number(arg("directed-speed", "0.45"));
-if (process.argv.includes("--directed-response")) overrides.DIRECTED_SWIM_RESPONSE = Number(arg("directed-response", "0.04"));
 
 function makeRandom(seed) {
     let a = seed >>> 0;

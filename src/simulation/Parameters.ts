@@ -341,14 +341,6 @@ export const RUDDER_COST_PER_DEGREE         = 0.0004; // energy
 // smoothed swimming direction (the genes still decide how to turn).
 export const STEER_BY_SWIM_DIRECTION_ENABLED = false;
 export const SWIM_DIRECTION_SMOOTHING       = 0.05;   // how fast the remembered swimming direction follows the velocity
-// Low-level swimming controller: the limbs still move and pay their stroke
-// cost, while limited directed thrust makes the chosen goal attainable for
-// bodies whose random stroke geometry cannot steer reliably.
-export const DIRECTED_SWIMMING_ENABLED      = true;
-export const DIRECTED_SWIM_SPEED            = 1.2;    // target units per step at effort 1
-export const DIRECTED_SWIM_RESPONSE         = 0.12;   // fraction of velocity correction per step
-export const DIRECTED_SWIM_ENERGY           = 0.00005;// energy per unit mass per velocity correction
-
 //------------------------------------------------------------------------------
 // Currents (off at the start; the C key): a few big ring-shaped streams, like
 // the Gulf Stream (see Currents.ts). Swimbots and meat drift; plants stay

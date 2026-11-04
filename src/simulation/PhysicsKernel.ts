@@ -13,7 +13,7 @@
 //------------------------------------------------------------------------------
 import { currentAt, currentDriftX, currentDriftY } from "./Currents";
 import { ONE, ONE_HALF, PI_OVER_180, ZERO } from "./MathConstants";
-import { DIRECTED_SWIMMING_ENABLED, DIRECTED_SWIM_SPEED, DIRECTED_SWIM_RESPONSE, DIRECTED_SWIM_ENERGY, GROWTH_COSTS_ENERGY_ENABLED, GROWTH_ENERGY_PER_MASS, OLD_AGE_DURATION, RUDDER_COST_PER_DEGREE, RUDDER_ENABLED, STEER_BY_SWIM_DIRECTION_ENABLED, SWIM_DIRECTION_SMOOTHING, SWIMBOT_SELECT_RADIUS_SCALAR, YOUNG_AGE_DURATION } from "./Parameters";
+import { GROWTH_COSTS_ENERGY_ENABLED, GROWTH_ENERGY_PER_MASS, OLD_AGE_DURATION, RUDDER_COST_PER_DEGREE, RUDDER_ENABLED, STEER_BY_SWIM_DIRECTION_ENABLED, SWIM_DIRECTION_SMOOTHING, SWIMBOT_SELECT_RADIUS_SCALAR, YOUNG_AGE_DURATION } from "./Parameters";
 import { applyWaterDrag, bodyMotionFactors } from "./BodyPhysics";
 import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
 import { CONTINUAL_ENERGY_DRAIN, ENERGY_EFFICIENCY_MEASUREMENT_PERIOD, ENERGY_USED_UP_SWIMMING, GENITAL_INDEX, MAX_PARTS, MOUTH_INDEX, ROOT_PART, STARVING, STARVING_TIMER_DELTA, TIMER_DELTA_INCREASE_RATE, WALL_BOUNCE } from "./SwimbotTypes";
@@ -312,16 +312,6 @@ export function physicsPartA( s: number, st: SharedState ): void
         if ( energy < ZERO ) { energy = ZERO; }
     }
 
-    if ( DIRECTED_SWIMMING_ENABLED && ( energy > ZERO ))
-    {
-        const speed = DIRECTED_SWIM_SPEED * B[ b + B_EFFORT ];
-        const dx = ( B[ b + B_GOAL_X ] * speed - velX ) * DIRECTED_SWIM_RESPONSE;
-        const dy = ( B[ b + B_GOAL_Y ] * speed - velY ) * DIRECTED_SWIM_RESPONSE;
-        velX += dx;
-        velY += dy;
-        energy -= ( Math.abs( dx ) + Math.abs( dy ) ) * bodyMass * DIRECTED_SWIM_ENERGY;
-        if ( energy < ZERO ) { energy = ZERO; }
-    }
     posX += velX;
     posY += velY;
     angleNow += spin;
