@@ -341,6 +341,7 @@ export const RUDDER_COST_PER_DEGREE         = 0.0004; // energy
 // smoothed swimming direction (the genes still decide how to turn).
 export const STEER_BY_SWIM_DIRECTION_ENABLED = false;
 export const SWIM_DIRECTION_SMOOTHING       = 0.05;   // how fast the remembered swimming direction follows the velocity
+
 //------------------------------------------------------------------------------
 // Currents (off at the start; the C key): a few big ring-shaped streams, like
 // the Gulf Stream (see Currents.ts). Swimbots and meat drift; plants stay

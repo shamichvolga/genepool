@@ -49,13 +49,7 @@ export function brainUpdate( M: Float64Array, m: number, rand: () => number ): v
     let state = M[ m + ML.M_STATE ];
     const goal = M[ m + ML.M_GOAL ];
 
-    // Below the hunger threshold, feeding takes precedence over mating even
-    // when a random neural output keeps requesting a mate. Immediate flight
-    // and the explicitly enabled self-feeding behaviour retain their priority.
-    const hungerOverridesGoal = ( M[ m + ML.M_BRAIN_ENERGY ] < M[ m + ML.M_HUNGER ] )
-        && ( goal !== OUT_FLEE ) && ( goal !== OUT_SELF_EAT );
-
-    if (( goal >= 0 ) && !hungerOverridesGoal )
+    if ( goal >= 0 )
     {
         if ( goal === OUT_SELF_EAT ) { M[ m + ML.M_STATE ] = BRAIN_STATE_SELF_FEED;        return; }
         if ( goal === OUT_FLEE     ) { M[ m + ML.M_STATE ] = BRAIN_STATE_FLEEING_PREDATOR; return; }

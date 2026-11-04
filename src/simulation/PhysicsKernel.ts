@@ -311,7 +311,6 @@ export function physicsPartA( s: number, st: SharedState ): void
         energy -= Math.abs( turn ) * RUDDER_COST_PER_DEGREE;
         if ( energy < ZERO ) { energy = ZERO; }
     }
-
     posX += velX;
     posY += velY;
     angleNow += spin;
