@@ -47,6 +47,28 @@ const st  = sb.sharedState();
 const bots = gp.getSwimbots();
 const STRIDE = sb.BOT_STRIDE;
 
+// Paired mixed-world test: replace only the initial complex bodies with the
+// baseline or evolved motor genomes from locomotion-evolution.cjs. Positions,
+// ages, energy and all other founders stay exactly the same in both runs.
+const FOUNDERS = arg( "founders", null );
+const FOUNDER_MODE = arg( "founder-mode", "baseline" );
+let foundersReplaced = 0;
+if ( FOUNDERS !== null )
+{
+    const source = JSON.parse( fs.readFileSync( path.resolve( ROOT, FOUNDERS ), "utf8" ));
+    const genesets = source.results.map( r => FOUNDER_MODE === "evolved" ? r.evolvedGenes : r.genes );
+    if (( genesets.length === 0 ) || !genesets.every( g => Array.isArray( g ) && g.length === 256 ))
+        throw new Error( "Invalid founder gene sets" );
+    for ( const b of bots )
+    {
+        if ( !b.getAlive() || b.getNumParts() < 10 || b.getNumParts() > 16 ) continue;
+        const genotype = new sb.Genotype();
+        genotype.setGenes( genesets[ foundersReplaced % genesets.length ].slice() );
+        b.create( b.getIndex(), b.getAge(), b.getPosition(), b.getAngle(), b.getEnergy(), genotype, new sb.Embryology() );
+        foundersReplaced ++;
+    }
+}
+
 //------------------------------------------------------------
 // what we keep per swimbot slot (reset at birth)
 //------------------------------------------------------------
@@ -188,6 +210,7 @@ function save()
     fs.writeFileSync( path.join( OUT, "deaths.csv" ), deaths.join( "\n" ) + "\n" );
     fs.writeFileSync( path.join( OUT, "births.csv" ), births.join( "\n" ) + "\n" );
     fs.writeFileSync( path.join( OUT, "summary.json" ), JSON.stringify({ seed: SEED, stepsDone: gp.getTimeStep(), stepsAsked: STEPS, deaths: deaths.length - 1, births: births.length - 1,
+        founderSource: FOUNDERS, founderMode: FOUNDER_MODE, foundersReplaced,
         counters: { ...Object.fromEntries( Object.entries( sb.simCounters ).filter( ([ k, v ]) => typeof v === "number" )),
             nutrientsFromSwimming: sb.energyCycleCounters ? sb.energyCycleCounters.nutrientsFromSwimming : 0 },
         secondsSoFar: ( Date.now() - t0 ) / 1000 }, null, 2 ));
