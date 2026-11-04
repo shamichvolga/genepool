@@ -12,6 +12,8 @@
 //               mean effort, predator level
 //   births.csv  one row per birth: mass and parts of both parents and of
 //               the child, the energy the child got
+//   newborns.csv the first 1000 steps: food at birth, actual sightings and
+//               pursuit, first meal, energy gained and spent, survival
 //   summary.json the settings and totals
 //
 //   node tools/form-census.cjs --seed 1 --steps 40000 --every 1000 --out tools/results/census-1
@@ -33,6 +35,7 @@ const OUT   = arg( "out", path.join( __dirname, "results", "census-" + SEED ));
 const ROOT  = arg( "root", path.join( __dirname, ".." ));
 const BOTS  = arg( "bots", null );
 const SAMPLE = 20;   // steps between position / spin samples
+const NEWBORN_STEPS = 1000;
 
 fs.mkdirSync( OUT, { recursive: true });
 
@@ -78,18 +81,95 @@ function fresh( s, energyAtBirth )
 {
     return { born: gp.getTimeStep(), energyAtBirth, foodGained: 0, preyGained: 0, given: 0, meals: 0, lastMeal: gp.getTimeStep(),
              gapSum: 0, gapCount: 0, path: 0, spinSum: 0, effortSum: 0, samples: 0,
-             lastX: NaN, lastY: NaN };
+             lastX: NaN, lastY: NaN, newborn: null };
 }
 
 let currentParent = -1;
 const births = [ "step,parent1_mass,parent1_parts,parent2_mass,parent2_parts,child_mass,child_parts,child_energy,parent1_predator" ];
 const deaths = [ "step,slot,mass,parts,length,mean_width,frequency,predator_level,cause,age,energy_at_birth,energy_at_death,food_gained,prey_gained,given_to_children,children,meals,mean_gap_between_meals,steps_since_last_meal,path,mean_speed,mean_abs_spin,mean_effort,thermal_optimum,thermal_width,hunger_threshold" ];
+const newborns = [ "step,slot,mass,parts,predator_level,birth_energy,birth_nearest_food,birth_food_in_view,view_radius,observed_steps,looks,looks_with_food,seen_food_distance_mean,pursuit_steps,pursuit_distance_mean,pursuit_min_distance,first_meal_age,meals,food_gained,prey_gained,end_energy,energy_min,net_energy_spent,alive_at_end,end_age,end_reason" ];
+const activeNewborns = new Set();
 
 function bodyOf( b )
 {
     const s = b.getIndex(), k = s * STRIDE;
     const mass = b.getPhenotypeMass(), length = st.bots[ k + sb.B_SUM_LENGTHS ];
     return { mass, parts: b.getNumParts(), length, width: length > 0 ? mass / length : 0, frequency: st.bots[ k + sb.B_FREQUENCY ] };
+}
+
+function csvNumber( value, digits = 2 ) { return Number.isFinite( value ) ? value.toFixed( digits ) : ""; }
+
+function startNewborn( s, r, energy )
+{
+    const b = bots[s], k = s * STRIDE, m = s * sb.MIND_STRIDE;
+    const mouth = b.getMouthPosition(), position = b.getPosition(), body = bodyOf( b );
+    const predatorLevel = b.getPredatorLevel(), meatEater = predatorLevel > sb.PREDATOR_LEVEL_THRESHOLD;
+    const viewRadius = st.mind[ m + sb.M_VIEW_RADIUS ];
+    let nearest = Infinity, inView = 0;
+    for ( let f = 0; f < st.liveFood.length; f++ )
+    {
+        if (( st.liveFood[f] !== 1 ) || (( st.foodType[f] === 2 ) !== meatEater )) continue;
+        const mx = st.foodX[f] - mouth.x, my = st.foodY[f] - mouth.y;
+        const mouthDistance = Math.hypot( mx, my );
+        nearest = Math.min( nearest, mouthDistance );
+        const bx = st.foodX[f] - position.x, by = st.foodY[f] - position.y;
+        if (( mouthDistance < viewRadius ) && ( Math.hypot( bx, by ) < viewRadius )) inView ++;
+    }
+    r.newborn = { mass: body.mass, parts: body.parts, predatorLevel, birthEnergy: energy, nearest, inView, viewRadius, observedSteps: 0,
+        looks: 0, looksWithFood: 0, seenDistanceSum: 0, pursuitSteps: 0, pursuitDistanceSum: 0,
+        pursuitMinDistance: Infinity, feedingEvents: 0, firstMealAge: null, energyMin: energy, done: false };
+    activeNewborns.add( s );
+}
+
+function finishNewborn( s, r, cause = "", runEnd = false )
+{
+    const n = r.newborn;
+    if ( !n || n.done ) return;
+    const b = bots[s], endEnergy = b.getEnergy(), endAge = b.getAge();
+    n.observedSteps = Math.max( n.observedSteps, Math.min( NEWBORN_STEPS, endAge ));
+    n.energyMin = Math.min( n.energyMin, endEnergy );
+    const aliveAtEnd = ( cause === "" ) || runEnd;
+    const endReason = runEnd ? "run_end" : ( aliveAtEnd ? "survived_1000" : cause );
+    newborns.push( [ gp.getTimeStep(), s, n.mass.toFixed( 1 ), n.parts, n.predatorLevel.toFixed( 2 ),
+        n.birthEnergy.toFixed( 2 ), csvNumber( n.nearest ), n.inView, n.viewRadius.toFixed( 1 ), n.observedSteps,
+        n.looks, n.looksWithFood, csvNumber( n.looksWithFood > 0 ? n.seenDistanceSum / n.looksWithFood : NaN ),
+        n.pursuitSteps, csvNumber( n.pursuitSteps > 0 ? n.pursuitDistanceSum / n.pursuitSteps : NaN ), csvNumber( n.pursuitMinDistance ),
+        n.firstMealAge === null ? "" : n.firstMealAge, n.feedingEvents, r.foodGained.toFixed( 2 ), r.preyGained.toFixed( 2 ),
+        endEnergy.toFixed( 2 ), n.energyMin.toFixed( 2 ), ( n.birthEnergy + r.foodGained + r.preyGained - endEnergy ).toFixed( 2 ),
+        aliveAtEnd ? 1 : 0, endAge, endReason ].join( "," ));
+    n.done = true;
+    activeNewborns.delete( s );
+}
+
+function sampleNewborn( s, r )
+{
+    const n = r.newborn, b = bots[s], k = s * STRIDE, m = s * sb.MIND_STRIDE;
+    if ( !n || n.done ) return;
+    if ( gp.getTimeStep() === r.born ) return;
+    n.observedSteps = Math.max( n.observedSteps, Math.min( NEWBORN_STEPS, b.getAge() ));
+    n.energyMin = Math.min( n.energyMin, b.getEnergy() );
+    const mouthX = st.bots[ k + sb.B_MOUTH_X ], mouthY = st.bots[ k + sb.B_MOUTH_Y ];
+    if ( st.sensing[s] === 1 )
+    {
+        n.looks ++;
+        const f = st.seenFood[s];
+        if ( f >= 0 )
+        {
+            n.looksWithFood ++;
+            n.seenDistanceSum += Math.hypot( st.foodX[f] - mouthX, st.foodY[f] - mouthY );
+        }
+    }
+    const state = st.mind[ m + sb.M_STATE ], f = st.mind[ m + sb.M_FOOD ];
+    const pursuing = ( state === sb.BRAIN_STATE_PURSUING_FOOD )
+        || ((( state === sb.BRAIN_STATE_LOOKING_FOR_PREY ) || ( state === sb.BRAIN_STATE_PURSUING_PREY )) && ( f >= 0 ) && ( st.foodType[f] === 2 ));
+    if ( pursuing && ( f >= 0 ) && ( st.mind[ m + sb.M_CANNIBAL ] !== 1 ))
+    {
+        const distance = Math.hypot( st.foodX[f] - mouthX, st.foodY[f] - mouthY );
+        n.pursuitSteps ++;
+        n.pursuitDistanceSum += distance;
+        n.pursuitMinDistance = Math.min( n.pursuitMinDistance, distance );
+    }
+    if ( b.getAge() >= NEWBORN_STEPS ) finishNewborn( s, r );
 }
 
 // interact(s): the swimbot that may give birth now
@@ -113,6 +193,7 @@ for ( let s = 0; s < N; s++ )
             contributors = [];
             const a = bodyOf( p1 ), c = bodyOf( b ), q = p2 ? bodyOf( p2 ) : { mass: NaN, parts: NaN };
             births.push( [ gp.getTimeStep(), a.mass.toFixed( 1 ), a.parts, q.mass.toFixed( 1 ), q.parts, c.mass.toFixed( 1 ), c.parts, energy.toFixed( 1 ), p1.getPredatorLevel().toFixed( 2 ) ].join( "," ));
+            startNewborn( index, rec[index], energy );
         }
     };
 
@@ -121,8 +202,9 @@ for ( let s = 0; s < N; s++ )
     {
         const before = b.getEnergy();
         const result = realEat();
+        const gained = b.getEnergy() - before;
         const r = rec[s];
-        if ( r ) { r.foodGained += b.getEnergy() - before; meal( r ); }
+        if ( r ) { r.foodGained += gained; meal( r, gained > 0 ); }
         return result;
     };
 
@@ -152,6 +234,7 @@ for ( let s = 0; s < N; s++ )
         if ( b.getAlive() && rec[s] )
         {
             const r = rec[s], body = bodyOf( b ), age = b.getAge();
+            finishNewborn( s, r, cause );
             deaths.push( [ gp.getTimeStep(), s, body.mass.toFixed( 1 ), body.parts, body.length.toFixed( 1 ), body.width.toFixed( 2 ), body.frequency.toFixed( 3 ),
                            b.getPredatorLevel().toFixed( 2 ), cause, age, r.energyAtBirth.toFixed( 1 ), b.getEnergy().toFixed( 1 ),
                            r.foodGained.toFixed( 1 ), r.preyGained.toFixed( 1 ), r.given.toFixed( 1 ), b.getNumOffspring(), r.meals,
@@ -165,9 +248,14 @@ for ( let s = 0; s < N; s++ )
     };
 }
 
-function meal( r )
+function meal( r, feeding = true )
 {
     const now = gp.getTimeStep();
+    if ( r.newborn && feeding )
+    {
+        r.newborn.feedingEvents ++;
+        if ( r.newborn.firstMealAge === null ) r.newborn.firstMealAge = now - r.born;
+    }
     if ( r.meals > 0 ) { r.gapSum += now - r.lastMeal; r.gapCount ++; }
     r.meals ++;
     r.lastMeal = now;
@@ -209,7 +297,9 @@ function save()
     fs.writeFileSync( path.join( OUT, "census.csv" ), census.join( "\n" ) + "\n" );
     fs.writeFileSync( path.join( OUT, "deaths.csv" ), deaths.join( "\n" ) + "\n" );
     fs.writeFileSync( path.join( OUT, "births.csv" ), births.join( "\n" ) + "\n" );
+    fs.writeFileSync( path.join( OUT, "newborns.csv" ), newborns.join( "\n" ) + "\n" );
     fs.writeFileSync( path.join( OUT, "summary.json" ), JSON.stringify({ seed: SEED, stepsDone: gp.getTimeStep(), stepsAsked: STEPS, deaths: deaths.length - 1, births: births.length - 1,
+        newbornSteps: NEWBORN_STEPS, newbornsFinished: newborns.length - 1, newbornsActive: activeNewborns.size,
         founderSource: FOUNDERS, founderMode: FOUNDER_MODE, foundersReplaced,
         counters: { ...Object.fromEntries( Object.entries( sb.simCounters ).filter( ([ k, v ]) => typeof v === "number" )),
             nutrientsFromSwimming: sb.energyCycleCounters ? sb.energyCycleCounters.nutrientsFromSwimming : 0 },
@@ -221,6 +311,7 @@ takeCensus();
 for ( let step = 1; step <= STEPS; step++ )
 {
     gp.update();
+    for ( const s of activeNewborns ) { sampleNewborn( s, rec[s] ); }
 
     if ( step % SAMPLE === 0 )
     {
@@ -243,5 +334,6 @@ for ( let step = 1; step <= STEPS; step++ )
         console.log( `seed ${ SEED } step ${ step } alive ${ gp.getNumSwimbots() } deaths ${ deaths.length - 1 } births ${ births.length - 1 } ${ (( Date.now() - t0 ) / 1000 ).toFixed( 0 ) }s` );
     }
 }
+for ( const s of activeNewborns ) { finishNewborn( s, rec[s], "", true ); }
 save();
 console.log( "done", OUT );
