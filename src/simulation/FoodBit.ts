@@ -1,3 +1,4 @@
+import { transferToAtmosphere } from "./EnergyBudget";
 import { simClock, gpRandom } from "./Globals";
 import { NULL_INDEX, ONE, ONE_HALF, PI2, ZERO } from "./MathConstants";
 import { plantSize } from "./PlantSize";
@@ -253,6 +254,9 @@ export function FoodBit()
     //----------------------
     this.kill = function()
     {
+        // closed energy cycle: whatever a dying bit still holds (an old plant,
+        // rotting meat, a sprout that could not take root) returns to the pool
+        if ( _index !== NULL_INDEX ) { transferToAtmosphere( _fe[ _fi ] ); _fe[ _fi ] = ZERO; }
         _index = NULL_INDEX;
         markLive();
     }

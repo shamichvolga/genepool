@@ -27,6 +27,7 @@ import { sizeSignature, SEARCH_IMAGE_LEARNING, SEARCH_IMAGE_GAIN, SEARCH_IMAGE_F
 //
 // --------------------------------------------------------------------------
 import { SWIMBOT_DOT_RENDER_RADIUS } from "./Parameters";
+import { drawFromAtmosphere, settleEnergyTransfer, transferToAtmosphere } from "./EnergyBudget";
 import { BRAIN_FOCUS_TARGET_SHIFT_STRENGTH, BRAIN_FOCUS_TARGET_SHIFT_THRESHOLD, BRAIN_SENSORY_UPDATE_PERIOD, BRAIN_STATE_FLEEING_PREDATOR, BRAIN_STATE_LOOKING_FOR_FOOD, BRAIN_STATE_LOOKING_FOR_MATE, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_FOOD, BRAIN_STATE_PURSUING_MATE, BRAIN_STATE_PURSUING_PREY, BRAIN_STATE_SELF_FEED, BRAIN_STATE_RESTING, BRAIN_WANDER_AMOUNT, Brain } from "./Brain";
 import { GREATEST_POSSIBLE_SWIMBOT_LENGTH, GREATEST_POSSIBLE_SWIMBOT_MASS } from "./Embryology";
 import { DEFAULT_FOOD_BIT_ENERGY, FOOD_BIT_GRAB_RADIUS, FoodBit } from "./FoodBit";
@@ -315,8 +316,10 @@ this.setParent = function( parent )
 	    const grown = PLANT_EVOLUTION_ENABLED ? plantSproutGrowth( plant.getIndex(), plant.getAge() ) : 0;
 	    let energy = plant.getEnergy() * FILTER_FEEDING_EFFICIENCY * ( PLANT_STAGE_ENERGY[0] + ( PLANT_STAGE_ENERGY[1] - PLANT_STAGE_ENERGY[0] ) * grown );
 	    if ( environment.active ) { energy *= this.getDigestionEfficiency( plant.getType() ) * climateFoodFactor( _M[ _m + SS.M_THERMAL_FIT ], _M[ _m + SS.M_THERMAL_PEAK ] ); }
-	    _B[ _b + SS.B_ENERGY ] += Math.min( room, energy );
+	    const gained = settleEnergyTransfer( plant.getEnergy(), Math.min( room, energy ));
+	    _B[ _b + SS.B_ENERGY ] += gained;
 	    _parent.plantEaten( plant );
+	    plant.setEnergy( ZERO );
 	    plant.kill();
 	    _numFoodBitsEaten ++;
 	    _numFilterMeals ++;
@@ -404,6 +407,7 @@ this.setParent = function( parent )
 	        _phenotype = _embryology.generatePhenotypeFromGenotype( _genotype );
 	        this.processPhenotype();
 	        _B[ _b + SS.B_ENERGY ] -= _M[ _m + SS.M_AUTOTOMY_LOSS ];
+	    transferToAtmosphere( _M[ _m + SS.M_AUTOTOMY_LOSS ] );   // regrowth cost returns to the pool
 	        _M[ _m + SS.M_PARTS_LOST ] = 0;
 	    }
 
@@ -527,12 +531,16 @@ this.setParent = function( parent )
 	    this.processPhenotype();
 
 	    const tissueEnergy = droppedMass * PREY_BODY_ENERGY;
+	    // closed energy cycle: body tissue was never paid for while alive, so
+	    // its energy is funded by the pool at the moment it becomes food
+	    const fundedTissue = drawFromAtmosphere( tissueEnergy );
 	    if ( selfFeeding )
 	    {
 	        // The organism retains its existing reserve and digests part of the
 	        // removed tissue. The branch is permanently gone: no free regrowth.
-	        const gained = Math.min( _M[ _m + SS.M_MAX_ENERGY ] - _B[ _b + SS.B_ENERGY ], tissueEnergy );
+	        const gained = Math.min( _M[ _m + SS.M_MAX_ENERGY ] - _B[ _b + SS.B_ENERGY ], fundedTissue );
 	        _B[ _b + SS.B_ENERGY ] += gained;
+	        transferToAtmosphere( fundedTissue - gained );
 	        _M[ _m + SS.M_PARTS_LOST ] = 0;
 	        _M[ _m + SS.M_AUTOTOMY_LOSS ] = ZERO;
 	        _M[ _m + SS.M_REGROW ] = 0;
@@ -550,7 +558,7 @@ this.setParent = function( parent )
 	    _partsDropped ++;
 	    // the part itself is food too, like a killed prey's body
 	    // (the same PREY_BODY_ENERGY per unit of mass), plus the energy it took
-	    return { energy: selfFeeding ? tissueEnergy : lost + tissueEnergy, x, y };
+	    return { energy: selfFeeding ? fundedTissue : lost + fundedTissue, x, y };
 	};
 
 	// bitten: maybe drop a part instead of dying (chance = gene)
@@ -2249,6 +2257,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
             // PLANT_SIZE_ENABLED: a bite off the plant, as much as the mouth takes
             // and the stomach has room for; the plant lives on with the rest
             let bitten = false;
+            let removedEnergy = chosenFoodBit().getEnergy();   // what leaves the world with this meal
             if ( PLANT_SIZE_ENABLED && environment.active && ( chosenFoodBit().getType() !== 2 ))
             {
                 const plant  = chosenFoodBit();
@@ -2257,12 +2266,16 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
                 const bite   = Math.min( biteEnergy( _phenotype.mass, plant.getAge(), plant.getEnergy() ), room / gain );
                 if ( bite <= ZERO ) { _M[ _m + SS.M_TRY_EAT ] = 0; return _M[ _m + SS.M_FOOD ]; }      // too tough for my mouth, or full
                 energyFromFoodBit = bite * gain;
+                removedEnergy = bite;
                 plant.setEnergy( plant.getEnergy() - bite );
                 bitten = plant.getEnergy() >= PLANT_SPROUT_ENERGY * 0.1;
             }
 
             // (meat: only part of it is kept - the food pyramid)
             if ( chosenFoodBit().getType() === 2 ) { energyFromFoodBit *= MEAT_ASSIMILATION; }
+            // closed energy cycle: digestion losses return to the pool; a bonus
+            // (a mature plant pays more than it stores) is funded by the pool
+            energyFromFoodBit = settleEnergyTransfer( removedEnergy, energyFromFoodBit );
             _B[ _b + SS.B_ENERGY ] += energyFromFoodBit;
 
             _numFoodBitsEaten ++;
@@ -2287,6 +2300,9 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
             if ( !bitten )
             {
                 _parent.plantEaten( chosenFoodBit() );
+                // a whole-bit meal was already accounted above (loss returned);
+                // a bitten-off plant's leftover returns to the pool inside kill()
+                if ( !( PLANT_SIZE_ENABLED && environment.active && ( chosenFoodBit().getType() !== 2 ))) { chosenFoodBit().setEnergy( ZERO ); }
                 chosenFoodBit().kill();
             }
 
@@ -2339,7 +2355,9 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	    if ( dropped !== null )
 	    {
 	        simCounters.autotomyBiteDrops ++;
-	        _B[ _b + SS.B_ENERGY ] += Math.min( Math.max( ZERO, _M[ _m + SS.M_MAX_ENERGY ] - _B[ _b + SS.B_ENERGY ] ), dropped.energy * MEAT_ASSIMILATION );
+	        const gained = Math.min( Math.max( ZERO, _M[ _m + SS.M_MAX_ENERGY ] - _B[ _b + SS.B_ENERGY ] ), dropped.energy * MEAT_ASSIMILATION );
+        _B[ _b + SS.B_ENERGY ] += gained;
+        transferToAtmosphere( dropped.energy - gained );   // assimilation loss and what did not fit
 	        chosenPrey().notifyAttackedBy( this );
 	        _numPartsEaten ++;
 	        _B[ _b + SS.B_TIMER_DELTA ] = ZERO;
@@ -2352,8 +2370,10 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	    //  bred and ate their young multiplied without food)
 	    // (MEAT_ASSIMILATION is applied to what I eat of it; what I cannot eat
 	    //  stays as meat for others, whole)
-	    let energyFromPrey = chosenPrey().getEnergy() * PREDATION_ENERGY_TRANSFER
-	                       + chosenPrey().getPhenotypeMass() * Math.min( ONE, chosenPrey().getGrowthScale() ) * PREY_BODY_ENERGY;
+	    const preyReserve = chosenPrey().getEnergy();
+    const bodyEnergy = chosenPrey().getPhenotypeMass() * Math.min( ONE, chosenPrey().getGrowthScale() ) * PREY_BODY_ENERGY;
+    let energyFromPrey = preyReserve * PREDATION_ENERGY_TRANSFER
+	                       + drawFromAtmosphere( bodyEnergy );   // closed cycle: the body was not paid for while alive, the pool funds it now
 
 	    this.learnSearchImage( chosenPrey() );
 	    chosenPrey().die( "predation" );
@@ -2367,6 +2387,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	    // what I cannot eat falls apart into pieces around (others may eat them)
 	    const eaten = Math.min( energyFromPrey, room / MEAT_ASSIMILATION );
 	    _B[ _b + SS.B_ENERGY ] += eaten * MEAT_ASSIMILATION;
+    transferToAtmosphere( preyReserve * ( ONE - PREDATION_ENERGY_TRANSFER ) + eaten * ( ONE - MEAT_ASSIMILATION ));
 	    if ( energyFromPrey > eaten ) { _parent.spawnCarcass( preyPosition.x, preyPosition.y, energyFromPrey - eaten ); }
 	    _M[ _m + SS.M_CANNIBAL ] = 0;
 
@@ -2804,6 +2825,11 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	        else simCounters.otherDeaths ++;
 	    }
         _live[ _liveAt ] = 0;
+    // closed energy cycle: return the reserve right now. Waiting for the next
+    // step's death handling is too late - a newborn may reuse this slot within
+    // this step, and the reserve would vanish with the body.
+    // (predation: the hunter already settled the reserve in huntEatChosenPrey)
+    if ( cause !== "predation" ) { transferToAtmosphere( _B[ _b + SS.B_ENERGY ] ); }
 
 	    //assert( _index != NULL_INDEX, "Swimbot.js: this.die: _index != NULL_INDEX" )
 	    if ( _index != NULL_INDEX )

@@ -26,9 +26,10 @@ import { FamilyTree } from "./FamilyTree";
 import { DEFAULT_FOOD_BIT_ENERGY, DEFAULT_FOOD_BIT_MAX_SPAWN_RADIUS, FOOD_BIT_BOUNDARY_MARGIN, FOOD_BIT_GRAB_RADIUS, FOOD_BIT_SIZE, FOOD_BIT_SIZE_VIEW_SCALE, FOOD_OPACITY_INCREMENT, FoodBit, MAX_FOOD_BIT_ENERGY, MAX_FOOD_BIT_MAX_SPAWN_RADIUS, MIN_FOOD_BIT_ENERGY, MIN_FOOD_BIT_MAX_SPAWN_RADIUS } from "./FoodBit";
 import { Genotype, NUM_GENES, PRESET_GENOTYPE_DARWIN, PRESET_GENOTYPE_DENNETT, PRESET_GENOTYPE_MENDEL, PRESET_GENOTYPE_TURING, PRESET_GENOTYPE_WILSON } from "./Genotype";
 import { CameraNavigationAction, NUM_GENES_USED, SimulationStartMode, energyCycleCounters, getRandomState, globalTweakers, gpRandom, resetSimulationCounters, setRandomState, simClock, simCounters } from "./Globals";
+import { drawFromAtmosphere, getAtmosphereEnergy, resetAtmosphere, transferToAtmosphere } from "./EnergyBudget";
 import { BYTE_SIZE, MILLISECONDS_PER_SECOND, NULL_INDEX, ONE, ONE_HALF, PI2, ZERO } from "./MathConstants";
 import { Obstacle } from "./Obstacle";
-import { BARRIER_EXPERIMENT, DEFAULT_CHILD_ENERGY_RATIO, DEFAULT_FOOD_REGENERATION_PERIOD, DEFAULT_GARDEN_OF_EDEN_RADIUS, DEFAULT_MAXIMUM_AGE, DEFAULT_SWIMBOT_HUNGER_THRESHOLD, FOOD_LOCAL_CAPACITY, FOOD_LOCAL_RADIUS, FOOD_RANDOM_SEED_CHANCE, FOOD_SPROUT_RATE, INITIAL_NUM_FOODBITS, INITIAL_NUM_SWIMBOTS, INITIAL_PREDATOR_FRACTION, LOCAL_PLANT_GROWTH, LOCAL_PLANT_SEED_RADIUS, MAX_CHILD_ENERGY_RATIO, MAX_FOODBITS, MAX_FOODBITS_PER_TYPE, MAX_FOOD_REGENERATION_PERIOD, MEAT_SLOT_SHARE, MAX_MAXIMUM_AGE, MAX_SWIMBOTS, MAX_SWIMBOT_HUNGER_THRESHOLD, MEAT_DECAY_TIME, MIN_CHILD_ENERGY_RATIO, MIN_FOOD_REGENERATION_PERIOD, MIN_MAXIMUM_AGE, MIN_SWIMBOT_HUNGER_THRESHOLD, NON_REPRODUCING_JUNK_DNA_LIMIT, OBSTACLE_ENABLED, PREDATOR_LEVEL_THRESHOLD, PREY_MAX_MASS_RATIO, RANDOM_MATING_CONTROL, RENDER_SWIMBOT_AS_DOT, SWIMBOT_LEVEL_OF_DETAIL_DOT, SWIMBOT_LEVEL_OF_DETAIL_HIGH, SWIMBOT_LEVEL_OF_DETAIL_LOW, YOUNG_AGE_DURATION } from "./Parameters";
+import { BARRIER_EXPERIMENT, DEFAULT_CHILD_ENERGY_RATIO, DEFAULT_FOOD_REGENERATION_PERIOD, DEFAULT_GARDEN_OF_EDEN_RADIUS, DEFAULT_MAXIMUM_AGE, DEFAULT_SWIMBOT_HUNGER_THRESHOLD, FOOD_LOCAL_CAPACITY, FOOD_LOCAL_RADIUS, FOOD_RANDOM_SEED_CHANCE, FOOD_SPROUT_RATE, INITIAL_NUM_FOODBITS, INITIAL_NUM_SWIMBOTS, INITIAL_PREDATOR_FRACTION, LOCAL_PLANT_GROWTH, LOCAL_PLANT_SEED_RADIUS, MAX_CHILD_ENERGY_RATIO, MAX_FOODBITS, MAX_FOODBITS_PER_TYPE, MAX_FOOD_REGENERATION_PERIOD, MEAT_SLOT_SHARE, MAX_MAXIMUM_AGE, MAX_SWIMBOTS, MAX_SWIMBOT_HUNGER_THRESHOLD, MEAT_DECAY_TIME, MIN_CHILD_ENERGY_RATIO, MIN_FOOD_REGENERATION_PERIOD, MIN_MAXIMUM_AGE, MIN_SWIMBOT_HUNGER_THRESHOLD, NON_REPRODUCING_JUNK_DNA_LIMIT, OBSTACLE_ENABLED, PREDATOR_LEVEL_THRESHOLD, PREY_MAX_MASS_RATIO, RANDOM_MATING_CONTROL, RENDER_SWIMBOT_AS_DOT, SWIMBOT_LEVEL_OF_DETAIL_DOT, SWIMBOT_LEVEL_OF_DETAIL_HIGH, SWIMBOT_LEVEL_OF_DETAIL_LOW, YOUNG_AGE_DURATION, CLOSED_ENERGY_CYCLE_ENABLED, ATMOSPHERE_RESERVE_WORLDS } from "./Parameters";
 import { PhyloTree } from "./PhyloTree";
 import { POOL_BOTTOM, POOL_HEIGHT, POOL_LEFT, POOL_RIGHT, POOL_TOP, POOL_WIDTH, Pool } from "./Pool";
 import { UniformGrid } from "./UniformGrid";
@@ -179,7 +180,7 @@ export function GenePool()
     let _classicSeedDebt     = 0;
     let _serial              = 0;         // birth numbers (KIN_NOT_EATEN_ENABLED)
     let _seedDebt            = 0;       // fractional seeds carried to the next step
-    const _energyBeforePhysics = SWIMMING_ENERGY_RECYCLE_ENABLED ? new Float64Array( MAX_SWIMBOTS ) : null;
+    const _energyBeforePhysics = ( SWIMMING_ENERGY_RECYCLE_ENABLED || CLOSED_ENERGY_CYCLE_ENABLED ) ? new Float64Array( MAX_SWIMBOTS ) : null;
     let _environmentImage    = null;    // picture of the temperature map (drawn behind the pool)
     const STARVING_FOOD_CHOICE = 15;   // below this energy a swimbot eats anything
 	let _levelOfDetail	        = SWIMBOT_LEVEL_OF_DETAIL_LOW;
@@ -550,6 +551,11 @@ export function GenePool()
         this.setGardenOfEdenRadius  ( DEFAULT_GARDEN_OF_EDEN_RADIUS     );
         this.setOffspringEnergyRatio( DEFAULT_CHILD_ENERGY_RATIO        );
         this.setMaximumSwimbotAge   ( DEFAULT_MAXIMUM_AGE               );
+
+        // closed energy cycle: the whole endowment of the world, granted once.
+        // Founders keep their starting energy; starting plants draw from the pool.
+        resetAtmosphere( INITIAL_NUM_SWIMBOTS * SWIMBOT_MAX_ENERGY * START_ENERGY_FACTOR
+                       + MAX_FOODBITS * globalTweakers.foodBitEnergy * ( 1 + ATMOSPHERE_RESERVE_WORLDS ));
 
         //-------------------------------------------------------------------
         // The "random" pool lives in the new environment (temperature map,
@@ -1098,7 +1104,7 @@ if ( mode === SimulationStartMode.SPECIES )
 	            if ( _obstacle.getObstruction( _vectorUtility, _vectorUtility ) ) continue;
 	            _foodBits[ placed ].initialize( placed );
 	            _foodBits[ placed ].setType( 0 );
-	            _foodBits[ placed ].setEnergy( globalTweakers.foodBitEnergy );
+	            if ( !fundPlant( placed, globalTweakers.foodBitEnergy )) continue;
 	            _foodBits[ placed ].setPosition( _vectorUtility );
 	            environment.plantCount[0][ environment.plantCellIndex( _vectorUtility.x, _vectorUtility.y ) ] ++;
 	            placed ++;
@@ -1140,6 +1146,7 @@ if ( mode === SimulationStartMode.SPECIES )
 	            _vectorUtility.y = cy + r * Math.sin( angle );
 	            _foodBits[ placed ].initialize( placed );
 	            _foodBits[ placed ].setType( type );
+            if ( !fundPlant( placed, globalTweakers.foodBitEnergy )) continue;
 	            _foodBits[ placed ].setPosition( _vectorUtility );
 	            if ( PLANT_SIZE_ENABLED ) { startPlantAge( placed ); }
 	            environment.plantCount[ type ][ environment.plantCellIndex( _foodBits[ placed ].getPosition().x, _foodBits[ placed ].getPosition().y ) ] ++;
@@ -1207,7 +1214,7 @@ if ( mode === SimulationStartMode.SPECIES )
 	            if ( f === NULL_INDEX ) return;
 	            _foodBits[f].initialize( f );
 	            _foodBits[f].setType( type );
-	            _foodBits[f].setEnergy( globalTweakers.foodBitEnergy );
+	            if ( !fundPlant( f, globalTweakers.foodBitEnergy )) return;
 	            _foodBits[f].setPosition( _vectorUtility );
 	            if ( PLANT_SIZE_ENABLED ) { startPlantAge( f ); }
 	            environment.plantCount[ type ][ environment.plantCellIndex( _vectorUtility.x, _vectorUtility.y ) ] ++;
@@ -1231,7 +1238,9 @@ if ( mode === SimulationStartMode.SPECIES )
 	    _foodBits[f].initialize( f );
 	    _foodBits[f].setType( 2 );
 	    _foodBits[f].setPosition( _vectorUtility );
-	    _foodBits[f].setEnergy( globalTweakers.foodBitEnergy );
+	    const fundedMeat = drawFromAtmosphere( globalTweakers.foodBitEnergy );
+	    if ( fundedMeat <= 0 ) { _foodBits[f].setEnergy( 0 ); _foodBits[f].kill(); return false; }
+	    _foodBits[f].setEnergy( fundedMeat );
 	    return true;
 	}
 
@@ -1388,7 +1397,7 @@ if ( mode === SimulationStartMode.SPECIES )
                     }
 	            _foodBits[ child ].initialize( child );
 	            _foodBits[ child ].setType( type );
-	            _foodBits[ child ].setEnergy( globalTweakers.foodBitEnergy );
+	            if ( !fundPlant( child, globalTweakers.foodBitEnergy )) return;
 	            _foodBits[ child ].setPosition( _vectorUtility );
 	            environment.plantCount[ type ][ environment.plantCellIndex( _vectorUtility.x, _vectorUtility.y ) ] ++;
 	            simCounters.nurserySprouts ++;
@@ -1458,7 +1467,7 @@ if ( mode === SimulationStartMode.SPECIES )
 	            _foodBits[ child ].initialize( child );
 	            if ( PLANT_EVOLUTION_ENABLED && ( parent !== null )) { inheritPlantGenes( child, parent.getIndex() ); }
 	            _foodBits[ child ].setType( type );
-	            _foodBits[ child ].setEnergy( globalTweakers.foodBitEnergy );
+	            if ( !fundPlant( child, globalTweakers.foodBitEnergy )) return;
 	            _foodBits[ child ].setPosition( _vectorUtility );
 	            environment.plantCount[ type ][ environment.plantCellIndex( _vectorUtility.x, _vectorUtility.y ) ] ++;
 	            if ( type === PLANT_TYPE_WARM ) { numType0FoodBits ++; } else { numType1FoodBits ++; }
@@ -1505,7 +1514,7 @@ if ( mode === SimulationStartMode.SPECIES )
 	        }
 	        _foodBits[ child ].initialize( child );
 	        _foodBits[ child ].setType( parent.getType() );
-	        _foodBits[ child ].setEnergy( globalTweakers.foodBitEnergy );
+	        if ( !fundPlant( child, globalTweakers.foodBitEnergy )) return;
 	        _foodBits[ child ].setPosition( _vectorUtility );
 	        environment.plantCount[ parent.getType() ][ environment.plantCellIndex( _vectorUtility.x, _vectorUtility.y ) ] ++;
 	        numPlants ++;
@@ -1804,6 +1813,7 @@ if ( mode === SimulationStartMode.SPECIES )
             }
 
             _foodBits[f].setType(n);
+            fundPlant( f, globalTweakers.foodBitEnergy );
 
             //-------------------------------------------------------------------
             // place food bit randomly in a disk in the middle of the pool
@@ -2088,7 +2098,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
         for (let i = 0; i < count; i++)
         {
             const f = this.findLowestDeadFoodBitInArray( true );
-            if ( f === NULL_INDEX ) return;
+            if ( f === NULL_INDEX ) { transferToAtmosphere( energy * ( 1 - i / count )); return; }   // no slots: the rest returns to the pool
             _foodBits[f].initialize( f );
             _foodBits[f].setType( 2 );
             _foodBits[f].setAutotomyDecoy( true );
@@ -2111,7 +2121,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
         while ( rest > 0.5 )
         {
             const f = this.findLowestDeadFoodBitInArray( true );
-            if ( f === NULL_INDEX ) return;
+            if ( f === NULL_INDEX ) { transferToAtmosphere( rest ); return; }   // no slots: the rest returns to the pool
             const piece = Math.min( MEAT_PIECE_ENERGY, rest );
             rest -= piece;
             const angle = gpRandom() * PI2, distance = gpRandom() * MEAT_PIECE_SCATTER;
@@ -2136,6 +2146,9 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 
             _foodBits[foodIndex].initialize(foodIndex);
             _foodBits[foodIndex].setType(2);
+            const fundedMeatBit = drawFromAtmosphere( DEFAULT_FOOD_BIT_ENERGY );
+            if ( fundedMeatBit <= 0 ) { _foodBits[foodIndex].setEnergy( 0 ); _foodBits[foodIndex].kill(); return; }
+            _foodBits[foodIndex].setEnergy( fundedMeatBit );
             _foodBits[foodIndex].setPosition(position);
 
             // ensure not spawned inside obstacle
@@ -2439,7 +2452,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	        _vectorUtility.setXY( root.x, root.y );
 	        _foodBits[f].initialize( f );
 	        _foodBits[f].setType( root.type );
-	        _foodBits[f].setEnergy( globalTweakers.foodBitEnergy );
+	        if ( !fundPlant( f, globalTweakers.foodBitEnergy )) continue;
 	        _foodBits[f].setPosition( _vectorUtility );
 	    }
 	}
@@ -2721,7 +2734,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 
 	    // 2. move (many threads)
         const B = _st.bots;
-        if ( _energyBeforePhysics !== null && environment.active )
+        if ( _energyBeforePhysics !== null && ( environment.active || CLOSED_ENERGY_CYCLE_ENABLED ))
         {
             for ( let i = 0; i < n; i++ )
             {
@@ -2730,12 +2743,13 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
             }
         }
 	    _runner.task( TASK_PHYSICS, list, n );
-        if ( _energyBeforePhysics !== null && environment.active )
+        if ( _energyBeforePhysics !== null && ( environment.active || CLOSED_ENERGY_CYCLE_ENABLED ))
         {
             for ( let i = 0; i < n; i++ )
             {
                 const s = list[i], b = s * SS.BOT_STRIDE;
                 const spent = Math.max( 0, _energyBeforePhysics[s] - Math.max( 0, B[ b + SS.B_ENERGY ] ));
+                transferToAtmosphere( spent );   // closed cycle: swimming, drag and basal metabolism return to the pool
                 energyCycleCounters.nutrientsFromSwimming += environment.returnSwimmingEnergyAt( B[ b + SS.B_POS_X ], B[ b + SS.B_POS_Y ], spent );
             }
         }
@@ -2822,6 +2836,15 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	const _phaseTimes = new Float64Array( 8 );
 	function now() { return ( typeof performance !== "undefined" ) ? performance.now() : 0; }
 	function phaseTime( phase, since ) { const t = now(); _phaseTimes[ phase ] += t - since; return t; }
+	// closed energy cycle: atmosphere + all food (plants and meat) +
+	// all living swimbots. Must stay constant over a whole run.
+	this.getTotalWorldEnergy = function()
+	{
+	    let total = getAtmosphereEnergy();
+	    for (let f = 0; f < MAX_FOODBITS; f++) { if ( _st.liveFood[f] === 1 ) total += _st.foodEnergy[f]; }
+	    for (let s = 0; s < MAX_SWIMBOTS; s++) { if ( _st.liveSwimbot[s] === 1 ) total += _st.bots[ s * SS.BOT_STRIDE + SS.B_ENERGY ]; }
+	    return total;
+	}
 	this.getPhaseTimes = function() { return _phaseTimes; }
 
 
@@ -2838,6 +2861,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
                 _swimbotWasAlive[s] = false;
                 if ( this.onSwimbotDied ) { this.onSwimbotDied( _swimbots[s] ); }     // (src/RunRecorder.ts)
 
+
                 // CARCASS_ENABLED: a body that died not eaten leaves its body as
                 // meat - the energy its mass holds (what growing it cost)
                 if ( CARCASS_ENABLED )
@@ -2845,7 +2869,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
                     if ( _swimbots[s].getDeathCause() !== "predation" )
                     {
                         const body = _swimbots[s].getPhenotypeMass() * Math.min( 1, _swimbots[s].getGrowthScale() ) * PREY_BODY_ENERGY;
-                        this.spawnCarcass( deadPosition.x, deadPosition.y, body );
+                        this.spawnCarcass( deadPosition.x, deadPosition.y, drawFromAtmosphere( body ));
                     }
                 }
                 else if ( _swimbots[s].getPredatorLevel() <= PREDATOR_LEVEL_THRESHOLD
@@ -2856,6 +2880,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
                     {
                         _foodBits[meatIndex].initialize(meatIndex);
                         _foodBits[meatIndex].setType(2);
+                        _foodBits[meatIndex].setEnergy( drawFromAtmosphere( DEFAULT_FOOD_BIT_ENERGY ));
                         _foodBits[meatIndex].setPosition(deadPosition);
                     }
                 }
@@ -3037,7 +3062,10 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
             if ( PLANT_SIZE_ENABLED && ( type !== 2 ))
             {
                 const full = plantFullEnergy( _clock - born[f] ), e = _st.foodEnergy[f];
-                _st.foodEnergy[f] = ( e > full ) ? full : e + ( full - e ) * PLANT_LEAF_REGROWTH;
+                // closed cycle: regrowing leaves draw from the pool; excess returns to it
+                const target = ( e > full ) ? full : e + ( full - e ) * PLANT_LEAF_REGROWTH;
+                if ( target > e ) { _st.foodEnergy[f] = e + drawFromAtmosphere( target - e ); }
+                else { transferToAtmosphere( e - target ); _st.foodEnergy[f] = target; }
             }
 
                  if ( type === 0 ) { numType0FoodBits ++; }
@@ -3120,6 +3148,17 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
     // position, unless the place is crowded, the type is maxed out, or the
     // pool is full. Returns true if a plant was created.
     //------------------------------------------------------------------------------
+    // closed energy cycle: a new plant is photosynthesis - its energy comes
+    // from the pool, never from nowhere. An empty pool means no sprout
+    // (auto-throttling); a nearly empty one means a smaller sprout.
+    function fundPlant( f, requested )
+    {
+        const funded = drawFromAtmosphere( requested );
+        if ( funded <= 0 ) { _foodBits[f].setEnergy( 0 ); _foodBits[f].kill(); return false; }
+        _foodBits[f].setEnergy( funded );
+        return true;
+    }
+
     this.spawnPlant = function( position, type, numType0, numType1, scatter )
     {
         if ( globalTweakers.numFoodTypes === 2 )
@@ -3134,7 +3173,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
         _foodBits[ child ].initialize( child );
         _foodBits[ child ].setType( type );
         _foodBits[ child ].setMaxSpawnRadius( LOCAL_PLANT_SEED_RADIUS );
-        _foodBits[ child ].setEnergy( globalTweakers.foodBitEnergy );
+        if ( !fundPlant( child, globalTweakers.foodBitEnergy )) return false;
 
         _seedSource.getPosition().set( position );
 
@@ -3240,11 +3279,12 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
             // (a seed carried far: it still comes from some plant)
             if ( PLANT_EVOLUTION_ENABLED && ( parentFoodBitIndex != NULL_INDEX )) { inheritPlantGenes( childFoodBitIndex, parentFoodBitIndex ); }
             _foodBits[ childFoodBitIndex ].setType( newFoodType );
-            _foodBits[ childFoodBitIndex ].setEnergy( globalTweakers.foodBitEnergy );
+if ( !fundPlant( childFoodBitIndex, globalTweakers.foodBitEnergy )) return;
             return;
         }
 
         _foodBits[ childFoodBitIndex ].spawnFromParent( _foodBits[ parentFoodBitIndex ], childFoodBitIndex, newFoodType );
+        if ( !fundPlant( childFoodBitIndex, _foodBits[ parentFoodBitIndex ].getEnergy() )) return;
 
         if ( PLANT_EVOLUTION_ENABLED )
         {
@@ -3342,7 +3382,13 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 
         for (let f=0; f<MAX_FOODBITS; f++)
         {
-            _foodBits[f].setEnergy( globalTweakers.foodBitEnergy );
+            const oldEnergy = _foodBits[f].getEnergy();
+            if ( _foodBits[f].getAlive() && CLOSED_ENERGY_CYCLE_ENABLED )
+            {
+                if ( globalTweakers.foodBitEnergy > oldEnergy ) { _foodBits[f].setEnergy( oldEnergy + drawFromAtmosphere( globalTweakers.foodBitEnergy - oldEnergy )); }
+                else { transferToAtmosphere( oldEnergy - globalTweakers.foodBitEnergy ); _foodBits[f].setEnergy( globalTweakers.foodBitEnergy ); }
+            }
+            else { _foodBits[f].setEnergy( globalTweakers.foodBitEnergy ); }
         }
     }
 
@@ -3487,7 +3533,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 
         let initialAge      = YOUNG_AGE_DURATION;
         let initialAngle    = ZERO;
-        let initialEnergy   = DEFAULT_SWIMBOT_HUNGER_THRESHOLD;
+        let initialEnergy   = drawFromAtmosphere( DEFAULT_SWIMBOT_HUNGER_THRESHOLD );
 
         _swimbots[ index ].create( index, initialAge, _camera.getPosition(), initialAngle, initialEnergy, _myGenotype, _embryology );
 
@@ -3713,7 +3759,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	    {
             let initialAge      = YOUNG_AGE_DURATION;
             let initialAngle    = getRandomAngleInDegrees(); //-180.0 + gpRandom() * 360.0;
-            let initialEnergy   = DEFAULT_SWIMBOT_HUNGER_THRESHOLD;
+            let initialEnergy   = drawFromAtmosphere( DEFAULT_SWIMBOT_HUNGER_THRESHOLD );
 
             _myGenotype.randomize();
 
@@ -3814,7 +3860,8 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	{
 	    if (( ID === NULL_INDEX ) || !_swimbots[ ID ].getAlive() ) return;
 	    const swimbot = _swimbots[ ID ];
-	    swimbot.setEnergy( Math.min( swimbot.getMaxEnergy(), swimbot.getEnergy() + 100 ));
+const feedRoom = Math.min( 100, swimbot.getMaxEnergy() - swimbot.getEnergy() );
+    swimbot.setEnergy( swimbot.getEnergy() + drawFromAtmosphere( feedRoom ));
 	}
 
 	//------------------------------------
@@ -5139,7 +5186,7 @@ this.renderFoodBits = function( useGraphicsCard )
 	    // (the random numbers among them: the state everything above went on from)
 	    chunks.push({ name: "poolScalars", data: Float64Array.from( [
 	        _clock, getRandomState(), _seedDebt, _nurseryDebt, _classicSeedDebt, _serial, _gardenOfEdenRadius, _currentSpeed, _numSick,
-	        _matingCount, _simulationRunning ? 1 : 0, this.startMode, _meatZoneDebt ] ) });
+	        _matingCount, _simulationRunning ? 1 : 0, this.startMode, _meatZoneDebt, getAtmosphereEnergy() ] ) });
 
 	    // every counter in one row (some are lists)
 	    const counterNames = Object.keys( simCounters ), counterValues: number[] = [], counterSizes: number[] = [];
@@ -5222,6 +5269,7 @@ this.renderFoodBits = function( useGraphicsCard )
 	    environment.setState( header.environment );
 	    environment.importRaw({ time: _clock, soilNutrient: file.get( "envSoil" ), nutrientUpdatedAt: file.get( "envSoilAt" ),
 	                            plantCount0: file.get( "envPlants0" ), plantCount1: file.get( "envPlants1" ) });
+	                            if ( scalars.length > 13 ) { resetAtmosphere( scalars[13] ); }
 	    if ( environment.active ) { environment.copyBackgroundTo( _st.background ); }
 	    try { _environmentImage = environment.active ? environment.makeImage() : null; _pool.setBackgroundImage( _environmentImage ); } catch ( e ) { _environmentImage = null; }
 
