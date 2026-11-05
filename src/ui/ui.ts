@@ -24,7 +24,7 @@ import { ViewTrackingMode } from "../simulation/ViewTracking";
 import { Graph } from "./graph";
 import { getInfoText } from "./info";
 import { _chosenPoolToLoad, _username, setChosenPoolToLoad } from "./saveLoad";
-import { decorateSwimbotCard, setupHints, translateHTML, translatePage } from "./lang";
+import { decorateSwimbotCard, setupHints, tr, translateHTML, translatePage } from "./lang";
 import { USER_SWIMBOTS } from "./userSwimbots";
 
 
@@ -57,7 +57,14 @@ export function initializeUI()
     setupHints();
     translatePage();
     // a new language: the parts the code fills are filled again
-    window.addEventListener( "genepool:language", () => { _lastSwimbotPanelHTML = ""; _lastGraphDataHTML = ""; showRunning(); });
+    window.addEventListener( "genepool:language", () =>
+    {
+        _lastSwimbotPanelHTML = ""; _lastGraphDataHTML = "";
+        showRunning();
+        setInfoPage( _currentInfoPage );
+        showPetriPicture();
+        if ( document.getElementById( "tweakGenesPanel" )!.style.display === "block" ) openTweakGenesPanel( genePool.getSelectedSwimbotID() );
+    });
   
     //--------------------------------------------------
     // This starts an update loop that is called 
@@ -303,8 +310,8 @@ export function openTweakGenesPanel( selectedSwimbotID )
     {
         document.getElementById( 'tweakGenesPanel'      ).style.visibility = 'visible'; document.getElementById( 'tweakGenesPanel' ).style.display = 'block';
         document.getElementById( 'closeTweakGenesPanel' ).style.display = "block";
-        document.getElementById( 'tweakGenesPanel' ).innerHTML = "<div id = 'tweakGenesTitle' >Tweak the genes of swimbot " + selectedSwimbotID + "</div>";
-        document.getElementById( 'tweakGenesPanel' ).innerHTML += "<div id = 'tweakGenesCategoryNote' >(choose which limb type to tweak)</div>";
+        document.getElementById( 'tweakGenesPanel' ).innerHTML = "<div id = 'tweakGenesTitle' >" + tr( "Tweak the genes of swimbot" ) + " " + selectedSwimbotID + "</div>";
+        document.getElementById( 'tweakGenesPanel' ).innerHTML += "<div id = 'tweakGenesCategoryNote' >" + tr( "(choose which limb type to tweak)" ) + "</div>";
         let numCategories = genePool.getNumGeneCategories();
         for (let c=0; c<numCategories; c++)
         {
@@ -347,7 +354,7 @@ export function openTweakGenesPanel( selectedSwimbotID )
             +  "oninput      = 'tweakGene( " + selectedSwimbotID + ", " + g + ")' "
             +  ">";
             document.getElementById( 'tweakGenesPanel' ).innerHTML
-            += "<div class = 'geneTweakerName' style = 'top:" + top + "px;'>" + geneTweakerName + "</div>";
+            += "<div class = 'geneTweakerName' style = 'top:" + top + "px;'>" + tr( geneTweakerName ) + "</div>";
         }
         _tweakGenesCategory = 0;
         let radioButtons = document.getElementsByName( 'geneTweakerCategory' );
@@ -700,7 +707,7 @@ export function advanceInfoPage( increment )
 //---------------------------------------------
 export function setInfoPage( pageNumber )
 {
-    document.getElementById( 'pageNumberLabel'  ).innerHTML = "page " + _currentInfoPage + " of 28";
+    document.getElementById( 'pageNumberLabel'  ).innerHTML = tr( "page" ) + " " + _currentInfoPage + " " + tr( "of" ) + " " + LAST_INFO_PAGE;
     document.getElementById( "infoText"         ).innerHTML = getInfoText( _currentInfoPage );
     if ( _currentInfoPage === FIRST_INFO_PAGE )
     {
@@ -915,7 +922,7 @@ export function togglePanel()
     const hidden = document.body.classList.toggle( "panelHidden" );
     const button = document.getElementById( "panelToggleButton" );
     button.innerHTML = hidden ? "&#x276E;" : "&#x276F;";
-    button.title     = hidden ? "show the panel (H)" : "hide the panel (H)";
+    button.title     = tr( hidden ? "show the panel (H)" : "hide the panel (H)" );
     window.dispatchEvent( new Event( "resize" ));
 }
 
@@ -1137,7 +1144,7 @@ export function showPetriPicture()
     const canvas = document.getElementById( "petriPicture" ) as HTMLCanvasElement;
     if ( canvas ) { drawPetriPreview( canvas, petriSettings.zones, petriSettings.layout, petriSettings.softness ); }
     const name = document.getElementById( "petriLayoutName" );
-    if ( name ) { name.innerHTML = "shape: " + PETRI_LAYOUTS[ petriSettings.layout ] + " · " + petriSettings.zones + " zones (click the picture to change the shape)"; }
+    if ( name ) { name.innerHTML = tr( "shape" ) + ": " + tr( PETRI_LAYOUTS[ petriSettings.layout ] ) + " · " + petriSettings.zones + " " + tr( "zones (click the picture to change the shape)" ); }
     rememberPetriSettings();
 }
 

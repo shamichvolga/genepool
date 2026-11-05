@@ -128,16 +128,16 @@ document.getElementById( "loadSwimbotFile" ).addEventListener( "change", functio
             if ( hasValidGenes )
             {
                 genePool.createNewSwimbotWithGenes( data.genes );
-                alert( "Swimbot загружен успешно!" );
+                alert( lang.tr( "Swimbot loaded successfully!" ));
             }
             else
             {
-                alert( "Ошибка: файл не содержит валидных генов." );
+                alert( lang.tr( "Error: the file does not contain valid genes." ));
             }
         }
         catch ( err )
         {
-            alert( "Ошибка чтения файла: " + err.message );
+            alert( lang.tr( "Error reading the file: " ) + err.message );
         }
     };
     reader.readAsText( file );

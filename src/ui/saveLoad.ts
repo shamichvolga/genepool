@@ -12,6 +12,7 @@
 // -------------------------------------------------------------------------- 
 import { SimulationStartMode } from "../simulation/Globals";
 import { closePopupPanel, switchToChosenPresetPool, syncPetriPanel } from "./ui";
+import { tr, translateHTML } from "./lang";
 
 
 export const InputMode = 
@@ -318,10 +319,10 @@ export function printFamilyTree()
         "left = 400, top = 100, width = 600, height = 700, status = 0, resizable = 0, channelmode = 0, menubar = 0, toolbar = 0, location = 0, titlebar = 0"
     );
     if ( !w ) return;
-    w.document.title = "Swimbot Data (copy and paste into a text file, then load into Gene Pool Lab)";
-    w.document.body.innerHTML = "collecting the data…";
+    w.document.title = tr( "Swimbot Data (copy and paste into a text file, then load into Gene Pool Lab)" );
+    w.document.body.innerHTML = tr( "collecting the data…" );
 
-    genePool.request( "getFamilyTreeText" ).then( function( text ) { w.document.body.innerHTML = text; });
+    genePool.request( "getFamilyTreeText" ).then( function( text ) { w.document.body.innerHTML = translateHTML( text ); });
 }
 
 
@@ -409,10 +410,10 @@ export function openPopupPanelForInput( text, mode )
 
         document.getElementById( "PopupText" ).style.visibility = "visible";
         document.getElementById( "PopupText" ).innerHTML
-        = text
+        = tr( text )
         + "<br>"
         + "<br>"
-        + "Name this swimbot...";
+        + tr( "Name this swimbot..." );
 
         //----------------------------------------------------
         // give user option to display data...
@@ -423,10 +424,10 @@ export function openPopupPanelForInput( text, mode )
     {
         document.getElementById( "PopupText" ).style.visibility = "visible";
         document.getElementById( "PopupText" ).innerHTML
-        = text
+        = tr( text )
         + "<br>"
         + "<br>"
-        + "choose from the list of saved swimbots:"
+        + tr( "choose from the list of saved swimbots:" )
         + "<br>"
         + "<br>";
 
@@ -502,9 +503,9 @@ function showPoolData( pool )
         document.getElementById( 'dataDisplay'      ).style.visibility = "visible"; document.getElementById( 'dataDisplay' ).style.display = 'block';
         document.getElementById( 'closeDataDisplay' ).style.visibility = "visible";
         document.getElementById( 'dataDisplay'      ).innerHTML
-        = "Copy the text below, put it in a new text file, and then give"
+        = tr( "Copy the text below, put it in a new text file, and then give" )
         + "<br>"
-        + "the file a unique name ending in '.json' (example: 'my_pool.json')"
+        + tr( "the file a unique name ending in '.json' (example: 'my_pool.json')" )
         + "<br>"
         + "<br>"
         + "_________________"
@@ -527,17 +528,17 @@ export function showSwimbotGenes(s)
         document.getElementById( 'closeDataDisplay' ).style.visibility = "visible";
         document.getElementById( 'dataDisplay'      ).innerHTML
         = "<br>"
-        + "<big><b>Save genes of swimbot " + s.toString() + "</b></big>"
+        + "<big><b>" + tr( "Save genes of swimbot" ) + " " + s.toString() + "</b></big>"
         + "<br>"
         + "<br>"
-        + "Please copy the genetic data below and put it in an "
+        + tr( "Please copy the genetic data below and put it in an" )
         + "<br>"
-        + "empty text file. Give it a cool name and save it."
+        + tr( "empty text file. Give it a cool name and save it." )
         + "<br>"
         + "<br>"
-        + "This is formatted as JSON, which is required "
+        + tr( "This is formatted as JSON, which is required" )
         + "<br>"
-        + "for it to be loaded back into the pool."
+        + tr( "for it to be loaded back into the pool." )
         + "<br>"
         + "<br>"
         + "<br>"

@@ -82,7 +82,7 @@ const RU: Record<string, string> =
     "resting": "отдыхает", "looking for mate": "ищет партнёра", "pursuing mate": "плывёт к партнёру", "looking for food bit": "ищет еду",
     "pursuing food bit": "плывёт к еде", "looking for prey": "ищет добычу", "pursuing prey": "преследует добычу", "fleeing predator": "убегает от хищника",
     "never": "никогда", "when chased": "когда гонятся", "missing": "не хватает", "neural": "нейросеть", "effort": "усилие",
-    "seeks": "ищет", "avoids": "избегает", "green": "зелёная", "blue": "синяя", "medium": "средний", "prey": "добычу", "of body": "тела", "bitten": "при укусе",
+    "seeks": "ищет", "avoids": "избегает", "green": "зелёная", "blue": "синяя", "medium": "средний", "medium prey": "среднюю добычу", "prey": "добычу", "of body": "тела", "bitten": "при укусе",
     "suits": "подходит", "picky": "разборчивость", "no (gene": "нет (ген", "yes (gene": "да (ген",
     // status line and graph text
     "FROZEN (space)": "ПАУЗА (пробел)", "steps/s": "шагов/с", "steps/sec": "шагов/с", "time step": "шаг времени", "speed": "скорость", "threads": "потоков",
@@ -100,14 +100,66 @@ const RU: Record<string, string> =
     "herbivore → predator → strong predator → herbivore": "травоядное → хищник → сильный хищник → травоядное",
     "never dies of age or hunger, cannot be eaten": "не умирает от старости и голода, его нельзя съесть", "+100 energy": "+100 энергии",
     "drawing off: faster": "рисование выкл: быстрее", "drawing on": "рисование вкл",
+    // remaining static and dynamic interface text
+    "press ? for the keys": "нажмите ? — справка по клавишам",
+    "W A S D, arrows": "W A S D, стрелки", "Q E, − +, wheel": "Q E, − +, колесо",
+    "start a 'petri' pool with these settings": "запустить бассейн «петри» с этими настройками",
+    "how many zones (2-12)": "количество зон (2–12)",
+    "the shape of the zones: click to change": "форма зон: щёлкните, чтобы изменить",
+    "border between zones: 0 = sharp, 1 = soft (as wide as a zone)": "граница зон: 0 — резкая, 1 — плавная (шириной с зону)",
+    "8000 × 8000, about 500 swimbots": "8000 × 8000, около 500 свимботов",
+    "16000 × 16000, about 2000 swimbots": "16000 × 16000, около 2000 свимботов",
+    "24000 × 24000, about 4500 swimbots": "24000 × 24000, около 4500 свимботов",
+    "32000 × 32000, about 8000 swimbots (needs a fast computer)": "32000 × 32000, около 8000 свимботов (нужен быстрый компьютер)",
+    "Run a pool (for example \"speciation\") for tens of thousands of steps, then get the data collected during the simulation and load it into":
+        "Запустите бассейн (например, «видообразование») на десятки тысяч шагов, затем получите собранные данные и загрузите их в",
+    "show gene data": "показать данные генов", "(no data)": "(нет данных)",
+    "SELECT THIS PANEL TO TURN ON RENDERING": "НАЖМИТЕ ЗДЕСЬ, ЧТОБЫ ВКЛЮЧИТЬ РИСОВАНИЕ",
+    "Rendering is currently turned off. It makes the simulation run faster.": "Рисование сейчас выключено, поэтому симуляция работает быстрее.",
+    "page": "страница", "of": "из", "shape": "форма", "rings": "кольца", "star": "звезда", "spiral": "спираль",
+    "zones (click the picture to change the shape)": "зон (щёлкните по картинке, чтобы изменить форму)",
+    "opposite color": "противоположный цвет",
+    "who a swimbot swims towards; whether the partner accepts is decided by its own genes": "к кому плывёт свимбот; согласие партнёра определяется его собственными генами",
+    "Tweak the genes of swimbot": "Изменение генов свимбота", "(choose which limb type to tweak)": "(выберите тип частей тела)",
+    "energy (the mark: hunger threshold)": "энергия (отметка — порог голода)",
+    "Swimbot Data (copy and paste into a text file, then load into Gene Pool Lab)": "Данные свимботов (скопируйте в текстовый файл и загрузите в Gene Pool Lab)",
+    "collecting the data…": "собираю данные…", "Load a new pool from a file": "Загрузить новый бассейн из файла",
+    "Name this swimbot...": "Назовите этого свимбота…", "choose from the list of saved swimbots:": "выберите из списка сохранённых свимботов:",
+    "Save genes of swimbot": "Сохранить гены свимбота",
+    "Please copy the genetic data below and put it in an": "Скопируйте генетические данные ниже в",
+    "empty text file. Give it a cool name and save it.": "пустой текстовый файл, придумайте ему название и сохраните.",
+    "This is formatted as JSON, which is required": "Формат JSON нужен для того, чтобы",
+    "for it to be loaded back into the pool.": "снова загрузить эти гены в бассейн.",
+    "Copy the text below, put it in a new text file, and then give": "Скопируйте текст ниже в новый текстовый файл и дайте ему",
+    "the file a unique name ending in '.json' (example: 'my_pool.json')": "уникальное имя с расширением .json (например, my_pool.json).",
+    "Swimbot loaded successfully!": "Свимбот успешно загружен!",
+    "Error: the file does not contain valid genes.": "Ошибка: файл не содержит действительных генов.",
+    "Error reading the file: ": "Ошибка чтения файла: ",
+    "yes": "да", "swimbot index:": "индекс свимбота:", "parent 1 index:": "индекс родителя 1:", "parent 2 index:": "индекс родителя 2:",
+    "birth time:": "время рождения:", "death time:": "время смерти:", "genes:": "гены:",
+    // gene editor
+    "junk": "не используется", "frequency": "частота", "cutoff": "отсечка",
+    "start red": "нач. красный", "start green": "нач. зелёный", "start blue": "нач. синий",
+    "end red": "конеч. красный", "end green": "конеч. зелёный", "end blue": "конеч. синий",
+    "start width": "нач. ширина", "end width": "конеч. ширина", "start length": "нач. длина", "end length": "конеч. длина",
+    "amplitude": "амплитуда", "phase": "фаза", "turn amplitude": "амплитуда поворота", "turn phase": "фаза поворота",
+    "branch amplitude": "амплитуда ветви", "branch phase": "фаза ветви", "branch turn amplitude": "поворот амплитуды ветви",
+    "branch turn phase": "поворот фазы ветви", "sequence count": "число повторов", "branch period": "период ветвления",
+    "branch angle": "угол ветвления", "branch number": "число ветвей", "branch shift": "сдвиг ветви",
+    "branch category": "категория ветви", "branch reflect": "отражение ветви", "splined": "сглаживание", "end cap spline": "сглаживание конца",
+    "preferred food type": "любимый тип еды", "digestible food type": "перевариваемый тип еды",
 };
 
 // the English of a text, translated if Russian is on
 export function tr( en: string ): string
 {
     if ( _lang === "en" ) return en;
-    const t = RU[ en.trim() ];
-    return t === undefined ? en : en.replace( en.trim(), t );
+    const key = en.trim().replace( /\s+/g, " " );
+    const translated = RU[ key ];
+    if ( translated === undefined ) return en;
+    const leading = /^\s*/.exec( en )![ 0 ];
+    const trailing = /\s*$/.exec( en )![ 0 ];
+    return leading + translated + trailing;
 }
 
 // HTML made in English (the status line, the graph numbers): known words and
@@ -117,8 +169,9 @@ export function translateHTML( html: string ): string
 {
     if ( _lang === "en" ) return html;
     if ( _phrases === null ) { _phrases = Object.keys( RU ).filter( k => k.length > 2 ).sort( ( a, b ) => b.length - a.length ); }
+    const withTitles = html.replace( /(\stitle\s*=\s*)(["'])(.*?)\2/g, ( _m, start, quote, text ) => start + quote + tr( text ) + quote );
     // only the text between tags
-    return html.replace( /(^|>)([^<]+)/g, ( _m, start, text ) => start + translateText( text ));
+    return withTitles.replace( /(^|>)([^<]+)/g, ( _m, start, text ) => start + translateText( text ));
 }
 function translateText( text: string ): string
 {
@@ -220,7 +273,7 @@ const _englishTitle = new WeakMap<Element, string>();
 
 export function translatePage()
 {
-    const roots = [ "masterPanel", "helpOverlay", "noRenderPanel" ].map( id => document.getElementById( id )).filter( Boolean ) as HTMLElement[];
+    const roots = [ "masterPanel", "helpOverlay", "noRenderPanel", "panelToggleButton", "dataDisplayButton" ].map( id => document.getElementById( id )).filter( Boolean ) as HTMLElement[];
     for ( const root of roots )
     {
         // (the parts filled by the code are translated when they are filled)
@@ -232,8 +285,10 @@ export function translatePage()
             if ( !_english.has( n )) _english.set( n, n.nodeValue );
             n.nodeValue = tr( _english.get( n )! );
         }
-        root.querySelectorAll( "[title]" ).forEach( ( e ) =>
+        const titled = [ root, ...Array.from( root.querySelectorAll( "[title]" )) ];
+        titled.forEach( ( e ) =>
         {
+            if ( !e.hasAttribute( "title" )) return;
             if ( !_englishTitle.has( e )) _englishTitle.set( e, e.getAttribute( "title" )! );
             e.setAttribute( "title", tr( _englishTitle.get( e )! ));
         });

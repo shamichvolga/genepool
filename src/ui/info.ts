@@ -11,9 +11,13 @@
 //                                                                        
 // -------------------------------------------------------------------------- 
 
+import { lang } from "./lang";
+import { getInfoTextRu } from "./infoRu";
+
 //----------------------------
 export function getInfoText( page )
 {
+    if ( lang() === "ru" ) return getInfoTextRu( page );
     let text = "";
     
     //--------------------------------
