@@ -145,7 +145,7 @@ assert.strictEqual( seedPool.getNumFoodBitsOfType( seedSb.PLANT_TYPE_COLD ), col
 assert( !seedBot.hasCarriedSeed(), "a planted seed leaves the carrier" );
 
 // A small herbivore ignores a closer, unbitable tree when edible grass is visible.
-const visionRun = createSimulation( 918, { ...overrides, INITIAL_NUM_SWIMBOTS: "1", VISION_WEIGHT_BY_BITE_EFFICIENCY: "true" } );
+const visionRun = createSimulation( 918, { ...overrides, INITIAL_NUM_SWIMBOTS: "1", VISION_WEIGHT_BY_BITE_EFFICIENCY: "true", PLANT_MAX_TOUGHNESS: "10000" } );
 const visionSb = visionRun.sandbox, visionPool = visionRun.genePool, visionSt = visionSb.sharedState();
 const visionBot = visionPool.getSwimbots().find( b => b.getAlive() );
 assert( visionBot, "vision fixture needs a living swimbot" );
@@ -178,5 +178,24 @@ assert.strictEqual( visionSb.biteEnergy( 1, visionTree.getWood(), visionTree.get
 visionSb.perceive( visionIndex, visionSt, new visionSb.PerceptionScratch( visionSb.MAX_SWIMBOTS, visionSb.MAX_FOODBITS ));
 assert.strictEqual( visionSt.seenFood[ visionIndex ], 1,
     "small herbivore should target the visible sprout instead of the closer mature tree" );
+
+// Contact eating and filter feeding also reject the same inaccessible tree.
+const treeEnergyBeforeContact = visionTree.getEnergy();
+visionSt.bots[ visionIndex * visionSb.BOT_STRIDE + visionSb.B_MOUTH_X ] = center.x;
+visionSt.bots[ visionIndex * visionSb.BOT_STRIDE + visionSb.B_MOUTH_Y ] = center.y;
+visionTree.setPosition( center );
+const foodNow = [];
+for ( let f = 0; f < visionSb.MAX_FOODBITS; f++ ) { if ( visionSt.liveFood[f] === 1 ) foodNow.push( f ); }
+visionSt.foodGrid.build( foodNow, foodNow.length, visionSt.foodX, visionSt.foodY );
+visionSt.foodAlive.set( visionSt.liveFood );
+visionBot.setEnergy( 0 );
+visionBot.setEnvironmentalStimuli( 0, [], false, null, false, null, null );
+visionBot.decide();
+assert( !visionBot.getIsTryingToEat(), "mouth contact cannot force a bite from mature wood" );
+assert.strictEqual( visionTree.getEnergy(), treeEnergyBeforeContact, "contact leaves inaccessible wood unchanged" );
+assert.strictEqual( visionSb.biteEnergy( visionBot.getPhenotypeMass(), visionTree.getWood(), visionTree.getEnergy() ), 0,
+    "the filter fixture tree must also be inaccessible to the actual swimbot phenotype" );
+visionBot.filterFeed( visionTree );
+assert.strictEqual( visionTree.getEnergy(), treeEnergyBeforeContact, "filter feeding cannot remove inaccessible wood" );
 
 console.log( "tree-soil integration passed: wood ratchet, bite limits, decay, fruit cap/energy, seed dispersal, vision filter, diffusion and persistence" );
