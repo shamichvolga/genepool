@@ -27,6 +27,7 @@ import { DISEASE_CONTACT_SCALE, DISEASE_DRAIN, DISEASE_DURATION, DISEASE_KEY_WID
          DISEASE_SPAWN_PERIOD, DISEASE_TRANSMISSION, DISEASE_IMMUNITY_LIKENESS, DISEASE_CROWD_NEIGHBOURS } from "./Parameters";
 import { SharedState, BOT_STRIDE, B_ENERGY, B_SUM_LENGTHS } from "./SharedState";
 import { MIND_STRIDE, M_DISEASE, M_DISEASE_TIMER, M_IMMUNE_0, M_IMMUNE_MEMORY, NUM_IMMUNE_MEMORY } from "./MindLayout";
+import { transferToAtmosphere } from "./EnergyBudget";
 
 export const KEY_SIZE = 7;
 const strains: Float32Array[] = [ new Float32Array( KEY_SIZE ) ];   // strain 0 = "healthy"
@@ -150,7 +151,9 @@ export function updateDiseases( st: SharedState, alive: ArrayLike<number>, numAl
 
         // it costs energy
         const b = s * BOT_STRIDE;
-        st.bots[ b + B_ENERGY ] = Math.max( 0, st.bots[ b + B_ENERGY ] - DISEASE_DRAIN );
+        const energyBeforeDrain = st.bots[ b + B_ENERGY ];
+        st.bots[ b + B_ENERGY ] = Math.max( 0, energyBeforeDrain - DISEASE_DRAIN );
+        transferToAtmosphere( energyBeforeDrain - st.bots[ b + B_ENERGY ] );
 
         // getting well
         if ( -- st.mind[ m + M_DISEASE_TIMER ] <= 0 ) { recover( st, s ); continue; }

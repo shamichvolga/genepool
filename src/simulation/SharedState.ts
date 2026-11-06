@@ -180,6 +180,9 @@ export class SharedState
     readonly foodAlive    : Uint8Array;
     readonly foodEnergy    : Float64Array;
     readonly foodBorn     : Float64Array;   // the step it appeared (its age = now - born)
+    readonly foodWood     : Float64Array;   // structural biomass: the historical energy maximum
+    readonly foodFruit    : Uint8Array;     // 1 = a waiting fruit dropped by a tree
+    readonly foodFruitAt  : Float64Array;   // the next step this tree may drop a fruit
     readonly plantGrowth  : Float32Array;   // plant genes (PlantGenes.ts)
     readonly plantSpread  : Float32Array;
 
@@ -303,6 +306,9 @@ export class SharedState
         this.foodAlive  = u8 ( "foodAlive", MAX_FOODBITS );
         this.foodEnergy = f64( "foodEnergy", MAX_FOODBITS );
         this.foodBorn   = f64( "foodBorn", MAX_FOODBITS );
+        this.foodWood   = f64( "foodWood", MAX_FOODBITS );
+        this.foodFruit  = u8 ( "foodFruit", MAX_FOODBITS );
+        this.foodFruitAt = f64( "foodFruitAt", MAX_FOODBITS );
         this.plantGrowth = new Float32Array( make( "plantGrowth", MAX_FOODBITS * 4 ));
         this.plantSpread = new Float32Array( make( "plantSpread", MAX_FOODBITS * 4 ));
 

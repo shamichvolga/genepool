@@ -2,8 +2,9 @@ import { WORLD_AREA_FACTOR } from "./World";
 import { CARCASS_ENABLED, DISEASE_ENABLED, CANNIBAL_GENE_FOUNDER_MAX, PLANT_REGROW_CHANCE, PLANT_REGROW_DELAY } from "./Parameters";
 import { exportStrains, importStrains, updateDiseases } from "./Disease";
 import { PILE_PARTS, PreparedZone, insideAny, prepareZones, randomPointInZone } from "./MapZones";
-import { plantFullEnergy, plantLifespan, plantSize } from "./PlantSize";
-import { PLANT_SIZE_ENABLED, PLANT_SEEDS_BY_SIZE, PLANT_GROW_TIME, PLANT_LEAF_REGROWTH, PLANT_LIFESPAN } from "./Parameters";
+import { plantCrown, plantFullEnergy, plantLifespan, plantSize } from "./PlantSize";
+import { PLANT_SIZE_ENABLED, PLANT_SEEDS_BY_SIZE, PLANT_LEAF_REGROWTH, PLANT_LIFESPAN, PLANT_SPROUT_ENERGY, PLANT_TREE_ENERGY,
+         WOOD_PER_FRUIT_TIER, PLANT_FRUIT_PERIOD, PLANT_FRUIT_ENERGY, PLANT_CANOPY_RADIUS, SHADED_PLANT_AGING_FACTOR, WOOD_DECAY_STEPS } from "./Parameters";
 import { Environment } from "./Environment";
 import { Chunk, WORLD_FORMAT, layoutFingerprint, packWorld, unpackWorld } from "./WorldFile";
 import { PARAM_DEFAULTS, PARAM_LIST, changedParams, setParameter } from "./ParamStore";
@@ -14,7 +15,7 @@ declare const __GENEPOOL_VERSION__: string;
 import { currentAt, currentDriftX, currentDriftY, currentStrength, randomPointInCurrent } from "./Currents";
 import { bindPlantGenes, inheritPlantGenes, plantMatureAge, plantOldAge, plantRotAge, plantSeedDistance } from "./PlantGenes";
 import { geneAverage, convertOldGenes, GENE_LAYOUT_VERSION, setTrait, gaussian, thermalWidthToGene, preyTargetScore, GENES_PREDATOR, GENES_THERMAL_OPTIMUM, GENES_THERMAL_WIDTH, GENES_DIGESTION, GENES_BRIGHTNESS, GENES_CHOOSINESS, GENES_HUNGER, GENES_AUTOTOMY_BITE, GENES_AUTOTOMY_THREAT, GENES_AUTOTOMY_AMOUNT, GENES_AUTOTOMY_WHICH, GENES_PERSISTENCE, GENES_INVESTMENT, GENES_SIZE_PICKINESS, GENES_DEFERENCE, GENES_RUDDER, GENES_WEAK_PREY, GENES_IMMUNE, GENES_CANNIBAL, GENES_CURRENT } from "./EcologyGenes";
-import { environment, FLAT_ENVIRONMENT, INITIAL_SOIL_NUTRIENT_PER_CELL, NUTRIENT_CYCLE_ENABLED, SWIMMING_ENERGY_RECYCLE_ENABLED, PLANT_TYPE_WARM, PLANT_TYPE_COLD, SEASONAL_PLANT_GROWTH_ENABLED, SEASONAL_PLANT_GROWTH_AMPLITUDE } from "./Environment";
+import { environment, FLAT_ENVIRONMENT, INITIAL_SOIL_NUTRIENT_PER_CELL, NUTRIENT_CYCLE_ENABLED, SWIMMING_ENERGY_RECYCLE_ENABLED, PLANT_CELL_SIZE, SOIL_DIFFUSION_INTERVAL, PLANT_TYPE_WARM, PLANT_TYPE_COLD, SEASONAL_PLANT_GROWTH_ENABLED, SEASONAL_PLANT_GROWTH_AMPLITUDE } from "./Environment";
 import { petriSettings, petriStartZone } from "./Petri";
 import { IGNORE_FOOD_EFFICIENCY, preyVisibility, TWO_PLANT_TYPES } from "./Ecology";
 import { START_ENERGY_FACTOR, PLANT_ROT_ENABLED, START_FOOD_FILL, START_FOOD_CLUMP, START_FOOD_CLUMP_RADIUS, PLANT_STAGES_SHOWN, NURSERY_ENABLED, NURSERY_STEPS, NURSERY_START_FOOD_FACTOR, NURSERY_EXTRA_SEEDS, PLANT_EVOLUTION_ENABLED, PLANT_SEED_PARENT_TRIES, CURRENTS_ENABLED, CURRENT_SPEED, CLASSIC_SEED_RAIN_FRACTION, MEAT_PIECE_ENERGY, MEAT_PIECE_SCATTER, PLANT_STAGES_ENABLED, PLANT_ROT_AGE, DIET_SWITCH_RATE, CLASSIC_NUM_SWIMBOTS, CLASSIC_NUM_FOODBITS, GARDEN_RADIUS, ENVIRONMENT_PLANT_SPREAD_RATE, ENVIRONMENT_SEEDS_PER_PERIOD, LOCAL_ENVIRONMENT_PLANT_GROWTH, PLANT_CELL_CAPACITY, PLANT_PARENT_SEED_FRACTION, PLANT_SEED_MIN_DISTANCE, PLANT_SEED_MAX_DISTANCE } from "./Parameters";
@@ -248,6 +249,7 @@ export function GenePool()
     let _perceptionChecks     = 0;
     let _gridResult     = new Int32Array( MAX_SWIMBOTS * 2 );  // scratch for grid queries
     let _foodGridResult = new Int32Array( MAX_FOODBITS * 2 );
+    const _plantShade   = new Float32Array( environment.plantCount[0].length );
     let _nearbyIndices  = new Int32Array( MAX_SWIMBOTS );      // swimbots within search radius
 
     let _renderBatch = []; // Batch rendering array
@@ -1295,12 +1297,11 @@ if ( mode === SimulationStartMode.SPECIES )
 	    };
 	}
 
-	// PLANT_SIZE_ENABLED: the plants of a new world have grown for a while already (0 .. 2 x PLANT_GROW_TIME)
 	function startPlantAge( f )
 	{
-	    const age = Math.floor( gpRandom() * 2 * PLANT_GROW_TIME );
+	    const age = Math.floor( gpRandom() * PLANT_LIFESPAN * 0.25 );
 	    _st.foodBorn[f] = _clock - age;
-	    _st.foodEnergy[f] = plantFullEnergy( age );
+	    _st.foodWood[f] = Math.max( _st.foodWood[f], _st.foodEnergy[f] );
 	}
 
 	// petri: a random point inside zone z (the whole zone, not just a garden)
@@ -1390,11 +1391,6 @@ if ( mode === SimulationStartMode.SPECIES )
 	            if ( !this.plantCanGrowAt( _vectorUtility.x, _vectorUtility.y, type )) continue;
 	            const child = this.findLowestDeadFoodBitInArray();
 	            if ( child === NULL_INDEX ) break;
-                    if ( NUTRIENT_CYCLE_ENABLED && !environment.takeSoilNutrientForSproutAt( _vectorUtility.x, _vectorUtility.y ))
-                    {
-                        simCounters.nutrientLimitedPlantSeeds ++;
-                        continue;
-                    }
 	            _foodBits[ child ].initialize( child );
 	            _foodBits[ child ].setType( type );
 	            if ( !fundPlant( child, globalTweakers.foodBitEnergy )) return;
@@ -1426,11 +1422,11 @@ if ( mode === SimulationStartMode.SPECIES )
 	            if ( PLANT_SIZE_ENABLED && PLANT_SEEDS_BY_SIZE && ( parent !== null ))
 	            {
 	                // a plant makes seeds as it is grown: a sprout hardly, a tree surely
-	                let grown = gpRandom() < plantSize( parent.getAge() );
+	                let grown = gpRandom() < plantSize( parent.getWood() );
 	                for (let k = 0; ( k < PLANT_SEED_PARENT_TRIES ) && !grown; k++)
 	                {
 	                    const other = this.findRandomLivingPlant();
-	                    if ( other !== null ) { parent = other; grown = gpRandom() < plantSize( other.getAge() ); }
+	                    if ( other !== null ) { parent = other; grown = gpRandom() < plantSize( other.getWood() ); }
 	                }
 	                if ( !grown ) break;         // (no grown plant found: no seed this time)
 	            }
@@ -1458,11 +1454,6 @@ if ( mode === SimulationStartMode.SPECIES )
 
 	            const child = this.findLowestDeadFoodBitInArray();
 	            if ( child === NULL_INDEX ) return;
-	            if ( NUTRIENT_CYCLE_ENABLED && !environment.takeSoilNutrientForSproutAt( _vectorUtility.x, _vectorUtility.y ))
-	            {
-	                simCounters.nutrientLimitedPlantSeeds ++;
-	                continue;
-	            }
 
 	            _foodBits[ child ].initialize( child );
 	            if ( PLANT_EVOLUTION_ENABLED && ( parent !== null )) { inheritPlantGenes( child, parent.getIndex() ); }
@@ -2541,6 +2532,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	//------------------------------------------------------------------------
 	this.interact = function( s )
 	{
+                _swimbots[s].updateCarriedSeed();
                 //-------------------------------------
                 // eating
                 //-------------------------------------
@@ -2845,6 +2837,24 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	    for (let s = 0; s < MAX_SWIMBOTS; s++) { if ( _st.liveSwimbot[s] === 1 ) total += _st.bots[ s * SS.BOT_STRIDE + SS.B_ENERGY ]; }
 	    return total;
 	}
+	this.getEcologyStats = function()
+	{
+	    let plants = 0, trees = 0, fruits = 0, carriedSeeds = 0;
+	    for ( let f = 0; f < MAX_FOODBITS; f++ )
+	    {
+	        if ( _st.liveFood[f] !== 1 ) continue;
+	        if ( _st.foodType[f] === 2 ) continue;
+	        plants ++;
+	        if ( _st.foodWood[f] >= WOOD_PER_FRUIT_TIER ) trees ++;
+	        if ( _st.foodFruit[f] === 1 ) fruits ++;
+	    }
+	    for ( let s = 0; s < MAX_SWIMBOTS; s++ )
+	    {
+	        if ( _st.liveSwimbot[s] === 1 && _swimbots[s].hasCarriedSeed() ) carriedSeeds ++;
+	    }
+	    return { plants, trees, fruits, carriedSeeds, soil: environment.getTotalSoilNutrient(),
+	             atmosphere: getAtmosphereEnergy(), totalEnergy: this.getTotalWorldEnergy() };
+	}
 	this.getPhaseTimes = function() { return _phaseTimes; }
 
 
@@ -3020,6 +3030,67 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 
 
 
+    function killPlant( f: number ): void
+    {
+        if ( environment.active && NUTRIENT_CYCLE_ENABLED )
+        {
+            environment.returnMeatDetritusAt( _st.foodX[f], _st.foodY[f], _st.foodEnergy[f] );
+        }
+        _foodBits[f].kill();
+    }
+
+    function buildCanopyShade(): void
+    {
+        _plantShade.fill( 0 );
+        if ( !PLANT_SIZE_ENABLED || !environment.active ) return;
+        for ( let i = 0; i < _aliveFoodBitIndices.length; i++ )
+        {
+            const f = _aliveFoodBitIndices[i];
+            if (( _st.liveFood[f] !== 1 ) || ( _st.foodType[f] === 2 )) continue;
+            const crown = plantCrown( _st.foodEnergy[f] );
+            if ( crown <= 0 ) continue;
+            const x = _st.foodX[f], y = _st.foodY[f];
+            const radius = PLANT_CANOPY_RADIUS * ( 0.25 + 0.75 * crown );
+            const c0 = Math.max( 0, Math.floor(( x - radius - POOL_LEFT ) / PLANT_CELL_SIZE ));
+            const c1 = Math.min( environment.plantColumns - 1, Math.floor(( x + radius - POOL_LEFT ) / PLANT_CELL_SIZE ));
+            const r0 = Math.max( 0, Math.floor(( y - radius - POOL_TOP ) / PLANT_CELL_SIZE ));
+            const r1 = Math.min( environment.plantRows - 1, Math.floor(( y + radius - POOL_TOP ) / PLANT_CELL_SIZE ));
+            for ( let r = r0; r <= r1; r++ )
+            {
+                for ( let c = c0; c <= c1; c++ )
+                {
+                    const dx = POOL_LEFT + ( c + 0.5 ) * PLANT_CELL_SIZE - x;
+                    const dy = POOL_TOP + ( r + 0.5 ) * PLANT_CELL_SIZE - y;
+                    const distance = Math.hypot( dx, dy );
+                    if ( distance >= radius ) continue;
+                    const k = r * environment.plantColumns + c;
+                    _plantShade[k] = Math.min( 1, _plantShade[k] + crown * ( 1 - distance / radius ));
+                }
+            }
+        }
+    }
+
+    function spawnFruit( parent: number ): boolean
+    {
+        const child = _this.findLowestDeadFoodBitInArray();
+        if ( child === NULL_INDEX ) return false;
+        const energy = Math.min( PLANT_FRUIT_ENERGY, Math.max( 0, _st.foodEnergy[parent] - PLANT_SPROUT_ENERGY ));
+        if ( energy <= 0 ) return false;
+        const crown = plantCrown( _st.foodEnergy[parent] );
+        const radius = PLANT_CANOPY_RADIUS * ( 0.25 + 0.75 * crown ) * Math.sqrt( gpRandom() );
+        const angle = gpRandom() * PI2;
+        _foodBits[child].initialize( child );
+        _foodBits[child].setType( _st.foodType[parent] );
+        if ( PLANT_EVOLUTION_ENABLED ) inheritPlantGenes( child, parent );
+        _foodBits[child].setFruit( true );
+        _foodBits[child].setEnergy( energy );
+        _vectorUtility.setXY( _st.foodX[parent] + Math.cos( angle ) * radius, _st.foodY[parent] + Math.sin( angle ) * radius );
+        _foodBits[child].setPosition( _vectorUtility );
+        _st.foodEnergy[parent] -= energy;
+        _foodBitGrid.addExtra( child );
+        return true;
+    }
+
 	//----------------------------
 	this.updateFood = function()
 	{
@@ -3027,45 +3098,67 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
         let numType0FoodBits = 0;
         let numType1FoodBits = 0;
         const counting = environment.active;
-        if ( counting ) { environment.clearPlantCounts(); }
+        if ( counting )
+        {
+            environment.clearPlantCounts();
+            if ( NUTRIENT_CYCLE_ENABLED && ( _clock % SOIL_DIFFUSION_INTERVAL === 0 )) environment.diffuseSoilNutrients();
+        }
+        buildCanopyShade();
 
-        //-------------------------------------------------
-        // general update for all food bits; meat rots
-        //-------------------------------------------------
-        // (on the shared arrays: alive, type, position and birth of each food bit)
         const live = _st.liveFood, foodType = _st.foodType, foodX = _st.foodX, foodY = _st.foodY, born = _st.foodBorn;
         for (let i = 0; i < _aliveFoodBitIndices.length; i++)
         {
-            let f = _aliveFoodBitIndices[i];
+            const f = _aliveFoodBitIndices[i];
             if ( live[f] !== 1 ) continue;
+            const type = foodType[f];
 
-            let type = foodType[f];
-
-            // PLANT_STAGES_ENABLED: very old plants rot away (their place frees up)
-            // (PLANT_EVOLUTION_ENABLED: the first plants get mixed ages, so that they do not all grow up at once)
             if ( PLANT_EVOLUTION_ENABLED && ( _clock === 1 ) && ( type !== 2 )) { born[f] = 1 - gpRandom() * plantOldAge( f ); }
             if ( PLANT_STAGES_ENABLED && PLANT_ROT_ENABLED && ( type !== 2 ) && ( _clock - born[f] > plantRotAge( f ))) { _foodBits[f].kill(); continue; }
 
-            // PLANT_SIZE_ENABLED: a plant grows towards the worth of its size; a new
-            // sprout starts small; a bitten plant grows its leaves back
-            // (PLANT_LIFESPAN: an old plant falls; what it holds goes back to the soil, its place is free)
-            if ( PLANT_SIZE_ENABLED && ( PLANT_LIFESPAN > 0 ) && ( type !== 2 ) && ( _clock - born[f] > plantLifespan( f, born[f] )))
+            if ( PLANT_SIZE_ENABLED && environment.active && ( type !== 2 ))
             {
-                if ( counting && NUTRIENT_CYCLE_ENABLED )
+                const cell = environment.plantCellIndex( foodX[f], foodY[f] );
+                const shade = ( _st.foodWood[f] < WOOD_PER_FRUIT_TIER ) ? _plantShade[cell] : 0;
+                const age = ( _clock - born[f] ) / ( 1 + ( SHADED_PLANT_AGING_FACTOR - 1 ) * shade );
+                if (( PLANT_LIFESPAN > 0 ) && ( age > plantLifespan( f, born[f] ))) { killPlant( f ); continue; }
+
+                const soil = environment.getSoilNutrientAtCell( cell );
+                const full = plantFullEnergy( soil );
+                let e = _st.foodEnergy[f];
+                if ( e < full )
                 {
-                    const position = _foodBits[f].getPosition();
-                    environment.returnMeatDetritusAt( position.x, position.y, _foodBits[f].getEnergy() );
+                    let wanted = ( full - e ) * PLANT_LEAF_REGROWTH * ( 1 - shade );
+                    if ( CLOSED_ENERGY_CYCLE_ENABLED ) wanted = Math.min( wanted, getAtmosphereEnergy() );
+                    const free = Math.min( wanted, Math.max( 0, PLANT_SPROUT_ENERGY - e ));
+                    const funded = environment.takeSoilNutrientForGrowthAt( foodX[f], foodY[f], wanted - free );
+                    const grown = free + funded;
+                    if ( grown > 0 ) { e += drawFromAtmosphere( grown ); _st.foodEnergy[f] = e; }
                 }
-                _foodBits[f].kill();
-                continue;
-            }
-            if ( PLANT_SIZE_ENABLED && ( type !== 2 ))
-            {
-                const full = plantFullEnergy( _clock - born[f] ), e = _st.foodEnergy[f];
-                // closed cycle: regrowing leaves draw from the pool; excess returns to it
-                const target = ( e > full ) ? full : e + ( full - e ) * PLANT_LEAF_REGROWTH;
-                if ( target > e ) { _st.foodEnergy[f] = e + drawFromAtmosphere( target - e ); }
-                else { transferToAtmosphere( e - target ); _st.foodEnergy[f] = target; }
+                _st.foodWood[f] = Math.max( _st.foodWood[f], e );
+
+                const crownStarved = e < _st.foodWood[f] * 0.05
+                    || (( _st.foodWood[f] > PLANT_SPROUT_ENERGY ) && ( full <= PLANT_SPROUT_ENERGY ) && ( e <= PLANT_SPROUT_ENERGY + 1e-6 ));
+                if ( crownStarved && ( _st.foodWood[f] > 0 ))
+                {
+                    _st.foodWood[f] = Math.max( 0, _st.foodWood[f] - PLANT_TREE_ENERGY / WOOD_DECAY_STEPS );
+                    if ( _st.foodWood[f] <= PLANT_SPROUT_ENERGY ) { killPlant( f ); continue; }
+                }
+
+                const maxFruits = Math.min( 3, Math.floor( _st.foodWood[f] / WOOD_PER_FRUIT_TIER ));
+                if (( maxFruits > 0 ) && ( _clock >= _st.foodFruitAt[f] ) && ( e > PLANT_SPROUT_ENERGY + PLANT_FRUIT_ENERGY ))
+                {
+                    _st.foodFruitAt[f] = _clock + PLANT_FRUIT_PERIOD * ( 0.8 + 0.4 * gpRandom() );
+                    const crown = plantCrown( e );
+                    const radius = PLANT_CANOPY_RADIUS * ( 0.25 + 0.75 * crown );
+                    const nearby = _foodBitGrid.collect( foodX[f], foodY[f], radius, _foodGridResult );
+                    let fruits = 0;
+                    for ( let k = 0; k < nearby; k++ )
+                    {
+                        const other = _foodGridResult[k];
+                        if (( live[other] === 1 ) && ( _st.foodFruit[other] === 1 )) fruits ++;
+                    }
+                    if ( fruits < maxFruits ) spawnFruit( f );
+                }
             }
 
                  if ( type === 0 ) { numType0FoodBits ++; }
@@ -3075,14 +3168,12 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
                 simCounters.meatDecayEvents ++;
                 if ( counting && NUTRIENT_CYCLE_ENABLED )
                 {
-                    const position = _foodBits[f].getPosition();
-                    simCounters.nutrientsFromMeatDecay += environment.returnMeatDetritusAt( position.x, position.y, _foodBits[f].getEnergy() );
+                    simCounters.nutrientsFromMeatDecay += environment.returnMeatDetritusAt( foodX[f], foodY[f], _st.foodEnergy[f] );
                 }
                 _foodBits[f].kill();
             }
             else if ( _currentSpeed > 0 )
             {
-                // meat drifts with the water (plants are rooted)
                 currentAt( foodX[f], foodY[f] );
                 foodX[f] = Math.max( POOL_LEFT + 1, Math.min( POOL_RIGHT  - 1, foodX[f] + _currentSpeed * currentDriftX() ));
                 foodY[f] = Math.max( POOL_TOP  + 1, Math.min( POOL_BOTTOM - 1, foodY[f] + _currentSpeed * currentDriftY() ));
@@ -3153,7 +3244,8 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
     // (auto-throttling); a nearly empty one means a smaller sprout.
     function fundPlant( f, requested )
     {
-        const funded = drawFromAtmosphere( requested );
+        const needed = ( PLANT_SIZE_ENABLED && environment.active && ( _st.foodType[f] !== 2 )) ? PLANT_SPROUT_ENERGY : requested;
+        const funded = drawFromAtmosphere( needed );
         if ( funded <= 0 ) { _foodBits[f].setEnergy( 0 ); _foodBits[f].kill(); return false; }
         _foodBits[f].setEnergy( funded );
         return true;
@@ -3591,6 +3683,11 @@ if ( !fundPlant( childFoodBitIndex, globalTweakers.foodBitEnergy )) return;
             const saved = data.foodBitArray[f];
             if ( typeof saved.age    === "number" ) { _st.foodBorn[ id ] = _clock - saved.age; }
             if ( typeof saved.growth === "number" ) { _st.plantGrowth[ id ] = saved.growth; _st.plantSpread[ id ] = saved.spread; }
+            if ( typeof saved.energy === "number" && Number.isFinite( saved.energy )) { _st.foodEnergy[ id ] = saved.energy; }
+            if ( typeof saved.wood === "number" && Number.isFinite( saved.wood )) { _st.foodWood[ id ] = saved.wood; }
+            else { _st.foodWood[ id ] = Math.max( 0, _st.foodEnergy[ id ] ); }
+            if ( typeof saved.fruit === "number" && Number.isFinite( saved.fruit )) { _st.foodFruit[ id ] = saved.fruit ? 1 : 0; }
+            if ( typeof saved.nextFruitAt === "number" && Number.isFinite( saved.nextFruitAt )) { _st.foodFruitAt[ id ] = saved.nextFruitAt; }
 
             // older save files have no food type - those are plants
             let type = data.foodBitArray[f].type;
@@ -3647,6 +3744,10 @@ if ( !fundPlant( childFoodBitIndex, globalTweakers.foodBitEnergy )) return;
                 loadedGenotype,
                 _embryology
             );
+            if ( Array.isArray( data.swimbotArray[s].privateState ) )
+            {
+                _swimbots[id].setPrivateState( data.swimbotArray[s].privateState, 0 );
+            }
 
             //------------------------------------------------------------------------------------
             // add the new swimbot to the family tree
@@ -3673,6 +3774,17 @@ if ( !fundPlant( childFoodBitIndex, globalTweakers.foodBitEnergy )) return;
         this.setFoodGrowthDelay     ( data.foodRegenerationPeriod   );
         this.setFoodSpread          ( data.foodSpread               );
         this.setFoodBitEnergy       ( data.foodBitEnergy            );
+        // setFoodBitEnergy applies the pool default to every loaded slot;
+        // restore per-item values afterwards when present in newer legacy saves.
+        for ( let f = 0; f < data.numFoodBits; f++ )
+        {
+            const saved = data.foodBitArray[f], id = saved.id;
+            if ( typeof saved.energy === "number" && Number.isFinite( saved.energy )) { _st.foodEnergy[id] = saved.energy; }
+            if ( typeof saved.wood === "number" && Number.isFinite( saved.wood )) { _st.foodWood[id] = saved.wood; }
+            else { _st.foodWood[id] = Math.max( 0, _st.foodEnergy[id] ); }
+            _st.foodFruit[id] = ( typeof saved.fruit === "number" && Number.isFinite( saved.fruit ) && saved.fruit !== 0 ) ? 1 : 0;
+            if ( typeof saved.nextFruitAt === "number" && Number.isFinite( saved.nextFruitAt )) { _st.foodFruitAt[id] = saved.nextFruitAt; }
+        }
         this.setHungerThreshold     ( data.hungerThreshold          );
         this.setAttraction          ( data.attractionCriterion      );
         this.setOffspringEnergyRatio( data.childEnergyRatio         );
@@ -4411,7 +4523,7 @@ this.renderFoodBits = function( useGraphicsCard )
 	        if ( alpha < 1 ) { alpha = _foodBits[f].getOpacity(); }       // (still fading in, or held in the hand)
 	        d[ i ] = x; d[ i + 1 ] = y; d[ i + 2 ] = x; d[ i + 3 ] = y;
 	        // PLANT_SIZE_ENABLED: a sprout is a small dot, a tree a big one
-	        const r = ( PLANT_SIZE_ENABLED && ( ft[f] !== 2 )) ? radius * ( 0.6 + 1.8 * plantSize( _clock - born[f] )) : radius;
+	        const r = ( PLANT_SIZE_ENABLED && ( ft[f] !== 2 )) ? radius * ( 0.6 + 1.8 * plantSize( _st.foodWood[f] )) : radius;
 	        d[ i + 4 ] = r; d[ i + 5 ] = r;
 	        d[ i + 6 ] = FOOD_RGB[ t ]; d[ i + 7 ] = FOOD_RGB[ t + 1 ]; d[ i + 8 ] = FOOD_RGB[ t + 2 ];
 	        d[ i + 9 ] = alpha > 1 ? 1 : alpha;
@@ -5143,7 +5255,7 @@ this.renderFoodBits = function( useGraphicsCard )
 	    "botX", "botY", "genitalX", "genitalY", "mouthX", "mouthY", "predator", "mass", "brightness", "energy", "scanRadius", "effWarm", "effCold", "preferred",
 	    "alive", "liveSwimbot", "liveFood", "eternal", "sensing", "brainState", "age", "colorR", "colorG", "colorB", "choosiness", "attraction",
 	    "imageR", "imageG", "imageB", "imageSize", "imageStrength", "preyValueWeight", "preyTravelWeight", "preyBaitBias",
-	    "foodX", "foodY", "foodType", "foodEnergy", "foodBorn", "plantGrowth", "plantSpread",
+	    "foodX", "foodY", "foodType", "foodEnergy", "foodBorn", "foodWood", "foodFruit", "foodFruitAt", "plantGrowth", "plantSpread",
 	    "mind", "nnInputs", "nnHidden", "nnOutputs", "random",
 	    "seenCount", "seen", "seenFood", "seenPrey", "targetPreyDistance", "targetPreyReward", "targetPreySuccess", "targetPreyChase",
 	    "targetBaitPresent", "targetBaitDistance", "targetBaitReward", "seenThreat", "seenPredator", "seenMate", "socialX", "socialY",
@@ -5302,7 +5414,7 @@ this.renderFoodBits = function( useGraphicsCard )
 	    }
 
 	    // 7. the numbers of the shared arrays, over everything the objects wrote (the arrays themselves stay: the threads hold them)
-	    for ( const name of WORLD_ARRAYS ) { ( _st as any )[ name ].set( file.get( name )); }
+	    for ( const name of WORLD_ARRAYS ) { if ( file.has( name )) ( _st as any )[ name ].set( file.get( name )); }
 	    for (let f = 0; f < MAX_FOODBITS; f++) { if ( liveFood[f] === 1 ) { _foodBits[f].setColorAccordingToType(); } }
 
 	    // 8. the rest of the pool
@@ -5380,6 +5492,10 @@ this.renderFoodBits = function( useGraphicsCard )
                 foodBitDataArray[ numFoodbits ].age    = _foodBits[f].getAge();
                 foodBitDataArray[ numFoodbits ].growth = _st.plantGrowth[f];
                 foodBitDataArray[ numFoodbits ].spread = _st.plantSpread[f];
+                foodBitDataArray[ numFoodbits ].energy = _st.foodEnergy[f];
+                foodBitDataArray[ numFoodbits ].wood = _st.foodWood[f];
+                foodBitDataArray[ numFoodbits ].fruit = _st.foodFruit[f];
+                foodBitDataArray[ numFoodbits ].nextFruitAt = _st.foodFruitAt[f];
 
                 numFoodbits ++;
             }
@@ -5415,6 +5531,9 @@ this.renderFoodBits = function( useGraphicsCard )
                 swimbotDataArray[ numSwimbots ].energy  = _swimbots[s].getEnergy();
                 swimbotDataArray[ numSwimbots ].genes   = this.getSwimbotGenes(s);
                 swimbotDataArray[ numSwimbots ].brain   = Array.from( _swimbots[s].getGenotype().getBrain() );
+                const privateState = new Float64Array( _swimbots[s].PRIVATE_STATE_SIZE );
+                _swimbots[s].getPrivateState( privateState, 0 );
+                swimbotDataArray[ numSwimbots ].privateState = Array.from( privateState );
 
 
 

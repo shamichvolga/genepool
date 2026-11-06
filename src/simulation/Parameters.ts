@@ -295,18 +295,28 @@ export const PLANT_STAGES_ENABLED           = false;  // (25.10: off with ORIGIN
 // PLANT_SIZE_ENABLED (22.10, docs/концепт_размер_пищи.md): a plant grows while nobody eats it and gets
 // tougher; eaters bite pieces off it (it lives on and grows back); only a strong enough bite (a big enough
 // body) gets through a tough plant; grown plants make the seeds. Replaces PLANT_STAGES when on.
-export const PLANT_SIZE_ENABLED             = false;
-export const PLANT_GROW_TIME                = 3000;   // steps: by then a plant is 63 % of a tree
-export const PLANT_SPROUT_ENERGY            = 10;     // a new sprout holds this much
+export const PLANT_SIZE_ENABLED             = true;
+export const SOIL_NUTRIENT_PER_ENERGY        = 0.05;
+export const PLANT_SPROUT_ENERGY            = 10;     // soft growth needs no minerals; a new sprout holds this much
 export const PLANT_TREE_ENERGY              = 150;    // a full-grown tree holds this much
-export const PLANT_LEAF_REGROWTH            = 0.002;  // share of the bitten-off part that grows back each step
+export const PLANT_LEAF_REGROWTH            = 0.002;  // share of the missing crown that grows back each step
 export const PLANT_MAX_TOUGHNESS            = 0.8;    // toughness of a full-grown tree (a sprout: 0)
 export const BITE_FORCE_AT_REFERENCE        = 0.5;    // the bite force of a body of BITE_REFERENCE_MASS (force grows as mass^(2/3))
 export const BITE_REFERENCE_MASS            = 410;
 export const BITE_ENERGY                    = 25;     // one bite takes this much x the bite force
 export const BITE_MARGIN                    = 0.15;   // the bite is full when the force is this much above the toughness
-export const PLANT_SEEDS_BY_SIZE            = true;   // PLANT_SIZE_ENABLED: only grown plants make seeds (false: every plant, as without PLANT_SIZE)
-export const PLANT_LIFESPAN                 = 0;      // PLANT_SIZE_ENABLED: an old plant falls after about this many steps (each its own: 0.5 .. 1.5 x), its place is free for seedlings; 0 = plants live until eaten   // sprout / mature / old plant; small bodies digest sprouts, big ones old plants better
+export const VISION_WEIGHT_BY_BITE_EFFICIENCY = true;
+export const PLANT_SEEDS_BY_SIZE            = true;
+export const PLANT_LIFESPAN                 = 12000;  // old plants fall after 0.5 .. 1.5 x this many steps
+export const WOOD_PER_FRUIT_TIER            = 40;     // one waiting fruit at 40 wood, two at 80, three at 120
+export const PLANT_FRUIT_PERIOD             = 600;
+export const PLANT_FRUIT_ENERGY             = 10;
+export const PLANT_CANOPY_RADIUS            = 300;
+export const SHADED_PLANT_AGING_FACTOR      = 4;
+export const WOOD_DECAY_STEPS               = 400;
+export const PLANT_SEED_CARRY_CHANCE         = 0.35;
+export const PLANT_SEED_GUT_MIN              = 500;
+export const PLANT_SEED_GUT_MAX              = 1000;
 export const PLANT_SPROUT_AGE               = 1500;
 export const PLANT_OLD_AGE                  = 6000;
 export const PLANT_ROT_AGE                  = 12000;

@@ -16,7 +16,7 @@
 //------------------------------------------------------------------------------
 import { gpRandom } from "./Globals";
 import { ZONE_TEMPERATURE, pointInZone, zoneBounds } from "./MapZones";
-import { TEMPERATURE_ENABLED } from "./Parameters";
+import { SOIL_NUTRIENT_PER_ENERGY, TEMPERATURE_ENABLED } from "./Parameters";
 import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
 import { petriLevel, petriPosition, petriTemperature, petriSettings } from "./Petri";
 
@@ -25,16 +25,17 @@ import { petriLevel, petriPosition, petriTemperature, petriSettings } from "./Pe
 // (24.10: the temperature gradient is off - TEMPERATURE_ENABLED in Parameters.ts; flat = no map)
 export const FLAT_ENVIRONMENT          = !TEMPERATURE_ENABLED;
 
-// Optional matter cycle experiment: meat rot returns nutrients to the same
-// plant cell, and each successful sprout consumes one nutrient unit.
-export const NUTRIENT_CYCLE_ENABLED              = false;
-export const SWIMMING_ENERGY_RECYCLE_ENABLED     = false; // requires NUTRIENT_CYCLE_ENABLED
-export const SWIMMING_ENERGY_TO_NUTRIENT         = 0.05;
+// Soil is a mineral index, not an energy store. Biomass decay and metabolism
+// return it locally; only crown growth above the soft-plant ceiling spends it.
+export const NUTRIENT_CYCLE_ENABLED              = true;
+export const SWIMMING_ENERGY_RECYCLE_ENABLED     = true;
+export const SWIMMING_ENERGY_TO_NUTRIENT         = SOIL_NUTRIENT_PER_ENERGY;
 export const INITIAL_SOIL_NUTRIENT_PER_CELL      = 3.0;
-export const SOIL_NUTRIENT_CAPACITY_PER_CELL     = 12.0;
-export const SOIL_NUTRIENT_PER_SPROUT            = 1.0;
-export const MEAT_DETRITUS_YIELD                 = 0.05;
-export const SOIL_NUTRIENT_DECAY_PER_STEP        = 0.00001;
+export const SOIL_NUTRIENT_CAPACITY_PER_CELL     = 24.0;
+export const MEAT_DETRITUS_YIELD                 = SOIL_NUTRIENT_PER_ENERGY;
+export const SOIL_NUTRIENT_DECAY_PER_STEP        = 0.000001;
+export const SOIL_DIFFUSION_INTERVAL             = 80;
+export const SOIL_DIFFUSION_PER_NEIGHBOR         = 0.0005;
 
 // Optional seasonal availability pulse for the single plant food type.
 // The multiplier averages to 1 over a full season and is disabled by default.
@@ -331,14 +332,56 @@ export class Environment
         return returned;
     }
 
-    takeSoilNutrientForSproutAt( x: number, y: number ): boolean
+    takeSoilNutrientForGrowthAt( x: number, y: number, requestedEnergy: number ): number
     {
-        if ( !NUTRIENT_CYCLE_ENABLED ) return true;
+        if ( !NUTRIENT_CYCLE_ENABLED ) return requestedEnergy;
+        if ( !( requestedEnergy > 0 )) return 0;
         const cell = this.plantCellIndex( x, y );
         this.ageSoilNutrient( cell );
-        if ( this.soilNutrient[ cell ] < SOIL_NUTRIENT_PER_SPROUT ) return false;
-        this.soilNutrient[ cell ] -= SOIL_NUTRIENT_PER_SPROUT;
-        return true;
+        const funded = Math.min( requestedEnergy, this.soilNutrient[ cell ] / SOIL_NUTRIENT_PER_ENERGY );
+        this.soilNutrient[ cell ] -= funded * SOIL_NUTRIENT_PER_ENERGY;
+        return funded;
+    }
+
+    diffuseSoilNutrients(): void
+    {
+        if ( !NUTRIENT_CYCLE_ENABLED ) return;
+        const columns = this.plantColumns, rows = this.plantRows;
+        const next = new Float64Array( this.soilNutrient.length );
+        for ( let k = 0; k < this.soilNutrient.length; k++ )
+        {
+            this.ageSoilNutrient( k );
+            next[k] = this.soilNutrient[k];
+        }
+        const exchange = ( a: number, b: number ) =>
+        {
+            const moved = ( this.soilNutrient[a] - this.soilNutrient[b] ) * SOIL_DIFFUSION_PER_NEIGHBOR;
+            next[a] -= moved; next[b] += moved;
+        };
+        for ( let r = 0; r < rows; r++ )
+        {
+            for ( let c = 0; c < columns; c++ )
+            {
+                const k = r * columns + c;
+                if ( c + 1 < columns ) exchange( k, k + 1 );
+                if ( r + 1 < rows ) exchange( k, k + columns );
+            }
+        }
+        this.soilNutrient.set( next );
+    }
+
+    getTotalSoilNutrient(): number
+    {
+        let total = 0;
+        for ( let k = 0; k < this.soilNutrient.length; k++ )
+        {
+            const elapsed = this.time - this.nutrientUpdatedAt[ k ];
+            const amount = this.soilNutrient[ k ];
+            total += ( elapsed > 0 && SOIL_NUTRIENT_DECAY_PER_STEP > 0 )
+                ? amount * Math.exp( -SOIL_NUTRIENT_DECAY_PER_STEP * elapsed )
+                : amount;
+        }
+        return total;
     }
 
     getSoilNutrientAtCell( cell: number ): number

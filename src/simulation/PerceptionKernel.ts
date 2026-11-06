@@ -11,8 +11,8 @@
 import { areKin } from "./Kin";
 import { currentAt, currentDriftX, currentDriftY, currentTravelFactor } from "./Currents";
 import { CURRENT_AWARENESS_ENABLED, CURRENT_AWARE_MIN_SPEED } from "./Parameters";
-import { biteEnergy } from "./PlantSize";
-import { PLANT_SIZE_ENABLED, PLANT_SPROUT_ENERGY } from "./Parameters";
+import { biteEfficiency, biteEnergy } from "./PlantSize";
+import { PLANT_SIZE_ENABLED, PLANT_SPROUT_ENERGY, VISION_WEIGHT_BY_BITE_EFFICIENCY } from "./Parameters";
 import { BRAIN_STATE_LOOKING_FOR_MATE, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_PREY } from "./Brain";
 import { IGNORE_FOOD_EFFICIENCY, mateAcceptance, pairRandom, preyVisibility, searchImageFactor } from "./Ecology";
 import { PLANT_TYPE_WARM } from "./Environment";
@@ -351,6 +351,8 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
             if ( type != preferredFoodType ) okay = false;
         }
         if ( !okay ) continue;
+        if ( PLANT_SIZE_ENABLED && VISION_WEIGHT_BY_BITE_EFFICIENCY && ( type !== 2 )
+        &&   ( biteEfficiency( myMass, st.foodWood[f] ) <= 0 )) continue;
 
         if ( type === 2 && foodAlive[f] === 1 && PREDATOR_TARGET_SELECTION_ENABLED )
         {
@@ -381,7 +383,7 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
             {
                 // a plant too tough for my mouth is no food for me; otherwise it is
                 // worth what I can bite off it (not what it holds): nearer, if more
-                const bite = biteEnergy( myMass, st.params[ PARAM_STEP ] - st.foodBorn[f], st.foodEnergy[f] );
+                const bite = biteEnergy( myMass, st.foodWood[f], st.foodEnergy[f] );
                 if ( bite <= 0 ) continue;
                 const worth = Math.min( 5, Math.max( 0.2, bite / PLANT_SPROUT_ENERGY ));
                 scaled /= worth * worth;
@@ -431,6 +433,7 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
     {
         const current = st.mind[ s * MIND_STRIDE + M_FOOD ];
         if (( current >= 0 ) && ( current !== chosenFood ) && ( foodAlive[ current ] === 1 ) && ( foodType[ current ] !== 2 )
+        &&  ( !PLANT_SIZE_ENABLED || !VISION_WEIGHT_BY_BITE_EFFICIENCY || ( biteEfficiency( myMass, st.foodWood[current] ) > 0 ))
         &&  !obstructed( st, myMouthX, myMouthY, foodX[ current ], foodY[ current ] ))
         {
             const cx = myMouthX - foodX[ current ], cy = myMouthY - foodY[ current ];

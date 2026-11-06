@@ -181,7 +181,8 @@ const run = vm.runInContext( `
         {
             // older versions of the code: only totals are available
             const n = genePool.getNumSwimbots();
-            return { alive: n, predators: 0, food: genePool.getNumFoodBits(), meat: 0, meanEnergy: 0, geneticClusters: 0, effectiveGeneticClusters: 0, largestGeneticClusterShare: 0 };
+            return { alive: n, predators: 0, food: genePool.getNumFoodBits(), meat: 0, meanEnergy: 0, geneticClusters: 0, effectiveGeneticClusters: 0, largestGeneticClusterShare: 0,
+                     trees: 0, fruits: 0, carriedSeeds: 0, soil: 0, atmosphere: 0, totalEnergy: 0 };
         }
         const bots = genePool.getSwimbots();
         let alive = 0, predators = 0, energy = 0;
@@ -216,6 +217,8 @@ const run = vm.runInContext( `
         let shannon = 0;
         for ( const r of clusters ) { const p = r.count / alive; shannon -= p * Math.log( p ); }
 
+        const ecology = typeof genePool.getEcologyStats === 'function' ? genePool.getEcologyStats() :
+            { trees: 0, fruits: 0, carriedSeeds: 0, soil: 0, atmosphere: 0, totalEnergy: 0 };
         return {
             alive,
             predators,
@@ -230,6 +233,12 @@ const run = vm.runInContext( `
             geneticClusters: geneticClusters.length,
             effectiveGeneticClusters: alive > 0 ? Math.exp( shannon ) : 0,
             largestGeneticClusterShare: geneticClusters.length > 0 && alive > 0 ? geneticClusters[0].count / alive : 0,
+            trees: ecology.trees,
+            fruits: ecology.fruits,
+            carriedSeeds: ecology.carriedSeeds,
+            soil: ecology.soil,
+            atmosphere: ecology.atmosphere,
+            totalEnergy: ecology.totalEnergy,
         };
     }
 
@@ -258,7 +267,7 @@ const alerts = run.alerts;
 // main loop
 //------------------------------------------------
 const rows = [];
-const header = "step,ms_per_step,alive,predators,plants,meat,mean_energy,mean_parts,mean_mass,simple_share,medium_share,complex_share,genetic_clusters,effective_genetic_clusters,largest_genetic_cluster_share,heap_mb";
+const header = "step,ms_per_step,alive,predators,plants,meat,mean_energy,mean_parts,mean_mass,simple_share,medium_share,complex_share,genetic_clusters,effective_genetic_clusters,largest_genetic_cluster_share,trees,fruits,carried_seeds,soil,atmosphere,total_energy,heap_mb";
 console.log( `seed=${SEED} steps=${STEPS} bots=${BOTS === null ? "default" : BOTS}` );
 console.log( header );
 
@@ -280,7 +289,8 @@ for ( let step = 1; step <= STEPS; step++ )
         const row = [ step, ( ms / stepsInWindow ).toFixed( 2 ), s.alive, s.predators, s.food, s.meat,
                       s.meanEnergy.toFixed( 1 ), s.meanParts.toFixed( 2 ), s.meanMass.toFixed( 1 ),
                       s.simpleShare.toFixed( 3 ), s.mediumShare.toFixed( 3 ), s.complexShare.toFixed( 3 ),
-                      s.geneticClusters, s.effectiveGeneticClusters.toFixed( 1 ), s.largestGeneticClusterShare.toFixed( 2 ), heap.toFixed( 0 ) ].join( "," );
+                      s.geneticClusters, s.effectiveGeneticClusters.toFixed( 1 ), s.largestGeneticClusterShare.toFixed( 2 ),
+                      s.trees, s.fruits, s.carriedSeeds, s.soil.toFixed( 3 ), s.atmosphere.toFixed( 3 ), s.totalEnergy.toFixed( 3 ), heap.toFixed( 0 ) ].join( "," );
         rows.push( row );
         console.log( row );
         t0 = process.hrtime.bigint();

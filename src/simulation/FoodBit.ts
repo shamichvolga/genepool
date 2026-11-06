@@ -40,6 +40,8 @@ export function FoodBit()
     let _blue           = ZERO;
     let _index          = NULL_INDEX;
     let _fb = new Float64Array( 1 );   // the step it appeared (shared: foodBorn)
+    let _fw = new Float64Array( 1 ), _fnext = new Float64Array( 1 );
+    let _ffruit = new Uint8Array( 1 );
     let _maxSpawnRadius = DEFAULT_FOOD_BIT_MAX_SPAWN_RADIUS;
     let _autotomyDecoy  = false;
     let _shownFully     = false;   // (held in the "hand": no fading in)
@@ -60,6 +62,9 @@ export function FoodBit()
         _fe = st.foodEnergy;
         _fb = st.foodBorn;
         _ft = st.foodType;
+        _fw = st.foodWood;
+        _ffruit = st.foodFruit;
+        _fnext = st.foodFruitAt;
         _fi = slot;
         _position.rebind( st.foodX, st.foodY, slot );
     }
@@ -73,6 +78,7 @@ export function FoodBit()
         _shownFully = false;
         _fb[ _fi ] = simClock.step;
         _fe[ _fi ]     = DEFAULT_FOOD_BIT_ENERGY;
+        _fw[ _fi ] = 0; _ffruit[ _fi ] = 0; _fnext[ _fi ] = 0;
         _autotomyDecoy = false;
         _position.x = POOL_LEFT + gpRandom() * POOL_WIDTH;
         _position.y = POOL_TOP  + gpRandom() * POOL_HEIGHT;
@@ -131,6 +137,7 @@ export function FoodBit()
         _fb[ _fi ] = simClock.step;
         _fe[ _fi ]     = parentFoodBit.getEnergy();
         _ft[ _fi ]       = childType;
+        _fw[ _fi ] = 0; _ffruit[ _fi ] = 0; _fnext[ _fi ] = 0;
         _autotomyDecoy = false;
 
         this.setColorAccordingToType();
@@ -267,6 +274,12 @@ export function FoodBit()
 	this.getPosition    = function() { return _position;    }
 	this.getEnergy      = function() { return _fe[ _fi ];      }
 	this.getType   = function() { return _ft[ _fi ];   }
+	this.getWood = function() { return _fw[ _fi ]; }
+	this.setWood = function( value ) { _fw[ _fi ] = Math.max( 0, value ); }
+	this.isFruit = function() { return _ffruit[ _fi ] === 1; }
+	this.setFruit = function( value ) { _ffruit[ _fi ] = value ? 1 : 0; }
+	this.getNextFruitAt = function() { return _fnext[ _fi ]; }
+	this.setNextFruitAt = function( value ) { _fnext[ _fi ] = value; }
 	this.getAutotomyDecoy = function() { return _autotomyDecoy; }
 	this.getIndex       = function() { return _index;       }
 	this.getAge         = function() { return simClock.step - _fb[ _fi ]; }
@@ -304,7 +317,7 @@ export function FoodBit()
 	const stageSize = function( st )
 	{
 	    // PLANT_SIZE_ENABLED: a sprout is a small dot, a tree a big one
-	    if ( PLANT_SIZE_ENABLED && ( _ft[ _fi ] !== 2 )) return 0.6 + 1.8 * plantSize( simClock.step - _fb[ _fi ] );
+	    if ( PLANT_SIZE_ENABLED && ( _ft[ _fi ] !== 2 )) return 0.6 + 1.8 * plantSize( _fw[ _fi ] );
 	    if (( st !== 0 ) || !PLANT_EVOLUTION_ENABLED ) return STAGE_SIZE[ st ];
 	    return 0.45 + 0.55 * plantSproutGrowth( _fi, simClock.step - _fb[ _fi ] );
 	}

@@ -11,7 +11,8 @@ import { decideStep, neuralThink, takeInLook } from "./DecisionKernel";
 import { BRAIN_SIZE, think, sigmoid, NUM_INPUTS, NUM_HIDDEN, NUM_OUTPUTS, DRIVE_OUTPUTS, THINK_PERIOD, DRIVE_HYSTERESIS, EFFORT_MIN, EFFORT_RANGE, IN_BIAS, IN_HUNGER, IN_ENERGY, IN_AGE, IN_FIT, IN_TREND, IN_FOOD, IN_MATE, IN_THREAT, IN_PREY, IN_CROWD, IN_PREDATOR, OUT_FOOD, OUT_MATE, OUT_FLEE, OUT_HUNT, OUT_CLIMATE, OUT_SOCIAL, OUT_EFFORT,
          IN_FOOD_SIDE, IN_FOOD_AHEAD, IN_NEAR_SIDE, IN_NEAR_AHEAD, IN_THREAT_SIDE, IN_THREAT_AHEAD, IN_KIN, IN_SEASON, IN_PREDATOR_NEAR, IN_PREY_DISTANCE, IN_PREY_REWARD, IN_PREY_SUCCESS, IN_PREY_CHASE, IN_BAIT_PRESENT, IN_BAIT_DISTANCE, IN_BAIT_REWARD, OUT_STEER, OUT_SELF_EAT, OUT_PREY_VALUE, OUT_PREY_TRAVEL, OUT_PREY_BAIT, STEER_MAX_DEGREES } from "./NeuralBrain";
 import { biteEnergy } from "./PlantSize";
-import { PLANT_SIZE_ENABLED, PLANT_SPROUT_ENERGY, PLANT_EVOLUTION_ENABLED, RUDDER_MAX_TURN, SIZE_SCALED_VISION_ENABLED, SIZE_SCALED_GRAB_ENABLED, GAPE_SUCCESS_FLOOR, GAPE_COOLDOWN_SLOPE, MASS_SCALED_STOMACH_ENABLED, SIZE_MATURITY_ENABLED, INHERITED_INVESTMENT_ENABLED, PLANT_STAGES_ENABLED, PLANT_SPROUT_AGE, PLANT_OLD_AGE, PLANT_STAGE_ENERGY, PREDATOR_GAPE_CURVE_ENABLED, NEURAL_BRAIN_ENABLED, CLIMATE_STEERING, SOCIAL_STEERING, CLIMATE_PROBE_DISTANCE, BODY_TEMPERATURE_INERTIA_ENABLED, SELF_CANNIBALISM_ENABLED, PREDATOR_TARGET_SELECTION_ENABLED } from "./Parameters";
+import { PLANT_SIZE_ENABLED, PLANT_SPROUT_ENERGY, PLANT_EVOLUTION_ENABLED, RUDDER_MAX_TURN, SIZE_SCALED_VISION_ENABLED, SIZE_SCALED_GRAB_ENABLED, GAPE_SUCCESS_FLOOR, GAPE_COOLDOWN_SLOPE, MASS_SCALED_STOMACH_ENABLED, SIZE_MATURITY_ENABLED, INHERITED_INVESTMENT_ENABLED, PLANT_STAGES_ENABLED, PLANT_SPROUT_AGE, PLANT_OLD_AGE, PLANT_STAGE_ENERGY, PREDATOR_GAPE_CURVE_ENABLED, NEURAL_BRAIN_ENABLED, CLIMATE_STEERING, SOCIAL_STEERING, CLIMATE_PROBE_DISTANCE, BODY_TEMPERATURE_INERTIA_ENABLED, SELF_CANNIBALISM_ENABLED, PREDATOR_TARGET_SELECTION_ENABLED,
+         WOOD_PER_FRUIT_TIER, PLANT_SEED_CARRY_CHANCE, PLANT_SEED_GUT_MIN, PLANT_SEED_GUT_MAX } from "./Parameters";
 import { environment, PLANT_TYPE_WARM, PLANT_TYPE_COLD } from "./Environment";
 import { sizeSignature, SEARCH_IMAGE_LEARNING, SEARCH_IMAGE_GAIN, SEARCH_IMAGE_FORGETTING, bodySize, sizeDietFactor, climateFoodFactor, digestionEfficiency, thermalFit, thermalPeak, THERMAL_MISMATCH_DRAIN, THERMAL_FIT_UPDATE_PERIOD, THERMOMELANISM, mateAcceptance, pairRandom, KINESIS_PERIOD, KINESIS_TURN_CHANCE, KINESIS_MAX_TURN, EMERGENCY_THERMAL_FIT, EMERGENCY_PROBE_DISTANCE } from "./Ecology";
 //--------------------------------------------------------------------------
@@ -32,7 +33,7 @@ import { BRAIN_FOCUS_TARGET_SHIFT_STRENGTH, BRAIN_FOCUS_TARGET_SHIFT_THRESHOLD, 
 import { GREATEST_POSSIBLE_SWIMBOT_LENGTH, GREATEST_POSSIBLE_SWIMBOT_MASS } from "./Embryology";
 import { DEFAULT_FOOD_BIT_ENERGY, FOOD_BIT_GRAB_RADIUS, FoodBit } from "./FoodBit";
 import { Genotype } from "./Genotype";
-import { globalTweakers, gpRandom, simCounters } from "./Globals";
+import { globalTweakers, gpRandom, simClock, simCounters } from "./Globals";
 import { NULL_INDEX, ONE, ONE_HALF, ONE_THIRD, PI_OVER_180, ZERO } from "./MathConstants";
 import { BIG_BODY_STOMACH_ENABLED, STOMACH_REFERENCE_MASS } from "./Parameters";
 import { AUTOTOMY_REGROW_DELAY, AUTOTOMY_DECOY_SPAN, PREY_BODY_ENERGY, ATTACK_COOLDOWN, ATTACK_SUCCESS_CHANCE, ENVIRONMENT_ATTACK_SUCCESS_CHANCE, BASAL_METABOLISM, DEFAULT_SWIMBOT_HUNGER_THRESHOLD, FOOD_TYPE_OFFSET, OLD_AGE_DURATION, PREDATION_ENERGY_TRANSFER, PREDATOR_FLEE_RADIUS, PREDATOR_LEVEL_THRESHOLD, PREY_SCAN_COOLDOWN, PREY_SCAN_RADIUS_GROWTH, PREY_SCAN_RADIUS_MAX_SCALE, RANDOM_MATING_CONTROL, SWIMBOT_MAX_ENERGY, SWIMBOT_SELECT_RADIUS_SCALAR, YOUNG_AGE_DURATION } from "./Parameters";
@@ -309,18 +310,43 @@ this.setParent = function( parent )
 	// FILTER_FEEDING_ENABLED: a limb brushed a sprout - eat it, less well
 	// than with the mouth (and a sprout is worth little anyway)
 	//------------------------------------------------------------------------
+	let _carriedSeed = 0;
+	const maybeCarrySeed = function( plant )
+	{
+	    if ( !PLANT_SIZE_ENABLED || !environment.active || ( _carriedSeed !== 0 ) || ( plant.getWood() < WOOD_PER_FRUIT_TIER * 2 )) return;
+	    if ( gpRandom() >= PLANT_SEED_CARRY_CHANCE ) return;
+	    const due = simClock.step + PLANT_SEED_GUT_MIN + gpRandom() * ( PLANT_SEED_GUT_MAX - PLANT_SEED_GUT_MIN );
+	    _carriedSeed = plant.getType() === PLANT_TYPE_COLD ? -due : due;
+	}
+	this.updateCarriedSeed = function()
+	{
+	    if (( _carriedSeed === 0 ) || ( Math.abs( _carriedSeed ) > simClock.step ) || !_parent ) return false;
+	    const type = _carriedSeed < 0 ? PLANT_TYPE_COLD : PLANT_TYPE_WARM;
+	    _carriedSeed = 0;
+	    return _parent.spawnPlant( _position, type, 0, 0, false );
+	}
+	this.hasCarriedSeed = function() { return _carriedSeed !== 0; }
+
 	this.filterFeed = function( plant )
 	{
 	    const room = Math.max( ZERO, _M[ _m + SS.M_MAX_ENERGY ] - _B[ _b + SS.B_ENERGY ] );
 	    if ( room <= ZERO ) return;
 	    const grown = PLANT_EVOLUTION_ENABLED ? plantSproutGrowth( plant.getIndex(), plant.getAge() ) : 0;
-	    let energy = plant.getEnergy() * FILTER_FEEDING_EFFICIENCY * ( PLANT_STAGE_ENERGY[0] + ( PLANT_STAGE_ENERGY[1] - PLANT_STAGE_ENERGY[0] ) * grown );
-	    if ( environment.active ) { energy *= this.getDigestionEfficiency( plant.getType() ) * climateFoodFactor( _M[ _m + SS.M_THERMAL_FIT ], _M[ _m + SS.M_THERMAL_PEAK ] ); }
-	    const gained = settleEnergyTransfer( plant.getEnergy(), Math.min( room, energy ));
+	    const bite = PLANT_SIZE_ENABLED ? biteEnergy( _phenotype.mass, plant.getWood(), plant.getEnergy() ) : plant.getEnergy();
+	    if ( bite <= ZERO ) return;
+	    let gain = FILTER_FEEDING_EFFICIENCY * ( PLANT_STAGE_ENERGY[0] + ( PLANT_STAGE_ENERGY[1] - PLANT_STAGE_ENERGY[0] ) * grown );
+	    if ( environment.active ) { gain *= this.getDigestionEfficiency( plant.getType() ) * climateFoodFactor( _M[ _m + SS.M_THERMAL_FIT ], _M[ _m + SS.M_THERMAL_PEAK ] ); }
+	    gain = Math.max( 0.05, gain );
+	    const removed = Math.min( bite, room / gain );
+	    const gained = settleEnergyTransfer( removed, removed * gain );
 	    _B[ _b + SS.B_ENERGY ] += gained;
-	    _parent.plantEaten( plant );
-	    plant.setEnergy( ZERO );
-	    plant.kill();
+	    plant.setEnergy( plant.getEnergy() - removed );
+	    maybeCarrySeed( plant );
+	    if (( plant.getWood() < WOOD_PER_FRUIT_TIER ) && ( plant.getEnergy() < PLANT_SPROUT_ENERGY * 0.1 ))
+	    {
+	        _parent.plantEaten( plant );
+	        plant.kill();
+	    }
 	    _numFoodBitsEaten ++;
 	    _numFilterMeals ++;
 	    simCounters.plantMeals ++;
@@ -1083,6 +1109,7 @@ this.setParent = function( parent )
 	//-----------------------------------------------------------------------------------
 	this.create = function( index, age, position, angle, energy, genotype, embryology )
 	{
+	    _carriedSeed = 0;
 	    _deathCause = "";      // (set again by die(); a newborn must not carry the last life of its slot)
 	    // (healthy, and with no immunity: DISEASE_ENABLED)
 	    _M[ _m + SS.M_DISEASE ] = 0; _M[ _m + SS.M_DISEASE_TIMER ] = 0;
@@ -1996,7 +2023,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	    out[ at + 6 ] = _numFilterMeals;   out[ at + 7 ] = _species;          out[ at + 8 ] = _torque;
 	    out[ at + 9 ] = _baseHungerThreshold;
 	    out[ at + 10 ] = Math.max( 0, DEATH_CAUSES.indexOf( _deathCause ));
-	    out[ at + 11 ] = 0;
+	    out[ at + 11 ] = _carriedSeed;
 	}
 	this.setPrivateState = function( src, at )
 	{
@@ -2005,6 +2032,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	    _numFilterMeals = src[ at + 6 ];   _species = src[ at + 7 ];          _torque = src[ at + 8 ];
 	    _baseHungerThreshold = src[ at + 9 ];
 	    _deathCause = DEATH_CAUSES[ src[ at + 10 ] ] || "";
+	    _carriedSeed = src[ at + 11 ] || 0;
 	}
 
 	// the first numbers of the parts that are left, in their order (-1 = no part)
@@ -2263,12 +2291,13 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
                 const plant  = chosenFoodBit();
                 const gain   = Math.max( 0.05, energyFromFoodBit / Math.max( 1e-9, plant.getEnergy() ));     // (digestion and climate)
                 const room   = Math.max( ZERO, _M[ _m + SS.M_MAX_ENERGY ] - _B[ _b + SS.B_ENERGY ] );
-                const bite   = Math.min( biteEnergy( _phenotype.mass, plant.getAge(), plant.getEnergy() ), room / gain );
+                const bite   = Math.min( biteEnergy( _phenotype.mass, plant.getWood(), plant.getEnergy() ), room / gain );
                 if ( bite <= ZERO ) { _M[ _m + SS.M_TRY_EAT ] = 0; return _M[ _m + SS.M_FOOD ]; }      // too tough for my mouth, or full
                 energyFromFoodBit = bite * gain;
                 removedEnergy = bite;
                 plant.setEnergy( plant.getEnergy() - bite );
-                bitten = plant.getEnergy() >= PLANT_SPROUT_ENERGY * 0.1;
+                maybeCarrySeed( plant );
+                bitten = ( plant.getWood() >= WOOD_PER_FRUIT_TIER ) || ( plant.getEnergy() >= PLANT_SPROUT_ENERGY * 0.1 );
             }
 
             // (meat: only part of it is kept - the food pyramid)

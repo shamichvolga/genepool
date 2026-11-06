@@ -47,6 +47,7 @@ import { FIELD_SIZE, PLANT_CELL_SIZE, SEASON_PERIOD, SEASON_AMPLITUDE_EQUATOR, S
 import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
 import { MAX_PARTS, NULL_PART, SWIMBOT_GENITAL_LENGTH, SWIMBOT_MOUTH_LENGTH, SWIMBOT_VIEW_RADIUS } from "./SwimbotTypes";
 import { FOOD_BIT_GRAB_RADIUS } from "./FoodBit";
+import { transferToAtmosphere } from "./EnergyBudget";
 
 const PI_OVER_180 = Math.PI / 180;
 
@@ -159,7 +160,7 @@ function edibleFoodAtMouth( st: SharedState, s: number, mouthX: number, mouthY: 
         const f = _touchBuffer[i];
         if ( st.liveFood[f] !== 1 ) continue;
         if (( st.foodType[f] === 2 ) !== meatEater ) continue;
-        if ( PLANT_SIZE_ENABLED && !meatEater && ( biteEnergy( st.mass[s], st.params[ SS.PARAM_STEP ] - st.foodBorn[f], st.foodEnergy[f] ) <= 0 )) continue;
+        if ( PLANT_SIZE_ENABLED && !meatEater && ( biteEnergy( st.mass[s], st.foodWood[f], st.foodEnergy[f] ) <= 0 )) continue;
         const dx = st.foodX[f] - mouthX, dy = st.foodY[f] - mouthY;
         if ( dx * dx + dy * dy < EAT_RADIUS * EAT_RADIUS ) return f;
     }
@@ -774,7 +775,9 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
     {
         updateBodyTemperature( st, s );
         if ((( age + index ) % THERMAL_FIT_UPDATE_PERIOD ) === 0 ) { updateThermalFit( st, s ); }
-        B[ b + SS.B_ENERGY ] -= THERMAL_MISMATCH_DRAIN * ( 1 - M[ m + SS.M_THERMAL_FIT ] );
+        const energyBeforeDrain = B[ b + SS.B_ENERGY ];
+        B[ b + SS.B_ENERGY ] = Math.max( 0, energyBeforeDrain - THERMAL_MISMATCH_DRAIN * ( 1 - M[ m + SS.M_THERMAL_FIT ] ));
+        transferToAtmosphere( energyBeforeDrain - B[ b + SS.B_ENERGY ] );
     }
 }
 
