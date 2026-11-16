@@ -11,10 +11,47 @@
 //            pile of the vanilla start (small, medium, big bodies); 0 = any
 //   diets    one number per seed: 0 = as usual (about a tenth are born
 //            predators), 1 = herbivore, 2 = predator (missing = 0)
-//   barrier  { x1, y1, x2, y2 } or null: the wall (the obstacle)
+//   barrier  { segments: [ [ x1, y1, x2, y2 ], ... ] } or null: the walls (the
+//            obstacle). Several segments may share a vertex (a T, a cross...);
+//            an old map with { x1, y1, x2, y2 } is read as one segment.
 //   partsMin, partsMax  the number of parts the random founders may have
 //------------------------------------------------------------------------------
 export type MapZone = { kind: string, points: number[] };
+
+// one wall segment (the genetic barrier used to be a single one)
+export type BarrierSegment = { x1: number, y1: number, x2: number, y2: number };
+
+// read any saved shape of the barrier (old single wall, or segments)
+export function barrierSegments( barrier: any ): BarrierSegment[]
+{
+    const out: BarrierSegment[] = [];
+    if ( !barrier ) return out;
+    const add = ( a: any ) =>
+    {
+        if ( !a ) return;
+        if ( Array.isArray( a ) && ( a.length >= 4 ))
+        {
+            const n = Math.floor( a.length / 4 ) * 4;
+            for ( let i = 0; i < n; i += 4 ) { out.push({ x1: a[i], y1: a[i + 1], x2: a[i + 2], y2: a[i + 3] }); }
+            return;
+        }
+        if ( Array.isArray( a.segments )) { add( a.segments ); return; }
+        if (( a.x1 !== undefined ) && ( a.y1 !== undefined ) && ( a.x2 !== undefined ) && ( a.y2 !== undefined ))
+        {
+            out.push({ x1: a.x1, y1: a.y1, x2: a.x2, y2: a.y2 });
+        }
+    };
+    add( barrier );
+    return out;
+}
+
+// the flat form the obstacle and the threads use: x1, y1, x2, y2, ...
+export function barrierFlat( barrier: any ): number[]
+{
+    const flat: number[] = [];
+    for ( const s of barrierSegments( barrier )) { flat.push( s.x1, s.y1, s.x2, s.y2 ); }
+    return flat;
+}
 
 export const ZONE_TEMPERATURE: { [ kind: string ]: number } = { warm: 0.85, cold: 0.15, mild: 0.5 };
 

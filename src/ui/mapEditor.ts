@@ -15,6 +15,8 @@
 // GenePool.startSimulationWithMap starts the world from it.
 //------------------------------------------------------------------------------
 import { lang } from "./lang";
+import { MAX_WALL_SEGMENTS } from "../simulation/SharedState";
+import { barrierSegments } from "../simulation/MapZones";
 import { TEMPERATURE_ENABLED } from "../simulation/Parameters";
 
 const FILL_KINDS = TEMPERATURE_ENABLED ? [ "plants", "meat", "warm", "cold", "mild" ] : [ "plants", "meat" ];
@@ -68,6 +70,12 @@ function normalize( m: any ): any
     if ( !Array.isArray( m.diets )) m.diets = [];
     while ( m.diets.length < m.seeds.length / 3 ) m.diets.push( 0 );
     m.diets.length = m.seeds.length / 3;
+    // the barrier, whatever its saved shape, becomes { segments: [...] }
+    if ( m.barrier )
+    {
+        const segs = barrierSegments( m.barrier ).slice( 0, MAX_WALL_SEGMENTS );
+        m.barrier = ( segs.length > 0 ) ? { segments: segs } : null;
+    }
     return m;
 }
 
@@ -185,9 +193,36 @@ function draw(): void
         g.fillRect( x, y, dot, dot );
     }
 
-    // the wall
-    const b = map.barrier || ( wall ? { x1: wall[0], y1: wall[1], x2: wall[2], y2: wall[3] } : null );
-    if ( b ) { g.strokeStyle = "#ffd84a"; g.lineWidth = 5; g.lineCap = "round"; g.beginPath(); g.moveTo( v.sx( b.x1 ), v.sy( b.y1 )); g.lineTo( v.sx( b.x2 ), v.sy( b.y2 )); g.stroke(); }
+    // the walls of the barrier (and the one being drawn now)
+    const segs = barrier();
+    if ( wall ) segs.push({ x1: wall[0], y1: wall[1], x2: wall[2], y2: wall[3] });
+    if ( segs.length > 0 )
+    {
+        g.strokeStyle = "#ffd84a"; g.lineWidth = 5; g.lineCap = "round";
+        for ( const s of segs )
+        {
+            g.beginPath(); g.moveTo( v.sx( s.x1 ), v.sy( s.y1 )); g.lineTo( v.sx( s.x2 ), v.sy( s.y2 )); g.stroke();
+        }
+        // the ends of the walls
+        const endDot = Math.max( 3, 6 );
+        for ( const s of segs )
+        {
+            for ( const q of [ { x: s.x1, y: s.y1 }, { x: s.x2, y: s.y2 } ] )
+            {
+                g.fillStyle = "#ffd84a"; g.beginPath(); g.arc( v.sx( q.x ), v.sy( q.y ), endDot, 0, Math.PI * 2 ); g.fill();
+            }
+        }
+    }
+    // the snap hint: a ring where a new wall would take hold
+    if ( mouse && ( tool === "wall" ) && !stroke )
+    {
+        const anchor = barrierAnchor( mouse );
+        if ( anchor )
+        {
+            g.strokeStyle = "rgba( 255, 216, 74, 0.9 )"; g.lineWidth = 2;
+            g.beginPath(); g.arc( v.sx( anchor.x ), v.sy( anchor.y ), 10, 0, Math.PI * 2 ); g.stroke();
+        }
+    }
 
     // the line being drawn, the brush
     if ( stroke && stroke.length >= 4 )
@@ -210,7 +245,8 @@ function draw(): void
         const predators = map.diets.filter( ( d: number ) => d === 2 ).length, herbivores = map.diets.filter( ( d: number ) => d === 1 ).length;
         info.textContent = t( "Founders: ", "Существ: " ) + n + t( " of ", " из " ) + preview.maxSwimbots
             + (( predators + herbivores > 0 ) ? " (" + t( "herbivores ", "травоядных " ) + herbivores + ", " + t( "predators ", "хищников " ) + predators + ")" : "" )
-            + " · " + t( "zones: ", "зон: " ) + map.zones.length + ( map.barrier ? t( " · wall", " · барьер" ) : "" )
+            + " · " + t( "zones: ", "зон: " ) + map.zones.length
+            + ( barrier().length > 0 ? " · " + t( "barrier: ", "барьер: " ) + barrier().length + " " + t( "wall/walls", "ст./стен" ) : "" )
             + ( map.base === "blank" ? t( " · blank map", " · чистая карта" ) : "" );
     }
     const note = document.getElementById( "meMessage" );
@@ -234,6 +270,53 @@ function inside( x: number, y: number, pts: number[] ): boolean
         if ((( pts[ i + 1 ] > y ) !== ( pts[ j + 1 ] > y )) && ( x < ( pts[j] - pts[i] ) * ( y - pts[ i + 1 ] ) / ( pts[ j + 1 ] - pts[ i + 1 ] ) + pts[i] )) c = !c;
     }
     return c;
+}
+
+//------------------------------------------------------------
+// the barrier: several walls that may share vertices (a T, a
+// cross, a fence...). Maps made before keep their single wall.
+//------------------------------------------------------------
+function barrier(): Array<{ x1: number, y1: number, x2: number, y2: number }> { return barrierSegments( map.barrier ); }
+
+// the closest place to start or end a wall: an existing vertex, or a
+// point on a wall (to branch from it) - or null when there is nothing near
+function barrierAnchor( p: { x: number, y: number } ): { x: number, y: number } | null
+{
+    const radius = Math.max( 60, 22 / view().k );
+    let best: { x: number, y: number } | null = null, bestD = radius;
+    const near = ( x: number, y: number ) =>
+    {
+        const d = Math.hypot( x - p.x, y - p.y );
+        if ( d < bestD ) { bestD = d; best = { x, y }; }
+    };
+    for ( const s of barrier() )
+    {
+        near( s.x1, s.y1 ); near( s.x2, s.y2 );
+        // the closest point on the wall itself (a branch may grow out of it)
+        const ax = s.x2 - s.x1, ay = s.y2 - s.y1, L2 = ax * ax + ay * ay;
+        if ( L2 > 0 )
+        {
+            const u = Math.max( 0, Math.min( 1, (( p.x - s.x1 ) * ax + ( p.y - s.y1 ) * ay ) / L2 ));
+            near( s.x1 + ax * u, s.y1 + ay * u );
+        }
+    }
+    return best;
+}
+
+function duplicateBarrier(): void
+{
+    const segs = barrier();
+    if ( segs.length === 0 ) { message = t( "There is no wall to copy yet.", "Стены, чтобы её копировать, пока нет." ); draw(); return; }
+    if ( segs.length >= MAX_WALL_SEGMENTS ) { message = t( "No more room: the barrier holds ", "Больше нельзя: в барьере уже " ) + MAX_WALL_SEGMENTS + t( " walls.", " стен." ); draw(); return; }
+    const s = segs[ 0 ];
+    const dx = ( preview.width / 20 ), dy = ( preview.height / 20 );
+    remember(); segs.push({ x1: s.x1 + dx, y1: s.y1 + dy, x2: s.x2 + dx, y2: s.y2 + dy });
+    map.barrier = { segments: segs }; message = ""; draw();
+}
+
+function clearBarrier(): void
+{
+    if ( map.barrier ) { remember(); map.barrier = null; message = t( "The barrier is gone.", "Барьер убран." ); draw(); }
 }
 
 function spray(): void
@@ -282,7 +365,11 @@ function onDown( e: PointerEvent ): void
         remember(); z.kind = fillKind; draw();
     }
     else if ( tool === "seeder" ) { remember(); spray(); clearInterval( spraying ); spraying = setInterval( spray, 50 ); }
-    else if ( tool === "wall" ) { wall = [ p.x, p.y, p.x, p.y ]; }
+    else if ( tool === "wall" )
+    {
+        const anchor = barrierAnchor( p );   // a wall may grow out of a wall (a T...)
+        wall = [ anchor ? anchor.x : p.x, anchor ? anchor.y : p.y, p.x, p.y ];
+    }
     else if ( tool === "eraser" ) { remember(); rub(); }
 }
 
@@ -311,7 +398,22 @@ function onUp(): void
     }
     if ( wall )
     {
-        if ( Math.hypot( wall[2] - wall[0], wall[3] - wall[1] ) > 50 ) { remember(); map.barrier = { x1: wall[0], y1: wall[1], x2: wall[2], y2: wall[3] }; }
+        const segs = barrier();
+        let x2 = wall[2], y2 = wall[3];
+        // snap the free end onto a nearby wall or wall end
+        const anchor = barrierAnchor( { x: x2, y: y2 } );
+        if ( anchor && !( anchor.x === wall[0] && anchor.y === wall[1] )) { x2 = anchor.x; y2 = anchor.y; }
+        if ( Math.hypot( x2 - wall[0], y2 - wall[1] ) > 50 )
+        {
+            if ( segs.length >= MAX_WALL_SEGMENTS ) { message = t( "No more room: the barrier holds ", "Больше нельзя: в барьере уже " ) + MAX_WALL_SEGMENTS + t( " walls.", " стен." ); }
+            else
+            {
+                remember();
+                segs.push({ x1: wall[0], y1: wall[1], x2, y2 });
+                map.barrier = { segments: segs };
+                message = ( segs.length > 1 ) ? t( "Walls ", "Стен " ) + segs.length + t( " (drag from a wall to grow another out of it)", " (тяните от стены, чтобы вырастить из неё новую)" ) : "";
+            }
+        }
         wall = null;
     }
     draw();
@@ -401,7 +503,7 @@ function build(): void
         +     button( "meTool-pencil", "&#x270F;&#xFE0F; " + t( "pencil", "карандаш" ), t( "draw the outline of a zone", "обвести зону" ))
         +     button( "meTool-fill", "&#x1FAA3; " + t( "fill", "заливка" ), t( "fill a zone outlined with the pencil", "залить обведённую зону" ))
         +     button( "meTool-seeder", "&#x1F331; " + t( "seeder", "сеялка" ), t( "spray founders: each dot is a swimbot at the start", "распылить существ: каждая точка — существо при старте" ))
-        +     button( "meTool-wall", "&#x1F9F1; " + t( "barrier", "барьер" ), t( "a wall across the pool (genetic barrier)", "стена поперёк бассейна (генетический барьер)" ))
+        +     button( "meTool-wall", "&#x1F9F1; " + t( "barrier", "барьер" ), t( "a wall across the pool: drag from a wall to grow another out of it (a T...)", "стена поперёк бассейна: тяните от стены, чтобы вырастить новую из неё (Т…)" ))
         +     button( "meTool-eraser", "&#x1F9FD; " + t( "rubber", "стёрка" ), t( "wipe dots and zones under the brush", "стереть точки и зоны под кистью" ))
         +   "</div>"
         +   "<div class='meHead'>" + t( "Fill with", "Чем заливать" ) + "</div>"
@@ -428,6 +530,8 @@ function build(): void
         +     button( "meUndo", "&#x21B6; " + t( "undo", "отменить" ), "Ctrl+Z" )
         +     button( "meVanilla", t( "vanilla map", "ванильная карта" ), t( "the map a new world would get anyway", "карта, которую новый мир получил бы сам" ))
         +     button( "meClear", "&#x1F9FD; " + t( "erase all", "ластик: всё" ), t( "wipe everything and draw it yourself", "стереть всё и нарисовать самому" ))
+        +     button( "meBarrierDupe", t( "copy barrier", "копия барьера" ), t( "draw a copy of the first wall next to it", "нарисовать копию первой стены рядом" ))
+        +     button( "meBarrierClear", t( "clear barrier", "убрать барьер" ), t( "remove all the walls", "убрать все стены" ))
         +   "</div>"
         +   "<div class='meHead'>" + t( "Presets", "Пресеты" ) + "</div>"
         +   "<select id='mePresets'></select>"
@@ -459,6 +563,8 @@ function build(): void
     on( "meClear", () => { remember(); map = { ...map, base: "blank", zones: [], seeds: [], diets: [], barrier: null }; message = t( "A blank map: no food and no swimbots until you draw them.", "Чистая карта: ни еды, ни существ, пока вы их не нарисуете." ); draw(); });
     on( "meSavePreset", savePreset );
     on( "meDeletePreset", deletePreset );
+    on( "meBarrierDupe", duplicateBarrier );
+    on( "meBarrierClear", clearBarrier );
     on( "meDownload", downloadMap );
     on( "meUpload", () => ( overlay!.querySelector( "#meFile" ) as HTMLInputElement ).click() );
     ( overlay.querySelector( "#meFile" ) as HTMLInputElement ).onchange = ( e ) => { const f = ( e.target as HTMLInputElement ).files?.[0]; if ( f ) uploadMap( f ); ( e.target as HTMLInputElement ).value = ""; };

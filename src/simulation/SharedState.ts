@@ -96,7 +96,16 @@ export const PARAM_PETRI        = 15;   // 1 = the "petri" map (no seasons)
 export const PARAM_MAX_ENERGY   = 16;
 export const PARAM_CURRENT      = 17;
 export const PARAM_STEP         = 18;   // the simulation step (plant ages in the threads)   // how strong the currents are now (0 = off; the C key)
-export const NUM_PARAMS         = 20;
+
+//------------------------------------------------------------------
+// walls (the genetic barrier may be a tree of segments: a T, a cross...)
+// PARAM_WALL_COUNT segments, each 4 numbers x1, y1, x2, y2, one after
+// another from PARAM_WALL_BASE. A single wall is just one segment.
+//------------------------------------------------------------------
+export const PARAM_WALL_COUNT   = 19;
+export const PARAM_WALL_BASE    = 20;
+export const MAX_WALL_SEGMENTS  = 24;
+export const NUM_PARAMS         = PARAM_WALL_BASE + MAX_WALL_SEGMENTS * 4;
 
 export * from "./MindLayout";
 import { MAX_THREADS, MIND_STRIDE, NUM_COUNTERS } from "./MindLayout";
