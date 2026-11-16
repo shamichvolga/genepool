@@ -208,6 +208,14 @@
                         <span  id = "maxAgeValue" class = "ecoValue">–</span>
                         <input id = "maxAgeSlider" class = "EcoSlider" type = "range" step = "0.1" autocomplete = "off" oninput = "setEcosystemValue( id )">
                     </div>
+                    <div class = "ecoRow">
+                        <label data-hint = "population limit" for = "populationLimitToggle">population limit</label>
+                        <input id = "populationLimitToggle" type = "checkbox" checked onchange = "setPopulationLimitEnabled( checked )">
+                    </div>
+                    <div class = "ecoRow">
+                        <label data-hint = "maximum body parts" for = "maxPartsInput">maximum body parts</label>
+                        <input id = "maxPartsInput" type = "number" min = "2" max = "64" step = "1" value = "16" onchange = "setMaximumSwimbotParts( value )">
+                    </div>
                     <button id = "tweakDefaultButton" class = "basicButton wide" onClick = "setEcosystemToDefaults();" >reset to defaults</button>
 
                     <div class = "gpNote">hunger threshold, mate choosiness, diet, temperature preference and the energy given to a child are inherited genes now: see the swimbot tab.</div>

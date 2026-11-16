@@ -30,7 +30,8 @@ export const MAX_CHILD_ENERGY_RATIO                = ONE;
 export const MIN_SWIMBOT_HUNGER_THRESHOLD          = ZERO;
 
 
-export const MAX_SWIMBOTS = 1500 * WORLD_AREA_FACTOR;
+export const POPULATION_LIMIT = 1500 * WORLD_AREA_FACTOR;
+export const MAX_SWIMBOTS = POPULATION_LIMIT * 4;
 
 export const INITIAL_NUM_SWIMBOTS =  500 * WORLD_AREA_FACTOR;
 
@@ -251,6 +252,8 @@ export function GlobalTweakers()
 {
     this.childEnergyRatio       = DEFAULT_CHILD_ENERGY_RATIO;
     this.maximumLifeSpan        = DEFAULT_MAXIMUM_AGE;
+    this.maximumParts           = 16;
+    this.populationLimitEnabled = true;
 	this.foodSpread             = DEFAULT_FOOD_BIT_MAX_SPAWN_RADIUS;
 	this.foodBitEnergy          = DEFAULT_FOOD_BIT_ENERGY;
 	this.foodRegenerationPeriod = DEFAULT_FOOD_REGENERATION_PERIOD;

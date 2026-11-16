@@ -15,7 +15,7 @@ export const ROOT_PART       =  0;
 export const MOUTH_INDEX	  =  0;
 export const GENITAL_INDEX   =  1;
 export const MIN_PARTS 	  =  2;
-export const MAX_PARTS 	  = 16;
+export const MAX_PARTS 	  = 64;
 
 //-------------------------------------------
 //  max swimbot population size
