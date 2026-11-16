@@ -19,6 +19,7 @@
 //------------------------------------------------------------------------------
 import { PREDATOR_LEVEL_THRESHOLD } from "./simulation/Parameters";
 import { simCounters } from "./simulation/Globals";
+import { MAX_PARTS } from "./simulation/SwimbotTypes";
 
 declare const __GENEPOOL_VERSION__: string;
 const VERSION = ( typeof __GENEPOOL_VERSION__ !== "undefined" ) ? __GENEPOOL_VERSION__ : "unknown";
@@ -30,7 +31,7 @@ const URL          = "/__runs";
 const MASS_BINS = [ 0, 100, 200, 300, 400, 600, 800, 1000, 1500, 99999 ];
 export const CENSUS_HEADER = "step,alive,predators,plants,meat,mass_p10,mass_p50,mass_p90,parts_p10,parts_p50,parts_p90,freq_p50,energy_p50,age_p50,"
     + MASS_BINS.slice( 0, -1 ).map( ( m, i ) => "mass_" + m + "_" + MASS_BINS[ i + 1 ] ).join( "," ) + ","
-    + Array.from({ length: 15 }, ( _, i ) => "parts_" + ( i + 2 )).join( "," )
+    + Array.from({ length: MAX_PARTS - 1 }, ( _, i ) => "parts_" + ( i + 2 )).join( "," )
     + ",sick,births,genetic_clusters,largest_cluster_share,steps_per_second";
 const CAUSES = [ "starvation", "predation", "old_age", "other" ];
 export const DEATHS_HEADER = "step," + CAUSES.map( c => "herb_" + c ).join( "," ) + "," + CAUSES.map( c => "pred_" + c ).join( "," ) + ",sick_at_death,mean_age_at_death";
@@ -82,7 +83,7 @@ export function startRunRecorder( pool: any, mode: () => string )
     {
         const mass: number[] = [], parts: number[] = [], freq: number[] = [], energy: number[] = [], age: number[] = [];
         let predators = 0, sick = 0;
-        const massHist = new Array( MASS_BINS.length - 1 ).fill( 0 ), partsHist = new Array( 15 ).fill( 0 );
+        const massHist = new Array( MASS_BINS.length - 1 ).fill( 0 ), partsHist = new Array( MAX_PARTS - 1 ).fill( 0 );
         for ( const b of pool.getSwimbots() )
         {
             if ( !b.getAlive() ) continue;
@@ -92,7 +93,7 @@ export function startRunRecorder( pool: any, mode: () => string )
             if ( b.getPredatorLevel() > PREDATOR_LEVEL_THRESHOLD ) predators ++;
             if ( b.getIsSick && b.getIsSick() ) sick ++;
             for ( let i = 0; i < massHist.length; i++ ) if ( m >= MASS_BINS[i] && m < MASS_BINS[ i + 1 ] ) massHist[i] ++;
-            if ( p >= 2 && p <= 16 ) partsHist[ p - 2 ] ++;
+            if ( p >= 2 && p <= MAX_PARTS ) partsHist[ p - 2 ] ++;
         }
         let clusters = "", largest = "";
         try { const r = pool.estimateGeneticClusters( 400 ); clusters = r.geneticClusters; largest = r.largestClusterShare.toFixed( 3 ); } catch ( e ) { /* (an empty pool) */ }

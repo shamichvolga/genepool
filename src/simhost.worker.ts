@@ -65,6 +65,8 @@ function makeSnapshot()
         energyToOffspring : pool.getEnergyToOffspring(),
         maximumSwimbotAge : pool.getMaximumSwimbotAge(),
         hungerThreshold   : pool.getHungerThreshold(),
+        populationLimitEnabled: pool.getPopulationLimitEnabled(),
+        maximumSwimbotParts: pool.getMaximumSwimbotParts(),
         history           : { interval: history.interval, step: history.step.slice(), herbivores: history.herbivores.slice(),
                               predators: history.predators.slice(), plants: history.plants.slice(), meat: history.meat.slice() },
         phaseTimes        : Array.from( phaseTimes ),

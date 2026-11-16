@@ -2,7 +2,7 @@ import { transferToAtmosphere } from "./EnergyBudget";
 import { simClock, gpRandom } from "./Globals";
 import { NULL_INDEX, ONE, ONE_HALF, PI2, ZERO } from "./MathConstants";
 import { plantSize } from "./PlantSize";
-import { MEAT_PIECE_ENERGY, PLANT_SIZE_ENABLED, PLANT_TREE_ENERGY, PLANT_EVOLUTION_ENABLED, PLANT_STAGES_ENABLED, PLANT_STAGES_SHOWN, SPAWN_FOOD_RANDOMLY_IN_POOL } from "./Parameters";
+import { MEAT_PIECE_ENERGY, PLANT_SIZE_ENABLED, PLANT_TREE_ENERGY, PLANT_EVOLUTION_ENABLED, PLANT_STAGES_ENABLED, PLANT_STAGES_SHOWN, SPAWN_FOOD_RANDOMLY_IN_POOL, WOOD_PER_FRUIT_TIER } from "./Parameters";
 import { plantGrowthOf, plantSpreadOf, plantSproutGrowth, plantStage, randomizePlantGenes } from "./PlantGenes";
 import { POOL_BOTTOM, POOL_HEIGHT, POOL_LEFT, POOL_RIGHT, POOL_TOP, POOL_WIDTH } from "./Pool";
 import { assert } from "./Utility";
@@ -308,7 +308,7 @@ export function FoodBit()
 	//------------------------------------------------------------------
 	const stage = function()
 	{
-	    if ( PLANT_SIZE_ENABLED ) return 1;
+	    if ( PLANT_SIZE_ENABLED ) return ( _ft[ _fi ] !== 2 && _fw[ _fi ] >= WOOD_PER_FRUIT_TIER ) ? 2 : 1;
 	    if ( !PLANT_STAGES_ENABLED || !PLANT_STAGES_SHOWN || ( _ft[ _fi ] === 2 )) return 1;
 	    return plantStage( _fi, simClock.step - _fb[ _fi ] );
 	}
@@ -371,6 +371,76 @@ export function FoodBit()
         + Math.floor( _blue  * 255 * ( st === 2 ? 0.8 : 1 )) + ", "
         + opacity() + ")";
 	    let radius = ( FOOD_BIT_SIZE + vewScale * FOOD_BIT_SIZE_VIEW_SCALE * FOOD_BIT_SIZE_VIEW_SCALE ) * stageSize( st );
+	    if ( PLANT_SIZE_ENABLED && ( _ft[ _fi ] !== 2 ))
+	    {
+	        canvas.save();
+	        const pixel = vewScale / Math.max( 1, canvas.canvas.width );
+	        if ( _ffruit[ _fi ] === 1 )
+	        {
+	            canvas.fillStyle = "rgba( 250, 155, 31, " + opacity() + " )";
+	            canvas.beginPath(); canvas.arc( _position.x, _position.y, Math.max( radius * 0.62, pixel * 0.95 ), 0, PI2, false ); canvas.fill(); canvas.closePath();
+	            canvas.restore();
+	            return;
+	        }
+
+	        const size = plantSize( _fw[ _fi ] );
+	        const plantStage = size < 0.20 ? 0 : size < 0.70 ? 1 : 2;
+	        const coreRadius = Math.max( radius * ( 0.6 + 1.8 * size ), pixel * ( plantStage === 0 ? 0.8 : 1.05 ));
+	        const green = plantStage === 0 ? "rgba( 128, 232, 64, " : plantStage === 1 ? "rgba( 71, 196, 56, " : "rgba( 56, 179, 48, ";
+	        canvas.fillStyle = green + opacity() + ")";
+	        canvas.beginPath(); canvas.arc( _position.x, _position.y, coreRadius, 0, PI2, false ); canvas.fill(); canvas.closePath();
+
+	        canvas.lineCap = "round";
+	        canvas.beginPath();
+	        if ( plantStage === 0 )
+	        {
+	            canvas.strokeStyle = "rgba( 128, 232, 64, " + opacity() + " )";
+	            canvas.lineWidth = pixel * 0.50;
+	            canvas.moveTo( _position.x, _position.y + pixel * 0.15 ); canvas.lineTo( _position.x, _position.y - pixel * 1.35 );
+	            canvas.moveTo( _position.x, _position.y - pixel * 0.42 ); canvas.lineTo( _position.x - pixel * 0.86, _position.y - pixel * 0.92 );
+	            canvas.moveTo( _position.x, _position.y - pixel * 0.42 ); canvas.lineTo( _position.x + pixel * 0.86, _position.y - pixel * 0.92 );
+	            canvas.stroke();
+	        }
+	        else if ( plantStage === 1 )
+	        {
+	            canvas.strokeStyle = "rgba( 71, 196, 56, " + opacity() + " )";
+	            canvas.lineWidth = pixel * 0.68;
+	            const leafRadius = pixel * 2.25;
+	            for ( let leaf = 0; leaf < 4; leaf++ )
+	            {
+	                const a = -Math.PI / 2 + leaf * Math.PI / 2;
+	                canvas.moveTo( _position.x + Math.cos( a ) * leafRadius * 0.12, _position.y + Math.sin( a ) * leafRadius * 0.12 );
+	                canvas.lineTo( _position.x + Math.cos( a ) * leafRadius, _position.y + Math.sin( a ) * leafRadius );
+	            }
+	            canvas.stroke();
+	        }
+	        else
+	        {
+	            const crownRadius = pixel * 3.35;
+	            for ( let shade = 0; shade < 2; shade++ )
+	            {
+	                canvas.beginPath();
+	                canvas.strokeStyle = ( shade === 0 ? "rgba( 56, 179, 48, " : "rgba( 102, 217, 61, " ) + opacity() + ")";
+	                canvas.lineWidth = pixel * 0.62;
+	                for ( let leaf = shade; leaf < 8; leaf += 2 )
+	                {
+	                    const a = leaf * Math.PI / 4;
+	                    const length = crownRadius * ( leaf % 2 === 0 ? 1 : 0.78 );
+	                    canvas.moveTo( _position.x + Math.cos( a ) * crownRadius * 0.16, _position.y + Math.sin( a ) * crownRadius * 0.16 );
+	                    canvas.lineTo( _position.x + Math.cos( a ) * length, _position.y + Math.sin( a ) * length );
+	                }
+	                canvas.stroke();
+	            }
+	        }
+	        canvas.closePath();
+	        if ( plantStage === 2 )
+	        {
+	            canvas.fillStyle = "rgba( 31, 115, 43, " + opacity() + " )";
+	            canvas.beginPath(); canvas.arc( _position.x, _position.y, pixel * 0.48, 0, PI2, false ); canvas.fill(); canvas.closePath();
+	        }
+	        canvas.restore();
+	        return;
+	    }
 
 	    if ( st === 2 )
 	    {

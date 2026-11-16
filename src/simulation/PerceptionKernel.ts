@@ -25,8 +25,8 @@ import { PREDATOR_DEFERENCE_ENABLED, KIN_NOT_EATEN_ENABLED, OLD_AGE_DURATION, WE
 import { M_CURRENT_W, M_DISEASE, M_WEAK_PREF, MIND_STRIDE, M_VIEW_RADIUS, M_GRAB_RADIUS, M_DEFERENCE, M_FOOD, M_PERSIST, M_MATURE_AGE, M_SIZE_PICKY, M_MAX_ENERGY } from "./MindLayout";
 import { preyTargetScore } from "./EcologyGenes";
 import {
-    BACKGROUND_SIZE, PARAM_MAX_LIFESPAN, B_NUM_PARTS, B_GROWTH, B_VEL_X, B_VEL_Y, BOT_STRIDE, MAX_SEEN, PARAM_ENV_ACTIVE, PARAM_STEP, PARAM_CURRENT, PARAM_ENV_FIELDS, PARAM_FOOD_TYPES, PARAM_OBSTACLE_X1, PARAM_OBSTACLE_X2,
-    PARAM_OBSTACLE_Y1, PARAM_OBSTACLE_Y2, SharedState
+    BACKGROUND_SIZE, PARAM_MAX_LIFESPAN, B_NUM_PARTS, B_GROWTH, B_VEL_X, B_VEL_Y, BOT_STRIDE, MAX_SEEN, PARAM_ENV_ACTIVE, PARAM_STEP, PARAM_CURRENT, PARAM_ENV_FIELDS, PARAM_FOOD_TYPES,
+    PARAM_WALL_COUNT, PARAM_WALL_BASE, SharedState
 } from "./SharedState";
 
 export const STARVING_FOOD_CHOICE = 15;   // below this energy a swimbot eats anything
@@ -145,28 +145,40 @@ function selectNearestCandidates( count: number, limit: number, sc: PerceptionSc
     return kept;
 }
 
-// is the line from (a0x, a0y) to (a1x, a1y) blocked by the obstacle?
+// is the line from (a0x, a0y) to (a1x, a1y) blocked by any of the walls?
 function obstructed( st: SharedState, a0x: number, a0y: number, a1x: number, a1y: number ): boolean
 {
     const P = st.params;
-    const b0x = P[ PARAM_OBSTACLE_X1 ], b0y = P[ PARAM_OBSTACLE_Y1 ];
-    const b1x = P[ PARAM_OBSTACLE_X2 ], b1y = P[ PARAM_OBSTACLE_Y2 ];
+    const count = P[ PARAM_WALL_COUNT ];
 
     const aX = a1x - a0x, aY = a1y - a0y;
-    const bX = b1x - b0x, bY = b1y - b0y;
     const aPerpX = -aY, aPerpY = aX;
-    const bPerpX = -bY, bPerpY = bX;
-    const a0b0x = b0x - a0x, a0b0y = b0y - a0y;
-    const a0b1x = b1x - a0x, a0b1y = b1y - a0y;
-    const b0a0x = a0x - b0x, b0a0y = a0y - b0y;
-    const b0a1x = a1x - b0x, b0a1y = a1y - b0y;
-    const a0Dotb0 = aPerpX * a0b0x + aPerpY * a0b0y;
-    const a0Dotb1 = aPerpX * a0b1x + aPerpY * a0b1y;
-    const b0Dota0 = bPerpX * b0a0x + bPerpY * b0a0y;
-    const b0Dota1 = bPerpX * b0a1x + bPerpY * b0a1y;
 
-    return (((( a0Dotb0 > 0 ) && ( a0Dotb1 < 0 )) || (( a0Dotb1 > 0 ) && ( a0Dotb0 < 0 )))
-        &&  ((( b0Dota0 > 0 ) && ( b0Dota1 < 0 )) || (( b0Dota1 > 0 ) && ( b0Dota0 < 0 ))));
+    for ( let w = 0; w < count; w++ )
+    {
+        const p = PARAM_WALL_BASE + w * 4;
+        const b0x = P[ p ], b0y = P[ p + 1 ];
+        const b1x = P[ p + 2 ], b1y = P[ p + 3 ];
+
+        const bX = b1x - b0x, bY = b1y - b0y;
+        const bPerpX = -bY, bPerpY = bX;
+        const a0b0x = b0x - a0x, a0b0y = b0y - a0y;
+        const a0b1x = b1x - a0x, a0b1y = b1y - a0y;
+        const b0a0x = a0x - b0x, b0a0y = a0y - b0y;
+        const b0a1x = a1x - b0x, b0a1y = a1y - b0y;
+        const a0Dotb0 = aPerpX * a0b0x + aPerpY * a0b0y;
+        const a0Dotb1 = aPerpX * a0b1x + aPerpY * a0b1y;
+        const b0Dota0 = bPerpX * b0a0x + bPerpY * b0a0y;
+        const b0Dota1 = bPerpX * b0a1x + bPerpY * b0a1y;
+
+        if (((( a0Dotb0 > 0 ) && ( a0Dotb1 < 0 )) || (( a0Dotb1 > 0 ) && ( a0Dotb0 < 0 )))
+        &&  ((( b0Dota0 > 0 ) && ( b0Dota1 < 0 )) || (( b0Dota1 > 0 ) && ( b0Dota0 < 0 ))))
+        {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 // brightness of the bottom (as Environment.backgroundAt)

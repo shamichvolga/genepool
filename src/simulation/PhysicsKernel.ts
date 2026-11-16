@@ -23,8 +23,7 @@ import {
     B_LAST_ENERGY, B_LAST_X, B_LAST_Y, B_MOUTH_X, B_MOUTH_Y, B_NUM_PARTS, B_POS_X, B_POS_Y, B_SELECT_RADIUS,
     B_SPIN, B_SUM_LENGTHS, B_TIMER, B_TIMER_DELTA, B_VEL_X, B_VEL_Y, BOT_STRIDE, C_A, M_X, M_Y, N_X, N_Y, P_X,
     P_Y, PARAM_MAX_LIFESPAN, PART_STRIDE, PS, Q_X, Q_Y, SharedState, V_X, V_Y,
-    PARAM_OB_END_RADIUS, PARAM_OB_LENGTH, PARAM_OB_MID_X, PARAM_OB_MID_Y, PARAM_OB_PERP_X, PARAM_OB_PERP_Y,
-    PARAM_OBSTACLE_X1, PARAM_OBSTACLE_Y1
+    PARAM_WALL_COUNT, PARAM_WALL_BASE
 } from "./SharedState";
 
 //------------------------------------------------------------------------------
@@ -476,35 +475,44 @@ export function physicsStep( s: number, st: SharedState ): void
 }
 
 //------------------------------------------------------------------------------
-// bumping into the obstacle pushes the swimbot away (as Obstacle.getCollision,
+// bumping into the walls pushes the swimbot away (as Obstacle.getCollision,
 // with the push of GenePool: force x 1.2 added to the velocity)
 //------------------------------------------------------------------------------
 export function obstacleCollision( s: number, st: SharedState ): void
 {
     const B = st.bots, b = s * BOT_STRIDE, P = st.params;
-    const endRadius = P[ PARAM_OB_END_RADIUS ];
-    if ( endRadius <= ZERO ) return;
+    const count = P[ PARAM_WALL_COUNT ];
+    if ( count <= 0 ) { return; }
+
+    const END_RADIUS = 20;   // (keep in step with the END_RADIUS of Obstacle)
     let radius = B[ b + B_SUM_LENGTHS ] * ONE_HALF;
-    if ( radius < endRadius ) { radius = endRadius; }
+    if ( radius < END_RADIUS ) { radius = END_RADIUS; }
 
-    const xx = B[ b + B_POS_X ] - P[ PARAM_OB_MID_X ];
-    const yy = B[ b + B_POS_Y ] - P[ PARAM_OB_MID_Y ];
-    const distanceSquared = xx * xx + yy * yy;
-    const ll = P[ PARAM_OB_LENGTH ] * ONE_HALF + endRadius + radius;
+    const px = B[ b + B_POS_X ], py = B[ b + B_POS_Y ];
 
-    if ( distanceSquared < ll * ll )
+    for ( let w = 0; w < count; w++ )
     {
-        const perpX = P[ PARAM_OB_PERP_X ], perpY = P[ PARAM_OB_PERP_Y ];
-        const testX = B[ b + B_POS_X ] - P[ PARAM_OBSTACLE_X1 ];
-        const testY = B[ b + B_POS_Y ] - P[ PARAM_OBSTACLE_Y1 ];
-        const dot = testX * perpX + testY * perpY;
+        const p = PARAM_WALL_BASE + w * 4;
+        const x1 = P[ p ], y1 = P[ p + 1 ], x2 = P[ p + 2 ], y2 = P[ p + 3 ];
+        const axisX = x2 - x1, axisY = y2 - y1;
+        const length = Math.sqrt( axisX * axisX + axisY * axisY );
+        if ( length <= ZERO ) continue;
 
-        if ( Math.abs( dot ) < radius )
-        {
-            let penetration = ( ONE - ( dot / radius ) );
-            if ( dot < ZERO ) { penetration *= -ONE; }
-            B[ b + B_VEL_X ] += ( perpX * penetration ) * 1.2;
-            B[ b + B_VEL_Y ] += ( perpY * penetration ) * 1.2;
-        }
+        const perpX = axisY / length, perpY = -axisX / length;
+        const midX = ( x1 + x2 ) * ONE_HALF, midY = ( y1 + y2 ) * ONE_HALF;
+
+        const xx = px - midX, yy = py - midY;
+        const distanceSquared = xx * xx + yy * yy;
+        const ll = length * ONE_HALF + END_RADIUS + radius;
+        if ( distanceSquared >= ll * ll ) continue;
+
+        const testX = px - x1, testY = py - y1;
+        const dot = testX * perpX + testY * perpY;
+        if ( Math.abs( dot ) >= radius ) continue;
+
+        let penetration = ( ONE - ( dot / radius ) );
+        if ( dot < ZERO ) { penetration *= -ONE; }
+        B[ b + B_VEL_X ] += ( perpX * penetration ) * 1.2;
+        B[ b + B_VEL_Y ] += ( perpY * penetration ) * 1.2;
     }
 }
