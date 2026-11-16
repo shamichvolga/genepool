@@ -174,16 +174,38 @@ export class GenePoolState {
         return this._runner.getNumThreads();
     }
     
-    // Методы синхронизации (заглушки — будут заполнены при миграции)
+    // Методы синхронизации
     syncSwimbotPosition(index: number) {
-        // TODO: Перенести из GenePool.ts
+        // Копирует позицию свимбота в общие массивы (из SharedState)
+        const k = index * SS.BOT_STRIDE, B = this.st.bots;
+        this.botX[index] = B[k + SS.B_POS_X];
+        this.botY[index] = B[k + SS.B_POS_Y];
+        this.genitalX[index] = B[k + SS.B_GENITAL_X];
+        this.genitalY[index] = B[k + SS.B_GENITAL_Y];
     }
     
     syncSwimbot(index: number) {
-        // TODO: Перенести из GenePool.ts
+        // Копирует все поля свимбота в SharedState
+        const swimbot = this.swimbots[index];
+        this.syncSwimbotPosition(index);
+        this.botAlive[index] = swimbot.getAlive() ? 1 : 0;
+        this.botEternal[index] = swimbot.isEternal() ? 1 : 0;
+        this.botPredator[index] = swimbot.getPredatorLevel();
+        this.botBrightness[index] = swimbot.getBrightness();
+        this.botMass[index] = swimbot.getPhenotypeMass();
     }
     
     rebuildAliveIndexCaches() {
-        // TODO: Перенести из GenePool.ts
+        // Пересобирает индексы живых существ
+        this.aliveSwimbotIndices.length = 0;
+        this.aliveFoodBitIndices.length = 0;
+
+        const liveSwimbot = this.st.liveSwimbot, liveFood = this.st.liveFood;
+        for (let s = 0; s < MAX_SWIMBOTS; s++) {
+            if (liveSwimbot[s] === 1) this.aliveSwimbotIndices.push(s);
+        }
+        for (let f = 0; f < MAX_FOODBITS; f++) {
+            if (liveFood[f] === 1) this.aliveFoodBitIndices.push(f);
+        }
     }
 }

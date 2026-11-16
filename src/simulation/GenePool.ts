@@ -1,7 +1,7 @@
 import { WORLD_AREA_FACTOR } from "./World";
 import { CARCASS_ENABLED, DISEASE_ENABLED, CANNIBAL_GENE_FOUNDER_MAX, PLANT_REGROW_CHANCE, PLANT_REGROW_DELAY } from "./Parameters";
 import { exportStrains, importStrains, updateDiseases } from "./Disease";
-import { PILE_PARTS, PreparedZone, insideAny, prepareZones, randomPointInZone } from "./MapZones";
+import { PILE_PARTS, PreparedZone, barrierFlat, insideAny, prepareZones, randomPointInZone } from "./MapZones";
 import { plantCrown, plantFullEnergy, plantLifespan, plantSize } from "./PlantSize";
 import { PLANT_SIZE_ENABLED, PLANT_SEEDS_BY_SIZE, PLANT_LEAF_REGROWTH, PLANT_LIFESPAN, PLANT_SPROUT_ENERGY, PLANT_TREE_ENERGY,
          WOOD_PER_FRUIT_TIER, PLANT_FRUIT_PERIOD, PLANT_FRUIT_ENERGY, PLANT_CANOPY_RADIUS, SHADED_PLANT_AGING_FACTOR, WOOD_DECAY_STEPS } from "./Parameters";
@@ -10,12 +10,12 @@ import { Chunk, WORLD_FORMAT, layoutFingerprint, packWorld, unpackWorld } from "
 import { PARAM_DEFAULTS, PARAM_LIST, changedParams, setParameter } from "./ParamStore";
 import { BRAIN_SIZE } from "./NeuralBrain";
 import { WORLD_SCALE } from "./World";
-import { MAX_PARTS } from "./SwimbotTypes";
+import { MAX_PARTS, MIN_PARTS } from "./SwimbotTypes";
 declare const __GENEPOOL_VERSION__: string;
 import { currentAt, currentDriftX, currentDriftY, currentStrength, randomPointInCurrent } from "./Currents";
 import { bindPlantGenes, inheritPlantGenes, plantMatureAge, plantOldAge, plantRotAge, plantSeedDistance } from "./PlantGenes";
 import { geneAverage, convertOldGenes, GENE_LAYOUT_VERSION, setTrait, gaussian, thermalWidthToGene, preyTargetScore, GENES_PREDATOR, GENES_THERMAL_OPTIMUM, GENES_THERMAL_WIDTH, GENES_DIGESTION, GENES_BRIGHTNESS, GENES_CHOOSINESS, GENES_HUNGER, GENES_AUTOTOMY_BITE, GENES_AUTOTOMY_THREAT, GENES_AUTOTOMY_AMOUNT, GENES_AUTOTOMY_WHICH, GENES_PERSISTENCE, GENES_INVESTMENT, GENES_SIZE_PICKINESS, GENES_DEFERENCE, GENES_RUDDER, GENES_WEAK_PREY, GENES_IMMUNE, GENES_CANNIBAL, GENES_CURRENT } from "./EcologyGenes";
-import { environment, FLAT_ENVIRONMENT, INITIAL_SOIL_NUTRIENT_PER_CELL, NUTRIENT_CYCLE_ENABLED, SWIMMING_ENERGY_RECYCLE_ENABLED, PLANT_CELL_SIZE, SOIL_DIFFUSION_INTERVAL, PLANT_TYPE_WARM, PLANT_TYPE_COLD, SEASONAL_PLANT_GROWTH_ENABLED, SEASONAL_PLANT_GROWTH_AMPLITUDE } from "./Environment";
+import { environment, FLAT_ENVIRONMENT, INITIAL_SOIL_NUTRIENT_PER_CELL, NUTRIENT_CYCLE_ENABLED, SWIMMING_ENERGY_RECYCLE_ENABLED, PLANT_CELL_SIZE, SOIL_DIFFUSION_INTERVAL, PLANT_TYPE_WARM, PLANT_TYPE_COLD, SEASONAL_PLANT_GROWTH_ENABLED, SEASONAL_PLANT_GROWTH_AMPLITUDE, SOIL_NUTRIENT_CAPACITY_PER_CELL } from "./Environment";
 import { petriSettings, petriStartZone } from "./Petri";
 import { IGNORE_FOOD_EFFICIENCY, preyVisibility, TWO_PLANT_TYPES } from "./Ecology";
 import { START_ENERGY_FACTOR, PLANT_ROT_ENABLED, START_FOOD_FILL, START_FOOD_CLUMP, START_FOOD_CLUMP_RADIUS, PLANT_STAGES_SHOWN, NURSERY_ENABLED, NURSERY_STEPS, NURSERY_START_FOOD_FACTOR, NURSERY_EXTRA_SEEDS, PLANT_EVOLUTION_ENABLED, PLANT_SEED_PARENT_TRIES, CURRENTS_ENABLED, CURRENT_SPEED, CLASSIC_SEED_RAIN_FRACTION, MEAT_PIECE_ENERGY, MEAT_PIECE_SCATTER, PLANT_STAGES_ENABLED, PLANT_ROT_AGE, DIET_SWITCH_RATE, CLASSIC_NUM_SWIMBOTS, CLASSIC_NUM_FOODBITS, GARDEN_RADIUS, ENVIRONMENT_PLANT_SPREAD_RATE, ENVIRONMENT_SEEDS_PER_PERIOD, LOCAL_ENVIRONMENT_PLANT_GROWTH, PLANT_CELL_CAPACITY, PLANT_PARENT_SEED_FRACTION, PLANT_SEED_MIN_DISTANCE, PLANT_SEED_MAX_DISTANCE } from "./Parameters";
@@ -30,7 +30,7 @@ import { CameraNavigationAction, NUM_GENES_USED, SimulationStartMode, energyCycl
 import { drawFromAtmosphere, getAtmosphereEnergy, resetAtmosphere, transferToAtmosphere } from "./EnergyBudget";
 import { BYTE_SIZE, MILLISECONDS_PER_SECOND, NULL_INDEX, ONE, ONE_HALF, PI2, ZERO } from "./MathConstants";
 import { Obstacle } from "./Obstacle";
-import { BARRIER_EXPERIMENT, DEFAULT_CHILD_ENERGY_RATIO, DEFAULT_FOOD_REGENERATION_PERIOD, DEFAULT_GARDEN_OF_EDEN_RADIUS, DEFAULT_MAXIMUM_AGE, DEFAULT_SWIMBOT_HUNGER_THRESHOLD, FOOD_LOCAL_CAPACITY, FOOD_LOCAL_RADIUS, FOOD_RANDOM_SEED_CHANCE, FOOD_SPROUT_RATE, INITIAL_NUM_FOODBITS, INITIAL_NUM_SWIMBOTS, INITIAL_PREDATOR_FRACTION, LOCAL_PLANT_GROWTH, LOCAL_PLANT_SEED_RADIUS, MAX_CHILD_ENERGY_RATIO, MAX_FOODBITS, MAX_FOODBITS_PER_TYPE, MAX_FOOD_REGENERATION_PERIOD, MEAT_SLOT_SHARE, MAX_MAXIMUM_AGE, MAX_SWIMBOTS, MAX_SWIMBOT_HUNGER_THRESHOLD, MEAT_DECAY_TIME, MIN_CHILD_ENERGY_RATIO, MIN_FOOD_REGENERATION_PERIOD, MIN_MAXIMUM_AGE, MIN_SWIMBOT_HUNGER_THRESHOLD, NON_REPRODUCING_JUNK_DNA_LIMIT, OBSTACLE_ENABLED, PREDATOR_LEVEL_THRESHOLD, PREY_MAX_MASS_RATIO, RANDOM_MATING_CONTROL, RENDER_SWIMBOT_AS_DOT, SWIMBOT_LEVEL_OF_DETAIL_DOT, SWIMBOT_LEVEL_OF_DETAIL_HIGH, SWIMBOT_LEVEL_OF_DETAIL_LOW, YOUNG_AGE_DURATION, CLOSED_ENERGY_CYCLE_ENABLED, ATMOSPHERE_RESERVE_WORLDS } from "./Parameters";
+import { BARRIER_EXPERIMENT, DEFAULT_CHILD_ENERGY_RATIO, DEFAULT_FOOD_REGENERATION_PERIOD, DEFAULT_GARDEN_OF_EDEN_RADIUS, DEFAULT_MAXIMUM_AGE, DEFAULT_SWIMBOT_HUNGER_THRESHOLD, FOOD_LOCAL_CAPACITY, FOOD_LOCAL_RADIUS, FOOD_RANDOM_SEED_CHANCE, FOOD_SPROUT_RATE, INITIAL_NUM_FOODBITS, INITIAL_NUM_SWIMBOTS, INITIAL_PREDATOR_FRACTION, LOCAL_PLANT_GROWTH, LOCAL_PLANT_SEED_RADIUS, MAX_CHILD_ENERGY_RATIO, MAX_FOODBITS, MAX_FOODBITS_PER_TYPE, MAX_FOOD_REGENERATION_PERIOD, MEAT_SLOT_SHARE, MAX_MAXIMUM_AGE, MAX_SWIMBOTS, MAX_SWIMBOT_HUNGER_THRESHOLD, MEAT_DECAY_TIME, MIN_CHILD_ENERGY_RATIO, MIN_FOOD_REGENERATION_PERIOD, MIN_MAXIMUM_AGE, MIN_SWIMBOT_HUNGER_THRESHOLD, NON_REPRODUCING_JUNK_DNA_LIMIT, OBSTACLE_ENABLED, POPULATION_LIMIT, PREDATOR_LEVEL_THRESHOLD, PREY_MAX_MASS_RATIO, RANDOM_MATING_CONTROL, RENDER_SWIMBOT_AS_DOT, SWIMBOT_LEVEL_OF_DETAIL_DOT, SWIMBOT_LEVEL_OF_DETAIL_HIGH, SWIMBOT_LEVEL_OF_DETAIL_LOW, YOUNG_AGE_DURATION, CLOSED_ENERGY_CYCLE_ENABLED, ATMOSPHERE_RESERVE_WORLDS } from "./Parameters";
 import { PhyloTree } from "./PhyloTree";
 import { POOL_BOTTOM, POOL_HEIGHT, POOL_LEFT, POOL_RIGHT, POOL_TOP, POOL_WIDTH, Pool } from "./Pool";
 import { UniformGrid } from "./UniformGrid";
@@ -48,6 +48,9 @@ import { Vector2D } from "./Vector2D";
 import { ATTACK_SUCCESS_CHANCE, ENVIRONMENT_ATTACK_SUCCESS_CHANCE, PREDATOR_TARGET_SELECTION_ENABLED, PREDATION_ENERGY_TRANSFER, PREY_BODY_ENERGY, PREY_SCAN_COOLDOWN, SWIMBOT_MAX_ENERGY } from "./Parameters";
 import { seedPredatorChoiceBrain } from "./NeuralBrain";
 import { ViewTracking, ViewTrackingMode } from "./ViewTracking";
+import { GenePoolState } from "./core/GenePoolState";
+import { createGenePoolRenderer } from "./GenePoolRenderer";
+import * as Serializer from "./GenePoolSerializer";
 
 //------------------
 export function GenePool()
@@ -252,8 +255,6 @@ export function GenePool()
     const _plantShade   = new Float32Array( environment.plantCount[0].length );
     let _nearbyIndices  = new Int32Array( MAX_SWIMBOTS );      // swimbots within search radius
 
-    let _renderBatch = []; // Batch rendering array
-    let _batchObjectPool = [];
     let _distanceCache = new Array(MAX_SWIMBOTS);
     let _lastSwimbotPositions = new Array(MAX_SWIMBOTS);
     let _aliveSwimbotIndices = [];
@@ -266,6 +267,42 @@ export function GenePool()
     _lastCameraPosition.setXY(0, 0);
 
     let hhh = 0;
+
+    //-------------------------------------
+    // Renderer context: геттеры на переменные замыкания для GenePoolRenderer
+    //-------------------------------------
+    const _rendererContext = {
+        get canvas() { return _canvas; },
+        get camera() { return _camera; },
+        get pool() { return _pool; },
+        get obstacle() { return _obstacle; },
+        get viewTracking() { return _viewTracking; },
+        get swimbots() { return _swimbots; },
+        get foodBits() { return _foodBits; },
+        get aliveSwimbotIndices() { return _aliveSwimbotIndices; },
+        get aliveFoodBitIndices() { return _aliveFoodBitIndices; },
+        get st() { return _st; },
+        get capsuleRenderer() { return _capsuleRenderer; },
+        get canvasWidth() { return _canvasWidth; },
+        get canvasHeight() { return _canvasHeight; },
+        get selectedSwimbot() { return _selectedSwimbot; },
+        get mousedOverSwimbot() { return _mousedOverSwimbot; },
+        get selectedFoodBit() { return _selectedFoodBit; },
+        get mousedOverFoodBit() { return _mousedOverFoodBit; },
+        get levelOfDetail() { return _levelOfDetail; },
+        get renderingGoals() { return _renderingGoals; },
+        get showViewTrackingMode() { return _showViewTrackingMode; },
+        get gpuUpClose() { return _gpuUpClose; },
+        get currentSpeed() { return _currentSpeed; },
+        get clock() { return _clock; },
+        get seconds() { return _seconds; },
+        get runner() { return _runner; },
+        get lastCameraPosition() { return _lastCameraPosition; },
+        get lastSwimbotPositions() { return _lastSwimbotPositions; },
+        get distanceCache() { return _distanceCache; },
+        showSwimbotTrail: (s: number) => _this.showSwimbotTrail(s),
+    };
+    let _renderer: any = null;  // создаётся после инициализации переменных
 
 	//-------------------------------------
 	// create fixed-sized swimbot array
@@ -280,23 +317,6 @@ export function GenePool()
         _swimbotWasAlive[s] = false;
 	}
 
-    function getBatchObject()
-    {
-        if (_batchObjectPool.length > 0)
-        {
-            return _batchObjectPool.pop();
-        }
-        return { swimbot: null, isSelected: false, isMousedOver: false, distance: 0 };
-    }
-
-    function releaseBatchObject(obj)
-    {
-        obj.swimbot = null;
-        obj.isSelected = false;
-        obj.isMousedOver = false;
-        obj.distance = 0;
-        _batchObjectPool.push(obj);
-    }
 
     //------------------------------------------------------------
     // scratch arrays for picking the nearest perceived swimbots
@@ -553,6 +573,8 @@ export function GenePool()
         this.setGardenOfEdenRadius  ( DEFAULT_GARDEN_OF_EDEN_RADIUS     );
         this.setOffspringEnergyRatio( DEFAULT_CHILD_ENERGY_RATIO        );
         this.setMaximumSwimbotAge   ( DEFAULT_MAXIMUM_AGE               );
+        this.setPopulationLimitEnabled( true );
+        this.setMaximumSwimbotParts ( 16 );
 
         // closed energy cycle: the whole endowment of the world, granted once.
         // Founders keep their starting energy; starting plants draw from the pool.
@@ -996,10 +1018,8 @@ if ( mode === SimulationStartMode.SPECIES )
 		_obstacle.setEnabled( OBSTACLE_ENABLED );
 		if ( _map && _map.barrier )
 		{
-		    // the wall drawn on the map
-		    end1.setXY( _map.barrier.x1, _map.barrier.y1 );
-		    end2.setXY( _map.barrier.x2, _map.barrier.y2 );
-		    _obstacle.setEndpointPositions( end1, end2 );
+		    // the wall (or walls: a T, a fence...) drawn on the map
+		    _obstacle.setSegments( barrierFlat( _map.barrier ));
 		    _obstacle.setEnabled( true );
 		}
 
@@ -1715,6 +1735,7 @@ if ( mode === SimulationStartMode.SPECIES )
 	    P[ SS.PARAM_OBSTACLE_X2  ] = _obstacle.getEnd2Position().x;
 	    P[ SS.PARAM_OBSTACLE_Y2  ] = _obstacle.getEnd2Position().y;
 	    _obstacle.writeGeometry( P, SS.PARAM_OB_MID_X, SS.PARAM_OB_MID_Y, SS.PARAM_OB_LENGTH, SS.PARAM_OB_PERP_X, SS.PARAM_OB_PERP_Y, SS.PARAM_OB_END_RADIUS );
+	    _obstacle.writeWalls( P, SS.PARAM_WALL_COUNT, SS.PARAM_WALL_BASE, SS.MAX_WALL_SEGMENTS );
 
 	    // the environment, for the decision kernel (DecisionKernel.temperatureAt...)
 	    P[ SS.PARAM_TIME  ] = environment.getTime();
@@ -2457,67 +2478,8 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	this.toggleCurrents  = function() { _currentSpeed = ( _currentSpeed > 0 ) ? 0 : CURRENT_SPEED; this.writePerceptionParams(); }
 	this.getCurrentsOn   = function() { return _currentSpeed > 0; }
 
-	//------------------------------------------------------------------------
-	// the currents seen: faint streaks that drift along the streams without
-	// stopping, each fading in and out (only where the camera looks)
-	//------------------------------------------------------------------------
-	const NUM_MARKS = 260;
-	const _marks = [];
-	let _lastMarkTime = 0;
-	const _markPoint = { x: 0, y: 0 };
-	function renderCurrents()
-	{
-	    if ( !( _currentSpeed > 0 )) { _marks.length = 0; return; }
-	    const now = performance.now();
-	    const dt = Math.min( 0.1, ( _lastMarkTime === 0 ) ? 0 : ( now - _lastMarkTime ) / 1000 );
-	    _lastMarkTime = now;
-
-	    const viewW = _camera.getXDimension(), viewH = _camera.getYDimension();
-	    const left = _camera.getPosition().x - viewW / 2, top = _camera.getPosition().y - viewH / 2;
-	    const inView = ( x, y ) => ( x > left ) && ( x < left + viewW ) && ( y > top ) && ( y < top + viewH );
-	    const speed = viewW * 0.06;             // (on screen: a steady drift, whatever the zoom)
-	    const random = () => Math.random();     // (drawing only: not the simulation's random numbers)
-
-	    // new marks where the camera looks, inside a stream
-	    while ( _marks.length < NUM_MARKS )
-	    {
-	        let placed = false;
-	        for (let attempt = 0; attempt < 30 && !placed; attempt++)
-	        {
-	            randomPointInCurrent( random, _markPoint );
-	            if ( !inView( _markPoint.x, _markPoint.y )) continue;
-	            _marks.push({ x: _markPoint.x, y: _markPoint.y, age: 0, life: 2.5 + 2.5 * random() });
-	            placed = true;
-	        }
-	        if ( !placed ) break;      // (no stream in sight)
-	    }
-
-	    _canvas.lineCap = "round";
-	    _canvas.lineWidth = Math.max( 1, viewW / 700 );
-	    for (let i = _marks.length - 1; i >= 0; i--)
-	    {
-	        const m = _marks[i];
-	        currentAt( m.x, m.y );
-	        const vx = currentDriftX(), vy = currentDriftY(), g = currentStrength();
-	        m.x += vx * speed * dt;
-	        m.y += vy * speed * dt;
-	        m.age += dt;
-	        if (( m.age > m.life ) || ( g < 0.05 ) || !inView( m.x, m.y )) { _marks.splice( i, 1 ); continue; }
-	        const fade = Math.min( 1, m.age / 0.6, ( m.life - m.age ) / 0.6 );
-	        const n = Math.max( 1e-6, Math.sqrt( vx * vx + vy * vy ));
-	        const tail = viewW * 0.025 * g;
-	        _canvas.strokeStyle = "rgba( 205, 228, 255, " + ( 0.32 * fade * Math.min( 1, g * 1.5 )).toFixed( 3 ) + " )";
-	        _canvas.beginPath();
-	        _canvas.moveTo( m.x - vx / n * tail, m.y - vy / n * tail );
-	        _canvas.lineTo( m.x, m.y );
-	        _canvas.stroke();
-	    }
-	}
-
-	// drawing time by part (milliseconds, smoothed): water and obstacle, food, swimbots, graphics card
-	const _renderPhaseMs = [ 0, 0, 0, 0 ];
-	function renderPhase( phase, since ) { const t = performance.now(); _renderPhaseMs[ phase ] += ( t - since - _renderPhaseMs[ phase ] ) * 0.05; return t; }
-	this.getRenderPhaseMs = function() { return _renderPhaseMs.slice(); }
+	// drawing time by part (milliseconds, smoothed): kept by GenePoolRenderer.ts
+	this.getRenderPhaseMs = function() { return _renderer.getRenderPhaseMs(); }
 
 	// no screen refresh for a while (hidden or covered window, embedded view)?
 	this.screenRefreshStalled = function( now ) { return ( now - _lastAnimationFrame ) > 100; }
@@ -3001,29 +2963,14 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
     //---------------------------------------------
 	this.findLowestDeadSwimbotInArray = function()
 	{
-        let s = NULL_INDEX;
-        let t = NULL_INDEX;
-
-        // (_botAlive is fast to scan; it can lag behind right after a new
-        //  pool is made, so the swimbot itself confirms)
-        let looking = true;
-        while ( looking )
+        const limit = globalTweakers.populationLimitEnabled ? POPULATION_LIMIT : MAX_SWIMBOTS;
+        for ( let s = 0; s < limit; s++ )
         {
-            t++;
-
-            if (( _botAlive[t] === 0 ) && !_swimbots[t].getAlive() )
-            {
-                s = t;
-                looking = false;
-            }
-
-            if ( t >= MAX_SWIMBOTS - 1 )
-            {
-                looking = false;
-            }
+            // (_botAlive is fast to scan; it can lag behind right after a new
+            //  pool is made, so the swimbot itself confirms)
+            if (( _botAlive[s] === 0 ) && !_swimbots[s].getAlive() ) return s;
         }
-
-        return s;
+        return NULL_INDEX;
     }
 
 
@@ -3533,6 +3480,18 @@ if ( !fundPlant( childFoodBitIndex, globalTweakers.foodBitEnergy )) return;
         globalTweakers.maximumLifeSpan = m;
     }
 
+    this.setPopulationLimitEnabled = function( value )
+    {
+        globalTweakers.populationLimitEnabled = Boolean( value );
+    }
+
+    this.setMaximumSwimbotParts = function( value )
+    {
+        const parsed = Number( value );
+        if ( !Number.isFinite( parsed )) return;
+        globalTweakers.maximumParts = Math.max( MIN_PARTS, Math.min( MAX_PARTS, Math.round( parsed )));
+    }
+
 
 	//-------------------------------------------------------------
 	this.findRandomLivingFoodBit = function( foodType )
@@ -3654,6 +3613,8 @@ if ( !fundPlant( childFoodBitIndex, globalTweakers.foodBitEnergy )) return;
         globalTweakers.numFoodTypes = environment.active ? ( TWO_PLANT_TYPES ? 2 : 1 ) : globalTweakers.numFoodTypes;
         _environmentImage = environment.active ? environment.makeImage() : null;
         _pool.setBackgroundImage( _environmentImage );
+        this.setPopulationLimitEnabled( data.populationLimitEnabled !== false );
+        this.setMaximumSwimbotParts( typeof data.maximumSwimbotParts === "number" ? data.maximumSwimbotParts : 16 );
 
         //console.log( "loading pool file:" );
         //console.log( data );
@@ -3825,6 +3786,10 @@ if ( !fundPlant( childFoodBitIndex, globalTweakers.foodBitEnergy )) return;
 
 
         _obstacle.setEndpointPositions( end1, end2 );
+		if ( data.obstacleSegments && ( data.obstacleSegments.length > 0 ))
+		{
+			_obstacle.setSegments( data.obstacleSegments );
+		}
 
 		//---------------------------------
 		// start time
@@ -4173,490 +4138,22 @@ const feedRoom = Math.min( 100, swimbot.getMaxEnergy() - swimbot.getEnergy() );
 	}
 
 	//-------------------------
-	this.render = function()
-	{
-		//----------------------------------------------------------
-		// clear the whole canvas: the pool is square, the screen is
-		// not - zoomed out, the strips beside the pool would keep
-		// pieces of old frames
-		//----------------------------------------------------------
-		_canvas.resetTransform();
-		_canvas.fillStyle = OUTSIDE_POOL_COLOR;
-		_canvas.fillRect( 0, 0, _canvasWidth, _canvasHeight );
-
-		//----------------------------------------------------------
-		// set transform according to camera
-		//----------------------------------------------------------
-        let nx = _camera.getPosition().x / _camera.getXDimension();
-        let ny = _camera.getPosition().y / _camera.getYDimension();
-
-		let xTranslation = ( ONE_HALF - nx ) * _canvasWidth;
-		let yTranslation = ( ONE_HALF - ny ) * _canvasHeight;
-
-        let xScale = _canvasWidth  / _camera.getXDimension();
-        let yScale = _canvasHeight / _camera.getYDimension();
-
-		_canvas.translate( xTranslation, yTranslation );
-        _canvas.scale( xScale, yScale );
-
-		//----------------------------------
-		// render the pool
-		//----------------------------------
-        // zoomed out (many swimbots on screen): bodies and food go to the
-        // graphics card; zoomed in: the detailed 2D drawing as before
-        // (the V key: bodies on the graphics card up close too, details in 2D on top)
-        const useGraphicsCard = ( _capsuleRenderer !== null ) && (( _levelOfDetail !== SWIMBOT_LEVEL_OF_DETAIL_HIGH ) || _gpuUpClose );
-        if ( useGraphicsCard ) { _capsuleRenderer.begin(); }
-
-        let phaseStart = performance.now();
-        _pool.render( _seconds, _camera );
-
-		//-------------------------
-		// render obstacle
-		//-------------------------
-		_obstacle.render( _camera );
-		renderCurrents();
-
-		//-------------------------
-		// render food
-		//-------------------------
-        phaseStart = renderPhase( 0, phaseStart );
-		this.renderFoodBits( useGraphicsCard );
-        phaseStart = renderPhase( 1, phaseStart );
-
-		//----------------------------------
-		// render swimbots with batching
-		//----------------------------------
-        this.renderSwimbotsWithBatching( useGraphicsCard );
-        phaseStart = renderPhase( 2, phaseStart );
-
-        if ( useGraphicsCard )
-        {
-            _capsuleRenderer.draw
-            (
-                _camera.getPosition().x - _camera.getXDimension() * ONE_HALF,
-                _camera.getPosition().y - _camera.getYDimension() * ONE_HALF,
-                _camera.getXDimension(),
-                _camera.getYDimension()
-            );
-
-            // the graphics card's picture goes into this canvas, so that what
-            // is drawn next (selection, the line to the target, mouths) lies on top
-            _canvas.save();
-            _canvas.resetTransform();
-            _canvas.drawImage( _capsuleRenderer.getCanvas(), 0, 0, _canvasWidth, _canvasHeight );
-            _canvas.restore();
-        }
-        else if ( _capsuleRenderer !== null )
-        {
-            _capsuleRenderer.clear();
-        }
-        this.renderSwimbotOverlays( useGraphicsCard );
-        renderPhase( 3, phaseStart );
-
-		//-----------------------------------------------------------------------
-		// when view is in mutual love mode, show a line between the lovers...
-		//-----------------------------------------------------------------------
-        if ( _viewTracking.getMode() === ViewTrackingMode.MUTUAL )
-        {
-            //console.log( "mutual" );
-            //console.log( _viewTracking.getLover1Index() + ", " + _viewTracking.getLover2Index() );
-            if (( _viewTracking.getLover1Index() != NULL_INDEX )
-            &&  ( _viewTracking.getLover2Index() != NULL_INDEX ))
-            {
-                _canvas.lineCap = "round";
-                _canvas.lineWidth = 5;
-                _canvas.strokeStyle = "rgba( 200, 200, 200, 0.06 )";
-                _canvas.moveTo( _swimbots[ _viewTracking.getLover1Index() ].getGenitalPosition().x, _swimbots[ _viewTracking.getLover1Index() ].getGenitalPosition().y );
-                _canvas.lineTo( _swimbots[ _viewTracking.getLover2Index() ].getGenitalPosition().x, _swimbots[ _viewTracking.getLover2Index() ].getGenitalPosition().y );
-                _canvas.stroke();
-
-                _canvas.lineWidth = 2;
-                _canvas.strokeStyle = "rgba( 255, 255, 200, 0.06 )";
-                _canvas.moveTo( _swimbots[ _viewTracking.getLover1Index() ].getGenitalPosition().x, _swimbots[ _viewTracking.getLover1Index() ].getGenitalPosition().y );
-                _canvas.lineTo( _swimbots[ _viewTracking.getLover2Index() ].getGenitalPosition().x, _swimbots[ _viewTracking.getLover2Index() ].getGenitalPosition().y );
-                _canvas.stroke();
-            }
-        }
-
-		//---------------------
-		// render camera
-		//---------------------
-		//renderCamera();
-
-		//---------------------
-		// reset transform
-		//---------------------
-        _canvas.resetTransform();
-
-        /*
-		//----------------------------------
-		// render framerate
-		//----------------------------------
-        _canvas.font = "14px Arial";
-		_canvas.fillStyle = "rgba( 255, 255, 255, 0.5 )";
-        _canvas.fillText( "framerate = " + _frameRate.toString(), _canvasWidth - 200, 20 );
-        */
-
-		//----------------------------------
-		// render view tracking info
-		//----------------------------------
-		if ( _showViewTrackingMode )
-		{
-            let viewTrackingMode = _viewTracking.getMode();
-
-            if ( viewTrackingMode != NULL_INDEX )
-            {
-                let modeString = "(error)";
-
-                     if ( viewTrackingMode === ViewTrackingMode.WHOLE_POOL ) { modeString = "viewing whole pool"         }
-                else if ( viewTrackingMode === ViewTrackingMode.AUTOTRACK  ) { modeString = "autotracking group"         }
-                else if ( viewTrackingMode === ViewTrackingMode.SELECTED   ) { modeString = "viewing selected swimbot"   }
-                else if ( viewTrackingMode === ViewTrackingMode.MUTUAL     ) { modeString = "viewing mutual love"        }
-                else if ( viewTrackingMode === ViewTrackingMode.PROLIFIC   ) { modeString = "viewing most prolific"      }
-                else if ( viewTrackingMode === ViewTrackingMode.EFFICIENT  ) { modeString = "viewing most efficient"     }
-                else if ( viewTrackingMode === ViewTrackingMode.VIRGIN     ) { modeString = "viewing oldest virgin"      }
-                else if ( viewTrackingMode === ViewTrackingMode.HUNGRY     ) { modeString = "viewing glutton"            }
-
-                _canvas.font = "14px Arial";
-                _canvas.fillStyle = "rgba( 255, 255, 255, 0.5 )";
-                _canvas.fillText( modeString, _canvasWidth - 170, _canvasHeight - 30 );
-            }
-        }
-
-		//---------------------------
-		// render touch state
-		//---------------------------
-		//_touch.render();
-
-		//---------------------------
-		// render border
-		//---------------------------
-        _canvas.lineWidth = 1;
-        _canvas.strokeStyle = "rgb( 0, 0, 0 )";
-		_canvas.strokeRect( 0, 0, _canvasWidth, _canvasHeight );
-		/*
-        //_canvas.strokeStyle = "rgb( 220, 230, 240 )";
-        _canvas.beginPath();
-        _canvas.moveTo( 0, _canvasHeight );
-        _canvas.lineTo( _canvasWidth, _canvasHeight );
-        _canvas.closePath();
-        _canvas.stroke();
-
-        _canvas.beginPath();
-        _canvas.moveTo( _canvasWidth, _canvasHeight );
-        _canvas.lineTo( _canvasWidth, 0 );
-        _canvas.closePath();
-        _canvas.stroke();
-
-
-        _canvas.beginPath();
-        _canvas.moveTo( 0, 0 );
-        _canvas.lineTo( 0, _canvasHeight );
-        _canvas.closePath();
-        _canvas.stroke();
-
-        _canvas.beginPath();
-        _canvas.moveTo( 0, 0 );
-        _canvas.lineTo( _canvasWidth, 0 );
-        _canvas.closePath();
-        _canvas.stroke();
-        */
-	}
-
-
-	/*
-	//----------------------------------------
-	function renderSwimbotSelectCircle( s, m )
-	{
-	    let lineWidth = 1.6 + 0.005 * _camera.getScale();
-	    let alpha = 0.07;
-
-        if ( m )
-        {
-    	    alpha = 0.03;
-        }
-
-        canvas.lineWidth = lineWidth;
-        canvas.strokeStyle = "rgba( 255, 255, 255, " + alpha + " )";
-        canvas.beginPath();
-        canvas.arc( _swimbots[s].getPosition().x, _swimbots[s].getPosition().y, _swimbots[s].getSelectRadius(), 0, PI2, false );
-        canvas.stroke();
-        canvas.closePath();
-
-        canvas.lineWidth = lineWidth * 0.4;
-        canvas.strokeStyle = "rgba( 255, 255, 255, " + alpha + " )";
-        canvas.beginPath();
-        canvas.arc( _swimbots[s].getPosition().x, _swimbots[s].getPosition().y, _swimbots[s].getSelectRadius(), 0, PI2, false );
-        canvas.stroke();
-        canvas.closePath();
-	}
-	*/
-
-
-	//----------------------------------------
-	// what the selected swimbot is after: a thin, see-through grey line
-	function renderTargetLine( line )
-	{
-	    if ( line === null ) return;
-	    canvas.lineWidth = 1.2 + 0.004 * _camera.getScale();
-	    canvas.strokeStyle = "rgba( 200, 200, 200, 0.35 )";
-	    canvas.beginPath();
-	    canvas.moveTo( line.fromX, line.fromY );
-	    canvas.lineTo( line.toX, line.toY );
-	    canvas.stroke();
-	    canvas.closePath();
-	}
-
-	function renderSelectCircle( x, y, r, m )
-	{
-	    let lineWidth = 1.6 + 0.005 * _camera.getScale();
-	    let alpha = 0.07;
-
-        if ( m )
-        {
-    	    alpha = 0.03;
-        }
-
-        canvas.lineWidth = lineWidth;
-        canvas.strokeStyle = "rgba( 255, 255, 255, " + alpha + " )";
-        canvas.beginPath();
-        canvas.arc( x, y, r, 0, PI2, false );
-        canvas.stroke();
-        canvas.closePath();
-
-        canvas.lineWidth = lineWidth * 0.4;
-        canvas.strokeStyle = "rgba( 255, 255, 255, " + alpha + " )";
-        canvas.beginPath();
-        canvas.arc( x, y, r, 0, PI2, false );
-        canvas.stroke();
-        canvas.closePath();
-	}
-
-
-
-	//-------------------------------
-	function renderCamera()
-	{
-		_canvas.strokeStyle = "rgb( 255, 255, 255 )";
-		_canvas.lineWidth = _camera.getScale() * 0.007;
-
-		let spacing = 15;
-
-		let x = _camera.getPosition().x - _camera.getXDimension() * ONE_HALF;
-		let y = _camera.getPosition().y - _camera.getYDimension() * ONE_HALF;
-		let w = _camera.getXDimension();
-		let h = _camera.getYDimension();
-
-		_canvas.strokeRect( x + spacing * ONE_HALF, y + spacing * ONE_HALF, w - spacing, h - spacing );
-
-		_canvas.fillStyle = "rgb( 255, 255, 255 )";
-		_canvas.strokeRect
-		(
-			_camera.getPosition().x - _camera.getXDimension() * 0.01,
-			_camera.getPosition().y - _camera.getYDimension() * 0.01, 0.01, 0.01
-		);
-    }
-
-
-
-
-
-	//-------------------------------
-this.renderFoodBits = function( useGraphicsCard )
-{
-        // plain dots on the graphics card: one tight loop over the shared
-        // arrays, straight into the renderer's buffer (no call per food bit)
-        if ( useGraphicsCard && !( PLANT_STAGES_ENABLED && PLANT_STAGES_SHOWN ) && !PLANT_EVOLUTION_ENABLED )
-        {
-            this.writeFoodDots();
-        }
-        else
-        for (let i = 0; i < _aliveFoodBitIndices.length; i++)
-        {
-            let f = _aliveFoodBitIndices[i];
-            if (!_foodBits[f].getAlive()) continue;
-
-            if (_camera.getWithinView(_foodBits[f].getPosition(), FOOD_BIT_GRAB_RADIUS))
-            {
-                if ( useGraphicsCard ) { _foodBits[f].writeCapsule( _capsuleRenderer, _camera.getScale() ); }
-                else                   { _foodBits[f].render( _camera.getScale() ); }
-
-                if (f === _selectedFoodBit)
-                {
-                    _foodBits[f].renderSelectOutline(_camera.getScale());
-                }
-
-                if (f === _mousedOverFoodBit)
-                {
-                    _foodBits[f].renderMousedOverOutline(_camera.getScale());
-                }
-            }
-        }
-}
-
-	const FOOD_RGB = [ 0.3, 0.8, 0.2,   0.3, 0.5, 0.9,   0.9, 0.1, 0.1 ];   // (as FoodBit.setColorAccordingToType)
-	this.writeFoodDots = function()
-	{
-	    const fx = _st.foodX, fy = _st.foodY, ft = _st.foodType, born = _st.foodBorn, live = _st.liveFood;
-	    const n = _aliveFoodBitIndices.length;
-	    const viewW = _camera.getXDimension(), viewH = _camera.getYDimension();
-	    const pad = FOOD_BIT_GRAB_RADIUS;
-	    const left = _camera.getPosition().x - viewW / 2 - pad, right = left + viewW + 2 * pad;
-	    const top  = _camera.getPosition().y - viewH / 2 - pad, bottom = top + viewH + 2 * pad;
-	    const radius = FOOD_BIT_SIZE + _camera.getScale() * FOOD_BIT_SIZE_VIEW_SCALE * FOOD_BIT_SIZE_VIEW_SCALE;
-	    const stride = _capsuleRenderer.floatsPerCapsule;
-	    let i = _capsuleRenderer.reserve( n );
-	    const d = _capsuleRenderer.reserved();
-	    let used = 0;
-	    const parts = [];
-	    for (let k = 0; k < n; k++)
-	    {
-	        const f = _aliveFoodBitIndices[k];
-	        if ( live[f] !== 1 ) continue;
-	        const x = fx[f], y = fy[f];
-	        if (( x < left ) || ( x > right ) || ( y < top ) || ( y > bottom )) continue;
-	        // (a piece of meat smaller than a whole one is drawn as a part of a dot, below)
-	        if (( ft[f] === 2 ) && ( _st.foodEnergy[f] < 0.8 * MEAT_PIECE_ENERGY )) { parts.push( f ); continue; }
-	        const t = ft[f] * 3;
-	        let alpha = ( _clock - born[f] ) * FOOD_OPACITY_INCREMENT;
-	        if ( alpha < 1 ) { alpha = _foodBits[f].getOpacity(); }       // (still fading in, or held in the hand)
-	        d[ i ] = x; d[ i + 1 ] = y; d[ i + 2 ] = x; d[ i + 3 ] = y;
-	        // PLANT_SIZE_ENABLED: a sprout is a small dot, a tree a big one
-	        const r = ( PLANT_SIZE_ENABLED && ( ft[f] !== 2 )) ? radius * ( 0.6 + 1.8 * plantSize( _st.foodWood[f] )) : radius;
-	        d[ i + 4 ] = r; d[ i + 5 ] = r;
-	        d[ i + 6 ] = FOOD_RGB[ t ]; d[ i + 7 ] = FOOD_RGB[ t + 1 ]; d[ i + 8 ] = FOOD_RGB[ t + 2 ];
-	        d[ i + 9 ] = alpha > 1 ? 1 : alpha;
-	        i += stride; used ++;
-	    }
-	    _capsuleRenderer.release( n - used );
-	    for ( const f of parts ) { _foodBits[f].writeCapsule( _capsuleRenderer, _camera.getScale() ); }
-
-	    // the selected and the touched food bit: outlines in 2D
-	    if (( _selectedFoodBit   != NULL_INDEX ) && _foodBits[ _selectedFoodBit   ].getAlive()) { _foodBits[ _selectedFoodBit   ].renderSelectOutline( _camera.getScale() ); }
-	    if (( _mousedOverFoodBit != NULL_INDEX ) && _foodBits[ _mousedOverFoodBit ].getAlive()) { _foodBits[ _mousedOverFoodBit ].renderMousedOverOutline( _camera.getScale() ); }
-	}
-
-	//----------------------------------
-	// render swimbots with batching
-	//----------------------------------
-	this.renderSwimbotsWithBatching = function( useGraphicsCard )
-	{
-    const cameraPos = _camera.getPosition();
-    const cameraChanged = !_lastCameraPosition.equals(cameraPos);
-    _lastCameraPosition.copyFrom(cameraPos);
-
-    // Reuse existing batch objects
-    while (_renderBatch.length > 0) {
-        releaseBatchObject(_renderBatch.pop());
-    }
-
-    // Add all visible swimbots to the batch using object pooling
-    for (let i = 0; i < _aliveSwimbotIndices.length; i++)
-    {
-        let s = _aliveSwimbotIndices[i];
-        if (_swimbots[s].getAlive())
-        {
-            const position = _swimbots[s].getPosition();
-            const boundingRadius = _swimbots[s].getBoundingRadius();
-
-            if (_camera.getWithinView(position, boundingRadius))
-            {
-                const swimbotPos = _swimbots[s].getPosition();
-                const posChanged = !_lastSwimbotPositions[s].equals(swimbotPos);
-
-                // Update cache if needed
-                if (cameraChanged || posChanged) {
-                    _lastSwimbotPositions[s].copyFrom(swimbotPos);
-                    // Calculate and cache squared distance to avoid sqrt
-                    _distanceCache[s] = swimbotPos.getDistanceSquaredTo(cameraPos);
-                }
-
-                const batchObj = getBatchObject();
-                batchObj.swimbot = _swimbots[s];
-                batchObj.isSelected = (s === _selectedSwimbot);
-                batchObj.isMousedOver = (s === _mousedOverSwimbot);
-                batchObj.distance = _distanceCache[s];
-
-                _renderBatch.push(batchObj);
-            }
-        }
-    }
-
-    // the bodies on the graphics card: their drawing data, made by all the
-    // threads at once (RenderData.ts) and then only copied, one block a body
-    const blocks = useGraphicsCard && ( _levelOfDetail !== SWIMBOT_LEVEL_OF_DETAIL_DOT );
-    if ( blocks )
-    {
-        for (let i = 0; i < _renderBatch.length; i++) { _renderList[i] = _renderBatch[i].swimbot.getIndex(); }
-        _runner.task( TASK_RENDER_DATA, _renderList, _renderBatch.length );
-    }
-
-    // Если требуется сортировка (раскомментировать при необходимости)
-    // _renderBatch.sort((a, b) => a.distance - b.distance);
-
-    // Render all swimbots in the batch
-    for (let i = 0; i < _renderBatch.length; i++)
-    {
-        const batchItem = _renderBatch[i];
-        const swimbot = batchItem.swimbot;
-
-	        if ( useGraphicsCard )
-	        {
-	            if ( blocks )
-	            {
-	                _capsuleRenderer.copyBlock( _st.renderParts, swimbot.getRenderBlockStart(), swimbot.getRenderBlockLength() );
-	            }
-	            else { swimbot.writeCapsules( _capsuleRenderer, _levelOfDetail === SWIMBOT_LEVEL_OF_DETAIL_DOT ); }
-	        }
-	        else                   { swimbot.render(_levelOfDetail); }
-
-	        if (batchItem.isSelected || batchItem.isMousedOver)
-	        {
-	            // (the circle and the line to the target: renderSwimbotOverlays, on top)
-	            swimbot.setRenderingGoals(true);
-	        }
-	        else
-	        {
-	            if (_renderingGoals)
-	            {
-	                swimbot.setRenderingGoals(true);
-	            }
-	        }
-	    }
-	}
-
-	//------------------------------------------------------------------------
-	// drawn after the bodies (on top of the graphics card's picture too):
-	// mouths and genitals up close when the bodies are on the graphics card,
-	// the selection circles, the line to the selected swimbot's target
-	//------------------------------------------------------------------------
-	const _renderList = new Int32Array( MAX_SWIMBOTS );
-
-	this.renderSwimbotOverlays = function( useGraphicsCard )
-	{
-	    const details = useGraphicsCard && ( _levelOfDetail === SWIMBOT_LEVEL_OF_DETAIL_HIGH );
-	    for (let i = 0; i < _renderBatch.length; i++)
-	    {
-	        const item = _renderBatch[i], swimbot = item.swimbot;
-	        if ( details ) { swimbot.renderDetails(); }
-	        if ( item.isSelected )
-	        {
-	            renderSelectCircle( swimbot.getPosition().x, swimbot.getPosition().y, swimbot.getSelectRadius(), false );
-	            renderTargetLine( swimbot.getTargetLine() );
-	            if ( DEBUG_SHOW_SWIMBOT_TRAIL ) { this.showSwimbotTrail( swimbot.getIndex() ); }
-	        }
-	        else if ( item.isMousedOver )
-	        {
-	            renderSelectCircle( swimbot.getPosition().x, swimbot.getPosition().y, swimbot.getSelectRadius(), true );
-	        }
-	    }
-	}
+	// drawing lives in GenePoolRenderer.ts
+	this.render                     = function()                 { _renderer.render(); }
+	this.renderFoodBits             = function( g )             { _renderer.renderFoodBits( g ); }
+	this.writeFoodDots              = function()                 { _renderer.writeFoodDots(); }
+	this.renderSwimbotsWithBatching = function( g )             { _renderer.renderSwimbotsWithBatching( g ); }
+	this.renderSwimbotOverlays      = function( g )             { _renderer.renderSwimbotOverlays( g ); }
 
 	// the V key: up close, bodies on the graphics card too (faster, a little plainer)
 	let _gpuUpClose = false;
 	this.toggleGpuUpClose = function() { _gpuUpClose = !_gpuUpClose; }
 	this.getGpuUpClose    = function() { return _gpuUpClose; }
+
+    //-------------------------------------
+    // Создание рендерера после инициализации всех переменных
+    //-------------------------------------
+    _renderer = createGenePoolRenderer( _rendererContext );
 
 	//--------------------------------------
 	this.initializeDebugTrail = function(s)
@@ -5078,6 +4575,8 @@ this.renderFoodBits = function( useGraphicsCard )
     this.getHungerThreshold     = function() { return globalTweakers.hungerThreshold;   }
     this.getEnergyToOffspring   = function() { return globalTweakers.childEnergyRatio;  }
     this.getMaximumSwimbotAge   = function() { return globalTweakers.maximumLifeSpan;   }
+    this.getPopulationLimitEnabled = function() { return globalTweakers.populationLimitEnabled; }
+    this.getMaximumSwimbotParts = function() { return globalTweakers.maximumParts; }
     this.getTimeStep            = function() { return _clock;                   }
 	this.getRenderingGoals      = function() { return _renderingGoals;          }
 	this.getSimulationRunning   = function() { return _simulationRunning;       }
@@ -5250,219 +4749,60 @@ this.renderFoodBits = function( useGraphicsCard )
 	// (docs/схема_сохранения_мира.md). saveWorld() returns the bytes of a
 	// .gpworld file (not compressed); loadWorld( bytes ) puts them back.
 	//------------------------------------------------------------------------
-	const WORLD_ARRAYS = [
-	    "bots", "parts", "partLength", "partWidth", "partMass", "partAngle", "partAmp", "partPhase", "partTurnAmp", "partTurnPhase", "partMoment", "partParent",
-	    "botX", "botY", "genitalX", "genitalY", "mouthX", "mouthY", "predator", "mass", "brightness", "energy", "scanRadius", "effWarm", "effCold", "preferred",
-	    "alive", "liveSwimbot", "liveFood", "eternal", "sensing", "brainState", "age", "colorR", "colorG", "colorB", "choosiness", "attraction",
-	    "imageR", "imageG", "imageB", "imageSize", "imageStrength", "preyValueWeight", "preyTravelWeight", "preyBaitBias",
-	    "foodX", "foodY", "foodType", "foodEnergy", "foodBorn", "foodWood", "foodFruit", "foodFruitAt", "plantGrowth", "plantSpread",
-	    "mind", "nnInputs", "nnHidden", "nnOutputs", "random",
-	    "seenCount", "seen", "seenFood", "seenPrey", "targetPreyDistance", "targetPreyReward", "targetPreySuccess", "targetPreyChase",
-	    "targetBaitPresent", "targetBaitDistance", "targetBaitReward", "seenThreat", "seenPredator", "seenMate", "socialX", "socialY",
-	];
-
-	this.saveWorld = function( withFamilyTree = true )
+	// the serializer (GenePoolSerializer.ts) works through this view of the pool's variables
+	const _serializerContext: any =
 	{
-	    const chunks: Chunk[] = [];
-	    for ( const name of WORLD_ARRAYS ) { chunks.push({ name, data: ( _st as any )[ name ].slice() }); }
+	    get st()                         { return _st; },
+	    get swimbots()                   { return _swimbots; },
+	    get foodBits()                   { return _foodBits; },
+	    get swimbotWasAlive()            { return _swimbotWasAlive; },
+	    get clock()                      { return _clock; },               set clock( v )              { _clock = v; },
+	    get seedDebt()                   { return _seedDebt; },            set seedDebt( v )           { _seedDebt = v; },
+	    get nurseryDebt()                { return _nurseryDebt; },         set nurseryDebt( v )        { _nurseryDebt = v; },
+	    get classicSeedDebt()            { return _classicSeedDebt; },     set classicSeedDebt( v )    { _classicSeedDebt = v; },
+	    get serial()                     { return _serial; },              set serial( v )             { _serial = v; },
+	    get gardenOfEdenRadius()         { return _gardenOfEdenRadius; },  set gardenOfEdenRadius( v ) { _gardenOfEdenRadius = v; },
+	    get currentSpeed()               { return _currentSpeed; },        set currentSpeed( v )       { _currentSpeed = v; },
+	    get numSick()                    { return _numSick; },             set numSick( v )            { _numSick = v; },
+	    get matingCount()                { return _matingCount; },         set matingCount( v )        { _matingCount = v; },
+	    get simulationRunning()          { return _simulationRunning; },   set simulationRunning( v )  { _simulationRunning = v; },
+	    get startMode()                  { return _this.startMode; },      set startMode( v )          { _this.startMode = v; },
+	    get meatZoneDebt()               { return _meatZoneDebt; },        set meatZoneDebt( v )       { _meatZoneDebt = v; },
+	    get matingRecord()               { return _matingRecord; },
+	    get matingBrightnessDifference() { return _matingBrightnessDifference; },
+	    get matingChoosinessMean()       { return _matingChoosinessMean; },
+	    get history()                    { return _history; },
+	    get gardens()                    { return _gardens; },             set gardens( v )            { _gardens = v; },
+	    get roots()                      { return _roots; },
+	    get obstacle()                   { return _obstacle; },
+	    get camera()                     { return _camera; },
+	    get familyTree()                 { return _familyTree; },
+	    get map()                        { return _map; },                 set map( v )                { _map = v; },
+	    get embryology()                 { return _embryology; },
+	    get pool()                       { return _pool; },
+	    setFoodGrowthDelay:      ( v: number ) => _this.setFoodGrowthDelay( v ),
+	    setFoodSpread:           ( v: number ) => _this.setFoodSpread( v ),
+	    setFoodBitEnergy:        ( v: number ) => _this.setFoodBitEnergy( v ),
+	    setHungerThreshold:      ( v: number ) => _this.setHungerThreshold( v ),
+	    setAttraction:           ( v: number ) => _this.setAttraction( v ),
+	    setOffspringEnergyRatio: ( v: number ) => _this.setOffspringEnergyRatio( v ),
+	    setMaximumSwimbotAge:    ( v: number ) => _this.setMaximumSwimbotAge( v ),
+	    writePerceptionParams:   () => _this.writePerceptionParams(),
+	    prepareMapZones:         () => prepareMapZones(),
+	    rebuildAliveIndexCaches: () => rebuildAliveIndexCaches(),
+	    setSelectedSwimbot:      ( i: number ) => setSelectedSwimbot( i ),
+	    resetFrameClock:         () => { _stepDebt = 0; _lastFrameTime = 0; },
+	    setEnvironmentImage:     ( image: any ) => { _environmentImage = image; },
+	    resetViewTracking:       () => _viewTracking.reset(),
+	    refreshCounts:           () => { _numSwimbots = _aliveSwimbotIndices.length; _numFoodBits = _aliveFoodBitIndices.length; },
+	};
 
-	    // the swimbots that need their objects: alive, and those that died last step (their body is still needed)
-	    const slots: number[] = [];
-	    for (let s = 0; s < MAX_SWIMBOTS; s++) { if (( _st.liveSwimbot[s] === 1 ) || _swimbotWasAlive[s] ) slots.push( s ); }
-	    const n = slots.length;
-	    const genes = new Uint8Array( n * NUM_GENES ), brain = new Float32Array( n * BRAIN_SIZE );
-	    const priv = new Float64Array( n * 12 ), origin = new Int8Array( n * MAX_PARTS );
-	    slots.forEach( ( s, i ) =>
-	    {
-	        const genotype = _swimbots[s].getGenotype();
-	        genes.set( genotype.getGenes(), i * NUM_GENES );
-	        brain.set( genotype.getBrain(), i * BRAIN_SIZE );
-	        _swimbots[s].getPrivateState( priv, i * 12 );
-	        _swimbots[s].getPhenotypeOrigins( origin, i * MAX_PARTS );
-	    });
-	    const wasAlive = new Uint8Array( MAX_SWIMBOTS );
-	    for (let s = 0; s < MAX_SWIMBOTS; s++) { wasAlive[s] = _swimbotWasAlive[s] ? 1 : 0; }
-	    const decoy = new Uint8Array( MAX_FOODBITS );
-	    for (let f = 0; f < MAX_FOODBITS; f++) { decoy[f] = ( _st.liveFood[f] === 1 && _foodBits[f].getAutotomyDecoy() ) ? 1 : 0; }   // (only for food that exists: a dead slot keeps an old flag)
-	    chunks.push({ name: "botSlots", data: Int32Array.from( slots ) }, { name: "botGenes", data: genes }, { name: "botBrain", data: brain },
-	                { name: "botPrivate", data: priv }, { name: "botOrigin", data: origin }, { name: "wasAlive", data: wasAlive }, { name: "foodDecoy", data: decoy });
-
-	    // the rest of the world
-	    const raw = environment.exportRaw();
-	    chunks.push({ name: "diseaseStrains", data: exportStrains() },
-	                { name: "envSoil", data: raw.soilNutrient }, { name: "envSoilAt", data: raw.nutrientUpdatedAt },
-	                { name: "envPlants0", data: raw.plantCount0 }, { name: "envPlants1", data: raw.plantCount1 },
-	                { name: "matingRecord", data: _matingRecord.slice() }, { name: "matingBrightness", data: _matingBrightnessDifference.slice() },
-	                { name: "matingChoosiness", data: _matingChoosinessMean.slice() });
-
-	    // (the random numbers among them: the state everything above went on from)
-	    chunks.push({ name: "poolScalars", data: Float64Array.from( [
-	        _clock, getRandomState(), _seedDebt, _nurseryDebt, _classicSeedDebt, _serial, _gardenOfEdenRadius, _currentSpeed, _numSick,
-	        _matingCount, _simulationRunning ? 1 : 0, this.startMode, _meatZoneDebt, getAtmosphereEnergy() ] ) });
-
-	    // every counter in one row (some are lists)
-	    const counterNames = Object.keys( simCounters ), counterValues: number[] = [], counterSizes: number[] = [];
-	    for ( const key of counterNames )
-	    {
-	        const value = ( simCounters as any )[ key ];
-	        const list = Array.isArray( value ) ? value : [ value ];
-	        counterSizes.push( Array.isArray( value ) ? list.length : -1 );
-	        for ( const x of list ) { counterValues.push( x ); }
-	    }
-	    chunks.push({ name: "counters", data: Float64Array.from( counterValues ) });
-
-	    let tree: any = null;
-	    if ( withFamilyTree )
-	    {
-	        tree = _familyTree.exportState();
-	        chunks.push({ name: "familyCols", data: tree.cols }, { name: "familyGenes", data: tree.genes });
-	    }
-
-	    const header: any =
-	    {
-	        code: ( typeof __GENEPOOL_VERSION__ !== "undefined" ) ? __GENEPOOL_VERSION__ : "headless", created: new Date().toISOString(),
-	        worldScale: WORLD_SCALE, clock: _clock, numAlive: slots.length,
-	        params: changedParams(), tweakers: { ...globalTweakers },
-	        counterNames, counterSizes,
-	        history: { interval: _history.interval, step: _history.step, herbivores: _history.herbivores, predators: _history.predators, plants: _history.plants, meat: _history.meat },
-	        environment: environment.getState(),
-	        gardens: _gardens.map( g => ({ x: g.x, y: g.y, type: g.type })),
-	        roots: _roots.map( r => ({ ...r })),
-	        obstacle: { x1: _obstacle.getEnd1Position().x, y1: _obstacle.getEnd1Position().y, x2: _obstacle.getEnd2Position().x, y2: _obstacle.getEnd2Position().y, enabled: _obstacle.getEnabled() },
-	        camera: { x: _camera.getPosition().x, y: _camera.getPosition().y, scale: _camera.getScale() },
-	        familyTree: tree ? { n: tree.n, length: tree.length, traits: tree.traits } : null,
-	        map: _map,
-	    };
-	    return packWorld( header, chunks );
-	}
+	this.saveWorld   = function( withFamilyTree = true ) { return Serializer.saveWorld( _serializerContext, withFamilyTree ); }
 
 	// the hashes of the parts of the world (to compare two worlds, and to check a load)
-	this.worldHashes = function()
-	{
-	    const header = unpackWorld( this.saveWorld( false )).header;
-	    const out: any = {};
-	    for ( const c of header.chunks ) { out[ c.name ] = c.hash; }
-	    return out;
-	}
+	this.worldHashes = function() { return Serializer.worldHashes( _serializerContext ); }
 
-	this.loadWorld = function( bytes )
-	{
-	    let file;
-	    try { file = unpackWorld( bytes ); } catch ( e ) { return { ok: false, reason: "bad file: " + e.message }; }
-	    const header = file.header;
-	    if ( header.format !== WORLD_FORMAT ) { return { ok: false, reason: "format " + header.format + " is not " + WORLD_FORMAT }; }
-	    const mine: any = layoutFingerprint();
-	    if ( header.layout.WORLD_SCALE !== mine.WORLD_SCALE ) { return { ok: false, reason: "world size", needWorld: header.layout.WORLD_SCALE }; }
-	    for ( const key in mine )
-	    {
-	        if ( header.layout[ key ] !== mine[ key ] ) { return { ok: false, reason: "the code has other sizes now (" + key + "): load softly" }; }
-	    }
-
-	    // 1. the clock of the frames: no catching up after the load
-	    _stepDebt = 0; _lastFrameTime = 0;
-
-	    // 2. the changed numbers (the threads take them at the next phase); everything else as the code has it
-	    for ( const p of PARAM_LIST ) { setParameter( p.name, ( header.params && ( p.name in header.params )) ? header.params[ p.name ] : PARAM_DEFAULTS[ p.name ] ); }
-
-	    // 3. the settings (they go over all food and all swimbots: before the arrays are copied)
-	    const t = header.tweakers;
-	    this.setFoodGrowthDelay( t.foodRegenerationPeriod );
-	    this.setFoodSpread( t.foodSpread );
-	    this.setFoodBitEnergy( t.foodBitEnergy );
-	    this.setHungerThreshold( t.hungerThreshold );
-	    this.setAttraction( t.attractionCriterion );
-	    this.setOffspringEnergyRatio( t.childEnergyRatio );
-	    this.setMaximumSwimbotAge( t.maximumLifeSpan );
-	    globalTweakers.numFoodTypes = t.numFoodTypes;
-
-	    // 4. the map of the environment, then what changes in it
-	    const scalars = file.get( "poolScalars" );
-	    _clock = scalars[0]; simClock.step = _clock;
-	    environment.setState( header.environment );
-	    environment.importRaw({ time: _clock, soilNutrient: file.get( "envSoil" ), nutrientUpdatedAt: file.get( "envSoilAt" ),
-	                            plantCount0: file.get( "envPlants0" ), plantCount1: file.get( "envPlants1" ) });
-	                            if ( scalars.length > 13 ) { resetAtmosphere( scalars[13] ); }
-	    if ( environment.active ) { environment.copyBackgroundTo( _st.background ); }
-	    try { _environmentImage = environment.active ? environment.makeImage() : null; _pool.setBackgroundImage( _environmentImage ); } catch ( e ) { _environmentImage = null; }
-
-	    // 5. clear everything (dying counts and writes to the family tree: set right below)
-	    for (let f = 0; f < MAX_FOODBITS; f++) { _foodBits[f].kill(); }
-	    for (let s = 0; s < MAX_SWIMBOTS; s++) { _swimbots[s].die(); }
-	    _familyTree.reset();
-	    importStrains( file.get( "diseaseStrains" ));
-
-	    // 6. the objects: swimbots (grown from their genes, put back as autotomy left them), food
-	    const slots = file.get( "botSlots" ), genes = file.get( "botGenes" ), brains = file.get( "botBrain" );
-	    const priv = file.get( "botPrivate" ), origin = file.get( "botOrigin" );
-	    const place = new Vector2D();
-	    const grown = new Genotype();      // (not _myGenotype: that one may be some swimbot's own genotype by now)
-	    for (let i = 0; i < slots.length; i++)
-	    {
-	        const s = slots[i];
-	        grown.setGenes( Array.from( genes.subarray( i * NUM_GENES, ( i + 1 ) * NUM_GENES )) );
-	        grown.setBrain( brains.subarray( i * BRAIN_SIZE, ( i + 1 ) * BRAIN_SIZE ));
-	        _swimbots[s].create( s, 0, place, 0, 0, grown, _embryology );
-	        _swimbots[s].restorePhenotypeOrder( origin, i * MAX_PARTS );
-	        _swimbots[s].setPrivateState( priv, i * 12 );
-	    }
-	    const liveFood = file.get( "liveFood" ), decoy = file.get( "foodDecoy" );
-	    for (let f = 0; f < MAX_FOODBITS; f++)
-	    {
-	        if ( liveFood[f] !== 1 ) continue;
-	        _foodBits[f].initialize( f );
-	        _foodBits[f].setAutotomyDecoy( decoy[f] === 1 );
-	    }
-
-	    // 7. the numbers of the shared arrays, over everything the objects wrote (the arrays themselves stay: the threads hold them)
-	    for ( const name of WORLD_ARRAYS ) { if ( file.has( name )) ( _st as any )[ name ].set( file.get( name )); }
-	    for (let f = 0; f < MAX_FOODBITS; f++) { if ( liveFood[f] === 1 ) { _foodBits[f].setColorAccordingToType(); } }
-
-	    // 8. the rest of the pool
-	    const wasAlive = file.get( "wasAlive" );
-	    for (let s = 0; s < MAX_SWIMBOTS; s++) { _swimbotWasAlive[s] = wasAlive[s] === 1; }
-	    _seedDebt = scalars[2]; _nurseryDebt = scalars[3]; _classicSeedDebt = scalars[4]; _serial = scalars[5];
-	    _gardenOfEdenRadius = scalars[6]; _currentSpeed = scalars[7]; _numSick = scalars[8]; _matingCount = scalars[9];
-	    _simulationRunning = scalars[10] === 1; this.startMode = scalars[11];
-	    _map = header.map || null; prepareMapZones(); _meatZoneDebt = ( scalars.length > 12 ) ? scalars[12] : 0;
-	    _matingRecord.set( file.get( "matingRecord" )); _matingBrightnessDifference.set( file.get( "matingBrightness" )); _matingChoosinessMean.set( file.get( "matingChoosiness" ));
-	    _gardens = header.gardens.map( g => ({ x: g.x, y: g.y, type: g.type }));
-	    _roots.length = 0;
-	    for ( const r of header.roots ) { _roots.push({ ...r }); }
-	    const h = header.history;
-	    _history.interval = h.interval;
-	    _history.step = h.step.slice(); _history.herbivores = h.herbivores.slice(); _history.predators = h.predators.slice(); _history.plants = h.plants.slice(); _history.meat = h.meat.slice();
-	    const end1 = new Vector2D(), end2 = new Vector2D();
-	    end1.setXY( header.obstacle.x1, header.obstacle.y1 ); end2.setXY( header.obstacle.x2, header.obstacle.y2 );
-	    _obstacle.setEndpointPositions( end1, end2 );
-	    _obstacle.setEnabled( header.obstacle.enabled );
-	    const cameraAt = new Vector2D(); cameraAt.setXY( header.camera.x, header.camera.y );
-	    _camera.setPosition( cameraAt );
-	    _camera.setScale( header.camera.scale );
-	    setSelectedSwimbot( NULL_INDEX );
-	    _viewTracking.reset();
-	    if ( header.familyTree && file.has( "familyCols" ))
-	    {
-	        _familyTree.importState({ ...header.familyTree, cols: file.get( "familyCols" ), genes: file.get( "familyGenes" ) });
-	    }
-
-	    // 9. the counters after everything that counted (die, create...), the caches, the random numbers last
-	    const counterValues = file.get( "counters" );
-	    let at = 0;
-	    header.counterNames.forEach( ( key, i ) =>
-	    {
-	        if ( header.counterSizes[i] < 0 ) { ( simCounters as any )[ key ] = counterValues[ at ++ ]; }
-	        else { for (let k = 0; k < header.counterSizes[i]; k++) { ( simCounters as any )[ key ][k] = counterValues[ at ++ ]; } }
-	    });
-	    this.writePerceptionParams();
-	    rebuildAliveIndexCaches();
-	    _numSwimbots = _aliveSwimbotIndices.length; _numFoodBits = _aliveFoodBitIndices.length;
-	    setRandomState( scalars[1] );
-
-	    // 10. is it the same world? (the parts of the file against the parts now)
-	    const now = this.worldHashes(), mismatches = [];
-	    for ( const c of header.chunks ) { if ( c.name in now && now[ c.name ] !== c.hash ) mismatches.push( c.name ); }
-	    return { ok: true, mismatches, code: header.code, clock: _clock };
-	}
+	this.loadWorld   = function( bytes ) { return Serializer.loadWorld( _serializerContext, bytes ); }
 
 	this.getPoolData = function()
 	{
@@ -5595,11 +4935,14 @@ for (let g=0; g<NUM_GENES; g++)
             "hungerThreshold"           : globalTweakers.hungerThreshold,
             "attractionCriterion"       : globalTweakers.attractionCriterion,
             "childEnergyRatio"          : globalTweakers.childEnergyRatio,
+            "populationLimitEnabled"    : globalTweakers.populationLimitEnabled,
+            "maximumSwimbotParts"       : globalTweakers.maximumParts,
             "renderingGoals"            : _renderingGoals,
             "obstacleEnd1X"             : _obstacle.getEnd1Position().x,
             "obstacleEnd1Y"             : _obstacle.getEnd1Position().y,
             "obstacleEnd2X"             : _obstacle.getEnd2Position().x,
             "obstacleEnd2Y"             : _obstacle.getEnd2Position().y,
+            "obstacleSegments"          : _obstacle.getSegments(),
             "geneLayout"                : GENE_LAYOUT_VERSION,
             "environment"               : environment.getState(),
             "clock"                     : _clock
