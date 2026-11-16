@@ -18,7 +18,7 @@ import { DEFAULT_FOOD_BIT_ENERGY, DEFAULT_FOOD_BIT_MAX_SPAWN_RADIUS, MAX_FOOD_BI
 import { CameraNavigationAction, SimulationStartMode } from "../simulation/Globals";
 import { NULL_INDEX } from "../simulation/MathConstants";
 import { DEFAULT_CHILD_ENERGY_RATIO, DEFAULT_FOOD_REGENERATION_PERIOD, DEFAULT_MAXIMUM_AGE, DEFAULT_SWIMBOT_HUNGER_THRESHOLD, MAX_CHILD_ENERGY_RATIO, MAX_FOOD_REGENERATION_PERIOD, MAX_MAXIMUM_AGE, MAX_SWIMBOT_HUNGER_THRESHOLD, MIN_CHILD_ENERGY_RATIO, MIN_FOOD_REGENERATION_PERIOD, MIN_MAXIMUM_AGE, MIN_SWIMBOT_HUNGER_THRESHOLD, PREDATOR_LEVEL_THRESHOLD } from "../simulation/Parameters";
-import { ATTRACTION_BIG, ATTRACTION_CLOSEST, ATTRACTION_COLORFUL, ATTRACTION_CROOKED, ATTRACTION_HYPER, ATTRACTION_LONG, ATTRACTION_NO_COLOR, ATTRACTION_RANDOM, ATTRACTION_SHORT, ATTRACTION_SIMILAR_COLOR, ATTRACTION_SIMILAR_HYPER, ATTRACTION_SIMILAR_LENGTH, ATTRACTION_SIMILAR_SIZE, ATTRACTION_SIMILAR_STRAIGHT, ATTRACTION_SMALL, ATTRACTION_STILL, ATTRACTION_STRAIGHT, NUM_ATTRACTIONS } from "../simulation/SwimbotTypes";
+import { ATTRACTION_BIG, ATTRACTION_CLOSEST, ATTRACTION_COLORFUL, ATTRACTION_CROOKED, ATTRACTION_HYPER, ATTRACTION_LONG, ATTRACTION_NO_COLOR, ATTRACTION_RANDOM, ATTRACTION_SHORT, ATTRACTION_SIMILAR_COLOR, ATTRACTION_SIMILAR_HYPER, ATTRACTION_SIMILAR_LENGTH, ATTRACTION_SIMILAR_SIZE, ATTRACTION_SIMILAR_STRAIGHT, ATTRACTION_SMALL, ATTRACTION_STILL, ATTRACTION_STRAIGHT, MAX_PARTS, MIN_PARTS, NUM_ATTRACTIONS } from "../simulation/SwimbotTypes";
 import { assert } from "../simulation/Utility";
 import { ViewTrackingMode } from "../simulation/ViewTracking";
 import { Graph } from "./graph";
@@ -174,6 +174,18 @@ export function setEcosystemValue( id )
     updateEcosystemUI();
 }
 
+export function setPopulationLimitEnabled( value )
+{
+    genePool.setPopulationLimitEnabled( value );
+    updateEcosystemUI();
+}
+
+export function setMaximumSwimbotParts( value )
+{
+    genePool.setMaximumSwimbotParts( value );
+    updateEcosystemUI();
+}
+
 //------------------------------------
 export function setEcosystemToDefaults()
 {
@@ -183,6 +195,8 @@ export function setEcosystemToDefaults()
     genePool.setHungerThreshold     ( DEFAULT_SWIMBOT_HUNGER_THRESHOLD  );
     genePool.setOffspringEnergyRatio( DEFAULT_CHILD_ENERGY_RATIO        );
     genePool.setMaximumSwimbotAge   ( DEFAULT_MAXIMUM_AGE               );
+    genePool.setPopulationLimitEnabled( true );
+    genePool.setMaximumSwimbotParts ( 16 );
     updateEcosystemUI();
 }
 
@@ -197,6 +211,8 @@ export function initializeEcosystemUI()
     document.getElementById( 'foodBitEnergySlider'      ).max = MAX_FOOD_BIT_ENERGY;
     document.getElementById( 'maxAgeSlider'             ).min = MIN_MAXIMUM_AGE;
     document.getElementById( 'maxAgeSlider'             ).max = MAX_MAXIMUM_AGE;
+    document.getElementById( 'maxPartsInput'            ).min = MIN_PARTS;
+    document.getElementById( 'maxPartsInput'            ).max = MAX_PARTS;
     updateEcosystemUI();
 }
 
@@ -213,6 +229,8 @@ export function updateEcosystemUI()
         document.getElementById( "foodBitEnergyValue"       ).innerHTML = genePool.getFoodBitEnergy();
         document.getElementById( "maxAgeSlider"             ).value     = genePool.getMaximumSwimbotAge();
         document.getElementById( "maxAgeValue"              ).innerHTML = genePool.getMaximumSwimbotAge();
+        ( document.getElementById( "populationLimitToggle" ) as HTMLInputElement ).checked = genePool.getPopulationLimitEnabled();
+        document.getElementById( "maxPartsInput"            ).value     = genePool.getMaximumSwimbotParts();
         let radioButtons = document.getElementsByName( 'attractionRadioButton' );
         for (let i = 0; i < radioButtons.length; i++)
         {
@@ -584,20 +602,20 @@ export function requestToLoadPoolFromFile()
 {
     if ( _username === "anonymous" )
     {
-        console.warn( "Cannot load pool: saving to a server is not available in this version" );
+        console.warn( tr("Cannot load pool: saving to a server is not available in this version") );
     }
     else
     {
-        let poolText = "from file";
+        let poolText = tr("from file");
         document.getElementById( 'popUpPanel'               ).style.display = "block";
         document.getElementById( 'cancelPopUpPanelButton'   ).style.display = "block";
         document.getElementById( 'savePopUpPanelButton'     ).style.display = "block";
         document.getElementById( 'noSavePopUpPanelButton'   ).style.display = "block";
         document.getElementById( 'popUpPanel' ).innerHTML
         = "<br>"
-        + "Do you want to save the current pool"
+        + tr("Do you want to save the current pool")
         + "<br>"
-        + "before loading " + poolText + "?";
+        + tr("before loading") + " " + poolText + "?";
     }
 }
 
@@ -772,7 +790,7 @@ export function updateUI()
             const history = genePool.getPopulationHistory();
             const predators = history.step.length > 0 ? history.predators[ history.step.length - 1 ] : 0;
             let graphDataHTML =
-                "time step: " + genePool.getTimeStep()
+                tr("time step:") + " " + genePool.getTimeStep()
                 + ( environment.active ? " (" + environment.seasonName() + ")" : "" )
                 + "<br>"
                 + "speed: " + Math.round( genePool.getStepsPerSecond() ) + " steps/sec"
@@ -784,8 +802,8 @@ export function updateUI()
                 + "<br>"
                 + genePool.getGeneticClustersText()
                 + "<br>"
-                + "green plants: " + genePool.getNumFoodBitsOfType(0)
-                + ( TWO_PLANT_TYPES ? "<br>blue plants: " + genePool.getNumFoodBitsOfType(1) : "" )
+                + tr("green plants:") + " " + genePool.getNumFoodBitsOfType(0)
+                + ( TWO_PLANT_TYPES ? "<br>" + tr("blue plants:") + " " + genePool.getNumFoodBitsOfType(1) : "" )
                 + "<br>"
                 + "meat: " + genePool.getNumFoodBitsOfType(2);
             if (graphDataHTML !== _lastGraphDataHTML)
@@ -892,7 +910,7 @@ function phaseTimesText()
     const n = T[6];
     if ( !( n > 0 )) return "";
     const f = ( x ) => ( x / n ).toFixed( 1 );
-    const text = "<br>step: " + f( T[5] ) + " ms (brain " + f( T[0] ) + ", move " + f( T[1] ) + ", look " + f( T[2] + T[3] ) + ", act " + f( T[4] ) + ")";
+    const text = "<br>step: " + f( T[5] ) + " " + tr("ms (brain") + " " + f( T[0] ) + tr(", move") + " " + f( T[1] ) + tr(", look") + " " + f( T[2] + T[3] ) + tr(", act") + " " + f( T[4] ) + ")";
     T.fill( 0 );
     return text;
 }
