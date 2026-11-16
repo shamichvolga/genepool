@@ -6,3 +6,10 @@ tools/results/
 node_modules/
 dist/
 runs/
+analysis/
+backups/
+.aider.tags.cache.v4/
+.aider.chat.history.md
+.aider.input.history
+*.csv
+*.log
