@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Как на самом деле рисуются растения — GenePool</title>
+<style>
+  body { margin: 0; padding: 22px 26px 40px; background: rgb(22,26,30); color: #d7e5da;
+         font: 14px/1.5 "Segoe UI", Tahoma, sans-serif; }
+  h1 { font-size: 20px; margin: 0 0 6px; color: #9ee06e; }
+  h2 { font-size: 16px; margin: 26px 0 4px; color: #b7e88f; }
+  .lead { color: #9fb0a4; max-width: 900px; margin: 0 0 10px; }
+  .note { color: #c8d6cc; background: #1c2420; border-left: 3px solid #4f8a3a;
+          padding: 8px 12px; max-width: 900px; margin: 8px 0 14px; }
+  .grid { display: flex; flex-wrap: wrap; gap: 14px; }
+  .cell { width: 172px; background: rgb(16,20,23); border: 1px solid #2c3a31;
+          border-radius: 8px; padding: 8px; text-align: center; }
+  .cell canvas { display: block; margin: 0 auto; background: rgb(22,26,30); }
+  .cap { font-size: 12px; color: #a9beae; margin-top: 6px; }
+  .cap b { color: #e2f2d8; }
+  .rgb { font-size: 11px; color: #7f9a87; }
+  .warn { color: #e8c07a; }
+  table { border-collapse: collapse; margin-top: 18px; font-size: 13px; }
+  td, th { border: 1px solid #33443a; padding: 5px 9px; text-align: left; }
+  th { background: #1b2720; color: #bfe39f; }
+</style>
+</head>
+<body>
+
+<h1>Растения в симуляции — как они реально рисуются</h1>
+<p class="lead">
+  Всё ниже — не придуманные картинки, а дословное повторение команд отрисовки из
+  <code>FoodBit.ts</code> и <code>GenePoolRenderer.ts</code>. Цвета, длины лучей и толщины линий
+  взяты из кода. Изображение увеличено в 8 раз, чтобы было видно; пропорции при этом не изменены.
+</p>
+<div class="note">
+  В текущих настройках включён <b>только один вид растений — зелёный</b> (тип 0).
+  Голубой вид выключен. Разница между стадиями зависит только от <b>ствола</b>
+  (максимальной энергии, которую растение когда-либо достигло), а не от возраста.
+  Максимальный ствол — 150.
+</div>
+
+<h2>1. Обычный запуск — отрисовка на видеокарте (WebGL2)</h2>
+<p class="lead">
+  именно так выглядит игра при обычном запуске: <code>writeFoodDots()</code> для ствола ниже 40
+  и <code>writeCapsule()</code> — звезда для ствола от 40.
+</p>
+<div class="grid" id="gpu"></div>
+
+<h2>2. Запасной режим — обычный 2D (если WebGL2 недоступен или <code>?local=1</code>)</h2>
+<p class="lead">
+  после исправления пороги и размеры одинаковы в обоих режимах: звезда со ствола 40,
+  а листья и лучи масштабируются вместе с растением, поэтому не прячутся при приближении.
+</p>
+<div class="grid" id="cpu"></div>
+
+<h2>3. Плод и мясо (для сравнения)</h2>
+<div class="grid" id="extra"></div>
+
+<div class="note">
+  <b>Что исправлено.</b> Раньше точка считалась в единицах мира, а листья — в экранных
+  пикселях, поэтому при приближении точка разрасталась и закрывала форму. Теперь и точка,
+  и листья считаются от размера растения. Порог звезды в обоих режимах — ствол 40.
+  Плод больше не растёт как дерево и всегда остаётся оранжевой точкой.
+  Цвет в 2D по-прежнему меняется с ростом: светло-зелёный → зелёный → тёмно-зелёный.
+</div>
+
+<table>
+  <tr><th>Что"/></th><th>Где в коде</th><th>Условие</th></tr>
+  <tr><td>росток: точка + стебель + 2 листа</td><td>FoodBit.ts 395–402 / GenePoolRenderer.ts 222–231</td><td>ствол меньше 30</td></tr>
+  <tr><td>саженец: точка + 4 листа</td><td>FoodBit.ts 404–415 / GenePoolRenderer.ts 232–242</td><td>ствол от 30</td></tr>
+  <tr><td>звезда из 8 лучей (видеокарта)</td><td>GenePoolRenderer.ts 244–257, FoodBit.ts 355–362</td><td>ствол от 40</td></tr>
+  <tr><td>звезда из 8 лучей + тёмный центр (2D)</td><td>FoodBit.ts 417–440</td><td>ствол от 40</td></tr>
+  <tr><td>плод: оранжевая точка</td><td>FoodBit.ts 378–384 / GenePoolRenderer.ts 213–218</td><td>всегда, даже при большом стволе в старом сохранении</td></tr>
+</table>
+
+<script>
+// --- константы прямо из кода ---
+const FOOD_BIT_SIZE = 1.5;              // FoodBit.ts:11
+const FOOD_BIT_SIZE_VIEW_SCALE = 0.03;  // FoodBit.ts:18
+const PLANT_TREE_ENERGY = 150;          // Parameters.ts:304
+const WOOD_PER_FRUIT_TIER = 40;         // Parameters.ts:314
+const VIEW_SCALE = 1;                   // масштаб камеры, при котором pixel = 1
+const pixel = VIEW_SCALE;               // writeFoodDots: pixel = viewW / canvasWidth
+const base = FOOD_BIT_SIZE + VIEW_SCALE * FOOD_BIT_SIZE_VIEW_SCALE * FOOD_BIT_SIZE_VIEW_SCALE;
+const MAG = 8;                          // только увеличение для показа
+
+const psize = w => Math.min(1, Math.max(0, w / PLANT_TREE_ENERGY));
+
+function addCell(parent, title, sub, draw) {
+  const cell = document.createElement('div'); cell.className = 'cell';
+  const cv = document.createElement('canvas'); cv.width = 156; cv.height = 128;
+  const cap = document.createElement('div'); cap.className = 'cap';
+  cap.innerHTML = '<b>' + title + '</b><br>' + sub;
+  cell.appendChild(cv); cell.appendChild(cap); parent.appendChild(cell);
+  const ctx = cv.getContext('2d');
+  ctx.lineCap = 'round';
+  draw(ctx, cv.width / 2, cv.height / 2 + 6);
+}
+function circle(ctx, x, y, r, color) {
+  ctx.fillStyle = color; ctx.beginPath();
+  ctx.arc(x, y, Math.max(0.2, r * MAG), 0, Math.PI * 2); ctx.fill();
+}
+function line(ctx, ax, ay, bx, by, widthWorld, color) {
+  ctx.strokeStyle = color; ctx.lineWidth = Math.max(0.3, widthWorld * MAG);
+  ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+}
+
+// ---------- видеокарта ----------
+function gpuPlant(ctx, x, y, wood) {
+  const size = psize(wood);
+  const r = base * (0.6 + 1.8 * size);
+  const span = Math.max(r, pixel);
+  if (wood < WOOD_PER_FRUIT_TIER) {
+    const stage = size < 0.20 ? 0 : 1;
+    circle(ctx, x, y, span, 'rgb(77,204,51)');            // FOOD_RGB 0.3/0.8/0.2
+    if (stage === 0) {
+      const col = 'rgb(128,232,64)';
+      line(ctx, x, y + span*0.15*MAG, x, y - span*1.35*MAG, span*0.20*2*MAG, col);
+      line(ctx, x, y - span*0.42*MAG, x - span*0.86*MAG, y - span*0.92*MAG, span*0.29*2*MAG, col);
+      line(ctx, x, y - span*0.42*MAG, x + span*0.86*MAG, y - span*0.92*MAG, span*0.29*2*MAG, col);
+    } else {
+      const leaf = span * 2.25 * MAG;
+      for (let k = 0; k < 4; k++) {
+        const a = -Math.PI/2 + k * Math.PI/2;
+        line(ctx, x + Math.cos(a)*leaf*0.12, y + Math.sin(a)*leaf*0.12,
+             x + Math.cos(a)*leaf, y + Math.sin(a)*leaf,
+             span*0.34*2*MAG, 'rgb(71,196,56)');
+      }
+    }
+  } else {
+    // writeCapsule: st = 2 -> звезда из четырёх отрезков (8 лучей) + центр
+    const ray = r * 1.8 * MAG, w = r * 0.28;
+    const col = 'rgb(61,163,41)';   // 0.3*0.8 / 0.8*0.8 / 0.2*0.8
+    for (let k = 0; k < 4; k++) {
+      const a = k * Math.PI/4, dx = Math.cos(a)*ray, dy = Math.sin(a)*ray;
+      line(ctx, x - dx, y - dy, x + dx, y + dy, w*2*MAG, col);
+    }
+    circle(ctx, x, y, r * 0.55, col);
+  }
+}
+
+// ---------- 2D ----------
+function cpuPlant(ctx, x, y, wood) {
+  const size = psize(wood);
+  const radius = base * (0.6 + 1.8 * size);
+  const stage = size < 0.20 ? 0 : (wood >= WOOD_PER_FRUIT_TIER ? 2 : 1);
+  const span = Math.max(radius, pixel);
+  const core = Math.max(span, pixel * (stage === 0 ? 0.8 : 1.05));
+  const green = stage === 0 ? 'rgb(128,232,64)' : stage === 1 ? 'rgb(71,196,56)' : 'rgb(56,179,48)';
+  circle(ctx, x, y, core, green);
+  if (stage === 0) {
+    const col = 'rgb(128,232,64)';
+    line(ctx, x, y + span*0.15*MAG, x, y - span*1.35*MAG, span*0.50*MAG, col);
+    line(ctx, x, y - span*0.42*MAG, x - span*0.86*MAG, y - span*0.92*MAG, span*0.50*MAG, col);
+    line(ctx, x, y - span*0.42*MAG, x + span*0.86*MAG, y - span*0.92*MAG, span*0.50*MAG, col);
+  } else if (stage === 1) {
+    const leaf = span * 2.25 * MAG;
+    for (let k = 0; k < 4; k++) {
+      const a = -Math.PI/2 + k * Math.PI/2;
+      line(ctx, x + Math.cos(a)*leaf*0.12, y + Math.sin(a)*leaf*0.12,
+           x + Math.cos(a)*leaf, y + Math.sin(a)*leaf,
+           span*0.68*MAG, 'rgb(71,196,56)');
+    }
+  } else {
+    const crown = span * 3.35 * MAG;
+    for (let shade = 0; shade < 2; shade++) {
+      const col = shade === 0 ? 'rgb(56,179,48)' : 'rgb(102,217,61)';
+      for (let leaf = shade; leaf < 8; leaf += 2) {
+        const a = leaf * Math.PI/4;
+        const len = crown * (leaf % 2 === 0 ? 1 : 0.78);
+        line(ctx, x + Math.cos(a)*crown*0.16, y + Math.sin(a)*crown*0.16,
+             x + Math.cos(a)*len, y + Math.sin(a)*len,
+             span*0.62*MAG, col);
+      }
+    }
+    circle(ctx, x, y, span * 0.48, 'rgb(31,115,43)');
+  }
+}
+
+const gpu = document.getElementById('gpu');
+const cpu = document.getElementById('cpu');
+[0, 25, 30, 39, 40, 70, 104, 105, 150].forEach(w => {
+  const label = 'ствол ' + w;
+  addCell(gpu, label, w < 30 ? 'росток' : w < 40 ? 'саженец' : 'звезда', (c,x,y) => gpuPlant(c,x,y,w));
+  addCell(cpu, label, w < 30 ? 'росток' : w < WOOD_PER_FRUIT_TIER ? 'саженец' : 'звезда', (c,x,y) => cpuPlant(c,x,y,w));
+});
+
+const extra = document.getElementById('extra');
+addCell(extra, 'плод', 'оранжевая точка', (c,x,y) => {
+  const r = Math.max(base*0.62, pixel*0.95);
+  circle(c, x, y, r, 'rgb(250,155,31)');
+});
+addCell(extra, 'мясо', 'не растение, тип 2', (c,x,y) => {
+  circle(c, x, y, base, 'rgb(230,26,26)');
+});
+addCell(extra, 'белый фон', 'экрана нет — только точки', (c,x,y) => {
+  c.fillStyle='#6f8a78'; c.font='12px sans-serif'; c.fillText('(пусто)', x-24, y+4);
+});
+</script>
+</body>
+</html>

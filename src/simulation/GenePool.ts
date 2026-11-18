@@ -3062,7 +3062,10 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
             if ( PLANT_EVOLUTION_ENABLED && ( _clock === 1 ) && ( type !== 2 )) { born[f] = 1 - gpRandom() * plantOldAge( f ); }
             if ( PLANT_STAGES_ENABLED && PLANT_ROT_ENABLED && ( type !== 2 ) && ( _clock - born[f] > plantRotAge( f ))) { _foodBits[f].kill(); continue; }
 
-            if ( PLANT_SIZE_ENABLED && environment.active && ( type !== 2 ))
+            // Плод — это еда, а не новое растение: он не должен расти, набирать
+            // ствол и плодоносить. Иначе со временем он превращается в дерево
+            // и на отдалении рисуется многолучевой звездой.
+            if ( PLANT_SIZE_ENABLED && environment.active && ( type !== 2 ) && ( _st.foodFruit[f] !== 1 ))
             {
                 const cell = environment.plantCellIndex( foodX[f], foodY[f] );
                 const shade = ( _st.foodWood[f] < WOOD_PER_FRUIT_TIER ) ? _plantShade[cell] : 0;

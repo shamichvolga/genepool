@@ -199,9 +199,11 @@ export function createGenePoolRenderer( ctx: any )
             if ( live[f] !== 1 ) continue;
             const x = fx[f], y = fy[f];
             if (( x < left ) || ( x > right ) || ( y < top ) || ( y > bottom )) continue;
-            // кусок мяса меньше целого и ствол с плодами рисуются отдельно (ниже)
+            // кусок мяса меньше целого и ствол с плодами рисуются отдельно (ниже).
+            // Плод — не дерево: он всегда остаётся оранжевой точкой, даже если в
+            // старом сохранении у него случайно накопился ствол.
             if ((( ft[f] === 2 ) && ( _st.foodEnergy[f] < 0.8 * MEAT_PIECE_ENERGY ))
-            || (( ft[f] !== 2 ) && ( _st.foodWood[f] >= WOOD_PER_FRUIT_TIER ))) { parts.push( f ); continue; }
+            || (( ft[f] !== 2 ) && ( fruit[f] !== 1 ) && ( _st.foodWood[f] >= WOOD_PER_FRUIT_TIER ))) { parts.push( f ); continue; }
             const isFruit = fruit[f] === 1;
             const t = ft[f] * 3;
             let alpha = ( ctx.clock - born[f] ) * FOOD_OPACITY_INCREMENT;
@@ -213,8 +215,13 @@ export function createGenePoolRenderer( ctx: any )
             const baseRed = isFruit ? 0.98 : FOOD_RGB[ t ];
             const baseGreen = isFruit ? 0.61 : FOOD_RGB[ t + 1 ];
             const baseBlue = isFruit ? 0.12 : FOOD_RGB[ t + 2 ];
+            // Размер растения в единицах мира. Раньше листья считались в экранных
+            // пикселях (pixel * ...), а точка — в единицах мира: при приближении точка
+            // разрасталась и полностью закрывала листья. Теперь всё масштабируется
+            // вместе, с страховкой, что листья не мельче одного пикселя.
+            const span = Math.max( radius * ( 0.6 + 1.8 * size ), pixel );
             const coreRadius = isFruit ? Math.max( radius * 0.62, pixel * 0.95 )
-                : plant ? Math.max( radius * ( 0.6 + 1.8 * size ), pixel * ( stage === 0 ? 0.8 : 1.05 )) : radius;
+                : plant ? span : radius;
             add( x, y, x, y, coreRadius, baseRed, baseGreen, baseBlue, alpha );
 
             if ( plant && !isFruit )
@@ -222,29 +229,29 @@ export function createGenePoolRenderer( ctx: any )
                 if ( stage === 0 )
                 {
                     // крошечный росток с двумя листьями
-                    add( x, y + pixel * 0.15, x, y - pixel * 1.35, pixel * 0.20, 0.50, 0.91, 0.25, alpha );
+                    add( x, y + span * 0.15, x, y - span * 1.35, span * 0.20, 0.50, 0.91, 0.25, alpha );
                     for ( let leaf = 0; leaf < 2; leaf++ )
                     {
                         const side = leaf === 0 ? -1 : 1;
-                        add( x, y - pixel * 0.42, x + side * pixel * 0.86, y - pixel * 0.92, pixel * 0.29, 0.50, 0.91, 0.25, alpha );
+                        add( x, y - span * 0.42, x + side * span * 0.86, y - span * 0.92, span * 0.29, 0.50, 0.91, 0.25, alpha );
                     }
                 }
                 else if ( stage === 1 )
                 {
                     // четыре круглых листа: хорошо заметный саженец
-                    const leafRadius = pixel * 2.25;
+                    const leafRadius = span * 2.25;
                     for ( let leaf = 0; leaf < 4; leaf++ )
                     {
                         const a = -Math.PI / 2 + leaf * Math.PI / 2;
                         add( x + Math.cos( a ) * leafRadius * 0.12, y + Math.sin( a ) * leafRadius * 0.12,
                              x + Math.cos( a ) * leafRadius, y + Math.sin( a ) * leafRadius,
-                             pixel * 0.34, 0.28, 0.77, 0.22, alpha );
+                             span * 0.34, 0.28, 0.77, 0.22, alpha );
                     }
                 }
                 else
                 {
                     // взрослая крона: восьмилучевая розетка
-                    const crownRadius = pixel * 3.35;
+                    const crownRadius = span * 3.35;
                     for ( let leaf = 0; leaf < 8; leaf++ )
                     {
                         const a = leaf * Math.PI / 4;
@@ -252,9 +259,9 @@ export function createGenePoolRenderer( ctx: any )
                         const lightLeaf = leaf % 2 !== 0;
                         add( x + Math.cos( a ) * crownRadius * 0.16, y + Math.sin( a ) * crownRadius * 0.16,
                              x + Math.cos( a ) * length, y + Math.sin( a ) * length,
-                             pixel * 0.31, lightLeaf ? 0.40 : 0.22, lightLeaf ? 0.85 : 0.70, lightLeaf ? 0.24 : 0.18, alpha );
+                             span * 0.31, lightLeaf ? 0.40 : 0.22, lightLeaf ? 0.85 : 0.70, lightLeaf ? 0.24 : 0.18, alpha );
                     }
-                    add( x, y, x, y, pixel * 0.48, 0.12, 0.43, 0.16, alpha );
+                    add( x, y, x, y, span * 0.48, 0.12, 0.43, 0.16, alpha );
                 }
             }
         }

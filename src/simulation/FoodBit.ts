@@ -384,8 +384,13 @@ export function FoodBit()
 	        }
 
 	        const size = plantSize( _fw[ _fi ] );
-	        const plantStage = size < 0.20 ? 0 : size < 0.70 ? 1 : 2;
-	        const coreRadius = Math.max( radius * ( 0.6 + 1.8 * size ), pixel * ( plantStage === 0 ? 0.8 : 1.05 ));
+	        // Как и в режиме видеокарты: звезда начинается со ствола 40, а не со 105.
+	        const plantStage = size < 0.20 ? 0 : ( _fw[ _fi ] >= WOOD_PER_FRUIT_TIER ? 2 : 1 );
+	        // Листья и лучи раньше задавались в экранных пикселях, а точка — в единицах
+	        // мира, поэтому при приближении точка закрывала всю форму. Теперь всё считается
+	        // от размера растения, но листья не мельче одного пикселя на экране.
+	        const span = Math.max( radius, pixel );
+	        const coreRadius = Math.max( span, pixel * ( plantStage === 0 ? 0.8 : 1.05 ));
 	        const green = plantStage === 0 ? "rgba( 128, 232, 64, " : plantStage === 1 ? "rgba( 71, 196, 56, " : "rgba( 56, 179, 48, ";
 	        canvas.fillStyle = green + opacity() + ")";
 	        canvas.beginPath(); canvas.arc( _position.x, _position.y, coreRadius, 0, PI2, false ); canvas.fill(); canvas.closePath();
@@ -395,17 +400,17 @@ export function FoodBit()
 	        if ( plantStage === 0 )
 	        {
 	            canvas.strokeStyle = "rgba( 128, 232, 64, " + opacity() + " )";
-	            canvas.lineWidth = pixel * 0.50;
-	            canvas.moveTo( _position.x, _position.y + pixel * 0.15 ); canvas.lineTo( _position.x, _position.y - pixel * 1.35 );
-	            canvas.moveTo( _position.x, _position.y - pixel * 0.42 ); canvas.lineTo( _position.x - pixel * 0.86, _position.y - pixel * 0.92 );
-	            canvas.moveTo( _position.x, _position.y - pixel * 0.42 ); canvas.lineTo( _position.x + pixel * 0.86, _position.y - pixel * 0.92 );
+	            canvas.lineWidth = span * 0.50;
+	            canvas.moveTo( _position.x, _position.y + span * 0.15 ); canvas.lineTo( _position.x, _position.y - span * 1.35 );
+	            canvas.moveTo( _position.x, _position.y - span * 0.42 ); canvas.lineTo( _position.x - span * 0.86, _position.y - span * 0.92 );
+	            canvas.moveTo( _position.x, _position.y - span * 0.42 ); canvas.lineTo( _position.x + span * 0.86, _position.y - span * 0.92 );
 	            canvas.stroke();
 	        }
 	        else if ( plantStage === 1 )
 	        {
 	            canvas.strokeStyle = "rgba( 71, 196, 56, " + opacity() + " )";
-	            canvas.lineWidth = pixel * 0.68;
-	            const leafRadius = pixel * 2.25;
+	            canvas.lineWidth = span * 0.68;
+	            const leafRadius = span * 2.25;
 	            for ( let leaf = 0; leaf < 4; leaf++ )
 	            {
 	                const a = -Math.PI / 2 + leaf * Math.PI / 2;
@@ -416,12 +421,12 @@ export function FoodBit()
 	        }
 	        else
 	        {
-	            const crownRadius = pixel * 3.35;
+	            const crownRadius = span * 3.35;
 	            for ( let shade = 0; shade < 2; shade++ )
 	            {
 	                canvas.beginPath();
 	                canvas.strokeStyle = ( shade === 0 ? "rgba( 56, 179, 48, " : "rgba( 102, 217, 61, " ) + opacity() + ")";
-	                canvas.lineWidth = pixel * 0.62;
+	                canvas.lineWidth = span * 0.62;
 	                for ( let leaf = shade; leaf < 8; leaf += 2 )
 	                {
 	                    const a = leaf * Math.PI / 4;
@@ -436,7 +441,7 @@ export function FoodBit()
 	        if ( plantStage === 2 )
 	        {
 	            canvas.fillStyle = "rgba( 31, 115, 43, " + opacity() + " )";
-	            canvas.beginPath(); canvas.arc( _position.x, _position.y, pixel * 0.48, 0, PI2, false ); canvas.fill(); canvas.closePath();
+	            canvas.beginPath(); canvas.arc( _position.x, _position.y, span * 0.48, 0, PI2, false ); canvas.fill(); canvas.closePath();
 	        }
 	        canvas.restore();
 	        return;
