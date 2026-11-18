@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Initial TypeScript Release
 - **Rewritten from scratch** in TypeScript + Vite, replacing older JavaScript versions
-- Faithful recreation of Jeffrey Ventrella's 1994 SwimBots / Gene Pool mechanics
+- Built on the mechanics of the classic Gene Pool (SwimBots) simulation
 - Full physics simulation: swimming, energy metabolism, predation, reproduction
 
 ### Core Features
@@ -53,6 +53,5 @@ Earlier versions existed as Python prototypes, JavaScript experiments, and parti
 ---
 
 **Repository**: https://github.com/shamichvolga/genepool  
-**License**: MIT  
-**Author**: Lionsman (shamichvolga)  
-**Original concept**: Jeffrey D. Ventrella (1994)
+**License**: MIT + Commons Clause  
+**Author**: Lionsman (shamichvolga)

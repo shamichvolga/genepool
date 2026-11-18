@@ -74,6 +74,4 @@ node tools/headless.cjs
 
 ## License
 
-GenePool is released under the MIT License (see [LICENSE](../LICENSE)).
-
-This project is a TypeScript reimplementation of Jeffrey Ventrella's SwimBots / Gene Pool (1994) with improvements toward solving the convergence problem in artificial life simulations.
+GenePool is released under the MIT License with the Commons Clause (see [LICENSE](LICENSE)).

@@ -2,9 +2,14 @@
 
 > *"If you ever sat in front of a fish tank as a kid, mesmerized for hours just watching tiny lives unfold without a script—you already understand what this project is."*
 
-🌐 **[▶ Play Live in Browser](https://shamichvolga.github.io/genepool/)**
+[![Play in browser](https://img.shields.io/badge/Play-in_browser-2ea44f?style=for-the-badge)](https://shamichvolga.github.io/genepool/)
+[![License](https://img.shields.io/badge/license-MIT_+_Commons_Clause-blue?style=for-the-badge)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/shamichvolga/genepool?style=for-the-badge)](https://github.com/shamichvolga/genepool/stargazers)
+[![Discussions](https://img.shields.io/github/discussions/shamichvolga/genepool?style=for-the-badge)](https://github.com/shamichvolga/genepool/discussions)
 
-**A complete TypeScript ecological overhaul of Jeffrey Ventrella's classic *GenePool (SwimBots)*—built over a 10-year obsession by a non-programmer pushing AI agents to the absolute limit of imagination. Now, I need your imagination, traveler.**
+🌐 **[▶ Play Live in Browser](https://shamichvolga.github.io/genepool/)** · 🇷🇺 [Русская версия](README_RU.md)
+
+**A complete TypeScript ecological overhaul of the classic artificial-life sandbox *Gene Pool (SwimBots)*—built over a 10-year obsession by a non-programmer pushing AI agents to the absolute limit of imagination. Now, I need your imagination, traveler.**
 
 ---
 
@@ -22,7 +27,7 @@ Every creature in this pool is an articulated, physics-driven swimmer whose body
 
 I have been coming back to *GenePool* for nearly **10 years**, ever since version 6 on PC. What fascinated me wasn't winning or scoring points—it was the **unscripted naturalness** of it. Every run told a different story. Like Conway's *Game of Life* or a real aquarium, you could watch creatures struggle, adapt, and surprise you.
 
-For years, I dreamed of making that world deeper. I wanted **real, unscripted evolution**—not fake variety where you lazily add 10 types of food for 10 hardcoded species. Unlike Conway's Game of Life (where rules are simple and exhaustible), and unlike modern tech-tree games (where winning is obvious), SwimBots offered something rare: **genuine uncertainty. Natural selection, not optimization.**
+For years, I dreamed of making that world deeper. I wanted **real, unscripted evolution**—not fake variety where you lazily add 10 types of food for 10 hardcoded species. Unlike Conway's Game of Life (where rules are simple and exhaustible), and unlike modern tech-tree games (where winning is obvious), it offered something rare: **genuine uncertainty. Natural selection, not optimization.**
 
 ### The AI Breakthrough
 
@@ -81,7 +86,7 @@ No installation needed. Just click and watch:
 ### Option 2: Run Locally on Windows
 1. Download this repository (click **`<> Code`** → **`Download ZIP`**)
 2. Extract the folder
-3. Double-click **`Запустить GenePool.bat`** (or `Запустить GenePool (долгий прогон).bat` for long uninterrupted runs)
+3. Double-click **`start-windows.bat`** (or `start-windows-long-run.bat` for long uninterrupted runs)
 4. Your browser will open automatically with the game running on `http://localhost:5173/`
 5. *(Requires [Node.js](https://nodejs.org/) installed—the batch script will prompt you if missing)*
 
@@ -104,7 +109,7 @@ This project exists because I love it, not because I expect to make money from i
 
 The best way to support GenePool is simply to:
 - **Download it, run it, and watch it**
-- **Share what you observe** — weird behaviors, surprising outcomes, ideas that come to mind
+- **Share what you observe** in [Discussions](https://github.com/shamichvolga/genepool/discussions) — weird behaviors, surprising outcomes, ideas that come to mind
 - **Suggest features or changes** (no programming experience needed)
 
 If you do feel like contributing financially to help with AI subscription costs (which power the development), here are the options:
@@ -123,7 +128,7 @@ If you do feel like contributing financially to help with AI subscription costs 
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** — How to suggest features or submit code
 - **[ROADMAP.md](ROADMAP.md)** — Planned features and research directions
 - **[FEATURE_COMPARISON.md](FEATURE_COMPARISON.md)** — Detailed mechanics vs. the original SwimBots
-- **[LICENSE](LICENSE)** — MIT License
+- **[LICENSE](LICENSE)** — MIT License with the Commons Clause
 
 ---
 
@@ -185,9 +190,8 @@ Requires ES2020+ JavaScript support (all modern browsers).
 
 ---
 
-## 📖 Learn More About SwimBots
+## 📖 Learn More About Artificial Life
 
-- **Original Concept**: Jeffrey D. Ventrella (1994) — *"SpaceTime and Evolution in the SwimBots World"* (MIT Media Lab)
 - **Related Fields**: Artificial Life, Neuroevolution, Evolutionary Algorithms, Complex Systems
 - **Modern References**: NEAT (Neuroevolution of Augmenting Topologies), HyperNEAT, OpenAI's evolutionary strategies
 
@@ -195,15 +199,14 @@ Requires ES2020+ JavaScript support (all modern browsers).
 
 ## ⚖️ License
 
-GenePool is released under the **MIT License**. See [LICENSE](LICENSE) for full terms.
+GenePool is released under the **MIT License with the Commons Clause**: free to use, modify and share, but not to sell. See [LICENSE](LICENSE).
 
-This project is a faithful reimplementation of Jeffrey Ventrella's SwimBots / Gene Pool (1994) in modern TypeScript, with significant enhancements toward solving the classic convergence problem in artificial life.
+Contains code derived from the original browser version of Gene Pool (© 2021 Jeffrey Ventrella, swimbots.com), used under the MIT License with the Commons Clause.
 
 ---
 
 **Last Updated**: November 2026  
-**Maintainer**: Lionsman / shamichvolga  
-**Original Concept**: Jeffrey D. Ventrella (1994)
+**Maintainer**: Lionsman / shamichvolga
 
 ---
 

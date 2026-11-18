@@ -2,12 +2,12 @@
 
 ## Vision
 
-GenePool aims to create a **self-sustaining artificial ecosystem** where speciation and biodiversity emerge naturally, solving Jeffrey Ventrella's classic "convergence problem" — the tendency of all SwimBots to evolve into a single optimal morph.
+GenePool aims to create a **self-sustaining artificial ecosystem** where speciation and biodiversity emerge naturally, solving the classic "convergence problem" — the tendency of all SwimBots to evolve into a single optimal morph.
 
 ## Current Status (v2.0)
 
 ### ✅ Complete
-- **TypeScript rewrite** of Ventrella's original 1994 SwimBot engine
+- **TypeScript rewrite** of the classic 1994 SwimBot engine
 - **Neural networks**: 30-input perceptron-style brains driving behavior
 - **Genetic architecture**: 112 body morphology genes + 57 ecology genes (hunger, reproduction, parasites, armor)
 - **Physics**: Swimming, predation, energy metabolism, starvation
@@ -60,7 +60,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for how to submit ideas, bug reports, and
 
 ## References
 
-- Ventrella, J. D. (1994). "SpaceTime and Evolution in the SwimBots World". MIT Media Lab technical report.
 - Artificial Life textbooks: Brooks & Maes, Levy & Goldberg
 - Modern approaches: Neural architecture search, neuroevolution (NEAT, HyperNEAT)
 

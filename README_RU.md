@@ -2,9 +2,14 @@
 
 > *«Если ты когда-нибудь в детстве сидел перед аквариумом и часами смотрел, как там без сценария разворачивается какая-то жизнь — ты уже понимаешь, что это такое».*
 
+[![Play in browser](https://img.shields.io/badge/Play-in_browser-2ea44f?style=for-the-badge)](https://shamichvolga.github.io/genepool/)
+[![License](https://img.shields.io/badge/license-MIT_+_Commons_Clause-blue?style=for-the-badge)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/shamichvolga/genepool?style=for-the-badge)](https://github.com/shamichvolga/genepool/stargazers)
+[![Discussions](https://img.shields.io/github/discussions/shamichvolga/genepool?style=for-the-badge)](https://github.com/shamichvolga/genepool/discussions)
+
 🌐 **[▶ Играть онлайн](https://shamichvolga.github.io/genepool/)** | [Play in English](README.md)
 
-**Полная переделка на TypeScript классического *GenePool (SwimBots)* Джеффри Вентреллы — плод 10-летней одержимости человека, который не программист, но вытолкал AI-агентов до абсолютного предела воображения. Теперь мне нужно *твоё* воображение, путник.**
+**Полная переделка на TypeScript классической песочницы искусственной жизни *Gene Pool (SwimBots)* — плод 10-летней одержимости человека, который не программист, но вытолкал AI-агентов до абсолютного предела воображения. Теперь мне нужно *твоё* воображение, путник.**
 
 ---
 
@@ -23,7 +28,7 @@
 
 Я возвращаюсь к *GenePool* уже почти **10 лет**, с версии 6 на ПК. Меня завораживала не победа или очки — завораживала **естественность без сценария**. Каждый прогон рассказывал свою историю. Как в *Game of Life* Конвея или в настоящем аквариуме, можно было смотреть, как существа борются, адаптируются и удивляют тебя.
 
-Годами я мечтал сделать этот мир глубже. Хотелось **настоящей, не сфальшивленной эволюции** — не дешёвого разнообразия, где просто добавляешь 10 видов еды на 10 заскриптованных видов. В отличие от Game of Life Конвея (где правила простые и исчерпываемые) и в отличие от современных игр с деревом техи (где победа очевидна), SwimBots предлагали что-то редкое: **настоящую неопределённость. Естественный отбор, а не оптимизацию.**
+Годами я мечтал сделать этот мир глубже. Хотелось **настоящей, не сфальшивленной эволюции** — не дешёвого разнообразия, где просто добавляешь 10 видов еды на 10 заскриптованных видов. В отличие от Game of Life Конвея (где правила простые и исчерпываемые) и в отличие от современных игр с деревом техи (где победа очевидна), он предлагал что-то редкое: **настоящую неопределённость. Естественный отбор, а не оптимизацию.**
 
 ### Прорыв с AI
 
@@ -82,7 +87,7 @@
 ### Способ 2: Запустить локально на Windows
 1. Скачай этот репозиторий (кнопка **`<> Code`** → **`Download ZIP`**)
 2. Распакуй папку
-3. Дважды кликни **`Запустить GenePool.bat`** (или **`Запустить GenePool (долгий прогон).bat`** для долгих непрерывных наблюдений)
+3. Дважды кликни **`start-windows.bat`** (или **`start-windows-long-run.bat`** для долгих непрерывных наблюдений)
 4. Браузер откроется автоматически с игрой на `http://localhost:5173/`
 5. *(Требуется установленный [Node.js](https://nodejs.org/) — батник подскажет, если его нет)*
 
@@ -124,7 +129,7 @@ node tools/headless.cjs
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** — Как предложить фичу или отправить код
 - **[ROADMAP.md](ROADMAP.md)** — Планы и направления исследований
 - **[FEATURE_COMPARISON.md](FEATURE_COMPARISON.md)** — Детальное сравнение механик с оригинальными SwimBots
-- **[LICENSE](LICENSE)** — MIT License
+- **[LICENSE](LICENSE)** — MIT License с условием Commons Clause
 
 ---
 
@@ -186,9 +191,8 @@ npm run build        # Production-сборка для деплоя
 
 ---
 
-## 📖 Узнать больше про SwimBots
+## 📖 Узнать больше про искусственную жизнь
 
-- **Оригинальная концепция**: Jeffrey D. Ventrella (1994) — *"SpaceTime and Evolution in the SwimBots World"* (MIT Media Lab)
 - **Смежные области**: Artificial Life, Neuroevolution, Evolutionary Algorithms, Complex Systems
 - **Современные ссылки**: NEAT (Neuroevolution of Augmenting Topologies), HyperNEAT, OpenAI evolutionary strategies
 
@@ -196,15 +200,14 @@ npm run build        # Production-сборка для деплоя
 
 ## ⚖️ Лицензия
 
-GenePool выпущен под **MIT License**. Полные условия — в [LICENSE](LICENSE).
+GenePool выпущен под **MIT License с условием Commons Clause**: можно свободно использовать, менять и распространять, но нельзя продавать. Подробности в [LICENSE](LICENSE).
 
-Этот проект — верная переделка SwimBots / Gene Pool Джеффри Вентреллы (1994) на современном TypeScript с существенными улучшениями для решения классической проблемы конвергенции в искусственной жизни.
+Содержит код, производный от оригинальной браузерной версии Gene Pool (© 2021 Jeffrey Ventrella, swimbots.com), по лицензии MIT с условием Commons Clause.
 
 ---
 
 **Последнее обновление**: Ноябрь 2026  
-**Мейнтейнер**: Lionsman / shamichvolga  
-**Оригинальная идея**: Jeffrey D. Ventrella (1994)
+**Мейнтейнер**: Lionsman / shamichvolga
 
 ---
 
