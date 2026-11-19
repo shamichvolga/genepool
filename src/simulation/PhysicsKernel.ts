@@ -176,9 +176,36 @@ export function physicsPartA( s: number, st: SharedState ): void
     const perpY = -headingX;
     const directionDot = B[ b + B_FOCUS_X ] * perpX + B[ b + B_FOCUS_Y ] * perpY;
 
-    // root position and angle
+    // Root position and angle. The bends are computed first: baseRel is just
+    // the static attachment angle, so the moment balance uses this step's
+    // stroke instead of the previous one's.
     let momentAdjustment = ZERO;
-    for (let p = 2; p < numParts; p++) { momentAdjustment += pd[ o + p * PS + B_A ] * moment[ k + p ]; }
+    for (let p = 2; p < numParts; p++)
+    {
+        const i = o + p * PS;
+        const ampModulator   = turnAmp  [ k + p ] * directionDot;
+        const phaseModulator = turnPhase[ k + p ] * directionDot * 0.15;
+        const radian = timer * frequency + ( phase[ k + p ] + phaseModulator );
+        const baseRel = angle[ k + p ];
+        let bend = ( amp[ k + p ] + ampModulator ) * fastSin( radian );
+
+        // C1 joint stop: a smooth asymptotic limit instead of a hard clamp
+        const totalRel = baseRel + bend;
+        const jMin = st.partJointMin[ k + p ] || JOINT_MIN_ANGLE;
+        const jMax = st.partJointMax[ k + p ] || JOINT_MAX_ANGLE;
+        if ( totalRel > jMax )
+        {
+            const over = totalRel - jMax;
+            bend = ( jMax - baseRel ) + ( 15 * over ) / ( 15 + over );
+        }
+        else if ( totalRel < jMin )
+        {
+            const under = jMin - totalRel;
+            bend = ( jMin - baseRel ) - ( 15 * under ) / ( 15 + under );
+        }
+        pd[ i + B_A ] = bend;
+        momentAdjustment += bend * moment[ k + p ];
+    }
 
     pd[ o + ROOT_PART * PS + P_X ] = posX;
     pd[ o + ROOT_PART * PS + P_Y ] = posY;
@@ -197,28 +224,8 @@ export function physicsPartA( s: number, st: SharedState ): void
 
         if ( p > 1 ) // part 1 has nothing to bend off of
         {
-            const ampModulator   = turnAmp  [ k + p ] * directionDot;
-            const phaseModulator = turnPhase[ k + p ] * directionDot * 0.5;
-            const radian = timer * frequency + ( phase[ k + p ] + phaseModulator );
-            const baseRel = pd[ i + C_A ] - pd[ j + C_A ];
-            let bend = ( amp[ k + p ] + ampModulator ) * fastSin( radian );
-
-            // C1 joint stop: a smooth asymptotic limit instead of a hard
-            // clamp, so the bend never freezes at the peak of the stroke
-            const totalRel = baseRel + bend;
-            const jMin = st.partJointMin[ k + p ] || JOINT_MIN_ANGLE;
-            const jMax = st.partJointMax[ k + p ] || JOINT_MAX_ANGLE;
-            if ( totalRel > jMax )
-            {
-                const over = totalRel - jMax;
-                bend = ( jMax - baseRel ) + ( 15 * over ) / ( 15 + over );
-            }
-            else if ( totalRel < jMin )
-            {
-                const under = jMin - totalRel;
-                bend = ( jMin - baseRel ) - ( 15 * under ) / ( 15 + under );
-            }
-            pd[ i + B_A ] = bend;
+            // the bend for this step is already stored by the moment pass
+            const bend = pd[ i + B_A ];
             pd[ i + C_A ] += bend;
 
             // flexural rigidity: a wide plate resists a sharp bend, so a
@@ -407,7 +414,7 @@ export function physicsPartA( s: number, st: SharedState ): void
                     if ( bl > 1e-4 )
                     {
                         bx /= bl; by /= bl;
-                        const impulse = Math.min( 0.45, 0.5 * CAVITY_JET_C * ( dS * dS ) / gap ) * ( motion.enabled ? motion.acceleration : 1 );
+                        const impulse = Math.min( 0.16, 0.25 * CAVITY_JET_C * ( dS * dS ) / gap ) * ( motion.enabled ? motion.acceleration : 1 );
                         accelerationX -= bx * impulse;
                         accelerationY -= by * impulse;
                         energy = Math.max( ZERO, energy - impulse * 0.008 );
@@ -492,11 +499,10 @@ export function physicsPartA( s: number, st: SharedState ): void
                 {
                     const dist = Math.sqrt( d2 );
                     const overlap = rSum - dist;
-                    const sep = Math.min( 1.2, overlap * 0.25 );
-                    const sx = ( dx / dist ) * sep, sy = ( dy / dist ) * sep;
-                    posX += sx; posY += sy;
-                    velX += sx * 0.15; velY += sy * 0.15;
-                    energy -= sep * 0.005;
+                    const force = Math.min( 0.08, overlap * 0.04 );
+                    velX += ( dx / dist ) * force;
+                    velY += ( dy / dist ) * force;
+                    energy -= force * 0.005;
                     if ( energy < ZERO ) { energy = ZERO; }
                 }
             }
@@ -524,13 +530,10 @@ export function physicsPartA( s: number, st: SharedState ): void
             {
                 const dist = Math.sqrt( d2 );
                 const overlap = rSum - dist;
-                const mb = Math.max( 1, st.mass[o2] );
-                const share = mb / ( ma + mb );
-                const sep = Math.min( 1.0, overlap * 0.35 * share );
-                const sx = ( dx / dist ) * sep, sy = ( dy / dist ) * sep;
-                posX += sx; posY += sy;
-                velX += sx * 0.12; velY += sy * 0.12;
-                energy -= sep * 0.004;
+                const force = Math.min( 0.08, overlap * 0.04 );
+                velX += ( dx / dist ) * force;
+                velY += ( dy / dist ) * force;
+                energy -= force * 0.004;
                 if ( energy < ZERO ) { energy = ZERO; }
             }
         }

@@ -283,7 +283,7 @@ let testNoEel = true;
         const rawGlide = genotype.getGeneValue( GLIDE_FACTOR_GENE );
         const rawJoint = genotype.getGeneValue( JOINT_LIMIT_GENE );
         const freqMult  = ( rawFreq === 0 || rawFreq === 128 ) ? 1.0 : Math.pow( 2.0, (( rawFreq - 128 ) / 127 ) * 0.9 );
-        const ampMult   = ( rawAmp  === 0 || rawAmp  === 128 ) ? 1.0 : Math.pow( 1.6, ( rawAmp - 128 ) / 127 );
+        const ampMult   = ( rawAmp  === 0 || rawAmp  === 128 ) ? 1.0 : Math.max( 0.75, Math.min( 1.25, Math.pow( 1.25, ( rawAmp - 128 ) / 127 )));
         _ampMult = ampMult;
         const glideVal  = ( rawGlide === 0 || rawGlide <= 128 ) ? 0.0 : (( rawGlide - 128 ) / 127 ) * 0.6;
         const jointBias = ( rawJoint === 0 || rawJoint === 128 ) ? 0.0 : (( rawJoint - 128 ) / 127 ) * 55.0;
@@ -419,7 +419,7 @@ let testNoEel = true;
         //---------------------------------
         // set the frequency...
         //---------------------------------
-        phenotype.frequency = Math.max( 0.015, Math.min( 0.35, _frequency * freqMult ));
+        phenotype.frequency = Math.max( 0.015, Math.min( 0.18, _frequency * freqMult ));
         
         // ВРЕМЕННО: хищники — чёрные, чтобы их было видно
         if (phenotype.predatorLevel > PREDATOR_LEVEL_THRESHOLD) {

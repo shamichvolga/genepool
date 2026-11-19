@@ -327,9 +327,14 @@ function wanderFocus( st: SharedState, s: number ): void
         gy = -0.5 + botRandom( st, s );
         length = Math.sqrt( gx * gx + gy * gy );
     }
-    const wander = BRAIN_WANDER_AMOUNT * 0.5;
-    gx += ( -wander * 0.5 + botRandom( st, s ) * wander );
-    gy += ( -wander * 0.5 + botRandom( st, s ) * wander );
+    // refresh the random course offset once in eight steps; in between the
+    // already-normalized goal keeps its direction instead of jittering
+    const wander = BRAIN_WANDER_AMOUNT * 0.6;
+    if ((( B[ b + SS.B_AGE ] + st.mind[ s * SS.MIND_STRIDE + SS.M_INDEX ] ) & 7 ) === 0 )
+    {
+        gx += ( -wander * 0.5 + botRandom( st, s ) * wander );
+        gy += ( -wander * 0.5 + botRandom( st, s ) * wander );
+    }
     // While searching for food or prey (no close target), drift along the
     // smell gradient from the diffusion fields.
     const searchState = st.mind[ s * SS.MIND_STRIDE + SS.M_STATE ];
@@ -774,15 +779,14 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
     //-------------------------------------------------
     const previousX = B[ b + SS.B_FOCUS_X ], previousY = B[ b + SS.B_FOCUS_Y ];
     const goalX = B[ b + SS.B_GOAL_X ], goalY = B[ b + SS.B_GOAL_Y ];
-    const maxShift = Math.min( 0.12, BRAIN_FOCUS_TARGET_SHIFT_THRESHOLD );
-    const shiftStrength = Math.min( 0.12, BRAIN_FOCUS_TARGET_SHIFT_STRENGTH );
-    let fx = previousX + goalX * shiftStrength;
-    let fy = previousY + goalY * shiftStrength;
+    const shift = Math.min( 0.06, BRAIN_FOCUS_TARGET_SHIFT_STRENGTH );
+    let fx = previousX + goalX * shift;
+    let fy = previousY + goalY * shift;
     const ddx = fx - previousX, ddy = fy - previousY;
-    if ( ddx * ddx + ddy * ddy > maxShift * maxShift )
+    if ( ddx * ddx + ddy * ddy > shift * shift )
     {
-        fx = previousX + goalX * maxShift;
-        fy = previousY + goalY * maxShift;
+        fx = previousX + goalX * shift;
+        fy = previousY + goalY * shift;
     }
     B[ b + SS.B_FOCUS_X ] = fx;
     B[ b + SS.B_FOCUS_Y ] = fy;
