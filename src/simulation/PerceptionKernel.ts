@@ -23,7 +23,7 @@ import { ATTRACTION_SIMILAR_COLOR, STARVING, SWIMBOT_MOUTH_LENGTH, SWIMBOT_VIEW_
 import { FOOD_BIT_GRAB_RADIUS } from "./FoodBit";
 import { PROFILER_ENABLED, profEnter, profExit, PROF_PERCEIVE, PROF_PERC_SWIMBOTS, PROF_PERC_FOOD, PROF_PERC_OBSTRUCTED } from "./Profiler";
 import { PREDATOR_DEFERENCE_ENABLED, KIN_NOT_EATEN_ENABLED, OLD_AGE_DURATION, WEAK_PREY_ENABLED, WEAK_STARVING_SHARE, JUVENILE_PREDATION_ENABLED, CROWD_AWARE_FOOD_CHOICE_ENABLED, FOOD_TARGET_PERSISTENCE_ENABLED, FOOD_SWITCH_RATIO_MIN, FOOD_KEEP_RADIUS_SCALE, SIZE_ASSORTATIVE_MATING_ENABLED } from "./Parameters";
-import { M_CURRENT_W, M_DISEASE, M_WEAK_PREF, MIND_STRIDE, M_VIEW_RADIUS, M_GRAB_RADIUS, M_DEFERENCE, M_FOOD, M_PERSIST, M_MATURE_AGE, M_SIZE_PICKY, M_MAX_ENERGY } from "./MindLayout";
+import { M_CURRENT_W, M_DISEASE, M_WEAK_PREF, MIND_STRIDE, M_VIEW_RADIUS, M_GRAB_RADIUS, M_DEFERENCE, M_FOOD, M_PERSIST, M_MATE, M_MATURE_AGE, M_SIZE_PICKY, M_MAX_ENERGY } from "./MindLayout";
 import { preyTargetScore } from "./EcologyGenes";
 import {
     BACKGROUND_SIZE, PARAM_MAX_LIFESPAN, B_NUM_PARTS, B_GROWTH, B_VEL_X, B_VEL_Y, BOT_STRIDE, MAX_SEEN, PARAM_ENV_ACTIVE, PARAM_STEP, PARAM_CURRENT, PARAM_ENV_FIELDS, PARAM_FOOD_TYPES,
@@ -697,6 +697,7 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
         mate = -1;
         let highest = -100.0;
         const r = st.colorR, g = st.colorG, b = st.colorB;
+        const currentMate = st.mind[ s * MIND_STRIDE + M_MATE ];
         for (let i = 0; i < numSeen; i++)
         {
             const o = st.seen[ seenBase + i ];
@@ -714,6 +715,11 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
                 const sizeSimilarity  = 0.5 * ( massSimilarity + partsSimilarity );
                 attractiveness = ( ONE - w ) * attractiveness + w * sizeSimilarity;
             }
+            // Hysteresis: a partner already chosen (and still in sight, since
+            // only seen bots reach this loop) keeps a bonus, so small score
+            // jitter cannot swap the indicator to another nearby candidate.
+            if ( st.brainState[o] !== BRAIN_STATE_FLEEING_PREDATOR ) attractiveness *= 1.05;
+            if (( o === currentMate ) && ( st.liveSwimbot[o] === 1 )) attractiveness *= 1.35;
 
             if (( attractiveness > highest )
             &&  ( attractiveness > 0 )

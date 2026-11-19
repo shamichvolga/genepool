@@ -766,11 +766,24 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
     const goalX = B[ b + SS.B_GOAL_X ], goalY = B[ b + SS.B_GOAL_Y ];
     let fx = previousX + goalX * BRAIN_FOCUS_TARGET_SHIFT_STRENGTH;
     let fy = previousY + goalY * BRAIN_FOCUS_TARGET_SHIFT_STRENGTH;
-    const ddx = fx - previousX, ddy = fy - previousY;
-    if ( ddx * ddx + ddy * ddy > BRAIN_FOCUS_TARGET_SHIFT_THRESHOLD * BRAIN_FOCUS_TARGET_SHIFT_THRESHOLD )
+    if ( previousX * goalX + previousY * goalY < 0 )
     {
-        fx = previousX + goalX * BRAIN_FOCUS_TARGET_SHIFT_THRESHOLD;
-        fy = previousY + goalY * BRAIN_FOCUS_TARGET_SHIFT_THRESHOLD;
+        // a near-reversal: turn by a small fixed step along the shortest arc
+        // instead of letting the additive shift swing the heading across the circle
+        const turn = Math.min( 0.06, BRAIN_FOCUS_TARGET_SHIFT_STRENGTH );
+        const sign = ( previousX * goalY - previousY * goalX ) >= 0 ? 1 : -1;
+        const sn = sign * turn, cs = 1 - 0.5 * turn * turn;
+        fx = previousX * cs - previousY * sn;
+        fy = previousY * cs + previousX * sn;
+    }
+    else
+    {
+        const ddx = fx - previousX, ddy = fy - previousY;
+        if ( ddx * ddx + ddy * ddy > BRAIN_FOCUS_TARGET_SHIFT_THRESHOLD * BRAIN_FOCUS_TARGET_SHIFT_THRESHOLD )
+        {
+            fx = previousX + goalX * BRAIN_FOCUS_TARGET_SHIFT_THRESHOLD;
+            fy = previousY + goalY * BRAIN_FOCUS_TARGET_SHIFT_THRESHOLD;
+        }
     }
     B[ b + SS.B_FOCUS_X ] = fx;
     B[ b + SS.B_FOCUS_Y ] = fy;
@@ -1050,6 +1063,16 @@ export function takeInLook( st: SharedState, s: number, counters: number ): void
         {
             const o = st.seen[ base + i ];
             if (( o === mate ) && ( isPredator( st, o ) === isPredator( st, s ))) { stillSeen = true; }
+        }
+        if ( !stillSeen && ( mate >= 0 ) && ( st.liveSwimbot[ mate ] === 1 )
+        &&  ( isPredator( st, mate ) === isPredator( st, s )))
+        {
+            // a partner at the edge of the radius may leave the strict view
+            // for one tick; keep it for a little longer instead of dropping it
+            const mp = mate * SS.BOT_STRIDE;
+            const dx = B[ mp + SS.B_POS_X ] - px, dy = B[ mp + SS.B_POS_Y ] - py;
+            const reach = M[ m + SS.M_VIEW_RADIUS ] * 1.15;
+            stillSeen = ( dx * dx + dy * dy <= reach * reach );
         }
         if ( !stillSeen )
         {

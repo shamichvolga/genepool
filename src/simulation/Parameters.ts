@@ -303,7 +303,7 @@ export const PLANT_SIZE_ENABLED             = true;
 export const SOIL_NUTRIENT_PER_ENERGY        = 0.05;
 export const PLANT_SPROUT_ENERGY            = 10;     // soft growth needs no minerals; a new sprout holds this much
 export const PLANT_TREE_ENERGY              = 150;    // a full-grown tree holds this much
-export const PLANT_LEAF_REGROWTH            = 0.0028;  // share of the missing crown that grows back each step
+export const PLANT_LEAF_REGROWTH            = 0.002;  // share of the missing crown that grows back each step
 export const PLANT_MAX_TOUGHNESS            = 0.78;    // toughness of a full-grown tree (a sprout: 0)
 export const BITE_FORCE_AT_REFERENCE        = 0.52;    // the bite force of a body of BITE_REFERENCE_MASS (force grows as mass^(2/3))
 export const BITE_REFERENCE_MASS            = 410;
@@ -409,12 +409,12 @@ export const PLANT_SEED_PARENT_TRIES        = 8;      // grown-up parents looked
 //     little less likely to succeed (but never below the floor).
 //------------------------------------------------------------------------------
 export const FILTER_FEEDING_ENABLED         = true;
-export const FILTER_FEEDING_EFFICIENCY      = 0.78;   // of the sprout's energy
+export const FILTER_FEEDING_EFFICIENCY      = 0.65;   // of the sprout's energy
 export const FILTER_FEEDING_PERIOD          = 4;      // each body checks its limbs every 4 steps
-export const FILTER_FEEDING_REACH           = 9;      // beyond the part's width
+export const FILTER_FEEDING_REACH           = 7.5;    // beyond the part's width
 export const LIMB_SPINES_ENABLED            = true;
-export const LIMB_SPINE_EFFECT              = 0.14;   // bite success x ( 1 - 0.1 x ( tips - 2 ))
-export const LIMB_SPINE_FLOOR               = 0.25;
+export const LIMB_SPINE_EFFECT              = 0.13;   // bite success x ( 1 - 0.1 x ( tips - 2 ))
+export const LIMB_SPINE_FLOOR               = 0.28;
 
 //------------------------------------------------------------------------------
 // Nursery: the gardens where the first swimbots start get much more food at
