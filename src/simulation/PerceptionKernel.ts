@@ -11,8 +11,8 @@
 import { areKin } from "./Kin";
 import { currentAt, currentDriftX, currentDriftY, currentTravelFactor } from "./Currents";
 import { CURRENT_AWARENESS_ENABLED, CURRENT_AWARE_MIN_SPEED } from "./Parameters";
-import { biteEfficiency, biteForce, plantToughness } from "./PlantSize";
-import { BITE_ENERGY, BITE_MARGIN, PLANT_SIZE_ENABLED, PLANT_SPROUT_ENERGY, VISION_WEIGHT_BY_BITE_EFFICIENCY } from "./Parameters";
+import { biteEfficiency, biteForce } from "./PlantSize";
+import { BITE_ENERGY, BITE_MARGIN, PLANT_MAX_TOUGHNESS, PLANT_SIZE_ENABLED, PLANT_SPROUT_ENERGY, PLANT_TREE_ENERGY, VISION_WEIGHT_BY_BITE_EFFICIENCY } from "./Parameters";
 import { BRAIN_STATE_FLEEING_PREDATOR, BRAIN_STATE_LOOKING_FOR_MATE, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_PREY } from "./Brain";
 import { IGNORE_FOOD_EFFICIENCY, mateAcceptance, pairRandom, preyVisibility, searchImageFactor } from "./Ecology";
 import { PLANT_TYPE_WARM } from "./Environment";
@@ -32,6 +32,7 @@ import {
 } from "./SharedState";
 
 export const STARVING_FOOD_CHOICE = 15;   // below this energy a swimbot eats anything
+const TOUGHNESS_PER_WOOD = PLANT_MAX_TOUGHNESS / PLANT_TREE_ENERGY;
 
 // the SDF geometry never changes during a run
 const SDF_CELL_W = POOL_WIDTH  / SDF_SIZE;
@@ -288,17 +289,15 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
     for (let i = 0; i < numNearby; i += stride)
     {
         const o = nearby[i];
-        if ( alive[o] === 1 )
+        // the grid is rebuilt from live bots only, so no alive[] test is needed
+        const dx = myGenitalX - genitalX[o];
+        const dy = myGenitalY - genitalY[o];
+        const distanceSquared = dx * dx + dy * dy;
+        if ( distanceSquared < viewRadiusSquared )
         {
-            const dx = myGenitalX - genitalX[o];
-            const dy = myGenitalY - genitalY[o];
-            const distanceSquared = dx * dx + dy * dy;
-            if ( distanceSquared < viewRadiusSquared )
-            {
-                sc.candidateIndices  [ numCandidates ] = o;
-                sc.candidateDistances[ numCandidates ] = distanceSquared;
-                numCandidates ++;
-            }
+            sc.candidateIndices  [ numCandidates ] = o;
+            sc.candidateDistances[ numCandidates ] = distanceSquared;
+            numCandidates ++;
         }
     }
 
@@ -416,7 +415,7 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
         }
         if ( !okay ) continue;
         if ( PLANT_SIZE_ENABLED && VISION_WEIGHT_BY_BITE_EFFICIENCY && ( type !== 2 )
-        &&   ( myBiteForce <= plantToughness( st.foodWood[f] ) )) continue;
+        &&   ( myBiteForce <= Math.min( PLANT_MAX_TOUGHNESS, st.foodWood[f] * TOUGHNESS_PER_WOOD ) )) continue;
 
         if ( type === 2 && foodAlive[f] === 1 && PREDATOR_TARGET_SELECTION_ENABLED )
         {
@@ -448,7 +447,7 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
             let scaled = viewDistanceSquared / e2;
             if ( PLANT_SIZE_ENABLED )
             {
-                const tough = plantToughness( st.foodWood[f] );
+                const tough = Math.min( PLANT_MAX_TOUGHNESS, st.foodWood[f] * TOUGHNESS_PER_WOOD );
                 if ( myBiteForce <= tough ) continue;
                 const eff = Math.min( 1, ( myBiteForce - tough ) / BITE_MARGIN );
                 const bite = Math.min( st.foodEnergy[f], BITE_ENERGY * myBiteForce * eff );

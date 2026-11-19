@@ -140,8 +140,9 @@ export class UniformGrid
             for ( let r = r0; r <= r1; r++ )
             {
                 const cell = r * cols + c;
-                const end = cellStart[ cell + 1 ];
-                for ( let k = cellStart[ cell ]; k < end; k++ )
+                const start = cellStart[ cell ], end = cellStart[ cell + 1 ];
+                if ( start === end ) continue;
+                for ( let k = start; k < end; k++ )
                 {
                     const item = sorted[k];
                     if ( this.isExtra[ item ] !== 0 ) continue;
