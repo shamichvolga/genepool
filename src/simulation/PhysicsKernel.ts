@@ -195,16 +195,6 @@ export function physicsPartA( s: number, st: SharedState ): void
 
         pd[ i + C_A ] = pd[ j + C_A ] + angle[ k + p ];
 
-        // Асимметричный суставной упор ("колени" / Joint ROM)
-        if ( p > 1 )
-        {
-            const jMin = st.partJointMin[ k + p ] || JOINT_MIN_ANGLE;
-            const jMax = st.partJointMax[ k + p ] || JOINT_MAX_ANGLE;
-            const relativeAngle = pd[ i + C_A ] - pd[ j + C_A ];
-            if ( relativeAngle < jMin ) { pd[ i + C_A ] = pd[ j + C_A ] + jMin; }
-            if ( relativeAngle > jMax ) { pd[ i + C_A ] = pd[ j + C_A ] + jMax; }
-        }
-
         if ( p > 1 ) // part 1 has nothing to bend off of
         {
             const ampModulator   = turnAmp  [ k + p ] * directionDot;
@@ -212,6 +202,14 @@ export function physicsPartA( s: number, st: SharedState ): void
             const radian = timer * frequency + ( phase[ k + p ] + phaseModulator );
             pd[ i + B_A ] = ( amp[ k + p ] + ampModulator ) * fastSin( radian );
             pd[ i + C_A ] += pd[ i + B_A ];
+
+            // Асимметричный суставной упор ("колени" / Joint ROM):
+            // clamp AFTER the bend so the spline never sees > 170 degrees
+            const jMin = st.partJointMin[ k + p ] || JOINT_MIN_ANGLE;
+            const jMax = st.partJointMax[ k + p ] || JOINT_MAX_ANGLE;
+            const relativeAngle = pd[ i + C_A ] - pd[ j + C_A ];
+            if ( relativeAngle < jMin ) { pd[ i + C_A ] = pd[ j + C_A ] + jMin; }
+            if ( relativeAngle > jMax ) { pd[ i + C_A ] = pd[ j + C_A ] + jMax; }
         }
 
         const radian = pd[ i + C_A ] * PI_OVER_180;
@@ -387,7 +385,7 @@ export function physicsPartA( s: number, st: SharedState ): void
                     if ( bl > 1e-4 )
                     {
                         bx /= bl; by /= bl;
-                        const impulse = Math.min( CAVITY_JET_MAX, CAVITY_JET_C * ( dS * dS ) / gap ) * ( motion.enabled ? motion.acceleration : 1 );
+                        const impulse = Math.min( 0.45, 0.5 * CAVITY_JET_C * ( dS * dS ) / gap ) * ( motion.enabled ? motion.acceleration : 1 );
                         accelerationX -= bx * impulse;
                         accelerationY -= by * impulse;
                         energy = Math.max( ZERO, energy - impulse * 0.008 );
@@ -442,81 +440,75 @@ export function physicsPartA( s: number, st: SharedState ): void
         energy -= drag.energyCost;
         if ( energy < ZERO ) { energy = ZERO; }
     }
-    // Tree obstacles and body collisions: every other step (each body skips
-    // half the steps, so the grid is walked half as often)
-    if ((( st.params[ PARAM_STEP ] + s ) & 1 ) === 0 )
+    // Tree obstacles and body collisions: a soft push on every step
+    // Tree obstacles: the compact list of adult trees (no grid walk)
+    const profTreesT0 = PROFILER_ENABLED ? profEnter( PROF_PHYS_TREES ) : 0;
+    if ( TREE_OBSTACLES_ENABLED )
     {
-        // Tree obstacles: the compact list of adult trees (no grid walk)
-        const profTreesT0 = PROFILER_ENABLED ? profEnter( PROF_PHYS_TREES ) : 0;
-        if ( TREE_OBSTACLES_ENABLED )
+        const treeCount = st.params[ PARAM_MATURE_TREE_COUNT ];
+        const trees = st.matureTrees;
+        const treeReach = sumLengths * 0.5 + TREE_OBSTACLE_RADIUS_BASE + TREE_OBSTACLE_RADIUS_SCALE + 8;
+        const treeReachSquared = treeReach * treeReach;
+        for ( let ti = 0; ti < treeCount; ti++ )
         {
-            const treeCount = st.params[ PARAM_MATURE_TREE_COUNT ];
-            const trees = st.matureTrees;
-            const treeReach = sumLengths * 0.5 + TREE_OBSTACLE_RADIUS_BASE + TREE_OBSTACLE_RADIUS_SCALE + 8;
-            const treeReachSquared = treeReach * treeReach;
-            for ( let ti = 0; ti < treeCount; ti++ )
+            const tf = trees[ti];
+            if ( st.liveFood[tf] !== 1 || st.foodType[tf] === 2 || st.foodWood[tf] < WOOD_PER_FRUIT_TIER ) continue;
+            const tx = st.foodX[tf], ty = st.foodY[tf];
+            const bdx0 = posX - tx, bdy0 = posY - ty;
+            if ( bdx0 * bdx0 + bdy0 * bdy0 > treeReachSquared ) continue;
+            const tr = TREE_OBSTACLE_RADIUS_BASE + TREE_OBSTACLE_RADIUS_SCALE * Math.min( 1, st.foodWood[tf] / PLANT_TREE_ENERGY );
+            const maxBodyR = sumLengths * 0.6 + tr + 8;
+            const bdx = posX - tx, bdy = posY - ty;
+            if ( bdx * bdx + bdy * bdy > maxBodyR * maxBodyR ) continue;
+            for ( let p = 0; p < numParts; p += 2 )
             {
-                const tf = trees[ti];
-                if ( st.liveFood[tf] !== 1 || st.foodType[tf] === 2 || st.foodWood[tf] < WOOD_PER_FRUIT_TIER ) continue;
-                const tx = st.foodX[tf], ty = st.foodY[tf];
-                const bdx0 = posX - tx, bdy0 = posY - ty;
-                if ( bdx0 * bdx0 + bdy0 * bdy0 > treeReachSquared ) continue;
-                const tr = TREE_OBSTACLE_RADIUS_BASE + TREE_OBSTACLE_RADIUS_SCALE * Math.min( 1, st.foodWood[tf] / PLANT_TREE_ENERGY );
-                const maxBodyR = sumLengths * 0.6 + tr + 8;
-                const bdx = posX - tx, bdy = posY - ty;
-                if ( bdx * bdx + bdy * bdy > maxBodyR * maxBodyR ) continue;
-                for ( let p = 0; p < numParts; p += 2 )
-                {
-                    const i = o + p * PS;
-                    const dx = pd[ i + M_X ] - tx, dy = pd[ i + M_Y ] - ty;
-                    const rSum = tr + st.partWidth[ k + p ] * 0.5;
-                    const d2 = dx * dx + dy * dy;
-                    if ( d2 > 1e-6 && d2 < rSum * rSum )
-                    {
-                        const dist = Math.sqrt( d2 );
-                        const overlap = rSum - dist;
-                        const push = Math.min( 0.35, overlap * BODY_COLLISION_PUSH * 0.75 );
-                        velX += ( dx / dist ) * push;
-                        velY += ( dy / dist ) * push;
-                        energy -= push * 0.005;
-                        if ( energy < ZERO ) { energy = ZERO; }
-                    }
-                }
-            }
-        }
-        if ( PROFILER_ENABLED ) { profExit( PROF_PHYS_TREES, profTreesT0 ); }
-
-        // Body collisions: O(N) потокобезопасное отталкивание через swimbotGrid (пишем только в себя)
-        const profCollT0 = PROFILER_ENABLED ? profEnter( PROF_PHYS_COLLISIONS ) : 0;
-        if ( BODY_COLLISIONS_ENABLED )
-        {
-            const ra = Math.max( 3, Math.sqrt( Math.max( 1, bodyMass ) ) * 0.14 );
-            const nn = st.swimbotGrid.collect( posX, posY, ra + 26, _kernelGridBuf );
-            const ma = Math.max( 1, bodyMass );
-            for ( let ni = 0; ni < nn; ni++ )
-            {
-                const o2 = _kernelGridBuf[ni];
-                if ( o2 === s || st.liveSwimbot[o2] !== 1 ) continue;
-                const dx = posX - st.botX[o2];
-                const dy = posY - st.botY[o2];
-                const rb = Math.max( 3, Math.sqrt( Math.max( 1, st.mass[o2] ) ) * 0.14 );
-                const rSum = ra + rb;
+                const i = o + p * PS;
+                const dx = pd[ i + M_X ] - tx, dy = pd[ i + M_Y ] - ty;
+                const rSum = tr + st.partWidth[ k + p ] * 0.5;
                 const d2 = dx * dx + dy * dy;
                 if ( d2 > 1e-6 && d2 < rSum * rSum )
                 {
                     const dist = Math.sqrt( d2 );
                     const overlap = rSum - dist;
-                    const mb = Math.max( 1, st.mass[o2] );
-                    const push = Math.min( 0.35, overlap * BODY_COLLISION_PUSH * 0.75 * ( mb / ( ma + mb ) ) * 2.0 );
+                    const push = Math.min( 0.22, overlap * 0.14 );
                     velX += ( dx / dist ) * push;
                     velY += ( dy / dist ) * push;
-                    energy -= push * 0.004;
+                    energy -= push * 0.005;
                     if ( energy < ZERO ) { energy = ZERO; }
                 }
             }
         }
-        if ( PROFILER_ENABLED ) { profExit( PROF_PHYS_COLLISIONS, profCollT0 ); }
     }
+    if ( PROFILER_ENABLED ) { profExit( PROF_PHYS_TREES, profTreesT0 ); }
+
+    // Body collisions: O(N) потокобезопасное отталкивание через swimbotGrid (пишем только в себя)
+    const profCollT0 = PROFILER_ENABLED ? profEnter( PROF_PHYS_COLLISIONS ) : 0;
+    if ( BODY_COLLISIONS_ENABLED )
+    {
+        const ra = Math.max( 3, Math.sqrt( Math.max( 1, bodyMass ) ) * 0.14 );
+        const nn = st.swimbotGrid.collect( posX, posY, ra + 26, _kernelGridBuf );
+        for ( let ni = 0; ni < nn; ni++ )
+        {
+            const o2 = _kernelGridBuf[ni];
+            if ( o2 === s || st.liveSwimbot[o2] !== 1 ) continue;
+            const dx = posX - st.botX[o2];
+            const dy = posY - st.botY[o2];
+            const rb = Math.max( 3, Math.sqrt( Math.max( 1, st.mass[o2] ) ) * 0.14 );
+            const rSum = ra + rb;
+            const d2 = dx * dx + dy * dy;
+            if ( d2 > 1e-6 && d2 < rSum * rSum )
+            {
+                const dist = Math.sqrt( d2 );
+                const overlap = rSum - dist;
+                const push = Math.min( 0.22, overlap * 0.14 );
+                velX += ( dx / dist ) * push;
+                velY += ( dy / dist ) * push;
+                energy -= push * 0.004;
+                if ( energy < ZERO ) { energy = ZERO; }
+            }
+        }
+    }
+    if ( PROFILER_ENABLED ) { profExit( PROF_PHYS_COLLISIONS, profCollT0 ); }
 
     // Wake grid: мягкое увлечение потоком воды (без саморазгона)
     if ( WAKE_GRID_ENABLED )
