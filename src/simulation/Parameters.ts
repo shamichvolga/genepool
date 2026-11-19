@@ -220,6 +220,7 @@ export const PREDATOR_TARGET_SELECTION_ENABLED = false;
 
 
 export const YOUNG_AGE_DURATION    = 1000;
+export const NEWBORN_SIZE_SCALE    = 0.35;   // детёныш начинает с 0.35 линейных размеров и растёт до 1.0
 export const OLD_AGE_DURATION      = 1000;
 export const MIN_MAXIMUM_AGE       = YOUNG_AGE_DURATION + OLD_AGE_DURATION;
 export const MAX_MAXIMUM_AGE       = 40000;
@@ -314,7 +315,7 @@ export const PLANT_LIFESPAN                 = 8000;  // old plants fall after 0.
 export const WOOD_PER_FRUIT_TIER            = 40;     // one waiting fruit at 40 wood, two at 80, three at 120
 export const PLANT_FRUIT_PERIOD             = 1200;
 export const PLANT_FRUIT_ENERGY             = 10;
-export const PLANT_CANOPY_RADIUS            = 300;
+export const PLANT_CANOPY_RADIUS            = 360;
 export const SHADED_PLANT_AGING_FACTOR      = 4;
 export const WOOD_DECAY_STEPS               = 400;
 export const PLANT_SEED_CARRY_CHANCE         = 0.35;
@@ -339,7 +340,7 @@ export const JUVENILE_PREDATION_ENABLED     = true;   // a predator may bite a n
 export const MEAT_PIECE_ENERGY              = 25;     // a body that is not eaten whole falls apart into pieces of this much
 export const MEAT_PIECE_SCATTER             = 40;     // ... lying this far around the place of death
 export const YOUNG_CANNIBALISM_ENABLED      = true;   // (on since 18.10)  // a hungry herbivore may eat a young one of its kind with fewer body parts
-export const CLASSIC_SEED_RAIN_FRACTION     = 0.1;    // classic pools: share of new food landing anywhere (not next to other food)
+export const CLASSIC_SEED_RAIN_FRACTION     = 0.05;    // classic pools: share of new food landing anywhere (not next to other food)
 
 //------------------------------------------------------------------------------
 // Income of a big body (commission round 2, bundle B1; off by default)
@@ -525,3 +526,26 @@ export const MEAT_ASSIMILATION              = 0.55;   // (d16: 0.4 lost the pred
 //------------------------------------------------------------------------------
 export const PLANT_REGROW_CHANCE            = 0;      // (off until tested)
 export const PLANT_REGROW_DELAY             = 1500;
+
+//------------------------------------------------------------------------------
+// Complex package (physics, ecology, morphology)
+//------------------------------------------------------------------------------
+export const BODY_COLLISIONS_ENABLED       = false;
+export const BODY_COLLISION_PUSH            = 0.5;
+export const BODY_COLLISION_MAX_IMPULSE     = 2.0;
+export const TREE_OBSTACLES_ENABLED         = false;
+export const TREE_OBSTACLE_RADIUS_BASE      = 4;
+export const TREE_OBSTACLE_RADIUS_SCALE     = 10;
+export const CAVITY_JET_ENABLED             = false;
+export const CAVITY_JET_C                  = 0.05;
+export const CAVITY_JET_MAX                 = 5.0;
+export const CAVITY_SUCTION_RADIUS_SCALE    = 1.5;
+export const WAKE_GRID_ENABLED              = false;
+export const WAKE_GRID_SIZE                 = 64;
+export const WAKE_DAMPING                   = 0.94;
+export const WAKE_DIFFUSION                = 0.04;
+export const WAKE_MAX_SPEED                = 2.5;
+export const WAKE_IMPULSE_SHARE             = 0.25;
+export const QUADRATIC_WATER_ENABLED        = false;
+export const JOINT_MIN_ANGLE                = -75;
+export const JOINT_MAX_ANGLE                = 75;
