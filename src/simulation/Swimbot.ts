@@ -36,7 +36,7 @@ import { Genotype } from "./Genotype";
 import { globalTweakers, gpRandom, simClock, simCounters } from "./Globals";
 import { NULL_INDEX, ONE, ONE_HALF, ONE_THIRD, PI_OVER_180, ZERO } from "./MathConstants";
 import { BIG_BODY_STOMACH_ENABLED, STOMACH_REFERENCE_MASS } from "./Parameters";
-import { AUTOTOMY_REGROW_DELAY, AUTOTOMY_DECOY_SPAN, PREY_BODY_ENERGY, ATTACK_COOLDOWN, ATTACK_SUCCESS_CHANCE, ENVIRONMENT_ATTACK_SUCCESS_CHANCE, BASAL_METABOLISM, DEFAULT_SWIMBOT_HUNGER_THRESHOLD, FOOD_TYPE_OFFSET, OLD_AGE_DURATION, PREDATION_ENERGY_TRANSFER, PREDATOR_FLEE_RADIUS, PREDATOR_LEVEL_THRESHOLD, PREY_SCAN_COOLDOWN, PREY_SCAN_RADIUS_GROWTH, PREY_SCAN_RADIUS_MAX_SCALE, RANDOM_MATING_CONTROL, SWIMBOT_MAX_ENERGY, SWIMBOT_SELECT_RADIUS_SCALAR, YOUNG_AGE_DURATION } from "./Parameters";
+import { AUTOTOMY_REGROW_DELAY, AUTOTOMY_DECOY_SPAN, PREY_BODY_ENERGY, ATTACK_COOLDOWN, ATTACK_SUCCESS_CHANCE, ENVIRONMENT_ATTACK_SUCCESS_CHANCE, BASAL_METABOLISM, DEFAULT_SWIMBOT_HUNGER_THRESHOLD, FOOD_TYPE_OFFSET, NEWBORN_SIZE_SCALE, OLD_AGE_DURATION, PREDATION_ENERGY_TRANSFER, PREDATOR_FLEE_RADIUS, PREDATOR_LEVEL_THRESHOLD, PREY_SCAN_COOLDOWN, PREY_SCAN_RADIUS_GROWTH, PREY_SCAN_RADIUS_MAX_SCALE, RANDOM_MATING_CONTROL, SWIMBOT_MAX_ENERGY, SWIMBOT_SELECT_RADIUS_SCALAR, YOUNG_AGE_DURATION } from "./Parameters";
 import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
 import { SwimbotRenderer } from "./SwimbotRenderer";
 import { ATTRACTION_BIG, ATTRACTION_CLOSEST, ATTRACTION_COLORFUL, ATTRACTION_CROOKED, ATTRACTION_HYPER, ATTRACTION_LONG, ATTRACTION_NO_COLOR, ATTRACTION_RANDOM, ATTRACTION_SHORT, ATTRACTION_SIMILAR_COLOR, ATTRACTION_SIMILAR_HYPER, ATTRACTION_SIMILAR_LENGTH, ATTRACTION_SIMILAR_SIZE, ATTRACTION_SIMILAR_STRAIGHT, ATTRACTION_SMALL, ATTRACTION_STILL, ATTRACTION_STRAIGHT, CONTINUAL_ENERGY_DRAIN, ENERGY_EFFICIENCY_MEASUREMENT_PERIOD, ENERGY_USED_UP_SWIMMING, GENITAL_INDEX, MAX_PARTS, MOUTH_INDEX, NULL_PART, Phenotype, ROOT_PART, STARVING, STARVING_TIMER_DELTA, SWIMBOT_GENITAL_LENGTH, SWIMBOT_MOUTH_LENGTH, SWIMBOT_VIEW_RADIUS, TIMER_DELTA_INCREASE_RATE, WALL_BOUNCE } from "./SwimbotTypes";
@@ -859,7 +859,8 @@ this.setParent = function( parent )
 
 			if ( _B[ _b + SS.B_AGE ] < YOUNG_AGE_DURATION )
 			{
-                length *= _B[ _b + SS.B_GROWTH ];
+                const sizeScale = NEWBORN_SIZE_SCALE + ( 1 - NEWBORN_SIZE_SCALE ) * _B[ _b + SS.B_GROWTH ];
+                length *= sizeScale;
 			}
 
 			let x = length * Math.sin( radian );
@@ -946,11 +947,17 @@ this.setParent = function( parent )
 		_B[ _b + SS.B_FREQUENCY ]      = _phenotype.frequency;
 		_B[ _b + SS.B_SUM_LENGTHS ] = _phenotype.sumPartLengths;
 		_B[ _b + SS.B_BODY_MASS ]       = _phenotype.mass;
+		if ( _shared !== null && _slot >= 0 ) { _shared.botGlide[ _slot ] = _phenotype.glideFactor || 0; }
 
 		for (let p=0; p<_phenotype.numParts; p++)
 		{
 			const part = _phenotype.parts[p];
 			const i = p * PS;
+			if ( _shared !== null && _slot >= 0 )
+			{
+				_shared.partJointMin[ _slot * MAX_PARTS + p ] = part.jointMin ?? -75;
+				_shared.partJointMax[ _slot * MAX_PARTS + p ] = part.jointMax ?? 75;
+			}
 			_pLength   [p] = part.length;
 			_pWidth    [p] = part.width;
 			_pMass     [p] = part.mass;
@@ -1110,6 +1117,7 @@ this.setParent = function( parent )
 	this.create = function( index, age, position, angle, energy, genotype, embryology )
 	{
 	    _carriedSeed = 0;
+	    if ( _shared !== null && _slot >= 0 ) { _shared.cavityValid[ _slot ] = 0; }
 	    _deathCause = "";      // (set again by die(); a newborn must not carry the last life of its slot)
 	    // (healthy, and with no immunity: DISEASE_ENABLED)
 	    _M[ _m + SS.M_DISEASE ] = 0; _M[ _m + SS.M_DISEASE_TIMER ] = 0;
@@ -1428,7 +1436,7 @@ _position.copyFrom( position );
         _M[ _m + SS.M_MATURE_AGE ]      = SIZE_MATURITY_ENABLED
             ? YOUNG_AGE_DURATION * Math.min( 4, Math.max( 0.5, _phenotype.mass / 410 ))
             : YOUNG_AGE_DURATION;
-        _M[ _m + SS.M_VIEW_RADIUS ]     = SIZE_SCALED_VISION_ENABLED ? SWIMBOT_VIEW_RADIUS * Math.pow( Math.max( 1, _phenotype.mass ) / 410, 0.2 ) : SWIMBOT_VIEW_RADIUS;
+        _M[ _m + SS.M_VIEW_RADIUS ]     = SIZE_SCALED_VISION_ENABLED ? SWIMBOT_VIEW_RADIUS * Math.pow( Math.max( 1, _phenotype.mass ) / 410, 0.35 ) : SWIMBOT_VIEW_RADIUS;
         _M[ _m + SS.M_GRAB_RADIUS ]     = SIZE_SCALED_GRAB_ENABLED ? FOOD_BIT_GRAB_RADIUS * Math.pow( Math.max( 1, _phenotype.mass ) / 410, 0.25 ) : FOOD_BIT_GRAB_RADIUS;
         _M[ _m + SS.M_MAX_ENERGY ]      = MASS_SCALED_STOMACH_ENABLED
             ? Math.max( 60, SWIMBOT_MAX_ENERGY * Math.pow( _phenotype.mass / 410, 0.75 ))
@@ -1767,7 +1775,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
         _velocity.add( _acceleration );
         if ( motion.enabled )
         {
-            const drag = applyWaterDrag( _velocity.x, _velocity.y, _phenotype.mass, motion.drag );
+            const drag = applyWaterDrag( _velocity.x, _velocity.y, _phenotype.mass, _phenotype.sumPartLengths, motion.drag );
             _velocity.setXY( drag.velocityX, drag.velocityY );
             _B[ _b + SS.B_ENERGY ] = Math.max( ZERO, _B[ _b + SS.B_ENERGY ] - drag.energyCost );
         }
@@ -3050,7 +3058,7 @@ console.log( "contributeToOffspring: _childEnergyRatio = " + _childEnergyRatio )
 	    let i = capsules.reserve( numParts - 1 );
 	    const d = capsules.reserved(), stride = capsules.floatsPerCapsule;
 	    // (a newborn grows from an egg: its widths too, as in the detailed drawing)
-	    const growth = Math.min( ONE, _B[ _b + SS.B_GROWTH ] ), egg = 5.0 * ( ONE - growth );
+	    const growth = Math.min( ONE, _B[ _b + SS.B_GROWTH ] ), sizeScale = NEWBORN_SIZE_SCALE + ( 1 - NEWBORN_SIZE_SCALE ) * growth;
 	    for (let p=1; p<numParts; p++)
 	    {
 	        const parent = _pParent[p];
@@ -3058,8 +3066,8 @@ console.log( "contributeToOffspring: _childEnergyRatio = " + _childEnergyRatio )
 	        else { d[ i ] = _pd[ parent * PS + P_X ]; d[ i + 1 ] = _pd[ parent * PS + P_Y ]; }
 	        d[ i + 2 ] = _pd[ p * PS + P_X ];
 	        d[ i + 3 ] = _pd[ p * PS + P_Y ];
-	        d[ i + 4 ] = _partStartWidth[p] * growth + egg;
-	        d[ i + 5 ] = _pWidth[p]         * growth + egg;
+	        d[ i + 4 ] = _partStartWidth[p] * sizeScale;
+	        d[ i + 5 ] = _pWidth[p]         * sizeScale;
 	        d[ i + 6 ] = greyR + _partRGB[ p * 3     ] * keep;
 	        d[ i + 7 ] = greyG + _partRGB[ p * 3 + 1 ] * keep;
 	        d[ i + 8 ] = greyB + _partRGB[ p * 3 + 2 ] * keep;

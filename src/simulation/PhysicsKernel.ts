@@ -13,16 +13,41 @@
 //------------------------------------------------------------------------------
 import { currentAt, currentDriftX, currentDriftY } from "./Currents";
 import { ONE, ONE_HALF, PI_OVER_180, ZERO } from "./MathConstants";
-import { GROWTH_COSTS_ENERGY_ENABLED, GROWTH_ENERGY_PER_MASS, OLD_AGE_DURATION, RUDDER_COST_PER_DEGREE, RUDDER_ENABLED, STEER_BY_SWIM_DIRECTION_ENABLED, SWIM_DIRECTION_SMOOTHING, SWIMBOT_SELECT_RADIUS_SCALAR, YOUNG_AGE_DURATION } from "./Parameters";
+import { GROWTH_COSTS_ENERGY_ENABLED, GROWTH_ENERGY_PER_MASS, NEWBORN_SIZE_SCALE, OLD_AGE_DURATION, RUDDER_COST_PER_DEGREE, RUDDER_ENABLED, STEER_BY_SWIM_DIRECTION_ENABLED, SWIM_DIRECTION_SMOOTHING, SWIMBOT_SELECT_RADIUS_SCALAR, YOUNG_AGE_DURATION } from "./Parameters";
 import { applyWaterDrag, bodyMotionFactors } from "./BodyPhysics";
 import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
 import { CONTINUAL_ENERGY_DRAIN, ENERGY_EFFICIENCY_MEASUREMENT_PERIOD, ENERGY_USED_UP_SWIMMING, GENITAL_INDEX, MAX_PARTS, MOUTH_INDEX, ROOT_PART, STARVING, STARVING_TIMER_DELTA, TIMER_DELTA_INCREASE_RATE, WALL_BOUNCE } from "./SwimbotTypes";
+import { BODY_COLLISIONS_ENABLED, BODY_COLLISION_PUSH, BODY_COLLISION_MAX_IMPULSE, TREE_OBSTACLES_ENABLED, TREE_OBSTACLE_RADIUS_BASE, TREE_OBSTACLE_RADIUS_SCALE, CAVITY_JET_ENABLED, CAVITY_JET_C, CAVITY_JET_MAX, CAVITY_SUCTION_RADIUS_SCALE, WAKE_GRID_ENABLED, WAKE_GRID_SIZE, WAKE_DAMPING, WAKE_DIFFUSION, WAKE_MAX_SPEED, WAKE_IMPULSE_SHARE, QUADRATIC_WATER_ENABLED, JOINT_MIN_ANGLE, JOINT_MAX_ANGLE, PLANT_TREE_ENERGY, WOOD_PER_FRUIT_TIER } from "./Parameters";
+
+const _WAKE_N = WAKE_GRID_SIZE;
+const _kernelGridBuf = new Int32Array( 512 );
+
+export function stepWakeGrid( st: SharedState ): void
+{
+    const wx = st.wakeX, wy = st.wakeY, nx = st.wakeNextX, ny = st.wakeNextY;
+    for ( let y = 0; y < _WAKE_N; y++ )
+    {
+        const row = y * _WAKE_N;
+        const upRow = ( y > 0 ) ? row - _WAKE_N : row;
+        const downRow = ( y < _WAKE_N - 1 ) ? row + _WAKE_N : row;
+        for ( let x = 0; x < _WAKE_N; x++ )
+        {
+            const idx = row + x;
+            const left = ( x > 0 ) ? idx - 1 : idx;
+            const right = ( x < _WAKE_N - 1 ) ? idx + 1 : idx;
+            nx[idx] = wx[idx] * WAKE_DAMPING + ( wx[left] + wx[right] + wx[upRow + x] + wx[downRow + x] ) * WAKE_DIFFUSION;
+            ny[idx] = wy[idx] * WAKE_DAMPING + ( wy[left] + wy[right] + wy[upRow + x] + wy[downRow + x] ) * WAKE_DIFFUSION;
+        }
+    }
+    wx.set( nx );
+    wy.set( ny );
+}
 import {
     PARAM_CURRENT, B_RUDDER, B_SWIM_X, B_SWIM_Y, A_X, A_Y, B_A, B_AGE, B_ANGLE, B_BASAL, B_BODY_MASS, B_COM_X, B_COM_Y, B_DEATHS, B_EFFICIENCY, B_EFFORT,
     B_ENERGY, B_ETERNAL, B_FOCUS_X, B_FOCUS_Y, B_FREQUENCY, B_GENITAL_X, B_GENITAL_Y, B_GOAL_X, B_GOAL_Y, B_GROWTH,
     B_LAST_ENERGY, B_LAST_X, B_LAST_Y, B_MOUTH_X, B_MOUTH_Y, B_NUM_PARTS, B_POS_X, B_POS_Y, B_SELECT_RADIUS,
     B_SPIN, B_SUM_LENGTHS, B_TIMER, B_TIMER_DELTA, B_VEL_X, B_VEL_Y, BOT_STRIDE, C_A, M_X, M_Y, N_X, N_Y, P_X,
-    P_Y, PARAM_MAX_LIFESPAN, PART_STRIDE, PS, Q_X, Q_Y, SharedState, V_X, V_Y,
+    P_Y, PARAM_MAX_LIFESPAN, PARAM_STEP, PART_STRIDE, PS, Q_X, Q_Y, SharedState, V_X, V_Y,
     PARAM_WALL_COUNT, PARAM_WALL_BASE
 } from "./SharedState";
 
@@ -106,7 +131,10 @@ export function physicsPartA( s: number, st: SharedState ): void
         }
     }
 
-    const timer = B[ b + B_TIMER ] + timerDelta * B[ b + B_EFFORT ];
+    const glide = st.botGlide[s];
+    const effort = B[ b + B_EFFORT ];
+    const glideScale = ( glide > 0 && effort < 0.85 ) ? ( 1 - 0.35 * glide ) : 1;
+    const timer = B[ b + B_TIMER ] + timerDelta * effort * glideScale;
 
     // modulators: the dot between the heading's perpendicular and the focus direction
     const radian0 = angleNow * PI_OVER_180;
@@ -141,6 +169,16 @@ export function physicsPartA( s: number, st: SharedState ): void
 
         pd[ i + C_A ] = pd[ j + C_A ] + angle[ k + p ];
 
+        // Асимметричный суставной упор ("колени" / Joint ROM)
+        if ( p > 1 )
+        {
+            const jMin = st.partJointMin[ k + p ] || JOINT_MIN_ANGLE;
+            const jMax = st.partJointMax[ k + p ] || JOINT_MAX_ANGLE;
+            const relativeAngle = pd[ i + C_A ] - pd[ j + C_A ];
+            if ( relativeAngle < jMin ) { pd[ i + C_A ] = pd[ j + C_A ] + jMin; }
+            if ( relativeAngle > jMax ) { pd[ i + C_A ] = pd[ j + C_A ] + jMax; }
+        }
+
         if ( p > 1 ) // part 1 has nothing to bend off of
         {
             const ampModulator   = turnAmp  [ k + p ] * directionDot;
@@ -152,7 +190,7 @@ export function physicsPartA( s: number, st: SharedState ): void
 
         const radian = pd[ i + C_A ] * PI_OVER_180;
         let partLength = length[ k + p ];
-        if ( growth < ONE ) { partLength *= growth; }
+        if ( growth < ONE ) { partLength *= NEWBORN_SIZE_SCALE + ( ONE - NEWBORN_SIZE_SCALE ) * growth; }
 
         const x = partLength * Math.sin( radian );
         const y = partLength * Math.cos( radian );
@@ -214,22 +252,23 @@ export function physicsPartA( s: number, st: SharedState ): void
     // select radius (now and then)
     if ( age % 20 === 0 )
     {
-        let selectRadius = B[ b + B_SELECT_RADIUS ];
+        let maxDistSq = 0;
         for (let p = 1; p < numParts; p++)
         {
-            for (let q = 1; q < numParts; q++)
+            const px = pd[ o + p * PS + P_X ], py = pd[ o + p * PS + P_Y ];
+            for (let q = p + 1; q < numParts; q++)
             {
-                if ( q != p )
-                {
-                    const xx = pd[ o + p * PS + P_X ] - pd[ o + q * PS + P_X ];
-                    const yy = pd[ o + p * PS + P_Y ] - pd[ o + q * PS + P_Y ];
-                    let distance = Math.sqrt( xx * xx + yy * yy );
-                    distance = SWIMBOT_SELECT_RADIUS_SCALAR * Math.sqrt( distance );
-                    if ( distance > selectRadius ) { selectRadius = distance; }
-                }
+                const xx = px - pd[ o + q * PS + P_X ];
+                const yy = py - pd[ o + q * PS + P_Y ];
+                const d2 = xx * xx + yy * yy;
+                if ( d2 > maxDistSq ) { maxDistSq = d2; }
             }
         }
-        B[ b + B_SELECT_RADIUS ] = selectRadius;
+        if ( maxDistSq > 0 )
+        {
+            const sr = SWIMBOT_SELECT_RADIUS_SCALAR * Math.sqrt( Math.sqrt( maxDistSq ));
+            if ( sr > B[ b + B_SELECT_RADIUS ] ) { B[ b + B_SELECT_RADIUS ] = sr; }
+        }
     }
 
     //==================================================================
@@ -259,9 +298,8 @@ export function physicsPartA( s: number, st: SharedState ): void
         const partVectorFromCenterY = pd[ i + M_Y ] - posY;
         const xx = partVectorFromCenterX * partVectorFromCenterX;
         const yy = partVectorFromCenterY * partVectorFromCenterY;
-        const distance = Math.sqrt( xx * xx + yy * yy );
 
-        if ( distance > ZERO )
+        if ( xx + yy > ZERO )
         {
             if ( motion.enabled )
             {
@@ -278,6 +316,88 @@ export function physicsPartA( s: number, st: SharedState ): void
             const partPerpendicularY = -partVectorFromCenterX;
             const perpDot = ( strokeForceX * partPerpendicularX + strokeForceY * partPerpendicularY ) / sumLengths;
             torque -= perpDot;
+
+            if ( WAKE_GRID_ENABLED )
+            {
+                const wcx = Math.max( 0, Math.min( _WAKE_N - 1, Math.floor( ( pd[ i + M_X ] - POOL_LEFT ) / ( POOL_RIGHT - POOL_LEFT ) * _WAKE_N ) ) );
+                const wcy = Math.max( 0, Math.min( _WAKE_N - 1, Math.floor( ( pd[ i + M_Y ] - POOL_TOP ) / ( POOL_BOTTOM - POOL_TOP ) * _WAKE_N ) ) );
+                const widx = wcy * _WAKE_N + wcx;
+                st.wakeX[widx] -= strokeForceX * WAKE_IMPULSE_SHARE;
+                st.wakeY[widx] -= strokeForceY * WAKE_IMPULSE_SHARE;
+            }
+        }
+    }
+
+    // Cavity Jet & Suction: геометрическое схлопывание и раскрытие парных веток без "абилок"
+    if ( CAVITY_JET_ENABLED && numParts >= 4 )
+    {
+        let p1 = -1, p2 = -1, sharedParent = -1;
+        for ( let a = 1; a < numParts - 1 && p1 < 0; a++ )
+        {
+            const pa = parentOf[ k + a ];
+            if ( pa < 0 ) continue;
+            for ( let c = a + 1; c < numParts; c++ )
+            {
+                if ( parentOf[ k + c ] === pa ) { p1 = a; p2 = c; sharedParent = pa; break; }
+            }
+        }
+        if ( p1 > 0 && p2 > 0 )
+        {
+            const jx = pd[ o + sharedParent * PS + P_X ], jy = pd[ o + sharedParent * PS + P_Y ];
+            const v1x = pd[ o + p1 * PS + P_X ] - jx, v1y = pd[ o + p1 * PS + P_Y ] - jy;
+            const v2x = pd[ o + p2 * PS + P_X ] - jx, v2y = pd[ o + p2 * PS + P_Y ] - jy;
+            const area = 0.5 * Math.abs( v1x * v2y - v1y * v2x );
+            if ( st.cavityValid[s] === 1 )
+            {
+                const dS = area - st.prevCavityArea[s];
+                if ( dS < -0.5 )
+                {
+                    const gap = Math.max( 4.0, Math.sqrt( ( v1x - v2x ) * ( v1x - v2x ) + ( v1y - v2y ) * ( v1y - v2y ) ));
+                    const l1 = Math.max( 1, Math.sqrt( v1x * v1x + v1y * v1y ));
+                    const l2 = Math.max( 1, Math.sqrt( v2x * v2x + v2y * v2y ));
+                    let bx = v1x / l1 + v2x / l2, by = v1y / l1 + v2y / l2;
+                    const bl = Math.sqrt( bx * bx + by * by );
+                    if ( bl > 1e-4 )
+                    {
+                        bx /= bl; by /= bl;
+                        const impulse = Math.min( CAVITY_JET_MAX, CAVITY_JET_C * ( dS * dS ) / gap ) * ( motion.enabled ? motion.acceleration : 1 );
+                        accelerationX -= bx * impulse;
+                        accelerationY -= by * impulse;
+                        energy = Math.max( ZERO, energy - impulse * 0.008 );
+                        if ( WAKE_GRID_ENABLED )
+                        {
+                            const wcx = Math.max( 0, Math.min( _WAKE_N - 1, Math.floor( ( jx - POOL_LEFT ) / ( POOL_RIGHT - POOL_LEFT ) * _WAKE_N ) ));
+                            const wcy = Math.max( 0, Math.min( _WAKE_N - 1, Math.floor( ( jy - POOL_TOP ) / ( POOL_BOTTOM - POOL_TOP ) * _WAKE_N ) ));
+                            const widx = wcy * _WAKE_N + wcx;
+                            st.wakeX[widx] += bx * impulse * WAKE_IMPULSE_SHARE;
+                            st.wakeY[widx] += by * impulse * WAKE_IMPULSE_SHARE;
+                        }
+                    }
+                }
+                else if ( dS > 0.5 )
+                {
+                    const branchLen = 0.5 * ( length[ k + p1 ] + length[ k + p2 ] );
+                    const sucR = branchLen * CAVITY_SUCTION_RADIUS_SCALE;
+                    const mx = B[ b + B_MOUTH_X ], my = B[ b + B_MOUTH_Y ];
+                    const fn = st.foodGrid.collect( mx, my, sucR, _kernelGridBuf );
+                    const sucR2 = sucR * sucR;
+                    for ( let fi = 0; fi < fn; fi++ )
+                    {
+                        const f = _kernelGridBuf[fi];
+                        if ( st.liveFood[f] !== 1 || st.foodWood[f] >= WOOD_PER_FRUIT_TIER ) continue;
+                        const dx = mx - st.foodX[f], dy = my - st.foodY[f];
+                        const d2 = dx * dx + dy * dy;
+                        if ( d2 > 4 && d2 < sucR2 )
+                        {
+                            const pull = Math.min( 0.6, 0.04 * dS / Math.sqrt( d2 ) );
+                            st.foodX[f] += dx * pull;
+                            st.foodY[f] += dy * pull;
+                        }
+                    }
+                }
+            }
+            st.prevCavityArea[s] = area;
+            st.cavityValid[s] = 1;
         }
     }
 
@@ -285,12 +405,94 @@ export function physicsPartA( s: number, st: SharedState ): void
     let velY = B[ b + B_VEL_Y ] + accelerationY;
     if ( motion.enabled )
     {
-        const drag = applyWaterDrag( velX, velY, bodyMass, motion.drag );
+        const effectiveDrag = motion.drag * ( ( glide > 0 && effort < 0.85 ) ? ( 1 - 0.35 * glide ) : 1 );
+        const drag = applyWaterDrag( velX, velY, bodyMass, sumLengths, effectiveDrag );
         velX = drag.velocityX;
         velY = drag.velocityY;
         energy -= drag.energyCost;
         if ( energy < ZERO ) { energy = ZERO; }
     }
+    // Tree obstacles: O(N) поиск стволов через foodGrid
+    if ( TREE_OBSTACLES_ENABLED )
+    {
+        const searchR = sumLengths * 0.5 + TREE_OBSTACLE_RADIUS_BASE + TREE_OBSTACLE_RADIUS_SCALE + 8;
+        const fn = st.foodGrid.collect( posX, posY, searchR, _kernelGridBuf );
+        for ( let fi = 0; fi < fn; fi++ )
+        {
+            const tf = _kernelGridBuf[fi];
+            if ( st.liveFood[tf] !== 1 || st.foodType[tf] === 2 || st.foodWood[tf] < WOOD_PER_FRUIT_TIER ) continue;
+            const tx = st.foodX[tf], ty = st.foodY[tf];
+            const tr = TREE_OBSTACLE_RADIUS_BASE + TREE_OBSTACLE_RADIUS_SCALE * Math.min( 1, st.foodWood[tf] / PLANT_TREE_ENERGY );
+            const maxBodyR = sumLengths * 0.6 + tr + 8;
+            const bdx = posX - tx, bdy = posY - ty;
+            if ( bdx * bdx + bdy * bdy > maxBodyR * maxBodyR ) continue;
+            for ( let p = 0; p < numParts; p += 2 )
+            {
+                const i = o + p * PS;
+                const dx = pd[ i + M_X ] - tx, dy = pd[ i + M_Y ] - ty;
+                const rSum = tr + st.partWidth[ k + p ] * 0.5;
+                const d2 = dx * dx + dy * dy;
+                if ( d2 > 1e-6 && d2 < rSum * rSum )
+                {
+                    const dist = Math.sqrt( d2 );
+                    const overlap = rSum - dist;
+                    const push = Math.min( BODY_COLLISION_MAX_IMPULSE, overlap * BODY_COLLISION_PUSH );
+                    velX += ( dx / dist ) * push;
+                    velY += ( dy / dist ) * push;
+                    energy -= push * 0.005;
+                    if ( energy < ZERO ) { energy = ZERO; }
+                }
+            }
+        }
+    }
+
+    // Body collisions: O(N) потокобезопасное отталкивание через swimbotGrid (пишем только в себя)
+    if ( BODY_COLLISIONS_ENABLED )
+    {
+        const ra = Math.max( 3, Math.sqrt( Math.max( 1, bodyMass ) ) * 0.14 );
+        const nn = st.swimbotGrid.collect( posX, posY, ra + 26, _kernelGridBuf );
+        const ma = Math.max( 1, bodyMass );
+        for ( let ni = 0; ni < nn; ni++ )
+        {
+            const o2 = _kernelGridBuf[ni];
+            if ( o2 === s || st.liveSwimbot[o2] !== 1 ) continue;
+            const dx = posX - st.botX[o2];
+            const dy = posY - st.botY[o2];
+            const rb = Math.max( 3, Math.sqrt( Math.max( 1, st.mass[o2] ) ) * 0.14 );
+            const rSum = ra + rb;
+            const d2 = dx * dx + dy * dy;
+            if ( d2 > 1e-6 && d2 < rSum * rSum )
+            {
+                const dist = Math.sqrt( d2 );
+                const overlap = rSum - dist;
+                const mb = Math.max( 1, st.mass[o2] );
+                const push = Math.min( BODY_COLLISION_MAX_IMPULSE, overlap * BODY_COLLISION_PUSH * ( mb / ( ma + mb ) ) * 2.0 );
+                velX += ( dx / dist ) * push;
+                velY += ( dy / dist ) * push;
+                energy -= push * 0.004;
+                if ( energy < ZERO ) { energy = ZERO; }
+            }
+        }
+    }
+
+    // Wake grid: мягкое увлечение потоком воды (без саморазгона)
+    if ( WAKE_GRID_ENABLED )
+    {
+        const ix = Math.max( 0, Math.min( _WAKE_N - 1, Math.floor( ( posX - POOL_LEFT ) / ( POOL_RIGHT - POOL_LEFT ) * _WAKE_N ) ) );
+        const iy = Math.max( 0, Math.min( _WAKE_N - 1, Math.floor( ( posY - POOL_TOP ) / ( POOL_BOTTOM - POOL_TOP ) * _WAKE_N ) ) );
+        const widx = iy * _WAKE_N + ix;
+        let wx = st.wakeX[widx];
+        let wy = st.wakeY[widx];
+        const wm2 = wx * wx + wy * wy;
+        if ( wm2 > WAKE_MAX_SPEED * WAKE_MAX_SPEED )
+        {
+            const sc = WAKE_MAX_SPEED / Math.sqrt( wm2 );
+            wx *= sc; wy *= sc;
+        }
+        velX += ( wx - velX ) * 0.06;
+        velY += ( wy - velY ) * 0.06;
+    }
+
     // the remembered swimming direction follows the velocity slowly
     B[ b + B_SWIM_X ] += ( velX - B[ b + B_SWIM_X ] ) * SWIM_DIRECTION_SMOOTHING;
     B[ b + B_SWIM_Y ] += ( velY - B[ b + B_SWIM_Y ] ) * SWIM_DIRECTION_SMOOTHING;
@@ -310,6 +512,84 @@ export function physicsPartA( s: number, st: SharedState ): void
         energy -= Math.abs( turn ) * RUDDER_COST_PER_DEGREE;
         if ( energy < ZERO ) { energy = ZERO; }
     }
+    // Tree obstacles: O(N) поиск стволов через foodGrid
+    if ( TREE_OBSTACLES_ENABLED )
+    {
+        const searchR = sumLengths * 0.5 + TREE_OBSTACLE_RADIUS_BASE + TREE_OBSTACLE_RADIUS_SCALE + 8;
+        const fn = st.foodGrid.collect( posX, posY, searchR, _kernelGridBuf );
+        for ( let fi = 0; fi < fn; fi++ )
+        {
+            const tf = _kernelGridBuf[fi];
+            if ( st.liveFood[tf] !== 1 || st.foodType[tf] === 2 || st.foodWood[tf] < WOOD_PER_FRUIT_TIER ) continue;
+            const tx = st.foodX[tf], ty = st.foodY[tf];
+            const tr = TREE_OBSTACLE_RADIUS_BASE + TREE_OBSTACLE_RADIUS_SCALE * Math.min( 1, st.foodWood[tf] / PLANT_TREE_ENERGY );
+            for ( let p = 0; p < numParts; p += 2 )
+            {
+                const i = o + p * PS;
+                const dx = pd[ i + M_X ] - tx, dy = pd[ i + M_Y ] - ty;
+                const rSum = tr + st.partWidth[ k + p ] * 0.5;
+                const d2 = dx * dx + dy * dy;
+                if ( d2 > 1e-6 && d2 < rSum * rSum )
+                {
+                    const dist = Math.sqrt( d2 );
+                    const overlap = rSum - dist;
+                    const push = Math.min( BODY_COLLISION_MAX_IMPULSE, overlap * BODY_COLLISION_PUSH );
+                    velX += ( dx / dist ) * push;
+                    velY += ( dy / dist ) * push;
+                    energy -= push * 0.005;
+                    if ( energy < ZERO ) { energy = ZERO; }
+                }
+            }
+        }
+    }
+
+    // Body collisions: O(N) потокобезопасное отталкивание через swimbotGrid (пишем только в себя)
+    if ( BODY_COLLISIONS_ENABLED )
+    {
+        const ra = Math.max( 3, Math.sqrt( Math.max( 1, bodyMass ) ) * 0.14 );
+        const nn = st.swimbotGrid.collect( posX, posY, ra + 26, _kernelGridBuf );
+        const ma = Math.max( 1, bodyMass );
+        for ( let ni = 0; ni < nn; ni++ )
+        {
+            const o2 = _kernelGridBuf[ni];
+            if ( o2 === s || st.liveSwimbot[o2] !== 1 ) continue;
+            const dx = posX - st.botX[o2];
+            const dy = posY - st.botY[o2];
+            const rb = Math.max( 3, Math.sqrt( Math.max( 1, st.mass[o2] ) ) * 0.14 );
+            const rSum = ra + rb;
+            const d2 = dx * dx + dy * dy;
+            if ( d2 > 1e-6 && d2 < rSum * rSum )
+            {
+                const dist = Math.sqrt( d2 );
+                const overlap = rSum - dist;
+                const mb = Math.max( 1, st.mass[o2] );
+                const push = Math.min( BODY_COLLISION_MAX_IMPULSE, overlap * BODY_COLLISION_PUSH * ( mb / ( ma + mb ) ) * 2.0 );
+                velX += ( dx / dist ) * push;
+                velY += ( dy / dist ) * push;
+                energy -= push * 0.004;
+                if ( energy < ZERO ) { energy = ZERO; }
+            }
+        }
+    }
+
+    // Wake grid: мягкое увлечение потоком воды (без саморазгона)
+    if ( WAKE_GRID_ENABLED )
+    {
+        const ix = Math.max( 0, Math.min( _WAKE_N - 1, Math.floor( ( posX - POOL_LEFT ) / ( POOL_RIGHT - POOL_LEFT ) * _WAKE_N ) ) );
+        const iy = Math.max( 0, Math.min( _WAKE_N - 1, Math.floor( ( posY - POOL_TOP ) / ( POOL_BOTTOM - POOL_TOP ) * _WAKE_N ) ) );
+        const widx = iy * _WAKE_N + ix;
+        let wx = st.wakeX[widx];
+        let wy = st.wakeY[widx];
+        const wm2 = wx * wx + wy * wy;
+        if ( wm2 > WAKE_MAX_SPEED * WAKE_MAX_SPEED )
+        {
+            const sc = WAKE_MAX_SPEED / Math.sqrt( wm2 );
+            wx *= sc; wy *= sc;
+        }
+        velX += ( wx - velX ) * 0.06;
+        velY += ( wy - velY ) * 0.06;
+    }
+
     posX += velX;
     posY += velY;
     angleNow += spin;

@@ -119,6 +119,8 @@ export function Part()
     this.endCapSpline       = ZERO;     // how pointy the splined end-cap is for parts that terminate body sequence
 	this.branch             = false;    // set to true if this part branches off (not a continuation of a category)
     this.splined		    = false;
+    this.jointMin           = -75;
+    this.jointMax           = 75;
 	this.numDecendents		= 0;
 	this.decendent			= new Array( MAX_PARTS );
 
@@ -145,6 +147,7 @@ export function Phenotype()
 	this.thermalWidth       = 0.4;
 	this.digestion          = 0.5;
 	this.brightness         = 0.5;
+	this.glideFactor        = 0;
 	this.choosiness         = 0;
 	this.hungerFactor       = 1;
 	this.autotomyBite       = 0;

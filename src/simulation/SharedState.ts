@@ -11,7 +11,7 @@
 // simulation objects on purpose (workers import it too).
 //------------------------------------------------------------------------------
 import { MAX_PARTS } from "./SwimbotTypes";
-import { MAX_FOODBITS, MAX_SWIMBOTS } from "./Parameters";
+import { MAX_FOODBITS, MAX_SWIMBOTS, WAKE_GRID_SIZE } from "./Parameters";
 import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
 import { GridAllocator, UniformGrid } from "./UniformGrid";
 import { BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS } from "./Brain";
@@ -182,6 +182,15 @@ export class SharedState
     readonly preyTravelWeight : Float64Array;
     readonly preyBaitBias     : Float64Array;
     readonly preyChoiceReady  : Uint8Array;   // derived target weights initialized for this slot
+    readonly wakeX            : Float32Array;
+    readonly wakeY            : Float32Array;
+    readonly wakeNextX        : Float32Array;
+    readonly wakeNextY        : Float32Array;
+    readonly prevCavityArea   : Float64Array;
+    readonly cavityValid      : Uint8Array;
+    readonly botGlide         : Float32Array;
+    readonly partJointMin     : Float32Array;
+    readonly partJointMax     : Float32Array;
 
     readonly foodX        : Float64Array;
     readonly foodY        : Float64Array;
@@ -308,6 +317,16 @@ export class SharedState
         this.preyTravelWeight = f64( "preyTravelWeight", n );
         this.preyBaitBias     = f64( "preyBaitBias", n );
         this.preyChoiceReady  = u8 ( "preyChoiceReady", n );
+        const wakeCells       = WAKE_GRID_SIZE * WAKE_GRID_SIZE;
+        this.wakeX            = new Float32Array( make( "wakeX", wakeCells * 4 ));
+        this.wakeY            = new Float32Array( make( "wakeY", wakeCells * 4 ));
+        this.wakeNextX        = new Float32Array( make( "wakeNextX", wakeCells * 4 ));
+        this.wakeNextY        = new Float32Array( make( "wakeNextY", wakeCells * 4 ));
+        this.prevCavityArea   = f64( "prevCavityArea", n );
+        this.cavityValid      = u8 ( "cavityValid", n );
+        this.botGlide         = new Float32Array( make( "botGlide", n * 4 ));
+        this.partJointMin     = new Float32Array( make( "partJointMin", partCount * 4 ));
+        this.partJointMax     = new Float32Array( make( "partJointMax", partCount * 4 ));
 
         this.foodX      = f64( "foodX", MAX_FOODBITS );
         this.foodY      = f64( "foodY", MAX_FOODBITS );

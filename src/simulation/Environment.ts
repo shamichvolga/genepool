@@ -301,7 +301,8 @@ export class Environment
         if ( elapsed <= 0 ) return;
         if ( SOIL_NUTRIENT_DECAY_PER_STEP > 0 )
         {
-            this.soilNutrient[ cell ] *= Math.exp( -SOIL_NUTRIENT_DECAY_PER_STEP * elapsed );
+            const x = SOIL_NUTRIENT_DECAY_PER_STEP * elapsed;
+            this.soilNutrient[ cell ] *= ( x < 0.01 ) ? ( 1 - x ) : Math.exp( -x );
         }
         this.nutrientUpdatedAt[ cell ] = this.time;
     }

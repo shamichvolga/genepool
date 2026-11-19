@@ -2,7 +2,7 @@ import { transferToAtmosphere } from "./EnergyBudget";
 import { simClock, gpRandom } from "./Globals";
 import { NULL_INDEX, ONE, ONE_HALF, PI2, ZERO } from "./MathConstants";
 import { plantSize, plantLifespan } from "./PlantSize";
-import { plantCrownRays } from "./PlantVisuals";
+import { plantCrownColors, plantCrownRays } from "./PlantVisuals";
 import { MEAT_PIECE_ENERGY, PLANT_SIZE_ENABLED, PLANT_TREE_ENERGY, PLANT_EVOLUTION_ENABLED, PLANT_STAGES_ENABLED, PLANT_STAGES_SHOWN, SPAWN_FOOD_RANDOMLY_IN_POOL, WOOD_PER_FRUIT_TIER } from "./Parameters";
 import { plantGrowthOf, plantSpreadOf, plantSproutGrowth, plantStage, randomizePlantGenes } from "./PlantGenes";
 import { POOL_BOTTOM, POOL_HEIGHT, POOL_LEFT, POOL_RIGHT, POOL_TOP, POOL_WIDTH } from "./Pool";
@@ -355,13 +355,14 @@ export function FoodBit()
 	    }
 	    const age = simClock.step - _fb[ _fi ];
 	    const lifespan = plantLifespan( _fi, _fb[ _fi ] );
-	    const crown = plantCrownRays( _fw[ _fi ], _fe[ _fi ], age, lifespan, _fi, radius * 3.35 );
 	    const px = viewScale / Math.max( 1, 1280 );
 	    if ( radius <= px * 2.5 )
 	    {
-	        capsules.add( _position.x, _position.y, _position.x, _position.y, Math.max( radius, px ), crown.colors.main.red, crown.colors.main.green, crown.colors.main.blue, opacity() );
+	        const colors = plantCrownColors( _fw[ _fi ], _fe[ _fi ], age, lifespan );
+	        capsules.add( _position.x, _position.y, _position.x, _position.y, Math.max( radius, px ), colors.main.red, colors.main.green, colors.main.blue, opacity() );
 	        return;
 	    }
+	    const crown = plantCrownRays( _fw[ _fi ], _fe[ _fi ], age, lifespan, _fi, radius * 3.35 );
 	    const w = radius * 0.22;
 	    const trunk = crown.colors.trunk;
 	    if ( crown.silhouette )
@@ -444,15 +445,15 @@ export function FoodBit()
 	        {
 	            const age = simClock.step - _fb[ _fi ];
 	            const lifespan = plantLifespan( _fi, _fb[ _fi ] );
-	            const crown = plantCrownRays( _fw[ _fi ], _fe[ _fi ], age, lifespan, _fi, span * 3.35 );
 	            if ( span <= pixel * 2.5 )
 	            {
-	                const main = crown.colors.main;
+	                const main = plantCrownColors( _fw[ _fi ], _fe[ _fi ], age, lifespan ).main;
 	                canvas.fillStyle = "rgba( " + Math.floor( main.red * 255 ) + ", " + Math.floor( main.green * 255 ) + ", " + Math.floor( main.blue * 255 ) + ", " + opacity() + " )";
 	                canvas.beginPath(); canvas.arc( _position.x, _position.y, Math.max( span, pixel ), 0, PI2, false ); canvas.fill(); canvas.closePath();
 	                canvas.restore();
 	                return;
 	            }
+	            const crown = plantCrownRays( _fw[ _fi ], _fe[ _fi ], age, lifespan, _fi, span * 3.35 );
 	            const w = span * 0.62;
 	            if ( crown.silhouette )
 	            {

@@ -11,8 +11,8 @@
 import { areKin } from "./Kin";
 import { currentAt, currentDriftX, currentDriftY, currentTravelFactor } from "./Currents";
 import { CURRENT_AWARENESS_ENABLED, CURRENT_AWARE_MIN_SPEED } from "./Parameters";
-import { biteEfficiency, biteEnergy } from "./PlantSize";
-import { PLANT_SIZE_ENABLED, PLANT_SPROUT_ENERGY, VISION_WEIGHT_BY_BITE_EFFICIENCY } from "./Parameters";
+import { biteEfficiency, biteForce, plantToughness } from "./PlantSize";
+import { BITE_ENERGY, BITE_MARGIN, PLANT_SIZE_ENABLED, PLANT_SPROUT_ENERGY, VISION_WEIGHT_BY_BITE_EFFICIENCY } from "./Parameters";
 import { BRAIN_STATE_LOOKING_FOR_MATE, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_PREY } from "./Brain";
 import { IGNORE_FOOD_EFFICIENCY, mateAcceptance, pairRandom, preyVisibility, searchImageFactor } from "./Ecology";
 import { PLANT_TYPE_WARM } from "./Environment";
@@ -210,6 +210,7 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
     const preyViewRadius        = st.scanRadius[s];
     const predatorLevel         = st.predator[s];
     const myMass                = st.mass[s];
+    const myBiteForce           = PLANT_SIZE_ENABLED ? biteForce( myMass ) : 0;
     const myX                   = st.botX[s];
     const myY                   = st.botY[s];
     const myGenitalX            = st.genitalX[s];
@@ -301,7 +302,8 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
     const preferredFoodType = st.preferred[s];
     const foodX = st.foodX, foodY = st.foodY, foodType = st.foodType, foodAlive = st.foodAlive;
     const botOffset = s * BOT_STRIDE;
-    const swimSpeed = Math.max( 0.05, Math.hypot( st.bots[ botOffset + B_VEL_X ], st.bots[ botOffset + B_VEL_Y ] ));
+    const bvx = st.bots[ botOffset + B_VEL_X ], bvy = st.bots[ botOffset + B_VEL_Y ];
+    const swimSpeed = Math.max( 0.05, Math.sqrt( bvx * bvx + bvy * bvy ));
 
     // CURRENT_AWARENESS_ENABLED: the drift here. How the way along the stream
     // counts in choosing a target is a gene (-1 .. +1): + down the stream counts
@@ -364,7 +366,7 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
         }
         if ( !okay ) continue;
         if ( PLANT_SIZE_ENABLED && VISION_WEIGHT_BY_BITE_EFFICIENCY && ( type !== 2 )
-        &&   ( biteEfficiency( myMass, st.foodWood[f] ) <= 0 )) continue;
+        &&   ( myBiteForce <= plantToughness( st.foodWood[f] ) )) continue;
 
         if ( type === 2 && foodAlive[f] === 1 && PREDATOR_TARGET_SELECTION_ENABLED )
         {
@@ -393,10 +395,10 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
             let scaled = viewDistanceSquared / ( e * e );
             if ( PLANT_SIZE_ENABLED )
             {
-                // a plant too tough for my mouth is no food for me; otherwise it is
-                // worth what I can bite off it (not what it holds): nearer, if more
-                const bite = biteEnergy( myMass, st.foodWood[f], st.foodEnergy[f] );
-                if ( bite <= 0 ) continue;
+                const tough = plantToughness( st.foodWood[f] );
+                if ( myBiteForce <= tough ) continue;
+                const eff = Math.min( 1, ( myBiteForce - tough ) / BITE_MARGIN );
+                const bite = Math.min( st.foodEnergy[f], BITE_ENERGY * myBiteForce * eff );
                 const worth = Math.min( 5, Math.max( 0.2, bite / PLANT_SPROUT_ENERGY ));
                 scaled /= worth * worth;
             }
@@ -405,9 +407,9 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
                 const k = currentTravelFactor( driftX, driftY, foodX[f] - myMouthX, foodY[f] - myMouthY, ownSpeed, awareness );
                 scaled *= k * k;
             }
+            if ( scaled >= smallestDistanceSquared || foodAlive[f] !== 1 ) continue;
             if ( CROWD_AWARE_FOOD_CHOICE_ENABLED )
             {
-                // herbivores in sight whose mouth is nearer to this plant than mine
                 let rivals = 0;
                 for (let i = 0; i < numSeen; i++)
                 {
@@ -416,10 +418,13 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
                     const ox = st.mouthX[o] - foodX[f], oy = st.mouthY[o] - foodY[f];
                     if ( ox * ox + oy * oy < viewDistanceSquared ) rivals ++;
                 }
-                const k = 1 + st.mind[ s * MIND_STRIDE + M_DEFERENCE ] * rivals;
-                scaled *= k * k;
+                if ( rivals > 0 )
+                {
+                    const k = 1 + st.mind[ s * MIND_STRIDE + M_DEFERENCE ] * rivals;
+                    scaled *= k * k;
+                }
             }
-            if ( scaled < smallestDistanceSquared && foodAlive[f] === 1 && !obstructed( st, myMouthX, myMouthY, foodX[f], foodY[f] ))
+            if ( scaled < smallestDistanceSquared && !obstructed( st, myMouthX, myMouthY, foodX[f], foodY[f] ))
             {
                 smallestDistanceSquared = scaled;
                 chosenFood = f;
@@ -493,6 +498,7 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
             const realDistance = Math.sqrt( px * px + py * py );
             // (a predator that prefers the weak - its gene - sees them as nearer)
             let distance = weak ? realDistance / ( 1 + 2 * st.mind[ s * MIND_STRIDE + M_WEAK_PREF ] ) : realDistance;
+            if ( distance > preyViewRadius ) continue;
 
             // PREDATOR_DEFERENCE_ENABLED: other hunters nearer to this prey make it
             // look farther (the same deference gene as with plants): many hunters

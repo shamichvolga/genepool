@@ -38,8 +38,8 @@ import * as SS from "./SharedState";
 import { buildFamilyTreeText, buildSwimbotPanelHTML, geneticClustersText } from "../ui/panelTexts";
 import { doTask, TASK_DECIDE, TASK_LOOK, TASK_PHYSICS, TASK_PREPARE_LOOK, TASK_RENDER_DATA } from "../parallel/ParallelWork";
 import { perceive, PerceptionScratch } from "./PerceptionKernel";
-import { physicsStep } from "./PhysicsKernel";
-import { ORIGINAL_FOOD_ENABLED } from "./Parameters";
+import { physicsStep, stepWakeGrid } from "./PhysicsKernel";
+import { ORIGINAL_FOOD_ENABLED, WAKE_GRID_ENABLED } from "./Parameters";
 import { Swimbot } from "./Swimbot";
 import { ATTRACTION_RANDOM, ATTRACTION_SIMILAR_COLOR, NUM_ATTRACTIONS, STARVING, SWIMBOT_MOUTH_LENGTH, SWIMBOT_VIEW_RADIUS } from "./SwimbotTypes";
 import { Touch, TouchState } from "./Touch";
@@ -77,7 +77,7 @@ export function GenePool()
     const FAST_FRAME_BUDGET_MS      = 25;   // speed ">>"
     const MAX_FRAME_BUDGET_MS       = 40;   // speed ">>>": as many steps as fit
     const OUTSIDE_POOL_COLOR        = "rgb( 22, 26, 30 )";   // the screen beyond the pool's edges
-    const MAX_FRAME_BUDGET_DRAWN_MS = 22;   // the same while drawing: leaves time for a smooth picture and panel (~35 frames/s)
+    const MAX_FRAME_BUDGET_DRAWN_MS = 14;   // leaves generous headroom for smooth 60fps UI & rendering
     let _speedLevel                 = 1;
     let _useAnimationFrames         = false;
     let _lastFrameTime              = 0;
@@ -259,6 +259,7 @@ export function GenePool()
     let _lastSwimbotPositions = new Array(MAX_SWIMBOTS);
     let _aliveSwimbotIndices = [];
     let _aliveFoodBitIndices = [];
+    let _aliveCachesDirty = true;
     let _swimbotWasAlive = new Array(MAX_SWIMBOTS);
     let _lastCameraPosition = new Vector2D();
     let _seedSource = new FoodBit(); // scratch: a stand-in parent position for seeding
@@ -418,6 +419,7 @@ export function GenePool()
         const liveSwimbot = _st.liveSwimbot, liveFood = _st.liveFood;
         for (let s = 0; s < MAX_SWIMBOTS; s++) { if ( liveSwimbot[s] === 1 ) _aliveSwimbotIndices.push(s); }
         for (let f = 0; f < MAX_FOODBITS; f++) { if ( liveFood[f]    === 1 ) _aliveFoodBitIndices.push(f); }
+        _aliveCachesDirty = false;
     }
 
 	//---------------------------------------------------------
@@ -1740,7 +1742,7 @@ if ( mode === SimulationStartMode.SPECIES )
 	    // the environment, for the decision kernel (DecisionKernel.temperatureAt...)
 	    P[ SS.PARAM_TIME  ] = environment.getTime();
 	    P[ SS.PARAM_PETRI ] = environment.petri ? 1 : 0;
-	    environment.copyTemperatureTo( _st.temperature );
+	    if ( P[ SS.PARAM_ENV_FIELDS ] === 1 ) { environment.copyTemperatureTo( _st.temperature ); }
 	    _st.plantWarm.set( environment.plantCount[0] );
 	    _st.plantCold.set( environment.plantCount[1] );
 	}
@@ -2430,7 +2432,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
         if ( _rendering && !pageHidden && draw )
         {
             const renderStart = performance.now();
-            rebuildAliveIndexCaches();
+            if ( _aliveCachesDirty ) { rebuildAliveIndexCaches(); }
             this.renderFrame();
             _renderMs += ( performance.now() - renderStart - _renderMs ) * 0.05;   // smoothed, for finding what is slow
         }
@@ -2696,6 +2698,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
                 _energyBeforePhysics[s] = B[ s * SS.BOT_STRIDE + SS.B_ENERGY ];
             }
         }
+	    if ( WAKE_GRID_ENABLED ) { stepWakeGrid( _st ); }
 	    _runner.task( TASK_PHYSICS, list, n );
         if ( _energyBeforePhysics !== null && ( environment.active || CLOSED_ENERGY_CYCLE_ENABLED ))
         {
@@ -2715,7 +2718,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	        const s = list[i];
 	        if ( B[ s * SS.BOT_STRIDE + SS.B_DEATHS ] > 0 ) { _swimbots[s].applyPhysicsDeaths(); }
 	    }
-	    _runner.task( TASK_PREPARE_LOOK, list, n );
+	    for (let i = 0; i < n; i++) { doTask( TASK_PREPARE_LOOK, _st, _perceptionScratch, list[i], 0 ); }
 	    t = phaseTime( 2, t );
 
 	    // 4. look around and take it in (many threads)
@@ -2745,10 +2748,12 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	//------------------------------------------------------------------------
 	// the kernels count into rows of _st.counters (one per thread): add them up
 	//------------------------------------------------------------------------
+	const _counterAcc = new Float64Array( SS.NUM_COUNTERS );
 	this.collectKernelCounters = function()
 	{
 	    const K = _st.counters;
-	    let a = new Float64Array( SS.NUM_COUNTERS );
+	    const a = _counterAcc;
+	    a.fill( 0 );
 	    for (let row = 0; row < SS.MAX_THREADS; row++)
 	    {
 	        const base = row * SS.NUM_COUNTERS;
@@ -2986,10 +2991,13 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
         _foodBits[f].kill();
     }
 
+    let _lastShadeClock = -999;
     function buildCanopyShade(): void
     {
+        if ( !PLANT_SIZE_ENABLED || !environment.active ) { _plantShade.fill( 0 ); return; }
+        if ( _clock > 1 && ( _clock - _lastShadeClock ) < 8 ) return;
+        _lastShadeClock = _clock;
         _plantShade.fill( 0 );
-        if ( !PLANT_SIZE_ENABLED || !environment.active ) return;
         for ( let i = 0; i < _aliveFoodBitIndices.length; i++ )
         {
             const f = _aliveFoodBitIndices[i];

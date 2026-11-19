@@ -92,6 +92,10 @@ export const SEGMENT_REPLICATION_ENABLED = true;
 export const GROWTH_TURN_ENABLED         = false;
 export const BRANCH_AMP_FLIP_ENABLED     = true;
 export const SECONDARY_BRANCHING_GENE    = 184;
+export const FREQ_MULTIPLIER_GENE         = 206;
+export const AMP_MULTIPLIER_GENE          = 207;
+export const GLIDE_FACTOR_GENE            = 208;
+export const JOINT_LIMIT_GENE             = 209;
 export const SEGMENT_REPLICATION_FIRST_GENE = 185; // repeat + delay for each of four categories
 export const GROWTH_TURN_FIRST_GENE      = 193;    // amplitude + phase + phase acceleration per category
 export const BRANCH_AMP_FLIP_GENE        = 205;
@@ -104,7 +108,8 @@ export function isGP6MechanicsGene( g: number ): boolean
 }
 export function isExperimentalEmbryologyGene( g: number ): boolean
 {
-    return isIterativeGrowthGene( g ) || isGP6MechanicsGene( g );
+    return isIterativeGrowthGene( g ) || isGP6MechanicsGene( g )
+        || ( g >= 206 && g <= 209 );
 }
 
 
@@ -138,6 +143,8 @@ let testNoEel = true;
         this.endBlue            = ZERO;
         this.splined            = ZERO;
         this.endCapSpline       = ZERO;
+        this.jointMin           = -75;
+        this.jointMax           = 75;
         
         // motion
         this.amp                = ZERO;
@@ -168,6 +175,7 @@ let testNoEel = true;
     let _categoryValues         = new Array( NUM_CATEGORIES ); 
     let _partIndex              = ZERO;
     let _generating             = false;
+    let _ampMult                = ONE;
     let _frequency              = ZERO;
     let _numGenesUsed           = 0;
     let _numGenesPerCategory    = 0;
@@ -269,6 +277,18 @@ let testNoEel = true;
         // Legacy/binary compatibility for other code that may still look for isPredator
         phenotype.isPredator       = phenotype.predatorLevel > PREDATOR_LEVEL_THRESHOLD;
 
+        // Tail genes 206..209: byte 0 (legacy saves) or 128 = neutral 1.0 / 0.0 / [-75, 75]
+        const rawFreq  = genotype.getGeneValue( FREQ_MULTIPLIER_GENE );
+        const rawAmp   = genotype.getGeneValue( AMP_MULTIPLIER_GENE );
+        const rawGlide = genotype.getGeneValue( GLIDE_FACTOR_GENE );
+        const rawJoint = genotype.getGeneValue( JOINT_LIMIT_GENE );
+        const freqMult  = ( rawFreq === 0 || rawFreq === 128 ) ? 1.0 : Math.pow( 2.0, (( rawFreq - 128 ) / 127 ) * 0.9 );
+        const ampMult   = ( rawAmp  === 0 || rawAmp  === 128 ) ? 1.0 : Math.pow( 1.6, ( rawAmp - 128 ) / 127 );
+        _ampMult = ampMult;
+        const glideVal  = ( rawGlide === 0 || rawGlide <= 128 ) ? 0.0 : (( rawGlide - 128 ) / 127 ) * 0.6;
+        const jointBias = ( rawJoint === 0 || rawJoint === 128 ) ? 0.0 : (( rawJoint - 128 ) / 127 ) * 55.0;
+        phenotype.glideFactor = glideVal;
+
         //---------------------------------
         // apply genes
         //---------------------------------
@@ -322,6 +342,10 @@ let testNoEel = true;
             _categoryValues[c].branchCategory   = Math.floor( ZERO  + _categoryValues[c].branchCategory );
             _categoryValues[c].branchReflect    = Math.floor( ONE   + _categoryValues[c].branchReflect  );
             _categoryValues[c].splined          = Math.round( ZERO  + _categoryValues[c].splined        );
+            const sign = ( c % 2 === 0 ) ? 1 : -1;
+            const shift = jointBias * sign;
+            _categoryValues[c].jointMin = Math.max( -88, Math.min( -12, -75 + shift ));
+            _categoryValues[c].jointMax = Math.min(  88, Math.max(  12,  75 + shift ));
         }
 
         //-----------------------------------------------------------------------------------------
@@ -395,7 +419,7 @@ let testNoEel = true;
         //---------------------------------
         // set the frequency...
         //---------------------------------
-        phenotype.frequency = _frequency;
+        phenotype.frequency = Math.max( 0.015, Math.min( 0.35, _frequency * freqMult ));
         
         // ВРЕМЕННО: хищники — чёрные, чтобы их было видно
         if (phenotype.predatorLevel > PREDATOR_LEVEL_THRESHOLD) {
@@ -709,9 +733,11 @@ if ( testNoEel )
 }
 
                 //-----------------------------------------------
-                // apply reflection on amp
+                // apply reflection on amp & joint ROM
                 //-----------------------------------------------
-                phenotype.parts[ _partIndex ].amp *= reflect;
+                phenotype.parts[ _partIndex ].amp *= reflect * _ampMult;
+                phenotype.parts[ _partIndex ].jointMin = _categoryValues[c].jointMin;
+                phenotype.parts[ _partIndex ].jointMax = _categoryValues[c].jointMax;
 
                 //---------------------------------------------------
                 // set some other attributes

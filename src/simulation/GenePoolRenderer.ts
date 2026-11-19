@@ -14,8 +14,7 @@ import {
     SWIMBOT_LEVEL_OF_DETAIL_DOT, SWIMBOT_LEVEL_OF_DETAIL_HIGH, WOOD_PER_FRUIT_TIER
 } from "./Parameters";
 import { FOOD_BIT_GRAB_RADIUS, FOOD_BIT_SIZE, FOOD_BIT_SIZE_VIEW_SCALE, FOOD_OPACITY_INCREMENT } from "./FoodBit";
-import { plantSize, plantLifespan } from "./PlantSize";
-import { plantCrownRays } from "./PlantVisuals";
+import { plantSize } from "./PlantSize";
 import { currentAt, currentDriftX, currentDriftY, currentStrength, randomPointInCurrent } from "./Currents";
 import { TASK_RENDER_DATA } from "../parallel/ParallelWork";
 
@@ -32,6 +31,7 @@ export function createGenePoolRenderer( ctx: any )
     const _renderPhaseMs = [ 0, 0, 0, 0 ];   // вода и препятствие, еда, свимботы, видеокарта
     const _marks: any[] = [];
     const _markPoint = { x: 0, y: 0 };
+    const _treeParts: number[] = [];
     let _lastMarkTime = 0;
 
     function getBatchObject()
@@ -186,7 +186,8 @@ export function createGenePoolRenderer( ctx: any )
         let i = _capsuleRenderer.reserve( capacity );
         const d = _capsuleRenderer.reserved();
         let used = 0;
-        const parts: number[] = [];
+        _treeParts.length = 0;
+        const parts = _treeParts;
         const add = ( ax: number, ay: number, bx: number, by: number, r: number, red: number, green: number, blue: number, alpha: number ) =>
         {
             d[ i ] = ax; d[ i + 1 ] = ay; d[ i + 2 ] = bx; d[ i + 3 ] = by;
@@ -225,40 +226,7 @@ export function createGenePoolRenderer( ctx: any )
                 : plant ? span : radius;
             add( x, y, x, y, coreRadius, baseRed, baseGreen, baseBlue, alpha );
 
-            const adult = plant && !isFruit && ( wood[f] >= WOOD_PER_FRUIT_TIER );
-            if ( adult )
-            {
-                const age = ctx.clock - born[f];
-                const lifespan = plantLifespan( f, born[f] );
-                if ( span <= pixel * 2.5 )
-                {
-                    const crown = plantCrownRays( wood[f], _st.foodEnergy[f], age, lifespan, f, span * 3.35 );
-                    add( x, y, x, y, Math.max( span, pixel ), crown.colors.main.red, crown.colors.main.green, crown.colors.main.blue, alpha );
-                    continue;
-                }
-                const crown = plantCrownRays( wood[f], _st.foodEnergy[f], age, lifespan, f, span * 3.35 );
-                const trunk = crown.colors.trunk;
-                if ( crown.silhouette )
-                {
-                    for ( let ray = 0; ray < crown.rays.length; ray++ )
-                    {
-                        const r = crown.rays[ray];
-                        const length = r.lengthFactor / ( 0.5 + 0.5 * crown.completeness ) * ( span * 3.35 );
-                        add( x, y, x + Math.cos( r.angle ) * length, y + Math.sin( r.angle ) * length,
-                             span * 0.31, r.color.red, r.color.green, r.color.blue, alpha * 0.22 );
-                    }
-                }
-                for ( let ray = 0; ray < crown.rays.length; ray++ )
-                {
-                    const r = crown.rays[ray];
-                    if ( !r.visible ) continue;
-                    const length = r.lengthFactor * ( span * 3.35 );
-                    add( x, y, x + Math.cos( r.angle ) * length, y + Math.sin( r.angle ) * length,
-                         span * 0.31, r.color.red, r.color.green, r.color.blue, alpha );
-                }
-                add( x, y, x, y, span * 0.48, trunk.red, trunk.green, trunk.blue, alpha );
-            }
-            else if ( plant && !isFruit )
+            if ( plant && !isFruit )
             {
                 if ( stage === 0 )
                 {

@@ -154,15 +154,17 @@ function edibleFoodAtMouth( st: SharedState, s: number, mouthX: number, mouthY: 
 {
     const meatEater = isPredator( st, s );
     const EAT_RADIUS = SWIMBOT_MOUTH_LENGTH + st.mind[ s * SS.MIND_STRIDE + SS.M_GRAB_RADIUS ];
+    const eatR2 = EAT_RADIUS * EAT_RADIUS;
     const n = st.foodGrid.collect( mouthX, mouthY, EAT_RADIUS, _touchBuffer );
     for (let i = 0; i < n; i++)
     {
         const f = _touchBuffer[i];
         if ( st.liveFood[f] !== 1 ) continue;
         if (( st.foodType[f] === 2 ) !== meatEater ) continue;
-        if ( PLANT_SIZE_ENABLED && !meatEater && ( biteEnergy( st.mass[s], st.foodWood[f], st.foodEnergy[f] ) <= 0 )) continue;
         const dx = st.foodX[f] - mouthX, dy = st.foodY[f] - mouthY;
-        if ( dx * dx + dy * dy < EAT_RADIUS * EAT_RADIUS ) return f;
+        if ( dx * dx + dy * dy >= eatR2 ) continue;
+        if ( PLANT_SIZE_ENABLED && !meatEater && ( biteEnergy( st.mass[s], st.foodWood[f], st.foodEnergy[f] ) <= 0 )) continue;
+        return f;
     }
     return -1;
 }
@@ -572,7 +574,8 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
         if ( foodAlive )
         {
             const xx = st.foodX[f] - mouthX, yy = st.foodY[f] - mouthY;
-            if ( Math.sqrt( xx * xx + yy * yy ) < SWIMBOT_MOUTH_LENGTH + M[ m + SS.M_GRAB_RADIUS ] ) { M[ m + SS.M_TRY_EAT ] = 1; }
+            const r = SWIMBOT_MOUTH_LENGTH + M[ m + SS.M_GRAB_RADIUS ];
+            if ( xx * xx + yy * yy < r * r ) { M[ m + SS.M_TRY_EAT ] = 1; }
         }
     }
     else if ( state === BRAIN_STATE_PURSUING_MATE )
@@ -580,7 +583,7 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
         if ( mateAlive )
         {
             const xx = st.genitalX[ mate ] - B[ b + SS.B_GENITAL_X ], yy = st.genitalY[ mate ] - B[ b + SS.B_GENITAL_Y ];
-            if ( Math.sqrt( xx * xx + yy * yy ) < SWIMBOT_GENITAL_LENGTH ) { M[ m + SS.M_TRY_MATE ] = 1; }
+            if ( xx * xx + yy * yy < SWIMBOT_GENITAL_LENGTH * SWIMBOT_GENITAL_LENGTH ) { M[ m + SS.M_TRY_MATE ] = 1; }
         }
     }
     else if ( state === BRAIN_STATE_PURSUING_PREY )
