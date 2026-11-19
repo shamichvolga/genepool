@@ -114,6 +114,7 @@ export class CapsuleRenderer
     private count         = 0;
     private uniforms      : { viewOrigin: WebGLUniformLocation, viewSize: WebGLUniformLocation, pixelSize: WebGLUniformLocation, outline: WebGLUniformLocation };
     private hasContent    = false;
+    private gpuCapacity   = 0;      // floats already allocated in the GPU buffer
 
     //--------------------------------------------------------------------
     // returns null if the browser has no WebGL2
@@ -275,7 +276,18 @@ export class CapsuleRenderer
         gl.blendFunc( gl.ONE, gl.ONE_MINUS_SRC_ALPHA );
 
         gl.bindBuffer( gl.ARRAY_BUFFER, this.instanceBuffer );
-        gl.bufferData( gl.ARRAY_BUFFER, this.data.subarray( 0, this.count * FLOATS_PER_CAPSULE ), gl.DYNAMIC_DRAW );
+        const activeFloats = this.count * FLOATS_PER_CAPSULE;
+        if ( activeFloats > this.gpuCapacity )
+        {
+            // grow the GPU store only when the CPU-side array has grown
+            gl.bufferData( gl.ARRAY_BUFFER, this.data, gl.DYNAMIC_DRAW );
+            this.gpuCapacity = this.data.length;
+        }
+        else
+        {
+            // upload just the records actually filled this frame
+            gl.bufferSubData( gl.ARRAY_BUFFER, 0, this.data.subarray( 0, activeFloats ));
+        }
 
         gl.bindVertexArray( this.vao );
         gl.drawArraysInstanced( gl.TRIANGLE_STRIP, 0, 4, this.count );

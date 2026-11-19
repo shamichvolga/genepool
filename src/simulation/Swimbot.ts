@@ -2454,6 +2454,16 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	    // a broad, armour-like body is harder to get past the predator's gape
 	    const preyMeanWidth = chosenPrey().getPhenotypeMass() / Math.max( 1, chosenPrey().getBoundingRadius() );
 	    if ( preyMeanWidth > 4.2 ) { gape *= ( ONE - Math.min( 0.35, ( preyMeanWidth - 4.2 ) * 0.12 )); }
+	    // Grove cover: the plant smell field is also a map of thick vegetation.
+	    // Small or still-growing prey can slip through a predator's gape there.
+	    const scentN = SS.SCENT_GRID_N;
+	    const scentCellW = ( POOL_RIGHT - POOL_LEFT ) / scentN;
+	    const scentCellH = ( POOL_BOTTOM - POOL_TOP ) / scentN;
+	    const preyPos = chosenPrey().getPosition();
+	    const gx = Math.max( 0, Math.min( scentN - 1, Math.floor(( preyPos.x - POOL_LEFT ) / scentCellW )));
+	    const gy = Math.max( 0, Math.min( scentN - 1, Math.floor(( preyPos.y - POOL_TOP ) / scentCellH )));
+	    const foodDensity = SS.sharedState().foodField[ gy * scentN + gx ];
+	    if (( foodDensity > 1.5 ) && (( preyMorph.numParts <= 6 ) || ( chosenPrey().getGrowthScale() < 0.75 ))) { gape *= 0.80; }
 	    if ( PREDATOR_GAPE_CURVE_ENABLED ) { _M[ _m + SS.M_HUNT_CD ] = ATTACK_COOLDOWN * ( 1 + GAPE_COOLDOWN_SLOPE * sizeRatio ); }
 	    // claws / mandibles: a firmer grip raises the chance of a successful bite
 	    const biteChance = Math.min( ONE, ( environment.active ? ENVIRONMENT_ATTACK_SUCCESS_CHANCE : ATTACK_SUCCESS_CHANCE ) * gape + 0.04 * _numFrontAppendages );

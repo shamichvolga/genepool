@@ -39,6 +39,15 @@ const SDF_CELL_W = POOL_WIDTH  / SDF_SIZE;
 const SDF_CELL_H = POOL_HEIGHT / SDF_SIZE;
 const SDF_MARGIN = 0.5 * Math.sqrt( SDF_CELL_W * SDF_CELL_W + SDF_CELL_H * SDF_CELL_H );
 
+// Octagonal norm: a cheap Euclidean approximation (within about 6%).
+// Hot loops compare candidates, so no Math.sqrt is needed.
+function fastDist( dx: number, dy: number ): number
+{
+    const ax = dx < 0 ? -dx : dx;
+    const ay = dy < 0 ? -dy : dy;
+    return ax > ay ? ( ax + 0.337 * ay ) : ( ay + 0.337 * ax );
+}
+
 const SCENT_CELL_W = POOL_WIDTH  / SCENT_GRID_N;
 const SCENT_CELL_H = POOL_HEIGHT / SCENT_GRID_N;
 
@@ -349,6 +358,9 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
     const iAmStarving      = st.energy[s] < STARVING_FOOD_CHOICE;
     const twoFoodTypes     = st.params[ PARAM_FOOD_TYPES ] === 2;
     const preferredFoodType = st.preferred[s];
+    // the plant/meat this bot is already after: a small loyalty bonus stops
+    // the indicator flickering between two nearly equally good targets
+    const currentFood      = st.mind[ s * MIND_STRIDE + M_FOOD ];
     const foodX = st.foodX, foodY = st.foodY, foodType = st.foodType, foodAlive = st.foodAlive;
     const botOffset = s * BOT_STRIDE;
     const bvx = st.bots[ botOffset + B_VEL_X ], bvy = st.bots[ botOffset + B_VEL_Y ];
@@ -376,7 +388,7 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
     let bestDist = viewRadius;
     let bestDistSq = viewRadiusSquared;
     let bestMeatScore = -Infinity;
-    let bestMeatBase = 0, bestMeatD = 0;   // only the chosen bait needs a Math.sqrt
+    let bestMeatBase = 0, bestMeatD = 0;   // only the chosen bait needs a distance
     const meatTravelWeight = st.preyTravelWeight[s];
     const meatRewardWeight = st.preyValueWeight[s];
     const meatBaitBias = st.preyBaitBias[s];
@@ -432,11 +444,12 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
         if ( type === 2 && foodAlive[f] === 1 && PREDATOR_TARGET_SELECTION_ENABLED )
         {
             const room = Math.max( 0, st.mind[ s * MIND_STRIDE + M_MAX_ENERGY ] - st.energy[s] );
-            const reward = Math.min( room, st.foodEnergy[f] ) / SWIMBOT_MAX_ENERGY;
+            const loyalty = ( f === currentFood ) ? 1.30 : 1;
+            const reward = Math.min( room, st.foodEnergy[f] ) / SWIMBOT_MAX_ENERGY * loyalty;
             const base = reward * meatRewardWeight;
-            // score = base - bias - travel * min(1, sqrt(d2)/reach).
-            // Compare candidates by squared distance; sqrt is needed only
-            // when a candidate actually becomes the best one.
+            // score = base - bias - travel * min(1, fastDist/reach).
+            // Compare candidates by squared distance; the octagonal distance
+            // is computed only when a candidate actually becomes the best one.
             let better = false;
             if ( bestMeatScore === -Infinity ) better = true;
             else if ( meatTravelWeight > 0 )
@@ -449,14 +462,16 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
 
             if ( better && !obstructed( st, myMouthX, myMouthY, foodX[f], foodY[f] ))
             {
-                const distance = Math.sqrt( viewDistanceSquared );
+                const distance = fastDist( dx, dy );
                 const distanceCost = distance / Math.max( 1, viewRadius );
                 const chaseCost = Math.min( 1, distance / meatReach );
                 const score = preyTargetScore( reward, chaseCost, meatRewardWeight, meatTravelWeight, meatBaitBias, true );
                 bestMeatScore = score;
                 bestMeatBase = base;
                 bestMeatD = distance;
-                bestDist = distance;
+                // keep a margin: the octagonal norm may be slightly shorter
+                // than the true Euclidean reach of the shrinking AABB filter
+                bestDist = distance * 1.02;
                 bestDistSq = viewDistanceSquared;
                 baitFound = true;
                 chosenFood = f;
@@ -472,9 +487,10 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
             if ( viewDistanceSquared >= viewRadiusSquared ) continue;
             const e = ( type === PLANT_TYPE_WARM ) ? myEfficiencyWarm : myEfficiencyCold;
             const e2 = e * e;
+            const loyalty2 = ( f === currentFood && foodAlive[f] === 1 ) ? 1.69 : 1;   // 1.30²
             // (worth <= 5 and e <= 1: beyond that reach this plant can no longer win)
-            if ( viewDistanceSquared >= smallestDistanceSquared * 25 * e2 ) continue;
-            let scaled = viewDistanceSquared / e2;
+            if ( viewDistanceSquared >= smallestDistanceSquared * 25 * e2 * loyalty2 ) continue;
+            let scaled = viewDistanceSquared / ( e2 * loyalty2 );
             if ( PLANT_SIZE_ENABLED )
             {
                 const tough = Math.min( PLANT_MAX_TOUGHNESS, st.foodWood[f] * TOUGHNESS_PER_WOOD );
@@ -509,19 +525,20 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
             if ( scaled < smallestDistanceSquared && !obstructed( st, myMouthX, myMouthY, foodX[f], foodY[f] ))
             {
                 smallestDistanceSquared = scaled;
-                bestDist = Math.sqrt( viewDistanceSquared );
+                bestDist = fastDist( dx, dy ) * 1.02;
                 bestDistSq = viewDistanceSquared;
                 chosenFood = f;
             }
             continue;
         }
 
-        if ( viewDistanceSquared < viewRadiusSquared && viewDistanceSquared < smallestDistanceSquared && foodAlive[f] === 1 )
+        const loyalty2 = ( f === currentFood && foodAlive[f] === 1 ) ? 1.69 : 1;
+        if ( viewDistanceSquared < viewRadiusSquared && viewDistanceSquared < loyalty2 * smallestDistanceSquared && foodAlive[f] === 1 )
         {
             if ( !obstructed( st, myMouthX, myMouthY, foodX[f], foodY[f] ))
             {
-                smallestDistanceSquared = viewDistanceSquared;
-                bestDist = Math.sqrt( viewDistanceSquared );
+                smallestDistanceSquared = viewDistanceSquared / loyalty2;
+                bestDist = fastDist( dx, dy ) * 1.02;
                 bestDistSq = viewDistanceSquared;
                 chosenFood = f;
             }
@@ -599,7 +616,7 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
             const py = myMouthY - botY[o];
             const distSq = px * px + py * py;
             if ( !weak && ( distSq > preyRadiusSq )) continue;   // the common case needs no square root
-            const realDistance = Math.sqrt( distSq );
+            const realDistance = fastDist( px, py );             // octagonal, no Math.sqrt
             // (a predator that prefers the weak - its gene - sees them as nearer)
             let distance = weak ? realDistance / ( 1 + 2 * st.mind[ s * MIND_STRIDE + M_WEAK_PREF ] ) : realDistance;
             if ( distance > preyViewRadius ) continue;
@@ -732,9 +749,17 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
         let highest = -100.0;
         const r = st.colorR, g = st.colorG, b = st.colorB;
         const currentMate = st.mind[ s * MIND_STRIDE + M_MATE ];
-        for (let i = 0; i < numSeen; i++)
+        // keep an already chosen partner a little beyond the normal view,
+        // so its indicator does not flicker at the edge of the search circle
+        let keepMate = false;
+        if (( currentMate >= 0 ) && ( st.liveSwimbot[currentMate] === 1 ))
         {
-            const o = st.seen[ seenBase + i ];
+            const mx = myGenitalX - genitalX[currentMate];
+            const my = myGenitalY - genitalY[currentMate];
+            keepMate = fastDist( mx, my ) < viewRadius * 1.25;
+        }
+        const scoreMate = ( o: number ): number =>
+        {
             const rDiff = Math.abs( r[o] - r[s] );
             const gDiff = Math.abs( g[o] - g[s] );
             const bDiff = Math.abs( b[o] - b[s] );
@@ -749,22 +774,39 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
                 const sizeSimilarity  = 0.5 * ( massSimilarity + partsSimilarity );
                 attractiveness = ( ONE - w ) * attractiveness + w * sizeSimilarity;
             }
-            // Hysteresis: a partner already chosen (and still in sight, since
-            // only seen bots reach this loop) keeps a bonus, so small score
-            // jitter cannot swap the indicator to another nearby candidate.
             if ( st.brainState[o] !== BRAIN_STATE_FLEEING_PREDATOR ) attractiveness *= 1.05;
-            if (( o === currentMate ) && ( st.liveSwimbot[o] === 1 )) attractiveness *= 1.35;
-
-            if (( attractiveness > highest )
-            &&  ( attractiveness > 0 )
-            &&  ( st.age[o] > st.mind[ o * MIND_STRIDE + M_MATURE_AGE ] )
-            &&  ( st.bots[ o * BOT_STRIDE + B_GROWTH ] >= ONE )                    // (grown up: a stunted body does not mate)
-            &&  ( st.energy[o] > STARVING )
-            &&  (( predator[o] > PREDATOR_LEVEL_THRESHOLD ) === iAmPredator )     // predators mate with predators only
-            &&  accepts( st, o, s, environmentOn ))
+            return attractiveness;
+        };
+        const mateIsEligible = ( o: number ): boolean =>
+        {
+            return ( st.age[o] > st.mind[ o * MIND_STRIDE + M_MATURE_AGE ] )
+                && ( st.bots[ o * BOT_STRIDE + B_GROWTH ] >= ONE )                 // (grown up: a stunted body does not mate)
+                && ( st.energy[o] > STARVING )
+                && (( predator[o] > PREDATOR_LEVEL_THRESHOLD ) === iAmPredator )  // predators mate with predators only
+                && accepts( st, o, s, environmentOn );
+        };
+        for (let i = 0; i < numSeen; i++)
+        {
+            const o = st.seen[ seenBase + i ];
+            let attractiveness = scoreMate( o );
+            // Hysteresis: a partner already chosen keeps a clear bonus, so
+            // score jitter cannot swap the indicator to a nearby candidate.
+            if ( keepMate && ( o === currentMate )) attractiveness *= 1.40;
+            if (( attractiveness > highest ) && ( attractiveness > 0 ) && mateIsEligible( o ))
             {
                 highest = attractiveness;
                 mate = o;
+            }
+        }
+        // The old partner may be just outside the normal view circle; give
+        // it the same bonus so it is not dropped at the boundary.
+        if ( keepMate && ( mate !== currentMate ) && mateIsEligible( currentMate ))
+        {
+            const attractiveness = scoreMate( currentMate ) * 1.40;
+            if (( attractiveness > highest ) && ( attractiveness > 0 ))
+            {
+                highest = attractiveness;
+                mate = currentMate;
             }
         }
     }

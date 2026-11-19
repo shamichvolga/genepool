@@ -13,7 +13,7 @@
 //------------------------------------------------------------------------------
 import { currentAt, currentDriftX, currentDriftY } from "./Currents";
 import { ONE, ONE_HALF, PI_OVER_180, ZERO } from "./MathConstants";
-import { GROWTH_COSTS_ENERGY_ENABLED, GROWTH_ENERGY_PER_MASS, NEWBORN_SIZE_SCALE, OLD_AGE_DURATION, RUDDER_COST_PER_DEGREE, RUDDER_ENABLED, STEER_BY_SWIM_DIRECTION_ENABLED, SWIM_DIRECTION_SMOOTHING, SWIMBOT_SELECT_RADIUS_SCALAR, YOUNG_AGE_DURATION } from "./Parameters";
+import { GROWTH_COSTS_ENERGY_ENABLED, GROWTH_ENERGY_PER_MASS, MAX_SWIMBOTS, NEWBORN_SIZE_SCALE, OLD_AGE_DURATION, RUDDER_COST_PER_DEGREE, RUDDER_ENABLED, STEER_BY_SWIM_DIRECTION_ENABLED, SWIM_DIRECTION_SMOOTHING, SWIMBOT_SELECT_RADIUS_SCALAR, YOUNG_AGE_DURATION } from "./Parameters";
 import { applyWaterDrag, bodyMotionFactors } from "./BodyPhysics";
 import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
 import { CONTINUAL_ENERGY_DRAIN, ENERGY_EFFICIENCY_MEASUREMENT_PERIOD, ENERGY_USED_UP_SWIMMING, GENITAL_INDEX, MAX_PARTS, MOUTH_INDEX, ROOT_PART, STARVING, STARVING_TIMER_DELTA, TIMER_DELTA_INCREASE_RATE, WALL_BOUNCE } from "./SwimbotTypes";
@@ -21,6 +21,9 @@ import { BODY_COLLISIONS_ENABLED, BODY_COLLISION_PUSH, BODY_COLLISION_MAX_IMPULS
 
 const _WAKE_N = WAKE_GRID_SIZE;
 const _kernelGridBuf = new Int32Array( 512 );
+// per-bot steering memory: a slew limiter for the wobble fed into the stroke
+const _smoothedDirectionDot = new Float32Array( MAX_SWIMBOTS );
+const MAX_DIRECTION_DOT_JUMP = 0.18;
 
 // Polynomial sine and cosine with the argument reduced to [-pi, pi].
 // The reduced range is small enough for a short Remez-style polynomial,
@@ -185,6 +188,15 @@ export function physicsPartA( s: number, st: SharedState ): void
     const perpX =  headingY;
     const perpY = -headingX;
     const directionDot = B[ b + B_FOCUS_X ] * perpX + B[ b + B_FOCUS_Y ] * perpY;
+    // wanderFocus() jitters every step; without a rate limit that jitter
+    // becomes a visible shiver in the phase of every limb. Keep the joints
+    // and their angle limits untouched - only the drive signal is filtered.
+    const previousDot = _smoothedDirectionDot[s];
+    let smoothDot = directionDot;
+    if ( directionDot > previousDot + MAX_DIRECTION_DOT_JUMP ) smoothDot = previousDot + MAX_DIRECTION_DOT_JUMP;
+    else if ( directionDot < previousDot - MAX_DIRECTION_DOT_JUMP ) smoothDot = previousDot - MAX_DIRECTION_DOT_JUMP;
+    _smoothedDirectionDot[s] = smoothDot;
+    smoothDot *= 0.65;
 
     // root position and angle
     let momentAdjustment = ZERO;
@@ -217,8 +229,8 @@ export function physicsPartA( s: number, st: SharedState ): void
 
         if ( p > 1 ) // part 1 has nothing to bend off of
         {
-            const ampModulator   = turnAmp  [ k + p ] * directionDot;
-            const phaseModulator = turnPhase[ k + p ] * directionDot;
+            const ampModulator   = turnAmp  [ k + p ] * smoothDot;
+            const phaseModulator = turnPhase[ k + p ] * smoothDot * 0.35;
             const radian = timer * frequency + ( phase[ k + p ] + phaseModulator );
             pd[ i + B_A ] = ( amp[ k + p ] + ampModulator ) * fastSin( radian );
             pd[ i + C_A ] += pd[ i + B_A ];

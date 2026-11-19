@@ -2717,14 +2717,20 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
                                 const dMass  = Math.min( 1, Math.abs( Math.log( Math.max( 1, _swimbots[s].getPhenotypeMass() ) / Math.max( 1, _potentialMate.getPhenotypeMass() ))) / 1.5 );
                                 const dTotal = 0.65 * dJunk + 0.20 * dParts + 0.15 * dMass;
                                 let compatProb = Math.exp( -( dTotal * dTotal ) / ( 2 * 0.42 * 0.42 ));
-                                // Rare-morph mate choice: unusual partners are
-                                // attractive, a morph that already dominates
-                                // the herbivores meets with less demand.
+                                // Assortative mating: two rare swimbots with the
+                                // same body plan reproduce it reliably, while a
+                                // cross with a different plan is less likely to
+                                // dilute it into the dominant morph.
+                                const myMorph = _swimbots[s].getMorphologySummary();
+                                const myBucket = SS.getMorphBucket( myMorph.numParts, myMorph.branchFraction > 0, myMorph.meanWidth );
                                 const mateMorph = _potentialMate.getMorphologySummary();
                                 const mateBucket = SS.getMorphBucket( mateMorph.numParts, mateMorph.branchFraction > 0, mateMorph.meanWidth );
                                 const mateShare = _st.morphBucketShare[ mateBucket ];
-                                if ( mateShare < 0.08 ) compatProb = Math.min( 1, compatProb * 1.25 );
-                                else if ( mateShare > 0.25 ) compatProb *= 0.80;
+                                if ( myBucket === mateBucket )
+                                {
+                                    if ( mateShare < 0.12 ) compatProb = Math.min( 1, compatProb * 1.35 );
+                                }
+                                else compatProb *= 0.75;
 
                                 // Parents under stress explore new forms faster.
                                 const avgEnergyRatio = 0.5 * ( _swimbots[s].getEnergy() / Math.max( 1, _swimbots[s].getMaxEnergy() )
