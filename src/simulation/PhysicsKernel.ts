@@ -22,6 +22,27 @@ import { BODY_COLLISIONS_ENABLED, BODY_COLLISION_PUSH, BODY_COLLISION_MAX_IMPULS
 const _WAKE_N = WAKE_GRID_SIZE;
 const _kernelGridBuf = new Int32Array( 512 );
 
+// Polynomial sine and cosine with the argument reduced to [-pi, pi].
+// The reduced range is small enough for a short Remez-style polynomial,
+// without a Math.sin / Math.cos call for every body segment.
+const INV_PI2 = 1 / ( 2 * Math.PI );
+const PI = Math.PI;
+const PI2 = 2 * Math.PI;
+
+function fastSin( x: number ): number
+{
+    x -= Math.round( x * INV_PI2 ) * PI2;
+    const x2 = x * x;
+    return x * ( 0.99999995 - x2 * ( 0.16666657 - x2 * ( 0.00833301 - x2 * 0.00019807 )));
+}
+
+function fastCos( x: number ): number
+{
+    x -= Math.round( x * INV_PI2 ) * PI2;
+    const x2 = x * x;
+    return 0.99999995 - x2 * ( 0.49999905 - x2 * ( 0.04166358 - x2 * 0.00138537 ));
+}
+
 export function stepWakeGrid( st: SharedState ): void
 {
     const wx = st.wakeX, wy = st.wakeY, nx = st.wakeNextX, ny = st.wakeNextY;
@@ -143,8 +164,8 @@ export function physicsPartA( s: number, st: SharedState ): void
 
     // modulators: the dot between the heading's perpendicular and the focus direction
     const radian0 = angleNow * PI_OVER_180;
-    let headingX = Math.sin( radian0 );
-    let headingY = Math.cos( radian0 );
+    let headingX = fastSin( radian0 );
+    let headingY = fastCos( radian0 );
     if ( STEER_BY_SWIM_DIRECTION_ENABLED )
     {
         // "forward" = where I actually swim (smoothed velocity), if I swim at all
@@ -189,7 +210,7 @@ export function physicsPartA( s: number, st: SharedState ): void
             const ampModulator   = turnAmp  [ k + p ] * directionDot;
             const phaseModulator = turnPhase[ k + p ] * directionDot;
             const radian = timer * frequency + ( phase[ k + p ] + phaseModulator );
-            pd[ i + B_A ] = ( amp[ k + p ] + ampModulator ) * Math.sin( radian );
+            pd[ i + B_A ] = ( amp[ k + p ] + ampModulator ) * fastSin( radian );
             pd[ i + C_A ] += pd[ i + B_A ];
         }
 
@@ -197,8 +218,8 @@ export function physicsPartA( s: number, st: SharedState ): void
         let partLength = length[ k + p ];
         if ( growth < ONE ) { partLength *= NEWBORN_SIZE_SCALE + ( ONE - NEWBORN_SIZE_SCALE ) * growth; }
 
-        const x = partLength * Math.sin( radian );
-        const y = partLength * Math.cos( radian );
+        const x = partLength * fastSin( radian );
+        const y = partLength * fastCos( radian );
         pd[ i + Q_X ] = pd[ i + M_X ];
         pd[ i + Q_Y ] = pd[ i + M_Y ];
         pd[ i + M_X ] = pd[ i + P_X ];

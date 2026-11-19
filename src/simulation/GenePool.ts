@@ -1739,6 +1739,9 @@ if ( mode === SimulationStartMode.SPECIES )
 	//------------------------------------------------------------------------
 	// stage 7: fill the shared arrays that perception reads, from the objects
 	//------------------------------------------------------------------------
+	// the wall distance grid is expensive (128² x segments), so rebuild it only
+	// when the wall geometry actually changes
+	let _sdfWallSignature = "";
 	this.writePerceptionParams = function()
 	{
 	    const P = _st.params;
@@ -1777,6 +1780,50 @@ if ( mode === SimulationStartMode.SPECIES )
 	        P[ SS.PARAM_WALL_MAX_X ] = maxX;
 	        P[ SS.PARAM_WALL_MIN_Y ] = minY;
 	        P[ SS.PARAM_WALL_MAX_Y ] = maxY;
+	    }
+
+	    // the distance field: each cell center stores its distance to the closest
+	    // wall segment. Perception uses it to skip segment tests with the triangle
+	    // inequality, so the exact segment loop stays the final authority.
+	    let wallSignature = String( wallCount );
+	    for ( let w = 0; w < wallCount; w++ )
+	    {
+	        const p = SS.PARAM_WALL_BASE + w * 4;
+	        wallSignature += "," + P[ p ] + "," + P[ p + 1 ] + "," + P[ p + 2 ] + "," + P[ p + 3 ];
+	    }
+	    if ( wallSignature !== _sdfWallSignature )
+	    {
+	        _sdfWallSignature = wallSignature;
+	        P[ SS.PARAM_SDF_READY ] = 0;
+	        if ( wallCount > 0 )
+	        {
+	            const sdf = _st.wallSdf;
+	            const cellW = POOL_WIDTH  / SS.SDF_SIZE;
+	            const cellH = POOL_HEIGHT / SS.SDF_SIZE;
+	            for ( let j = 0; j < SS.SDF_SIZE; j++ )
+	            {
+	                const cy = POOL_TOP + ( j + 0.5 ) * cellH;
+	                for ( let i = 0; i < SS.SDF_SIZE; i++ )
+	                {
+	                    const cx = POOL_LEFT + ( i + 0.5 ) * cellW;
+	                    let best = Infinity;
+	                    for ( let w = 0; w < wallCount; w++ )
+	                    {
+	                        const p = SS.PARAM_WALL_BASE + w * 4;
+	                        const ax = P[ p ], ay = P[ p + 1 ];
+	                        const vx = P[ p + 2 ] - ax, vy = P[ p + 3 ] - ay;
+	                        const len2 = vx * vx + vy * vy;
+	                        let t = len2 > 0 ? (( cx - ax ) * vx + ( cy - ay ) * vy ) / len2 : 0;
+	                        t = t < 0 ? 0 : ( t > 1 ? 1 : t );
+	                        const dx = cx - ( ax + t * vx ), dy = cy - ( ay + t * vy );
+	                        const d2 = dx * dx + dy * dy;
+	                        if ( d2 < best ) { best = d2; }
+	                    }
+	                    sdf[ j * SS.SDF_SIZE + i ] = Math.sqrt( best );
+	                }
+	            }
+	            P[ SS.PARAM_SDF_READY ] = 1;
+	        }
 	    }
 
 	    // the environment, for the decision kernel (DecisionKernel.temperatureAt...)

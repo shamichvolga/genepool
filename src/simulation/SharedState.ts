@@ -112,7 +112,13 @@ export const PARAM_WALL_MAX_X   = 117;
 export const PARAM_WALL_MIN_Y   = 118;
 export const PARAM_WALL_MAX_Y   = 119;
 export const PARAM_MATURE_TREE_COUNT = 120;   // how many adult trees are in matureTrees
-export const NUM_PARAMS         = 121;
+export const PARAM_SDF_READY    = 121;   // 1 = wallSdf has been filled for the current walls
+export const NUM_PARAMS         = 122;
+
+// signed distance to the nearest wall segment, on a 128x128 grid over the pool.
+// centers of the cells hold the distance; a conservative half-diagonal margin
+// makes the triangle-inequality visibility test valid anywhere in a cell.
+export const SDF_SIZE = 128;
 
 export * from "./MindLayout";
 import { MAX_THREADS, MIND_STRIDE, NUM_COUNTERS } from "./MindLayout";
@@ -149,6 +155,7 @@ export class SharedState
     readonly partMoment   : Float64Array;
     readonly partParent   : Int32Array;
     readonly params       : Float64Array;
+    readonly wallSdf      : Float32Array;   // SDF_SIZE² distances to the walls
 
     //--------------------------------------------------------
     // what perception reads (one number per swimbot slot)
@@ -289,6 +296,7 @@ export class SharedState
         this.partMoment    = f64( "partMoment",    partCount );
         this.partParent    = new Int32Array( make( "partParent", partCount * 4 ));
         this.params        = f64( "params",        NUM_PARAMS );
+        this.wallSdf       = new Float32Array( make( "wallSdf", SDF_SIZE * SDF_SIZE * 4 ));
 
         const u8  = ( name: string, count: number ) => new Uint8Array( make( name, count ));
         const n = maxSwimbots;

@@ -344,6 +344,16 @@ function clampWeight( v: number ): number
     return v > WEIGHT_LIMIT ? WEIGHT_LIMIT : ( v < -WEIGHT_LIMIT ? -WEIGHT_LIMIT : v );
 }
 
+// Pade [3/3] approximation of tanh: two multiplications less than the library
+// function in the hottest loop, with the tails clipped to +-1.
+function fastTanh( x: number ): number
+{
+    if ( x > 4.5 ) return 1;
+    if ( x < -4.5 ) return -1;
+    const x2 = x * x;
+    return x * ( 27 + x2 ) / ( 27 + 9 * x2 );
+}
+
 //------------------------------------------------------------
 // one thought: inputs -> outputs (hidden keeps its state)
 //------------------------------------------------------------
@@ -356,7 +366,7 @@ export function think( w: Float32Array, inputs: Float64Array, hidden: Float64Arr
         for ( let i = 0; i < NUM_INPUTS; i++ ) { sum += w[ ih + i ] * inputs[i]; }
         const hh = W_HH + h * NUM_HIDDEN;
         for ( let j = 0; j < NUM_HIDDEN; j++ ) { sum += w[ hh + j ] * hidden[j]; }
-        newHidden[h] = Math.tanh( sum );
+        newHidden[h] = fastTanh( sum );
     }
     for ( let h = 0; h < NUM_HIDDEN; h++ ) { hidden[h] = newHidden[h]; }
 

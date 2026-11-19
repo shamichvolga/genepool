@@ -18,7 +18,7 @@ import { IGNORE_FOOD_EFFICIENCY, mateAcceptance, pairRandom, preyVisibility, sea
 import { PLANT_TYPE_WARM } from "./Environment";
 import { ONE, ONE_THIRD } from "./MathConstants";
 import { ATTACK_SUCCESS_CHANCE, ENVIRONMENT_ATTACK_SUCCESS_CHANCE, PREDATOR_LEVEL_THRESHOLD, PREY_MAX_MASS_RATIO, PREY_SCAN_COOLDOWN, SWIMBOT_MAX_ENERGY, PREDATION_ENERGY_TRANSFER, PREY_BODY_ENERGY, YOUNG_AGE_DURATION, PREDATOR_TARGET_SELECTION_ENABLED } from "./Parameters";
-import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
+import { POOL_BOTTOM, POOL_HEIGHT, POOL_LEFT, POOL_RIGHT, POOL_TOP, POOL_WIDTH } from "./Pool";
 import { ATTRACTION_SIMILAR_COLOR, STARVING, SWIMBOT_MOUTH_LENGTH, SWIMBOT_VIEW_RADIUS } from "./SwimbotTypes";
 import { FOOD_BIT_GRAB_RADIUS } from "./FoodBit";
 import { PROFILER_ENABLED, profEnter, profExit, PROF_PERCEIVE, PROF_PERC_SWIMBOTS, PROF_PERC_FOOD, PROF_PERC_OBSTRUCTED } from "./Profiler";
@@ -27,10 +27,16 @@ import { M_CURRENT_W, M_DISEASE, M_WEAK_PREF, MIND_STRIDE, M_VIEW_RADIUS, M_GRAB
 import { preyTargetScore } from "./EcologyGenes";
 import {
     BACKGROUND_SIZE, PARAM_MAX_LIFESPAN, B_NUM_PARTS, B_GROWTH, B_VEL_X, B_VEL_Y, BOT_STRIDE, MAX_SEEN, PARAM_ENV_ACTIVE, PARAM_STEP, PARAM_CURRENT, PARAM_ENV_FIELDS, PARAM_FOOD_TYPES,
-    PARAM_WALL_COUNT, PARAM_WALL_BASE, PARAM_WALL_MIN_X, PARAM_WALL_MAX_X, PARAM_WALL_MIN_Y, PARAM_WALL_MAX_Y, SharedState
+    PARAM_WALL_COUNT, PARAM_WALL_BASE, PARAM_WALL_MIN_X, PARAM_WALL_MAX_X, PARAM_WALL_MIN_Y, PARAM_WALL_MAX_Y,
+    PARAM_SDF_READY, SDF_SIZE, SharedState
 } from "./SharedState";
 
 export const STARVING_FOOD_CHOICE = 15;   // below this energy a swimbot eats anything
+
+// the SDF geometry never changes during a run
+const SDF_CELL_W = POOL_WIDTH  / SDF_SIZE;
+const SDF_CELL_H = POOL_HEIGHT / SDF_SIZE;
+const SDF_MARGIN = 0.5 * Math.sqrt( SDF_CELL_W * SDF_CELL_W + SDF_CELL_H * SDF_CELL_H );
 
 //------------------------------------------------------------
 // scratch arrays: one set per thread
@@ -39,6 +45,7 @@ export class PerceptionScratch
 {
     readonly foodGridResult     : Int32Array;
     readonly nearbyIndices      : Int32Array;
+    readonly predatorIndices    : Int32Array;   // compact list of hunting rivals
     readonly candidateIndices   : Int32Array;
     readonly candidateDistances : Float64Array;
     readonly nearestIndices     = new Int32Array  ( MAX_SEEN );
@@ -48,6 +55,7 @@ export class PerceptionScratch
     {
         this.foodGridResult     = new Int32Array  ( maxFoodBits * 2 );
         this.nearbyIndices      = new Int32Array  ( maxSwimbots );
+        this.predatorIndices    = new Int32Array  ( maxSwimbots );
         this.candidateIndices   = new Int32Array  ( maxSwimbots );
         this.candidateDistances = new Float64Array( maxSwimbots );
     }
@@ -147,11 +155,10 @@ function selectNearestCandidates( count: number, limit: number, sc: PerceptionSc
 }
 
 // is the line from (a0x, a0y) to (a1x, a1y) blocked by any of the walls?
+// (no clock calls here: with 60 000 existences a step they cost more than the
+//  segment test itself; the visibility loop is timed as a whole instead)
 function obstructed( st: SharedState, a0x: number, a0y: number, a1x: number, a1y: number ): boolean
 {
-    const profT0 = PROFILER_ENABLED ? profEnter( PROF_PERC_OBSTRUCTED ) : 0;
-    try
-    {
     const P = st.params;
     const count = P[ PARAM_WALL_COUNT ];
     if ( count <= 0 ) return false;
@@ -163,6 +170,21 @@ function obstructed( st: SharedState, a0x: number, a0y: number, a1x: number, a1y
       || ( a0y > P[ PARAM_WALL_MAX_Y ] && a1y > P[ PARAM_WALL_MAX_Y ] ) ) return false;
 
     const aX = a1x - a0x, aY = a1y - a0y;
+
+    // Triangle inequality on the wall distance field: if both ends of the line
+    // are farther from every wall than half the line is long, no wall can cross
+    // it. Subtracting half a cell diagonal keeps the test conservative.
+    if ( P[ PARAM_SDF_READY ] === 1 )
+    {
+        const sdf = st.wallSdf;
+        const i0 = Math.max( 0, Math.min( SDF_SIZE - 1, Math.floor(( a0x - POOL_LEFT ) / SDF_CELL_W )));
+        const j0 = Math.max( 0, Math.min( SDF_SIZE - 1, Math.floor(( a0y - POOL_TOP  ) / SDF_CELL_H )));
+        const i1 = Math.max( 0, Math.min( SDF_SIZE - 1, Math.floor(( a1x - POOL_LEFT ) / SDF_CELL_W )));
+        const j1 = Math.max( 0, Math.min( SDF_SIZE - 1, Math.floor(( a1y - POOL_TOP  ) / SDF_CELL_H )));
+        const gap = ( sdf[ j0 * SDF_SIZE + i0 ] - SDF_MARGIN ) + ( sdf[ j1 * SDF_SIZE + i1 ] - SDF_MARGIN );
+        if (( gap > 0 ) && ( gap * gap > aX * aX + aY * aY )) return false;
+    }
+
     const aPerpX = -aY, aPerpY = aX;
 
     for ( let w = 0; w < count; w++ )
@@ -190,8 +212,6 @@ function obstructed( st: SharedState, a0x: number, a0y: number, a1x: number, a1y
     }
 
     return false;
-    }
-    finally { if ( PROFILER_ENABLED ) { profExit( PROF_PERC_OBSTRUCTED, profT0 ); } }
 }
 
 // brightness of the bottom (as Environment.backgroundAt)
@@ -258,7 +278,11 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
     // the NEAREST swimbots within normal view, in order of distance
     //------------------------------------------------------------------
     let numCandidates = 0;
-    for (let i = 0; i < numNearby; i++)
+    // In a dense school hundreds of neighbours compete for MAX_SEEN = 20 slots.
+    // Strided sampling keeps the work bounded (~64 candidates) without sorting
+    // all of them; the nearest-first selection below is otherwise unchanged.
+    const stride = numNearby > 96 ? Math.ceil( numNearby / 64 ) : 1;
+    for (let i = 0; i < numNearby; i += stride)
     {
         const o = nearby[i];
         if ( alive[o] === 1 )
@@ -293,6 +317,8 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
     const seenBase = s * MAX_SEEN;
     let numSeen = 0;
     let socialX = 0, socialY = 0;
+    // one clock reading for the whole visibility loop instead of one per wall test
+    const profObstructedT0 = PROFILER_ENABLED ? profEnter( PROF_PERC_OBSTRUCTED ) : 0;
     for (let i = 0; i < numNearest && numSeen < MAX_SEEN; i++)
     {
         const o = nearestList[i];
@@ -304,6 +330,7 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
             socialY += botY[o] - myY;
         }
     }
+    if ( PROFILER_ENABLED ) { profExit( PROF_PERC_OBSTRUCTED, profObstructedT0 ); }
     st.seenCount[s] = numSeen;
     st.socialX[s]   = socialX;
     st.socialY[s]   = socialY;
@@ -505,6 +532,21 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
         let bestPreyValue = -Infinity;
         let bestPreyReward = 0, bestPreyDistance = 0, bestPreySuccess = 0, bestPreyChase = 0;
         const attackChance = environmentOn ? ENVIRONMENT_ATTACK_SUCCESS_CHANCE : ATTACK_SUCCESS_CHANCE;
+        const preyRadiusSq = preyViewRadius * preyViewRadius;
+
+        // One compact pass over the rivals, instead of rescanning every neighbour
+        // once for every possible prey (the old O(N*K²) innermost loop).
+        let numPredators = 0;
+        if ( PREDATOR_DEFERENCE_ENABLED )
+        {
+            const pi = sc.predatorIndices;
+            for (let j = 0; j < numNearby; j++)
+            {
+                const q = nearby[j];
+                if (( alive[q] === 1 ) && ( predator[q] > PREDATOR_LEVEL_THRESHOLD ) && ( q !== s )) pi[ numPredators ++ ] = q;
+            }
+        }
+
         for (let i = 0; i < numNearby; i++)
         {
             const o = nearby[i];
@@ -519,7 +561,9 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
 
             const px = myMouthX - botX[o];
             const py = myMouthY - botY[o];
-            const realDistance = Math.sqrt( px * px + py * py );
+            const distSq = px * px + py * py;
+            if ( !weak && ( distSq > preyRadiusSq )) continue;   // the common case needs no square root
+            const realDistance = Math.sqrt( distSq );
             // (a predator that prefers the weak - its gene - sees them as nearer)
             let distance = weak ? realDistance / ( 1 + 2 * st.mind[ s * MIND_STRIDE + M_WEAK_PREF ] ) : realDistance;
             if ( distance > preyViewRadius ) continue;
@@ -530,12 +574,14 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
             if ( PREDATOR_DEFERENCE_ENABLED )
             {
                 let rivals = 0;
-                for (let j = 0; j < numNearby; j++)
+                const realDistanceSq = realDistance * realDistance;
+                for (let j = 0; j < numPredators; j++)
                 {
-                    const q = nearby[j];
-                    if (( q === s ) || ( alive[q] === 0 ) || ( predator[q] <= PREDATOR_LEVEL_THRESHOLD )) continue;
-                    const qx = st.mouthX[q] - botX[o], qy = st.mouthY[q] - botY[o];
-                    if ( qx * qx + qy * qy < realDistance * realDistance ) rivals ++;
+                    const q = sc.predatorIndices[j];
+                    const qx = st.mouthX[q] - botX[o];
+                    if ( Math.abs( qx ) >= realDistance ) continue;   // cheap reject before the square
+                    const qy = st.mouthY[q] - botY[o];
+                    if ( qx * qx + qy * qy < realDistanceSq ) rivals ++;
                 }
                 distance *= 1 + st.mind[ s * MIND_STRIDE + M_DEFERENCE ] * rivals;
             }
@@ -610,7 +656,7 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
     const iAmWeak  = WEAK_PREY_ENABLED && isWeak( st, s );
     if ( !iAmPredator )
     {
-        let threatDistance = Infinity, anyDistance = Infinity;
+        let threatDistanceSq = Infinity, anyDistanceSq = Infinity;
         for (let i = 0; i < numNearby; i++)
         {
             const o = nearby[i];
@@ -623,16 +669,16 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
 
             const gx = myGenitalX - genitalX[o];
             const gy = myGenitalY - genitalY[o];
-            const distance = Math.sqrt( gx * gx + gy * gy );
-            if ( distance > viewRadius ) continue;
+            const distanceSq = gx * gx + gy * gy;   // squares keep the order, no square root needed
+            if ( distanceSq > viewRadiusSquared ) continue;
             if ( obstructed( st, myGenitalX, myGenitalY, genitalX[o], genitalY[o] )) continue;   // (no seeing through the wall)
 
-            if ( distance < anyDistance ) { anyDistance = distance; anyPredator = o; }
+            if ( distanceSq < anyDistanceSq ) { anyDistanceSq = distanceSq; anyPredator = o; }
 
             // the danger is a hunting predator (a fed one is calmer)
             const state = st.brainState[o];
             if (( state !== BRAIN_STATE_LOOKING_FOR_PREY ) && ( state !== BRAIN_STATE_PURSUING_PREY )) continue;
-            if ( distance < threatDistance ) { threatDistance = distance; threat = o; }
+            if ( distanceSq < threatDistanceSq ) { threatDistanceSq = distanceSq; threat = o; }
         }
     }
     st.seenThreat[s]   = threat;
