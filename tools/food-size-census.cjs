@@ -78,17 +78,22 @@ const t0 = Date.now();
 for ( let step = 1; step <= STEPS; step++ )
 {
     gp.update();
+    // Use the shared typed arrays here instead of calling through every Swimbot
+    // wrapper on every simulation step.  This is the same predicate as before,
+    // but avoids millions of JS method calls during a long census.
     let herbivoresNow = 0;
-    for ( let s = 0; s < bots.length; s++ ) if ( st.liveSwimbot[s] === 1 && st.predator[s] <= sb.PREDATOR_LEVEL_THRESHOLD ) herbivoresNow ++;
+    for ( let s = 0; s < st.liveSwimbot.length; s++ )
+        if ( st.liveSwimbot[s] === 1 && st.predator[s] <= sb.PREDATOR_LEVEL_THRESHOLD ) herbivoresNow ++;
     herbStepSum += herbivoresNow;
 
     if ( step % EVERY !== 0 && step !== STEPS ) continue;
 
     let alive = 0, predators = 0, mass = 0, herb = 0;
     const byClass = [ 0, 0, 0, 0 ], byParts = new Map();
-    for ( const b of bots )
+    for ( let s = 0; s < bots.length; s++ )
     {
-        if ( !b.getAlive() ) continue;
+        const b = bots[s];
+        if ( st.liveSwimbot[s] !== 1 ) continue;
         alive ++;
         if ( b.getPredatorLevel() > sb.PREDATOR_LEVEL_THRESHOLD ) { predators ++; continue; }
         herb ++;
@@ -113,7 +118,7 @@ for ( let step = 1; step <= STEPS; step++ )
     // currents: where they live, the gene, the brain's weights on the current senses
     let inStream = 0, geneIn = 0, geneOut = 0, wSide = 0, wAhead = 0, wEffort = 0, counted = 0;
     const hasCurrentSenses = ( typeof sb.IN_CURRENT_SIDE === "number" );
-    for ( let s = 0; s < bots.length; s++ )
+    for ( let s = 0; s < st.liveSwimbot.length; s++ )
     {
         if ( st.liveSwimbot[s] !== 1 ) continue;
         counted ++;
