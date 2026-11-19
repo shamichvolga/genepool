@@ -200,11 +200,11 @@ export const ATMOSPHERE_RESERVE_WORLDS     = 1.0;
 // Базовый обмен веществ: каждый шаг бот тратит
 // BASAL_METABOLISM * (масса тела)^0.75 энергии — большое тело дороже в содержании
 // (закон Клайбера). При 0.000025 для типичного бота это примерно столько же, сколько плавание.
-export const BASAL_METABOLISM              = 0;   // ЭКСПЕРИМЕНТ: попробуйте 0.000008 – 0.000025
+export const BASAL_METABOLISM              = 0.000015;   // ЭКСПЕРИМЕНТ: попробуйте 0.000008 – 0.000025
 
 // C8 experiment: let body mass and breadth change thrust response, water drag,
 // and the energy dissipated while swimming. Disabled in ordinary simulations.
-export const BODY_HYDRODYNAMICS_ENABLED    = false;
+export const BODY_HYDRODYNAMICS_ENABLED    = true;
 
 // C9 experiment: internal temperature approaches the local felt-temperature
 // signal; body mass and width change the equilibration rate, not its endpoint.
@@ -280,11 +280,11 @@ export const BITE_ALONG_PARTS_ENABLED       = true;   // 20.10: anywhere along a
 //------------------------------------------------------------------------------
 // Experiments for different body forms (off by default)
 //------------------------------------------------------------------------------
-export const MASS_SCALED_STOMACH_ENABLED    = false;  // maximum energy = 200 x (mass / 410)^0.75, at least 60
+export const MASS_SCALED_STOMACH_ENABLED    = true;  // maximum energy = 200 x (mass / 410)^0.75, at least 60
 // 20.10: a big body stores more: maximum energy grows with mass (fat reserves
 // grow as the body does), never below the usual 200. A 16-part hunter pays for
 // moving a long body; with the same 200 as a 5-part grazer it starved.
-export const BIG_BODY_STOMACH_ENABLED       = true;
+export const BIG_BODY_STOMACH_ENABLED       = false;
 export const STOMACH_REFERENCE_MASS         = 410;    // a body of this mass (or lighter) keeps 200
 // ORIGINAL_FOOD_ENABLED (25.10, the owner: "food as in the original"): the plants
 // appear and spread as in the original Gene Pool, scaled to the pool's size:
@@ -303,16 +303,16 @@ export const SOIL_NUTRIENT_PER_ENERGY        = 0.05;
 export const PLANT_SPROUT_ENERGY            = 10;     // soft growth needs no minerals; a new sprout holds this much
 export const PLANT_TREE_ENERGY              = 150;    // a full-grown tree holds this much
 export const PLANT_LEAF_REGROWTH            = 0.002;  // share of the missing crown that grows back each step
-export const PLANT_MAX_TOUGHNESS            = 0.8;    // toughness of a full-grown tree (a sprout: 0)
-export const BITE_FORCE_AT_REFERENCE        = 0.5;    // the bite force of a body of BITE_REFERENCE_MASS (force grows as mass^(2/3))
+export const PLANT_MAX_TOUGHNESS            = 0.72;    // toughness of a full-grown tree (a sprout: 0)
+export const BITE_FORCE_AT_REFERENCE        = 0.52;    // the bite force of a body of BITE_REFERENCE_MASS (force grows as mass^(2/3))
 export const BITE_REFERENCE_MASS            = 410;
 export const BITE_ENERGY                    = 25;     // one bite takes this much x the bite force
-export const BITE_MARGIN                    = 0.15;   // the bite is full when the force is this much above the toughness
+export const BITE_MARGIN                    = 0.20;   // the bite is full when the force is this much above the toughness
 export const VISION_WEIGHT_BY_BITE_EFFICIENCY = true;
 export const PLANT_SEEDS_BY_SIZE            = true;
-export const PLANT_LIFESPAN                 = 12000;  // old plants fall after 0.5 .. 1.5 x this many steps
+export const PLANT_LIFESPAN                 = 8000;  // old plants fall after 0.5 .. 1.5 x this many steps
 export const WOOD_PER_FRUIT_TIER            = 40;     // one waiting fruit at 40 wood, two at 80, three at 120
-export const PLANT_FRUIT_PERIOD             = 600;
+export const PLANT_FRUIT_PERIOD             = 1200;
 export const PLANT_FRUIT_ENERGY             = 10;
 export const PLANT_CANOPY_RADIUS            = 300;
 export const SHADED_PLANT_AGING_FACTOR      = 4;
@@ -344,8 +344,8 @@ export const CLASSIC_SEED_RAIN_FRACTION     = 0.1;    // classic pools: share of
 //------------------------------------------------------------------------------
 // Income of a big body (commission round 2, bundle B1; off by default)
 //------------------------------------------------------------------------------
-export const SIZE_SCALED_VISION_ENABLED     = false;  // view radius = 300 x (mass / 410)^0.2  (about 240 .. 380)
-export const SIZE_SCALED_GRAB_ENABLED       = false;  // food grab radius = 20 x (mass / 410)^0.25 (about 15 .. 25)
+export const SIZE_SCALED_VISION_ENABLED     = true;  // view radius = 300 x (mass / 410)^0.2  (about 240 .. 380)
+export const SIZE_SCALED_GRAB_ENABLED       = true;  // food grab radius = 20 x (mass / 410)^0.25 (about 15 .. 25)
 export const GAPE_SUCCESS_FLOOR             = 0.3;    // PREDATOR_GAPE_CURVE: success never below 0.3 x the normal
 export const GAPE_COOLDOWN_SLOPE            = 0.5;    // PREDATOR_GAPE_CURVE: cooldown x ( 1 + 0.5 x prey/predator mass )
 
@@ -407,11 +407,11 @@ export const PLANT_SEED_PARENT_TRIES        = 8;      // grown-up parents looked
 //     spine in the throat of a predator: each tip beyond two makes a bite a
 //     little less likely to succeed (but never below the floor).
 //------------------------------------------------------------------------------
-export const FILTER_FEEDING_ENABLED         = false;
+export const FILTER_FEEDING_ENABLED         = true;
 export const FILTER_FEEDING_EFFICIENCY      = 0.6;    // of the sprout's energy
 export const FILTER_FEEDING_PERIOD          = 4;      // each body checks its limbs every 4 steps
 export const FILTER_FEEDING_REACH           = 6;      // beyond the part's width
-export const LIMB_SPINES_ENABLED            = false;
+export const LIMB_SPINES_ENABLED            = true;
 export const LIMB_SPINE_EFFECT              = 0.1;    // bite success x ( 1 - 0.1 x ( tips - 2 ))
 export const LIMB_SPINE_FLOOR               = 0.4;
 
@@ -472,7 +472,7 @@ export const DESPERATE_PREY_MASS_SHARE      = 0.5;
 // growing pauses, and only a grown-up body may mate.
 //------------------------------------------------------------------------------
 export const GROWTH_COSTS_ENERGY_ENABLED    = true;
-export const GROWTH_ENERGY_PER_MASS         = 0.06;   // (= PREY_BODY_ENERGY)
+export const GROWTH_ENERGY_PER_MASS         = 0.025;   // (= PREY_BODY_ENERGY)
 
 //------------------------------------------------------------------------------
 // Coexistence of forms (19.10, docs/идеи_сосуществования.md, ideas 1-7)
@@ -480,7 +480,7 @@ export const GROWTH_ENERGY_PER_MASS         = 0.06;   // (= PREY_BODY_ENERGY)
 export const KIN_NOT_EATEN_ENABLED          = true;   // 1: no eating one's parent, child, brother or sister
 export const ONLY_GROWN_EAT_YOUNG_ENABLED   = true;   // 2: only a grown body eats the young, by its own present mass
 export const WEAK_PREY_ENABLED              = true;   // 3: a predator may take any old or starving body (preference: a gene)
-export const WEAK_STARVING_SHARE            = 0.15;   //    "starving": energy below this share of its full store
+export const WEAK_STARVING_SHARE            = 0.06;   //    "starving": energy below this share of its full store
 export const CARCASS_ENABLED                = true;   // 4: every body that dies not eaten leaves its body as meat
 
 //------------------------------------------------------------------------------
@@ -501,13 +501,13 @@ export const DISEASE_CROWD_NEIGHBOURS       = 8;      // a new disease appears o
 // only a body whose gene is above CANNIBAL_GENE_THRESHOLD goes for the young.
 // The first swimbots have it low (0 .. CANNIBAL_GENE_FOUNDER_MAX): it spreads
 // only if it pays.
-export const CANNIBAL_GENE_THRESHOLD        = 0.5;
+export const CANNIBAL_GENE_THRESHOLD        = 0.65;
 export const CANNIBAL_GENE_FOUNDER_MAX      = 0.4;
 
 // (20.10) Hunters get in each other's way: a prey other predators are nearer
 // to looks farther, by the deference gene (as plants for herbivores).
 // Ecology: predator interference (Beddington-DeAngelis) softens the swings.
-export const PREDATOR_DEFERENCE_ENABLED     = false;
+export const PREDATOR_DEFERENCE_ENABLED     = true;
 
 //------------------------------------------------------------------------------
 // (20.10) The food pyramid: an eater keeps only MEAT_ASSIMILATION of the

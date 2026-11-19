@@ -87,10 +87,10 @@ export function isIterativeGrowthGene( g: number ): boolean
 
 // Five independent GP6-inspired mechanics. The new loci start after the
 // iterative-growth block and are treated as junk unless their experiment is on.
-export const SECONDARY_BRANCHING_ENABLED = false;
-export const SEGMENT_REPLICATION_ENABLED = false;
+export const SECONDARY_BRANCHING_ENABLED = true;
+export const SEGMENT_REPLICATION_ENABLED = true;
 export const GROWTH_TURN_ENABLED         = false;
-export const BRANCH_AMP_FLIP_ENABLED     = false;
+export const BRANCH_AMP_FLIP_ENABLED     = true;
 export const SECONDARY_BRANCHING_GENE    = 184;
 export const SEGMENT_REPLICATION_FIRST_GENE = 185; // repeat + delay for each of four categories
 export const GROWTH_TURN_FIRST_GENE      = 193;    // amplitude + phase + phase acceleration per category
