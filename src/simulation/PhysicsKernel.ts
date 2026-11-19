@@ -301,24 +301,39 @@ export function physicsPartA( s: number, st: SharedState ): void
     const profFluidT0 = PROFILER_ENABLED ? profEnter( PROF_PHYS_FLUID ) : 0;
     let accelerationX = ZERO, accelerationY = ZERO, torque = ZERO;
 
+    const normLength = sumLengths > ZERO ? Math.pow( sumLengths, 0.82 ) : ONE;
     for (let p = 1; p < numParts; p++)
     {
         const i = o + p * PS;
-        const fractionOfWhole = length[ k + p ] / sumLengths;
+        // wide parts are the paddles: a broad tail moves more water than a
+        // thin worm segment of the same length
+        const widthFactor = Math.sqrt( Math.max( 0.25, st.partWidth[ k + p ] / 3.5 ));
+        const fractionOfWhole = ( length[ k + p ] * widthFactor ) / normLength;
+
+        // a broader parent body shelters the segment behind it (teardrop
+        // shapes spend less energy than uniform worms)
+        const parent = parentOf[ k + p ];
+        const shield = parent > 0
+            ? Math.max( 0.55, Math.min( 1.0, st.partWidth[ k + p ] / Math.max( 0.5, st.partWidth[ k + parent ] )))
+            : 1.0;
+        // branches on the outside of a turn push harder (differential rudder)
+        const branchBias = angle[ k + p ] !== ZERO
+            ? Math.max( 0.55, Math.min( 1.55, ONE + ( angle[ k + p ] / 90 ) * directionDot * 0.65 ))
+            : ONE;
 
         // (the body was just shifted onto its center of mass, so the part
         //  velocities are computed here, after the shift)
         pd[ i + V_X ] = pd[ i + M_X ] - pd[ i + Q_X ];
         pd[ i + V_Y ] = pd[ i + M_Y ] - pd[ i + Q_Y ];
 
-        const strokeAmplitude = ( pd[ i + V_X ] * pd[ i + N_X ] + pd[ i + V_Y ] * pd[ i + N_Y ] ) * fractionOfWhole;
+        const strokeAmplitude = ( pd[ i + V_X ] * pd[ i + N_X ] + pd[ i + V_Y ] * pd[ i + N_Y ] ) * fractionOfWhole * branchBias;
         const strokeForceX = pd[ i + N_X ] * strokeAmplitude;
         const strokeForceY = pd[ i + N_Y ] * strokeAmplitude;
 
         if ( motion.enabled )
-            energy -= Math.abs( strokeAmplitude ) * ENERGY_USED_UP_SWIMMING * motion.strokeCost;
+            energy -= Math.abs( strokeAmplitude ) * ENERGY_USED_UP_SWIMMING * motion.strokeCost * shield;
         else
-            energy -= Math.abs( strokeAmplitude ) * ENERGY_USED_UP_SWIMMING;
+            energy -= Math.abs( strokeAmplitude ) * ENERGY_USED_UP_SWIMMING * shield;
         if ( energy < ZERO ) { energy = ZERO; }
 
         const partVectorFromCenterX = pd[ i + M_X ] - posX;
@@ -585,7 +600,10 @@ export function physicsPartA( s: number, st: SharedState ): void
         B[ b + B_LAST_ENERGY ] = energy;
     }
 
-    energy -= CONTINUAL_ENERGY_DRAIN + B[ b + B_BASAL ];
+    // a still, gliding ambusher lives more cheaply than an active swimmer
+    let basal = B[ b + B_BASAL ];
+    if (( glide > 0.2 ) && ( effort < 0.75 )) { basal *= ( ONE - 0.5 * glide ); }
+    energy -= CONTINUAL_ENERGY_DRAIN + basal;
 
     B[ b + B_GROWTH      ] = growth;
     B[ b + B_TIMER_DELTA ] = timerDelta;

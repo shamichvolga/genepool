@@ -13,7 +13,7 @@ import { currentAt, currentDriftX, currentDriftY, currentTravelFactor } from "./
 import { CURRENT_AWARENESS_ENABLED, CURRENT_AWARE_MIN_SPEED } from "./Parameters";
 import { biteEfficiency, biteForce, plantToughness } from "./PlantSize";
 import { BITE_ENERGY, BITE_MARGIN, PLANT_SIZE_ENABLED, PLANT_SPROUT_ENERGY, VISION_WEIGHT_BY_BITE_EFFICIENCY } from "./Parameters";
-import { BRAIN_STATE_LOOKING_FOR_MATE, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_PREY } from "./Brain";
+import { BRAIN_STATE_FLEEING_PREDATOR, BRAIN_STATE_LOOKING_FOR_MATE, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_PREY } from "./Brain";
 import { IGNORE_FOOD_EFFICIENCY, mateAcceptance, pairRandom, preyVisibility, searchImageFactor } from "./Ecology";
 import { PLANT_TYPE_WARM } from "./Environment";
 import { ONE, ONE_THIRD } from "./MathConstants";
@@ -28,7 +28,7 @@ import { preyTargetScore } from "./EcologyGenes";
 import {
     BACKGROUND_SIZE, PARAM_MAX_LIFESPAN, B_NUM_PARTS, B_GROWTH, B_VEL_X, B_VEL_Y, BOT_STRIDE, MAX_SEEN, PARAM_ENV_ACTIVE, PARAM_STEP, PARAM_CURRENT, PARAM_ENV_FIELDS, PARAM_FOOD_TYPES,
     PARAM_WALL_COUNT, PARAM_WALL_BASE, PARAM_WALL_MIN_X, PARAM_WALL_MAX_X, PARAM_WALL_MIN_Y, PARAM_WALL_MAX_Y,
-    PARAM_SDF_READY, SDF_SIZE, SharedState
+    PARAM_SDF_READY, SDF_SIZE, SCENT_GRID_N, SharedState
 } from "./SharedState";
 
 export const STARVING_FOOD_CHOICE = 15;   // below this energy a swimbot eats anything
@@ -37,6 +37,9 @@ export const STARVING_FOOD_CHOICE = 15;   // below this energy a swimbot eats an
 const SDF_CELL_W = POOL_WIDTH  / SDF_SIZE;
 const SDF_CELL_H = POOL_HEIGHT / SDF_SIZE;
 const SDF_MARGIN = 0.5 * Math.sqrt( SDF_CELL_W * SDF_CELL_W + SDF_CELL_H * SDF_CELL_H );
+
+const SCENT_CELL_W = POOL_WIDTH  / SCENT_GRID_N;
+const SCENT_CELL_H = POOL_HEIGHT / SCENT_GRID_N;
 
 //------------------------------------------------------------
 // scratch arrays: one set per thread
@@ -262,7 +265,7 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
     // everybody within the search radius (wider for a hunting predator)
     //------------------------------------------------------------------
     const profSwimT0 = PROFILER_ENABLED ? profEnter( PROF_PERC_SWIMBOTS ) : 0;
-    const searchRadius = Math.min( 1100, iAmPredator ? preyViewRadius : viewRadius );
+    const searchRadius = Math.min( 380, iAmPredator ? preyViewRadius : viewRadius );
     const nearby = sc.nearbyIndices;
     let numNearby = 0;
     const numInCells = st.swimbotGrid.collect( myX, myY, searchRadius, nearby, botX, botY );
@@ -727,6 +730,27 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
         }
     }
     st.seenMate[s] = mate;
+
+    //------------------------------------------------------------------
+    // O(1) smell gradient: one cell difference from the 128x128 fields.
+    // Food for a hungry herbivore, prey for a hunter, away from danger
+    // (negative predator gradient) while fleeing.
+    //------------------------------------------------------------------
+    const stateNow = st.brainState[s];
+    let field: Float32Array;
+    let sign = ONE;
+    if ( stateNow === BRAIN_STATE_FLEEING_PREDATOR ) { field = st.predField; sign = -ONE; }
+    else if ( iAmPredator )                          { field = st.preyField; }
+    else                                             { field = st.foodField; }
+    const ix = Math.max( 1, Math.min( SCENT_GRID_N - 2, Math.floor(( myX - POOL_LEFT ) / SCENT_CELL_W )));
+    const iy = Math.max( 1, Math.min( SCENT_GRID_N - 2, Math.floor(( myY - POOL_TOP  ) / SCENT_CELL_H )));
+    const fidx = iy * SCENT_GRID_N + ix;
+    let gx = sign * ( field[ fidx + 1 ] - field[ fidx - 1 ] );
+    let gy = sign * ( field[ fidx + SCENT_GRID_N ] - field[ fidx - SCENT_GRID_N ] );
+    const glen = Math.sqrt( gx * gx + gy * gy );
+    if ( glen > 1e-5 ) { gx /= glen; gy /= glen; } else { gx = 0; gy = 0; }
+    st.scentGradX[s] = gx;
+    st.scentGradY[s] = gy;
     }
     finally { if ( PROFILER_ENABLED ) { profExit( PROF_PERCEIVE, profT0 ); } }
 }

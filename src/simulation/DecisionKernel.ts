@@ -327,6 +327,14 @@ function wanderFocus( st: SharedState, s: number ): void
     }
     gx += ( -BRAIN_WANDER_AMOUNT * 0.5 + botRandom( st, s ) * BRAIN_WANDER_AMOUNT );
     gy += ( -BRAIN_WANDER_AMOUNT * 0.5 + botRandom( st, s ) * BRAIN_WANDER_AMOUNT );
+    // While searching for food or prey (no close target), drift along the
+    // smell gradient from the diffusion fields.
+    const searchState = st.mind[ s * SS.MIND_STRIDE + SS.M_STATE ];
+    if (( searchState === BRAIN_STATE_LOOKING_FOR_FOOD ) || ( searchState === BRAIN_STATE_LOOKING_FOR_PREY ))
+    {
+        gx += st.scentGradX[s] * 0.45;
+        gy += st.scentGradY[s] * 0.45;
+    }
     B[ b + SS.B_GOAL_X ] = gx / length;
     B[ b + SS.B_GOAL_Y ] = gy / length;
 }

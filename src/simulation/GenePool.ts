@@ -255,6 +255,11 @@ export function GenePool()
     let _foodGridResult = new Int32Array( MAX_FOODBITS * 2 );
     const _plantShade   = new Float32Array( environment.plantCount[0].length );
     let _nearbyIndices  = new Int32Array( MAX_SWIMBOTS );      // swimbots within search radius
+    // preallocated scratch: Z-order keys and one diffusion scratch grid
+    const _mortonCodes  = new Int32Array( MAX_SWIMBOTS );
+    const _scentTmp     = new Float32Array( SS.SCENT_GRID_N * SS.SCENT_GRID_N );
+    const _scentCellW   = POOL_WIDTH  / SS.SCENT_GRID_N;
+    const _scentCellH   = POOL_HEIGHT / SS.SCENT_GRID_N;
 
     let _distanceCache = new Array(MAX_SWIMBOTS);
     let _lastSwimbotPositions = new Array(MAX_SWIMBOTS);
@@ -2701,7 +2706,21 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
                                 simCounters.reproductiveJunkSimilaritySum += junkSimilarity;
                                 const similarityBin = Math.min( 9, Math.floor( junkSimilarity * 10 ));
                                 simCounters.reproductiveJunkSimilarityBins[ similarityBin ] ++;
-                                if ( junkSimilarity > NON_REPRODUCING_JUNK_DNA_LIMIT )
+
+                                // Continuous divergence instead of a hard
+                                // step: junk DNA, body plan and mass each count.
+                                const dJunk  = 1 - junkSimilarity;
+                                const dParts = Math.abs( _swimbots[s].getNumParts() - _potentialMate.getNumParts() ) / 12;
+                                const dMass  = Math.min( 1, Math.abs( Math.log( Math.max( 1, _swimbots[s].getPhenotypeMass() ) / Math.max( 1, _potentialMate.getPhenotypeMass() ))) / 1.5 );
+                                const dTotal = 0.65 * dJunk + 0.20 * dParts + 0.15 * dMass;
+                                const compatProb = Math.exp( -( dTotal * dTotal ) / ( 2 * 0.42 * 0.42 ));
+
+                                // Parents under stress explore new forms faster.
+                                const avgEnergyRatio = 0.5 * ( _swimbots[s].getEnergy() / Math.max( 1, _swimbots[s].getMaxEnergy() )
+                                                            + _potentialMate.getEnergy() / Math.max( 1, _potentialMate.getMaxEnergy() ));
+                                const mutScale = avgEnergyRatio < 0.35 ? 1.45 : ( avgEnergyRatio > 0.75 ? 0.8 : 1.0 );
+
+                                if ( gpRandom() < compatProb )
                                 {
                                     simCounters.reproductiveJunkPasses ++;
 
@@ -2710,7 +2729,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
                                 //-----------------------------------
                                 assert( _childGenotype != null, "_childGenotype != null" );
 
-                                _childGenotype.setAsOffspring( _myGenotype, _mateGenotype );
+                                _childGenotype.setAsOffspring( _myGenotype, _mateGenotype, mutScale );
 
                                 // rarely, the child switches diet (see DIET_SWITCH_RATE)
                                 if ( environment.active && ( gpRandom() < DIET_SWITCH_RATE ))
@@ -2793,6 +2812,103 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 
 
 	//------------------------------------------------------------------------
+	// Smell fields: decay, deposit and a light 4-neighbour blur once a step.
+	// Their gradients only tilt a search direction; they add no new rules.
+	//------------------------------------------------------------------------
+	function updateScentFields(): void
+	{
+	    const N = SS.SCENT_GRID_N, cells = N * N;
+	    const food = _st.foodField, prey = _st.preyField, pred = _st.predField;
+	    for (let i = 0; i < cells; i++)
+	    {
+	        food[i] *= 0.86;
+	        prey[i] *= 0.86;
+	        pred[i] *= 0.86;
+	    }
+
+	    // plants: their energy is the food smell
+	    for (let k = 0; k < _aliveFoodBitIndices.length; k++)
+	    {
+	        const f = _aliveFoodBitIndices[k];
+	        const ix = Math.max( 0, Math.min( N - 1, Math.floor( _foodX[f] / _scentCellW )));
+	        const iy = Math.max( 0, Math.min( N - 1, Math.floor( _foodY[f] / _scentCellH )));
+	        food[ iy * N + ix ] += _st.foodEnergy[f] * 0.02;
+	    }
+
+	    // swimbots: herbivore biomass or a predator trace
+	    for (let k = 0; k < _aliveSwimbotIndices.length; k++)
+	    {
+	        const s = _aliveSwimbotIndices[k];
+	        const ix = Math.max( 0, Math.min( N - 1, Math.floor( _botX[s] / _scentCellW )));
+	        const iy = Math.max( 0, Math.min( N - 1, Math.floor( _botY[s] / _scentCellH )));
+	        const idx = iy * N + ix;
+	        if ( _botPredator[s] > PREDATOR_LEVEL_THRESHOLD ) { pred[idx] += 1.0; }
+	        else                                              { prey[idx] += _botMass[s] * 0.003; }
+	    }
+
+	    // one light diffusion pass; read from a snapshot so the result does
+	    // not depend on the order in which cells are visited
+	    const tmp = _scentTmp;
+	    for (let f = 0; f < 3; f++)
+	    {
+	        const a = f === 0 ? food : ( f === 1 ? prey : pred );
+	        tmp.set( a );
+	        for (let y = 0; y < N; y++)
+	        {
+	            const row = y * N;
+	            const up = y > 0 ? row - N : row;
+	            const down = y < N - 1 ? row + N : row;
+	            for (let x = 0; x < N; x++)
+	            {
+	                const i = row + x;
+	                const l = x > 0 ? i - 1 : i;
+	                const r = x < N - 1 ? i + 1 : i;
+	                const avg = 0.25 * ( tmp[l] + tmp[r] + tmp[up + x] + tmp[down + x] );
+	                a[i] = tmp[i] + 0.06 * ( avg - tmp[i] );
+	            }
+	        }
+	    }
+	}
+
+	// 16-bit Peano-Morton key from the coordinates
+	function mortonBits( v: number ): number
+	{
+	    v &= 0xff;
+	    v = ( v | ( v << 4 )) & 0x0f0f;
+	    v = ( v | ( v << 2 )) & 0x3333;
+	    v = ( v | ( v << 1 )) & 0x5555;
+	    return v;
+	}
+	// Put neighbours in the pool next to each other in the work list. Insertion
+	// sort is effectively linear here: the order barely changes in 8 steps,
+	// and it needs no allocation.
+	function sortAliveByMorton(): void
+	{
+	    const cols = SS.SCENT_GRID_N - 1;
+	    const list = _aliveSwimbotIndices, n = list.length;
+	    for (let i = 0; i < n; i++)
+	    {
+	        const s = list[i];
+	        const ix = Math.max( 0, Math.min( cols, Math.floor( _botX[s] / POOL_WIDTH  * cols )));
+	        const iy = Math.max( 0, Math.min( cols, Math.floor( _botY[s] / POOL_HEIGHT * cols )));
+	        _mortonCodes[i] = mortonBits( ix ) | ( mortonBits( iy ) << 1 );
+	    }
+	    for (let i = 1; i < n; i++)
+	    {
+	        const code = _mortonCodes[i], s = list[i];
+	        let j = i - 1;
+	        while ( j >= 0 && _mortonCodes[j] > code )
+	        {
+	            _mortonCodes[j + 1] = _mortonCodes[j];
+	            list[j + 1] = list[j];
+	            j --;
+	        }
+	        _mortonCodes[j + 1] = code;
+	        list[j + 1] = s;
+	    }
+	}
+
+	//------------------------------------------------------------------------
 	// stage 7: the step in phases. Deciding, moving and looking around touch
 	// only the shared arrays and run in several threads (_runner, see
 	// ParallelWork.ts); what changes other objects (eating, biting, mating,
@@ -2800,6 +2916,8 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	//------------------------------------------------------------------------
 	this.updateSwimbotsInPhases = function()
 	{
+	    updateScentFields();
+	    if ( _clock % 8 === 0 ) { sortAliveByMorton(); }
 	    const list = _aliveSwimbotIndices;
 	    const n    = list.length;
 	    const M    = _st.mind;

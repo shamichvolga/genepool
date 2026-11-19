@@ -2395,6 +2395,9 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	    let gape = PREDATOR_GAPE_CURVE_ENABLED ? Math.min( ONE, Math.max( GAPE_SUCCESS_FLOOR, 1.5 - sizeRatio )) : ONE;
 	    // LIMB_SPINES_ENABLED: every limb tip beyond two is a spine in the throat
 	    if ( LIMB_SPINES_ENABLED ) { gape *= Math.max( LIMB_SPINE_FLOOR, ONE - LIMB_SPINE_EFFECT * Math.max( 0, chosenPrey().getNumLimbTips() - 2 )); }
+	    // a broad, armour-like body is harder to get past the predator's gape
+	    const preyMeanWidth = chosenPrey().getPhenotypeMass() / Math.max( 1, chosenPrey().getBoundingRadius() );
+	    if ( preyMeanWidth > 4.2 ) { gape *= ( ONE - Math.min( 0.35, ( preyMeanWidth - 4.2 ) * 0.12 )); }
 	    if ( PREDATOR_GAPE_CURVE_ENABLED ) { _M[ _m + SS.M_HUNT_CD ] = ATTACK_COOLDOWN * ( 1 + GAPE_COOLDOWN_SLOPE * sizeRatio ); }
 	    if ( gpRandom() > ( environment.active ? ENVIRONMENT_ATTACK_SUCCESS_CHANCE : ATTACK_SUCCESS_CHANCE ) * gape )
 	    {

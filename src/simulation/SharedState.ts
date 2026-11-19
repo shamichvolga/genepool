@@ -120,6 +120,10 @@ export const NUM_PARAMS         = 122;
 // makes the triangle-inequality visibility test valid anywhere in a cell.
 export const SDF_SIZE = 128;
 
+// 128x128 diffusion fields: plant energy, herbivore biomass, predator traces.
+// GenePool fills them once a step; perception reads an O(1) gradient from them.
+export const SCENT_GRID_N = 128;
+
 export * from "./MindLayout";
 import { MAX_THREADS, MIND_STRIDE, NUM_COUNTERS } from "./MindLayout";
 
@@ -156,6 +160,9 @@ export class SharedState
     readonly partParent   : Int32Array;
     readonly params       : Float64Array;
     readonly wallSdf      : Float32Array;   // SDF_SIZE² distances to the walls
+    readonly foodField    : Float32Array;   // SCENT_GRID_N² plant energy density
+    readonly preyField    : Float32Array;   // herbivore biomass density
+    readonly predField    : Float32Array;   // predator traces
 
     //--------------------------------------------------------
     // what perception reads (one number per swimbot slot)
@@ -207,6 +214,8 @@ export class SharedState
     readonly cavityParent     : Int16Array;
     readonly matureTrees      : Int32Array;  // the adult trees (their food bit indices), for collisions
     readonly botGlide         : Float32Array;
+    readonly scentGradX       : Float32Array;   // normalized smell gradient, per swimbot
+    readonly scentGradY       : Float32Array;
     readonly partJointMin     : Float32Array;
     readonly partJointMax     : Float32Array;
 
@@ -297,6 +306,10 @@ export class SharedState
         this.partParent    = new Int32Array( make( "partParent", partCount * 4 ));
         this.params        = f64( "params",        NUM_PARAMS );
         this.wallSdf       = new Float32Array( make( "wallSdf", SDF_SIZE * SDF_SIZE * 4 ));
+        const scentCells = SCENT_GRID_N * SCENT_GRID_N;
+        this.foodField     = new Float32Array( make( "foodField", scentCells * 4 ));
+        this.preyField     = new Float32Array( make( "preyField", scentCells * 4 ));
+        this.predField     = new Float32Array( make( "predField", scentCells * 4 ));
 
         const u8  = ( name: string, count: number ) => new Uint8Array( make( name, count ));
         const n = maxSwimbots;
@@ -348,6 +361,8 @@ export class SharedState
         this.cavityParent     = new Int16Array( make( "cavityParent", n * 2 ));
         this.matureTrees      = new Int32Array( make( "matureTrees", MAX_FOODBITS * 4 ));
         this.botGlide         = new Float32Array( make( "botGlide", n * 4 ));
+        this.scentGradX       = new Float32Array( make( "scentGradX", n * 4 ));
+        this.scentGradY       = new Float32Array( make( "scentGradY", n * 4 ));
         this.partJointMin     = new Float32Array( make( "partJointMin", partCount * 4 ));
         this.partJointMax     = new Float32Array( make( "partJointMax", partCount * 4 ));
 

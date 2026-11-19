@@ -355,7 +355,7 @@ g++; _genes[g] = 255;
 */
 
     //--------------------------------------------------------
-	this.setAsOffspring = function( parent_0, parent_1 )
+	this.setAsOffspring = function( parent_0, parent_1, mutationScale = 1.0 )
 	{
 	    // the brain chromosome: whole neurons from either parent, small mutations
 	    inheritBrain( _brain, parent_0.getBrain(), parent_1.getBrain(), SELF_CANNIBALISM_ENABLED,
@@ -433,12 +433,12 @@ g++; _genes[g] = 255;
             ||  isEcologyGene(g) || isMarkerGene(g) || isDeferenceGene(g) )
             {
                 // ecology genes and markers: small steps, no wrap-around
-                if ( gpRandom() < ecologyMutationRate(g) )
+                if ( gpRandom() < ecologyMutationRate(g) * mutationScale )
                 {
                     _genes[g] = isMarkerGene(g) ? mutateMarkerGene( _genes[g] ) : mutateEcologyGene( _genes[g] );
                 }
             }
-            else if ( gpRandom() < MUTATION_RATE )
+            else if ( gpRandom() < MUTATION_RATE * mutationScale )
             {
                 this.mutateGene(g);
             }

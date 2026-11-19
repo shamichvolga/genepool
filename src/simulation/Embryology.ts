@@ -503,12 +503,22 @@ testNoEel = false;
                         for (let b=0; b<_categoryValues[c].branchNumber; b++)
                         {
                             reflect = ONE;
-                            if ( b % _categoryValues[c].branchReflect === 0 )
+                            const reflectMode = _categoryValues[c].branchReflect;
+                            if ( reflectMode >= 2 )
+                            {
+                                // mirror the two halves of the fan instead of
+                                // alternating one branch at a time
+                                reflect = ( b < _categoryValues[c].branchNumber * 0.5 ) ? -ONE : ONE;
+                            }
+                            else if (( reflectMode > 0 ) && ( b % reflectMode === 0 ))
                             {
                                 reflect = -ONE;
                             }
 
                             let f = -ONE + ( b / ( _categoryValues[c].branchNumber - 1 ) ) * 2;
+                            // an odd fan has a central branch; tilt it a little
+                            // so it does not grow along the spine
+                            if (( _categoryValues[c].branchNumber % 2 === 1 ) && ( Math.abs( f ) < 0.05 )) { f = 0.35; }
 
                             this.generateBodySequence( phenotype, p, _categoryValues[c].branchAngle * f, c, reflect, _branchDepth[p] + 1 );
                         }
