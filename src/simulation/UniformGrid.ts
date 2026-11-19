@@ -35,6 +35,7 @@ export class UniformGrid
     private  extras     : Int32Array;
     private  meta       : Int32Array;   // [0] = number of extras
     private  isExtra    : Uint8Array;   // 1 = moved to extras since the rebuild
+    private  occupiedMask: Uint32Array; // one bit per cell: fast "is this cell empty?"
 
     constructor( cellSize: number, left: number, top: number, right: number, bottom: number, capacity: number, alloc: GridAllocator = plainMemory )
     {
@@ -51,6 +52,7 @@ export class UniformGrid
         this.extras     = new Int32Array( alloc( "extras",     capacity * 4 ));
         this.isExtra    = new Uint8Array( alloc( "isExtra",    capacity ));
         this.meta       = new Int32Array( alloc( "meta",       4 * 4 ));
+        this.occupiedMask = new Uint32Array( alloc( "occupiedMask", (( cells + 31 ) >>> 5 ) * 4 ));
     }
 
     private get numExtras(): number  { return this.meta[0]; }
@@ -78,6 +80,7 @@ export class UniformGrid
     {
         const cellCount = this.cellCount;
         cellCount.fill( 0 );
+        this.occupiedMask.fill( 0 );
 
         for ( let e = 0; e < this.numExtras; e++ ) this.isExtra[ this.extras[e] ] = 0;
         this.numExtras = 0;
@@ -88,6 +91,7 @@ export class UniformGrid
             const cell = this.row( ys[ item ] ) * this.cols + this.column( xs[ item ] );
             this.cellOfItem[ item ] = cell;
             cellCount[ cell ] ++;
+            this.occupiedMask[ cell >>> 5 ] |= ( 1 << ( cell & 31 ));
         }
 
         // running total: where each cell starts
@@ -140,6 +144,7 @@ export class UniformGrid
             for ( let r = r0; r <= r1; r++ )
             {
                 const cell = r * cols + c;
+                if (( this.occupiedMask[ cell >>> 5 ] & ( 1 << ( cell & 31 ))) === 0 ) continue;
                 const start = cellStart[ cell ], end = cellStart[ cell + 1 ];
                 if ( start === end ) continue;
                 for ( let k = start; k < end; k++ )

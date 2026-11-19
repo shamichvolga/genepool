@@ -17,6 +17,16 @@ export const NUM_GENES = 256;
 //const CROSSOVER_RATE	= 0.2;
 export const MIN_GENE_VALUE	= 0;
 
+// Embryology's body layout: 2 global genes, then 27 genes for each of the
+// 4 part categories. Within a category these offsets pick branch angle /
+// number and the four width/length genes (0-based).
+const MORPH_CATEGORY_FIRST_GENE = 2;
+const MORPH_CATEGORY_GENES      = 27;
+const MORPH_WIDTH_GENE          = 6;
+const MORPH_LENGTH_GENE         = 8;
+const MORPH_BRANCH_ANGLE_GENE   = 20;
+const MORPH_BRANCH_NUMBER_GENE  = 21;
+
 //const NON_REPRODUCING_JUNK_DNA_LIMIT = 0.9;
 
 
@@ -446,6 +456,30 @@ g++; _genes[g] = 255;
             assert ( _genes[g] >= 0, "_genes[g] >=   0" );
             assert ( _genes[g] < BYTE_SIZE, "_genes[g] < BYTE_SIZE" );
             assertInteger( _genes[g], "Genotype: setAsOffspring: AFTER MUTATION...assertInteger: _genes[g]" );
+        }
+
+        // Rare coordinated change: instead of one limb gene wandering off,
+        // a whole category becomes a slightly different module (branching
+        // plus its segment widths and lengths move together).
+        if ( gpRandom() < 0.03 )
+        {
+            const category = Math.floor( gpRandom() * 4 );
+            const base = MORPH_CATEGORY_FIRST_GENE + category * MORPH_CATEGORY_GENES;
+            const magnitude = Math.round( 10 + gpRandom() * 28 );
+            const delta = ( gpRandom() < ONE_HALF ) ? -magnitude : magnitude;
+            const shift = ( g: number ) =>
+            {
+                let value = _genes[g] + delta;
+                if ( value < 0 ) value = 0;
+                else if ( value >= BYTE_SIZE ) value = BYTE_SIZE - 1;
+                _genes[g] = value;
+            };
+            shift( base + MORPH_BRANCH_NUMBER_GENE );
+            shift( base + MORPH_BRANCH_ANGLE_GENE );
+            shift( base + MORPH_WIDTH_GENE );
+            shift( base + MORPH_WIDTH_GENE + 1 );
+            shift( base + MORPH_LENGTH_GENE );
+            shift( base + MORPH_LENGTH_GENE + 1 );
         }
     }
 

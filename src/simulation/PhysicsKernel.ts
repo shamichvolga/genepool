@@ -170,7 +170,17 @@ export function physicsPartA( s: number, st: SharedState ): void
     {
         // "forward" = where I actually swim (smoothed velocity), if I swim at all
         const sx = B[ b + B_SWIM_X ], sy = B[ b + B_SWIM_Y ], sl = Math.sqrt( sx * sx + sy * sy );
-        if ( sl > 0.02 ) { headingX = sx / sl; headingY = sy / sl; }
+        if ( sl > 0.01 )
+        {
+            // no hard jump around the old 0.02 threshold: fade from the body's
+            // angle to the actual swim direction over a narrow speed band
+            const blend = Math.min( 1, ( sl - 0.01 ) / 0.03 );
+            const vx = sx / sl, vy = sy / sl;
+            headingX += ( vx - headingX ) * blend;
+            headingY += ( vy - headingY ) * blend;
+            const hl = Math.sqrt( headingX * headingX + headingY * headingY );
+            if ( hl > 1e-5 ) { headingX /= hl; headingY /= hl; }
+        }
     }
     const perpX =  headingY;
     const perpY = -headingX;

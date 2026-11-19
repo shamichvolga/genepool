@@ -257,6 +257,7 @@ export function GenePool()
     let _nearbyIndices  = new Int32Array( MAX_SWIMBOTS );      // swimbots within search radius
     // preallocated scratch: Z-order keys and one diffusion scratch grid
     const _mortonCodes  = new Int32Array( MAX_SWIMBOTS );
+    const _foodMortonCodes = new Int32Array( MAX_FOODBITS );
     const _scentTmp     = new Float32Array( SS.SCENT_GRID_N * SS.SCENT_GRID_N );
     const _scentCellW   = POOL_WIDTH  / SS.SCENT_GRID_N;
     const _scentCellH   = POOL_HEIGHT / SS.SCENT_GRID_N;
@@ -2916,6 +2917,54 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	    }
 	}
 
+	// How common is each herbivore shape right now? Predators read these shares
+	// to form (or break) a search image: a morph that monopolises the pool is
+	// easier to find, a rare one is overlooked.
+	function updateMorphBucketShares(): void
+	{
+	    const share = _st.morphBucketShare;
+	    share.fill( 0 );
+	    let total = 0;
+	    for (let i = 0; i < _aliveSwimbotIndices.length; i++)
+	    {
+	        const s = _aliveSwimbotIndices[i];
+	        if ( _botPredator[s] > PREDATOR_LEVEL_THRESHOLD ) continue;
+	        const morph = _swimbots[s].getMorphologySummary();
+	        share[ SS.getMorphBucket( morph.numParts, morph.branchFraction > 0, morph.meanWidth ) ] ++;
+	        total ++;
+	    }
+	    if ( total > 0 ) { for (let b = 0; b < share.length; b++ ) share[b] /= total; }
+	}
+
+	// Same idea for the (much larger) food list: nearby plants and meat land
+	// next to each other in the grid build, which keeps its counting sort's
+	// memory access local. No allocation, and only every 16 steps.
+	function sortAliveFoodByMorton(): void
+	{
+	    const cols = SS.SCENT_GRID_N - 1;
+	    const list = _aliveFoodBitIndices, n = list.length;
+	    for (let i = 0; i < n; i++)
+	    {
+	        const f = list[i];
+	        const ix = Math.max( 0, Math.min( cols, Math.floor( _foodX[f] / POOL_WIDTH  * cols )));
+	        const iy = Math.max( 0, Math.min( cols, Math.floor( _foodY[f] / POOL_HEIGHT * cols )));
+	        _foodMortonCodes[i] = mortonBits( ix ) | ( mortonBits( iy ) << 1 );
+	    }
+	    for (let i = 1; i < n; i++)
+	    {
+	        const code = _foodMortonCodes[i], f = list[i];
+	        let j = i - 1;
+	        while ( j >= 0 && _foodMortonCodes[j] > code )
+	        {
+	            _foodMortonCodes[j + 1] = _foodMortonCodes[j];
+	            list[j + 1] = list[j];
+	            j --;
+	        }
+	        _foodMortonCodes[j + 1] = code;
+	        list[j + 1] = f;
+	    }
+	}
+
 	//------------------------------------------------------------------------
 	// stage 7: the step in phases. Deciding, moving and looking around touch
 	// only the shared arrays and run in several threads (_runner, see
@@ -2925,7 +2974,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	this.updateSwimbotsInPhases = function()
 	{
 	    if (( _clock & 1 ) === 0 ) { updateScentFields(); }
-	    if ( _clock % 8 === 0 ) { sortAliveByMorton(); }
+	    if ( _clock % 8 === 0 ) { sortAliveByMorton(); updateMorphBucketShares(); }
 	    const list = _aliveSwimbotIndices;
 	    const n    = list.length;
 	    const M    = _st.mind;
@@ -3137,6 +3186,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	    // rebuild the food grid from the living food bits (their position, type
 	    // and energy are already in the shared state: FoodBit.bindShared)
 	    _st.foodAlive.set( _st.liveFood );
+        if (( _clock & 15 ) === 0 ) { sortAliveFoodByMorton(); }
         _foodBitGrid.build( _aliveFoodBitIndices, _aliveFoodBitIndices.length, _foodX, _foodY );
 
         this.updateSwimbotsInPhases();

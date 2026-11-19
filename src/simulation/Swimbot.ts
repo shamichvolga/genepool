@@ -2286,6 +2286,8 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
         &&  ( chosenFoodBit().getAlive() ))
         {
             let energyFromFoodBit = chosenFoodBit().getEnergy();
+            const foodType = chosenFoodBit().getType();
+            const foodWood = ( foodType === 2 ) ? 0 : chosenFoodBit().getWood();
 
             if ( globalTweakers.numFoodTypes > 1 )
             {
@@ -2346,8 +2348,24 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
                 bitten = ( plant.getWood() >= WOOD_PER_FRUIT_TIER ) || ( plant.getEnergy() >= PLANT_SPROUT_ENERGY * 0.1 );
             }
 
+            // Trophic partitioning: body size decides which part of the plant
+            // a herbivore can actually use. Big guts handle wood, small ones
+            // are quick on the young sprouts instead.
+            if ( foodType !== 2 )
+            {
+                if ( foodWood >= WOOD_PER_FRUIT_TIER )
+                {
+                    if ( _phenotype.numParts >= 9 ) energyFromFoodBit *= 1.25;
+                    else if ( _phenotype.numParts <= 5 ) energyFromFoodBit *= 0.65;
+                }
+                else if (( foodWood < 1 ) && ( _phenotype.numParts <= 5 ))
+                {
+                    energyFromFoodBit *= 1.15;
+                }
+            }
+
             // (meat: only part of it is kept - the food pyramid)
-            if ( chosenFoodBit().getType() === 2 ) { energyFromFoodBit *= MEAT_ASSIMILATION; }
+            if ( foodType === 2 ) { energyFromFoodBit *= MEAT_ASSIMILATION; }
             // closed energy cycle: digestion losses return to the pool; a bonus
             // (a mature plant pays more than it stores) is funded by the pool
             energyFromFoodBit = settleEnergyTransfer( removedEnergy, energyFromFoodBit );
@@ -2414,6 +2432,13 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	    let gape = PREDATOR_GAPE_CURVE_ENABLED ? Math.min( ONE, Math.max( GAPE_SUCCESS_FLOOR, 1.5 - sizeRatio )) : ONE;
 	    // LIMB_SPINES_ENABLED: every limb tip beyond two is a spine in the throat
 	    if ( LIMB_SPINES_ENABLED ) { gape *= Math.max( LIMB_SPINE_FLOOR, ONE - LIMB_SPINE_EFFECT * Math.max( 0, chosenPrey().getNumLimbTips() - 2 )); }
+	    // Apostatic selection: an over-abundant shape is easy to spot, an
+	    // unusual one slips past the predator's search image.
+	    const preyMorph = chosenPrey().getMorphologySummary();
+	    const preyBucket = SS.getMorphBucket( preyMorph.numParts, preyMorph.branchFraction > 0, preyMorph.meanWidth );
+	    const preyShare = SS.sharedState().morphBucketShare[ preyBucket ];
+	    if ( preyShare < 0.08 ) gape *= 0.82;
+	    else if ( preyShare > 0.22 ) gape *= Math.min( 1.22, 1 + ( preyShare - 0.22 ) * 0.8 );
 	    // a broad, armour-like body is harder to get past the predator's gape
 	    const preyMeanWidth = chosenPrey().getPhenotypeMass() / Math.max( 1, chosenPrey().getBoundingRadius() );
 	    if ( preyMeanWidth > 4.2 ) { gape *= ( ONE - Math.min( 0.35, ( preyMeanWidth - 4.2 ) * 0.12 )); }

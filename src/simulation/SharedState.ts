@@ -138,6 +138,14 @@ export const BACKGROUND_SIZE    = 256;  // = Environment FIELD_SIZE
 export const SWIMBOT_GRID_CELL  = 200;
 export const FOOD_GRID_CELL     = 150;
 
+// 8 size buckets x branching, used for apostatic selection. meanWidth is
+// carried for future refinements; today a lobed body is simply "branched".
+export function getMorphBucket( numParts: number, hasBranches: boolean, meanWidth: number ): number
+{
+    void meanWidth;
+    return (( Math.min( 7, Math.max( 0, ( numParts - 3 ) >> 1 )) << 1 ) | ( hasBranches ? 1 : 0 ));
+}
+
 export class SharedState
 {
     readonly shared       : boolean;     // true = really in shared memory (threads possible)
@@ -219,6 +227,7 @@ export class SharedState
     readonly partJointMin     : Float32Array;
     readonly partJointMax     : Float32Array;
     readonly frontAppendages  : Uint8Array;    // number of raptorial front limbs (0..3)
+    readonly morphBucketShare : Float32Array;  // 16 morphospace shares among living herbivores
 
     readonly foodX        : Float64Array;
     readonly foodY        : Float64Array;
@@ -367,6 +376,7 @@ export class SharedState
         this.partJointMin     = new Float32Array( make( "partJointMin", partCount * 4 ));
         this.partJointMax     = new Float32Array( make( "partJointMax", partCount * 4 ));
         this.frontAppendages  = u8 ( "frontAppendages", n );
+        this.morphBucketShare = new Float32Array( make( "morphBucketShare", 16 * 4 ));
 
         this.foodX      = f64( "foodX", MAX_FOODBITS );
         this.foodY      = f64( "foodY", MAX_FOODBITS );

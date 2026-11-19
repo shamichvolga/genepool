@@ -372,6 +372,11 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
     let chosenFood = -1;
     let smallestDistanceSquared = Number.MAX_SAFE_INTEGER;
     let bestMeatScore = -Infinity;
+    let bestMeatBase = 0, bestMeatD = 0;   // only the chosen bait needs a Math.sqrt
+    const meatTravelWeight = st.preyTravelWeight[s];
+    const meatRewardWeight = st.preyValueWeight[s];
+    const meatBaitBias = st.preyBaitBias[s];
+    const meatReach = swimSpeed * Math.max( 1, PREY_SCAN_COOLDOWN );
     let baitFound = false;
     let baitDistance = 0, baitReward = 0;
     // Search far enough from the body center to include food touching the
@@ -421,13 +426,29 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
         {
             const room = Math.max( 0, st.mind[ s * MIND_STRIDE + M_MAX_ENERGY ] - st.energy[s] );
             const reward = Math.min( room, st.foodEnergy[f] ) / SWIMBOT_MAX_ENERGY;
-            const distanceCost = Math.sqrt( viewDistanceSquared ) / Math.max( 1, viewRadius );
-            const chaseCost = Math.min( 1, Math.sqrt( viewDistanceSquared ) / swimSpeed / Math.max( 1, PREY_SCAN_COOLDOWN ));
-            const score = preyTargetScore( reward, chaseCost, st.preyValueWeight[s],
-                                           st.preyTravelWeight[s], st.preyBaitBias[s], true );
-            if ( score > bestMeatScore && !obstructed( st, myMouthX, myMouthY, foodX[f], foodY[f] ))
+            const base = reward * meatRewardWeight;
+            // score = base - bias - travel * min(1, sqrt(d2)/reach).
+            // Compare candidates by squared distance; sqrt is needed only
+            // when a candidate actually becomes the best one.
+            let better = false;
+            if ( bestMeatScore === -Infinity ) better = true;
+            else if ( meatTravelWeight > 0 )
             {
+                const bestChase = Math.min( 1, bestMeatD / meatReach );
+                const threshold = bestChase + ( base - bestMeatBase ) / meatTravelWeight;
+                better = threshold > 1 || ( threshold > 0 && viewDistanceSquared < threshold * threshold * meatReach * meatReach );
+            }
+            else better = base > bestMeatBase;
+
+            if ( better && !obstructed( st, myMouthX, myMouthY, foodX[f], foodY[f] ))
+            {
+                const distance = Math.sqrt( viewDistanceSquared );
+                const distanceCost = distance / Math.max( 1, viewRadius );
+                const chaseCost = Math.min( 1, distance / meatReach );
+                const score = preyTargetScore( reward, chaseCost, meatRewardWeight, meatTravelWeight, meatBaitBias, true );
                 bestMeatScore = score;
+                bestMeatBase = base;
+                bestMeatD = distance;
                 baitFound = true;
                 chosenFood = f;
                 baitDistance = distanceCost;
