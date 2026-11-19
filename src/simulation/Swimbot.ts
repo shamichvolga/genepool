@@ -984,16 +984,18 @@ this.setParent = function( parent )
 
 		if ( _shared !== null && _slot >= 0 )
 		{
-			// CAVITY_JET: the first pair of segments that share a parent, cached once
+			// CAVITY_JET: the first pair of lateral branches that share a parent,
+			// cached once. Spine segments are excluded: bending the back must not
+			// create a false jet impulse.
 			let pair1 = -1, pair2 = -1, pairParent = -1;
 			const count = _phenotype.numParts;
 			for (let p = 1; p < count && ( pair1 < 0 ); p++)
 			{
 				const parent = _pParent[p];
-				if ( parent < 0 ) continue;
+				if ( parent < 0 || !_phenotype.parts[p].branch ) continue;
 				for (let q = p + 1; q < count; q++)
 				{
-					if ( _pParent[q] === parent ) { pair1 = p; pair2 = q; pairParent = parent; break; }
+					if ( _phenotype.parts[q].branch && _pParent[q] === parent ) { pair1 = p; pair2 = q; pairParent = parent; break; }
 				}
 			}
 			_shared.cavityP1[_slot]     = pair1;

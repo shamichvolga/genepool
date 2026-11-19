@@ -746,8 +746,11 @@ if ( testNoEel )
                 // apply reflection on amp & joint ROM
                 //-----------------------------------------------
                 phenotype.parts[ _partIndex ].amp *= reflect * _ampMult;
-                phenotype.parts[ _partIndex ].jointMin = _categoryValues[c].jointMin;
-                phenotype.parts[ _partIndex ].jointMax = _categoryValues[c].jointMax;
+                // the joint stop is relative to the branch's own attachment
+                // angle, otherwise steep side branches get clamped sideways
+                const baseAngle = phenotype.parts[ _partIndex ].angle;
+                phenotype.parts[ _partIndex ].jointMin = baseAngle + _categoryValues[c].jointMin;
+                phenotype.parts[ _partIndex ].jointMax = baseAngle + _categoryValues[c].jointMax;
 
                 //---------------------------------------------------
                 // set some other attributes

@@ -492,10 +492,11 @@ export function physicsPartA( s: number, st: SharedState ): void
                 {
                     const dist = Math.sqrt( d2 );
                     const overlap = rSum - dist;
-                    const push = Math.min( 0.22, overlap * 0.14 );
-                    velX += ( dx / dist ) * push;
-                    velY += ( dy / dist ) * push;
-                    energy -= push * 0.005;
+                    const sep = Math.min( 1.2, overlap * 0.25 );
+                    const sx = ( dx / dist ) * sep, sy = ( dy / dist ) * sep;
+                    posX += sx; posY += sy;
+                    velX += sx * 0.15; velY += sy * 0.15;
+                    energy -= sep * 0.005;
                     if ( energy < ZERO ) { energy = ZERO; }
                 }
             }
@@ -507,7 +508,8 @@ export function physicsPartA( s: number, st: SharedState ): void
     const profCollT0 = PROFILER_ENABLED ? profEnter( PROF_PHYS_COLLISIONS ) : 0;
     if ( BODY_COLLISIONS_ENABLED )
     {
-        const ra = Math.max( 3, Math.sqrt( Math.max( 1, bodyMass ) ) * 0.14 );
+        const ma = Math.max( 1, bodyMass );
+        const ra = Math.max( 3, Math.sqrt( ma ) * 0.14 );
         const nn = st.swimbotGrid.collect( posX, posY, ra + 26, _kernelGridBuf );
         for ( let ni = 0; ni < nn; ni++ )
         {
@@ -522,10 +524,13 @@ export function physicsPartA( s: number, st: SharedState ): void
             {
                 const dist = Math.sqrt( d2 );
                 const overlap = rSum - dist;
-                const push = Math.min( 0.22, overlap * 0.14 );
-                velX += ( dx / dist ) * push;
-                velY += ( dy / dist ) * push;
-                energy -= push * 0.004;
+                const mb = Math.max( 1, st.mass[o2] );
+                const share = mb / ( ma + mb );
+                const sep = Math.min( 1.0, overlap * 0.35 * share );
+                const sx = ( dx / dist ) * sep, sy = ( dy / dist ) * sep;
+                posX += sx; posY += sy;
+                velX += sx * 0.12; velY += sy * 0.12;
+                energy -= sep * 0.004;
                 if ( energy < ZERO ) { energy = ZERO; }
             }
         }

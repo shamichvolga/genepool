@@ -305,6 +305,13 @@ export function createGenePoolRenderer( ctx: any )
             }
         }
 
+        // a fixed draw order: Morton resorting of the work list must not make
+        // overlapping bodies swap their z-order from frame to frame
+        if ( _renderBatch.length > 1 )
+        {
+            _renderBatch.sort( ( a, b ) => a.swimbot.getIndex() - b.swimbot.getIndex() );
+        }
+
         // тела на видеокарте: данные рисования готовят все потоки разом (RenderData.ts),
         // потом они только копируются, по одному блоку на тело
         const blocks = useGraphicsCard && ( _levelOfDetail !== SWIMBOT_LEVEL_OF_DETAIL_DOT );
