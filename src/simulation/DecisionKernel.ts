@@ -332,8 +332,8 @@ function wanderFocus( st: SharedState, s: number ): void
     const searchState = st.mind[ s * SS.MIND_STRIDE + SS.M_STATE ];
     if (( searchState === BRAIN_STATE_LOOKING_FOR_FOOD ) || ( searchState === BRAIN_STATE_LOOKING_FOR_PREY ))
     {
-        gx += st.scentGradX[s] * 0.45;
-        gy += st.scentGradY[s] * 0.45;
+        gx += st.scentGradX[s] * 0.15;
+        gy += st.scentGradY[s] * 0.15;
     }
     B[ b + SS.B_GOAL_X ] = gx / length;
     B[ b + SS.B_GOAL_Y ] = gy / length;

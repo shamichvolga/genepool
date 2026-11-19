@@ -301,13 +301,14 @@ export function physicsPartA( s: number, st: SharedState ): void
     const profFluidT0 = PROFILER_ENABLED ? profEnter( PROF_PHYS_FLUID ) : 0;
     let accelerationX = ZERO, accelerationY = ZERO, torque = ZERO;
 
-    const normLength = sumLengths > ZERO ? Math.pow( sumLengths, 0.82 ) : ONE;
+    // Keep the thrust normalized by the whole body length: a higher power
+    // inflated both force and energy use several times over and killed the
+    // bots at startup. Only a gentle, bounded width bonus remains.
+    const normLength = Math.max( ONE, sumLengths );
     for (let p = 1; p < numParts; p++)
     {
         const i = o + p * PS;
-        // wide parts are the paddles: a broad tail moves more water than a
-        // thin worm segment of the same length
-        const widthFactor = Math.sqrt( Math.max( 0.25, st.partWidth[ k + p ] / 3.5 ));
+        const widthFactor = Math.sqrt( Math.max( 0.45, Math.min( 1.8, st.partWidth[ k + p ] / 3.5 )));
         const fractionOfWhole = ( length[ k + p ] * widthFactor ) / normLength;
 
         // a broader parent body shelters the segment behind it (teardrop
@@ -318,7 +319,7 @@ export function physicsPartA( s: number, st: SharedState ): void
             : 1.0;
         // branches on the outside of a turn push harder (differential rudder)
         const branchBias = angle[ k + p ] !== ZERO
-            ? Math.max( 0.55, Math.min( 1.55, ONE + ( angle[ k + p ] / 90 ) * directionDot * 0.65 ))
+            ? Math.max( 0.82, Math.min( 1.18, ONE + ( angle[ k + p ] / 90 ) * directionDot * 0.22 ))
             : ONE;
 
         // (the body was just shifted onto its center of mass, so the part
@@ -474,7 +475,7 @@ export function physicsPartA( s: number, st: SharedState ): void
                     {
                         const dist = Math.sqrt( d2 );
                         const overlap = rSum - dist;
-                        const push = Math.min( BODY_COLLISION_MAX_IMPULSE, overlap * BODY_COLLISION_PUSH * 1.8 );
+                        const push = Math.min( 0.35, overlap * BODY_COLLISION_PUSH * 0.75 );
                         velX += ( dx / dist ) * push;
                         velY += ( dy / dist ) * push;
                         energy -= push * 0.005;
@@ -506,7 +507,7 @@ export function physicsPartA( s: number, st: SharedState ): void
                     const dist = Math.sqrt( d2 );
                     const overlap = rSum - dist;
                     const mb = Math.max( 1, st.mass[o2] );
-                    const push = Math.min( BODY_COLLISION_MAX_IMPULSE, overlap * BODY_COLLISION_PUSH * 1.8 * ( mb / ( ma + mb ) ) * 2.0 );
+                    const push = Math.min( 0.35, overlap * BODY_COLLISION_PUSH * 0.75 * ( mb / ( ma + mb ) ) * 2.0 );
                     velX += ( dx / dist ) * push;
                     velY += ( dy / dist ) * push;
                     energy -= push * 0.004;
@@ -557,6 +558,10 @@ export function physicsPartA( s: number, st: SharedState ): void
         energy -= Math.abs( turn ) * RUDDER_COST_PER_DEGREE;
         if ( energy < ZERO ) { energy = ZERO; }
     }
+
+    // Viscous water resistance for rotation: linear velocity is damped by
+    // drag, spin was not, so it accumulated and jerked the head left/right.
+    spin *= 0.82;
 
     posX += velX;
     posY += velY;

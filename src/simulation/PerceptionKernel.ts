@@ -749,8 +749,16 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
     let gy = sign * ( field[ fidx + SCENT_GRID_N ] - field[ fidx - SCENT_GRID_N ] );
     const glen = Math.sqrt( gx * gx + gy * gy );
     if ( glen > 1e-5 ) { gx /= glen; gy /= glen; } else { gx = 0; gy = 0; }
-    st.scentGradX[s] = gx;
-    st.scentGradY[s] = gy;
+    if (( gx === 0 ) && ( gy === 0 ))
+    {
+        st.scentGradX[s] *= 0.75;
+        st.scentGradY[s] *= 0.75;
+    }
+    else
+    {
+        st.scentGradX[s] += 0.25 * ( gx - st.scentGradX[s] );
+        st.scentGradY[s] += 0.25 * ( gy - st.scentGradY[s] );
+    }
     }
     finally { if ( PROFILER_ENABLED ) { profExit( PROF_PERCEIVE, profT0 ); } }
 }
