@@ -327,23 +327,8 @@ function wanderFocus( st: SharedState, s: number ): void
         gy = -0.5 + botRandom( st, s );
         length = Math.sqrt( gx * gx + gy * gy );
     }
-    // refresh the random course offset once in eight steps; in between the
-    // already-normalized goal keeps its direction instead of jittering
-    const wander = BRAIN_WANDER_AMOUNT * 0.6;
-    if ((( B[ b + SS.B_AGE ] + st.mind[ s * SS.MIND_STRIDE + SS.M_INDEX ] ) & 7 ) === 0 )
-    {
-        gx += ( -wander * 0.5 + botRandom( st, s ) * wander );
-        gy += ( -wander * 0.5 + botRandom( st, s ) * wander );
-    }
-    // While searching for food or prey (no close target), drift along the
-    // smell gradient from the diffusion fields.
-    const searchState = st.mind[ s * SS.MIND_STRIDE + SS.M_STATE ];
-    if (( searchState === BRAIN_STATE_LOOKING_FOR_FOOD ) || ( searchState === BRAIN_STATE_LOOKING_FOR_PREY )
-    ||  ( searchState === BRAIN_STATE_LOOKING_FOR_MATE ))
-    {
-        gx += st.scentGradX[s] * 0.15;
-        gy += st.scentGradY[s] * 0.15;
-    }
+    gx += ( -BRAIN_WANDER_AMOUNT * 0.5 + botRandom( st, s ) * BRAIN_WANDER_AMOUNT );
+    gy += ( -BRAIN_WANDER_AMOUNT * 0.5 + botRandom( st, s ) * BRAIN_WANDER_AMOUNT );
     B[ b + SS.B_GOAL_X ] = gx / length;
     B[ b + SS.B_GOAL_Y ] = gy / length;
 }
@@ -779,14 +764,13 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
     //-------------------------------------------------
     const previousX = B[ b + SS.B_FOCUS_X ], previousY = B[ b + SS.B_FOCUS_Y ];
     const goalX = B[ b + SS.B_GOAL_X ], goalY = B[ b + SS.B_GOAL_Y ];
-    const shift = Math.min( 0.06, BRAIN_FOCUS_TARGET_SHIFT_STRENGTH );
-    let fx = previousX + goalX * shift;
-    let fy = previousY + goalY * shift;
+    let fx = previousX + goalX * BRAIN_FOCUS_TARGET_SHIFT_STRENGTH;
+    let fy = previousY + goalY * BRAIN_FOCUS_TARGET_SHIFT_STRENGTH;
     const ddx = fx - previousX, ddy = fy - previousY;
-    if ( ddx * ddx + ddy * ddy > shift * shift )
+    if ( ddx * ddx + ddy * ddy > BRAIN_FOCUS_TARGET_SHIFT_THRESHOLD * BRAIN_FOCUS_TARGET_SHIFT_THRESHOLD )
     {
-        fx = previousX + goalX * shift;
-        fy = previousY + goalY * shift;
+        fx = previousX + goalX * BRAIN_FOCUS_TARGET_SHIFT_THRESHOLD;
+        fy = previousY + goalY * BRAIN_FOCUS_TARGET_SHIFT_THRESHOLD;
     }
     B[ b + SS.B_FOCUS_X ] = fx;
     B[ b + SS.B_FOCUS_Y ] = fy;

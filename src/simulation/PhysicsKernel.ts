@@ -176,36 +176,9 @@ export function physicsPartA( s: number, st: SharedState ): void
     const perpY = -headingX;
     const directionDot = B[ b + B_FOCUS_X ] * perpX + B[ b + B_FOCUS_Y ] * perpY;
 
-    // Root position and angle. The bends are computed first: baseRel is just
-    // the static attachment angle, so the moment balance uses this step's
-    // stroke instead of the previous one's.
+    // root position and angle
     let momentAdjustment = ZERO;
-    for (let p = 2; p < numParts; p++)
-    {
-        const i = o + p * PS;
-        const ampModulator   = turnAmp  [ k + p ] * directionDot;
-        const phaseModulator = turnPhase[ k + p ] * directionDot * 0.15;
-        const radian = timer * frequency + ( phase[ k + p ] + phaseModulator );
-        const baseRel = angle[ k + p ];
-        let bend = ( amp[ k + p ] + ampModulator ) * fastSin( radian );
-
-        // C1 joint stop: a smooth asymptotic limit instead of a hard clamp
-        const totalRel = baseRel + bend;
-        const jMin = st.partJointMin[ k + p ] || JOINT_MIN_ANGLE;
-        const jMax = st.partJointMax[ k + p ] || JOINT_MAX_ANGLE;
-        if ( totalRel > jMax )
-        {
-            const over = totalRel - jMax;
-            bend = ( jMax - baseRel ) + ( 15 * over ) / ( 15 + over );
-        }
-        else if ( totalRel < jMin )
-        {
-            const under = jMin - totalRel;
-            bend = ( jMin - baseRel ) - ( 15 * under ) / ( 15 + under );
-        }
-        pd[ i + B_A ] = bend;
-        momentAdjustment += bend * moment[ k + p ];
-    }
+    for (let p = 2; p < numParts; p++) { momentAdjustment += pd[ o + p * PS + B_A ] * moment[ k + p ]; }
 
     pd[ o + ROOT_PART * PS + P_X ] = posX;
     pd[ o + ROOT_PART * PS + P_Y ] = posY;
@@ -222,31 +195,31 @@ export function physicsPartA( s: number, st: SharedState ): void
 
         pd[ i + C_A ] = pd[ j + C_A ] + angle[ k + p ];
 
-        if ( p > 1 ) // part 1 has nothing to bend off of
+        // Асимметричный суставной упор ("колени" / Joint ROM)
+        if ( p > 1 )
         {
-            // the bend for this step is already stored by the moment pass
-            const bend = pd[ i + B_A ];
-            pd[ i + C_A ] += bend;
-
-            // flexural rigidity: a wide plate resists a sharp bend, so a
-            // stiff armoured body and a narrow flexible tail each pay their way
-            const bendRad = bend * PI_OVER_180;
-            const widthNorm = st.partWidth[ k + p ] / 3.5;
-            energy -= 0.00018 * bendRad * bendRad * widthNorm * widthNorm * effort;
-            if ( energy < ZERO ) { energy = ZERO; }
+            const jMin = st.partJointMin[ k + p ] || JOINT_MIN_ANGLE;
+            const jMax = st.partJointMax[ k + p ] || JOINT_MAX_ANGLE;
+            const relativeAngle = pd[ i + C_A ] - pd[ j + C_A ];
+            if ( relativeAngle < jMin ) { pd[ i + C_A ] = pd[ j + C_A ] + jMin; }
+            if ( relativeAngle > jMax ) { pd[ i + C_A ] = pd[ j + C_A ] + jMax; }
         }
 
-        // one argument reduction, one shared r2 for both sine and cosine
-        let r = pd[ i + C_A ] * PI_OVER_180;
-        r -= Math.round( r * INV_PI2 ) * PI2;
-        const r2 = r * r;
-        const sinR = r * ( 0.99999995 - r2 * ( 0.16666657 - r2 * ( 0.00833301 - r2 * 0.00019807 )));
-        const cosR = 0.99999995 - r2 * ( 0.49999905 - r2 * ( 0.04166358 - r2 * 0.00138537 ));
+        if ( p > 1 ) // part 1 has nothing to bend off of
+        {
+            const ampModulator   = turnAmp  [ k + p ] * directionDot;
+            const phaseModulator = turnPhase[ k + p ] * directionDot;
+            const radian = timer * frequency + ( phase[ k + p ] + phaseModulator );
+            pd[ i + B_A ] = ( amp[ k + p ] + ampModulator ) * fastSin( radian );
+            pd[ i + C_A ] += pd[ i + B_A ];
+        }
+
+        const radian = pd[ i + C_A ] * PI_OVER_180;
         let partLength = length[ k + p ];
         if ( growth < ONE ) { partLength *= NEWBORN_SIZE_SCALE + ( ONE - NEWBORN_SIZE_SCALE ) * growth; }
 
-        const x = partLength * sinR;
-        const y = partLength * cosR;
+        const x = partLength * fastSin( radian );
+        const y = partLength * fastCos( radian );
         pd[ i + Q_X ] = pd[ i + M_X ];
         pd[ i + Q_Y ] = pd[ i + M_Y ];
         pd[ i + M_X ] = pd[ i + P_X ];
@@ -328,40 +301,24 @@ export function physicsPartA( s: number, st: SharedState ): void
     const profFluidT0 = PROFILER_ENABLED ? profEnter( PROF_PHYS_FLUID ) : 0;
     let accelerationX = ZERO, accelerationY = ZERO, torque = ZERO;
 
-    // Keep the thrust normalized by the whole body length: a higher power
-    // inflated both force and energy use several times over and killed the
-    // bots at startup. Only a gentle, bounded width bonus remains.
-    const normLength = Math.max( ONE, sumLengths );
     for (let p = 1; p < numParts; p++)
     {
         const i = o + p * PS;
-        const widthFactor = Math.sqrt( Math.max( 0.45, Math.min( 1.8, st.partWidth[ k + p ] / 3.5 )));
-        const fractionOfWhole = ( length[ k + p ] * widthFactor ) / normLength;
-
-        // a broader parent body shelters the segment behind it (teardrop
-        // shapes spend less energy than uniform worms)
-        const parent = parentOf[ k + p ];
-        const shield = parent > 0
-            ? Math.max( 0.55, Math.min( 1.0, st.partWidth[ k + p ] / Math.max( 0.5, st.partWidth[ k + parent ] )))
-            : 1.0;
-        // branches on the outside of a turn push harder (differential rudder)
-        const branchBias = angle[ k + p ] !== ZERO
-            ? Math.max( 0.82, Math.min( 1.18, ONE + ( angle[ k + p ] / 90 ) * directionDot * 0.22 ))
-            : ONE;
+        const fractionOfWhole = length[ k + p ] / sumLengths;
 
         // (the body was just shifted onto its center of mass, so the part
         //  velocities are computed here, after the shift)
         pd[ i + V_X ] = pd[ i + M_X ] - pd[ i + Q_X ];
         pd[ i + V_Y ] = pd[ i + M_Y ] - pd[ i + Q_Y ];
 
-        const strokeAmplitude = ( pd[ i + V_X ] * pd[ i + N_X ] + pd[ i + V_Y ] * pd[ i + N_Y ] ) * fractionOfWhole * branchBias;
+        const strokeAmplitude = ( pd[ i + V_X ] * pd[ i + N_X ] + pd[ i + V_Y ] * pd[ i + N_Y ] ) * fractionOfWhole;
         const strokeForceX = pd[ i + N_X ] * strokeAmplitude;
         const strokeForceY = pd[ i + N_Y ] * strokeAmplitude;
 
         if ( motion.enabled )
-            energy -= Math.abs( strokeAmplitude ) * ENERGY_USED_UP_SWIMMING * motion.strokeCost * shield;
+            energy -= Math.abs( strokeAmplitude ) * ENERGY_USED_UP_SWIMMING * motion.strokeCost;
         else
-            energy -= Math.abs( strokeAmplitude ) * ENERGY_USED_UP_SWIMMING * shield;
+            energy -= Math.abs( strokeAmplitude ) * ENERGY_USED_UP_SWIMMING;
         if ( energy < ZERO ) { energy = ZERO; }
 
         const partVectorFromCenterX = pd[ i + M_X ] - posX;
@@ -414,7 +371,7 @@ export function physicsPartA( s: number, st: SharedState ): void
                     if ( bl > 1e-4 )
                     {
                         bx /= bl; by /= bl;
-                        const impulse = Math.min( 0.16, 0.25 * CAVITY_JET_C * ( dS * dS ) / gap ) * ( motion.enabled ? motion.acceleration : 1 );
+                        const impulse = Math.min( CAVITY_JET_MAX, CAVITY_JET_C * ( dS * dS ) / gap ) * ( motion.enabled ? motion.acceleration : 1 );
                         accelerationX -= bx * impulse;
                         accelerationY -= by * impulse;
                         energy = Math.max( ZERO, energy - impulse * 0.008 );
@@ -469,76 +426,81 @@ export function physicsPartA( s: number, st: SharedState ): void
         energy -= drag.energyCost;
         if ( energy < ZERO ) { energy = ZERO; }
     }
-    // Tree obstacles and body collisions: a soft push on every step
-    // Tree obstacles: the compact list of adult trees (no grid walk)
-    const profTreesT0 = PROFILER_ENABLED ? profEnter( PROF_PHYS_TREES ) : 0;
-    if ( TREE_OBSTACLES_ENABLED )
+    // Tree obstacles and body collisions: every other step (each body skips
+    // half the steps, so the grid is walked half as often)
+    if ((( st.params[ PARAM_STEP ] + s ) & 1 ) === 0 )
     {
-        const treeCount = st.params[ PARAM_MATURE_TREE_COUNT ];
-        const trees = st.matureTrees;
-        const treeReach = sumLengths * 0.5 + TREE_OBSTACLE_RADIUS_BASE + TREE_OBSTACLE_RADIUS_SCALE + 8;
-        const treeReachSquared = treeReach * treeReach;
-        for ( let ti = 0; ti < treeCount; ti++ )
+        // Tree obstacles: the compact list of adult trees (no grid walk)
+        const profTreesT0 = PROFILER_ENABLED ? profEnter( PROF_PHYS_TREES ) : 0;
+        if ( TREE_OBSTACLES_ENABLED )
         {
-            const tf = trees[ti];
-            if ( st.liveFood[tf] !== 1 || st.foodType[tf] === 2 || st.foodWood[tf] < WOOD_PER_FRUIT_TIER ) continue;
-            const tx = st.foodX[tf], ty = st.foodY[tf];
-            const bdx0 = posX - tx, bdy0 = posY - ty;
-            if ( bdx0 * bdx0 + bdy0 * bdy0 > treeReachSquared ) continue;
-            const tr = TREE_OBSTACLE_RADIUS_BASE + TREE_OBSTACLE_RADIUS_SCALE * Math.min( 1, st.foodWood[tf] / PLANT_TREE_ENERGY );
-            const maxBodyR = sumLengths * 0.6 + tr + 8;
-            const bdx = posX - tx, bdy = posY - ty;
-            if ( bdx * bdx + bdy * bdy > maxBodyR * maxBodyR ) continue;
-            for ( let p = 0; p < numParts; p += 2 )
+            const treeCount = st.params[ PARAM_MATURE_TREE_COUNT ];
+            const trees = st.matureTrees;
+            const treeReach = sumLengths * 0.5 + TREE_OBSTACLE_RADIUS_BASE + TREE_OBSTACLE_RADIUS_SCALE + 8;
+            const treeReachSquared = treeReach * treeReach;
+            for ( let ti = 0; ti < treeCount; ti++ )
             {
-                const i = o + p * PS;
-                const dx = pd[ i + M_X ] - tx, dy = pd[ i + M_Y ] - ty;
-                const rSum = tr + st.partWidth[ k + p ] * 0.5;
+                const tf = trees[ti];
+                if ( st.liveFood[tf] !== 1 || st.foodType[tf] === 2 || st.foodWood[tf] < WOOD_PER_FRUIT_TIER ) continue;
+                const tx = st.foodX[tf], ty = st.foodY[tf];
+                const bdx0 = posX - tx, bdy0 = posY - ty;
+                if ( bdx0 * bdx0 + bdy0 * bdy0 > treeReachSquared ) continue;
+                const tr = TREE_OBSTACLE_RADIUS_BASE + TREE_OBSTACLE_RADIUS_SCALE * Math.min( 1, st.foodWood[tf] / PLANT_TREE_ENERGY );
+                const maxBodyR = sumLengths * 0.6 + tr + 8;
+                const bdx = posX - tx, bdy = posY - ty;
+                if ( bdx * bdx + bdy * bdy > maxBodyR * maxBodyR ) continue;
+                for ( let p = 0; p < numParts; p += 2 )
+                {
+                    const i = o + p * PS;
+                    const dx = pd[ i + M_X ] - tx, dy = pd[ i + M_Y ] - ty;
+                    const rSum = tr + st.partWidth[ k + p ] * 0.5;
+                    const d2 = dx * dx + dy * dy;
+                    if ( d2 > 1e-6 && d2 < rSum * rSum )
+                    {
+                        const dist = Math.sqrt( d2 );
+                        const overlap = rSum - dist;
+                        const push = Math.min( BODY_COLLISION_MAX_IMPULSE, overlap * BODY_COLLISION_PUSH * 1.8 );
+                        velX += ( dx / dist ) * push;
+                        velY += ( dy / dist ) * push;
+                        energy -= push * 0.005;
+                        if ( energy < ZERO ) { energy = ZERO; }
+                    }
+                }
+            }
+        }
+        if ( PROFILER_ENABLED ) { profExit( PROF_PHYS_TREES, profTreesT0 ); }
+
+        // Body collisions: O(N) потокобезопасное отталкивание через swimbotGrid (пишем только в себя)
+        const profCollT0 = PROFILER_ENABLED ? profEnter( PROF_PHYS_COLLISIONS ) : 0;
+        if ( BODY_COLLISIONS_ENABLED )
+        {
+            const ra = Math.max( 3, Math.sqrt( Math.max( 1, bodyMass ) ) * 0.14 );
+            const nn = st.swimbotGrid.collect( posX, posY, ra + 26, _kernelGridBuf );
+            const ma = Math.max( 1, bodyMass );
+            for ( let ni = 0; ni < nn; ni++ )
+            {
+                const o2 = _kernelGridBuf[ni];
+                if ( o2 === s || st.liveSwimbot[o2] !== 1 ) continue;
+                const dx = posX - st.botX[o2];
+                const dy = posY - st.botY[o2];
+                const rb = Math.max( 3, Math.sqrt( Math.max( 1, st.mass[o2] ) ) * 0.14 );
+                const rSum = ra + rb;
                 const d2 = dx * dx + dy * dy;
                 if ( d2 > 1e-6 && d2 < rSum * rSum )
                 {
                     const dist = Math.sqrt( d2 );
                     const overlap = rSum - dist;
-                    const force = Math.min( 0.08, overlap * 0.04 );
-                    velX += ( dx / dist ) * force;
-                    velY += ( dy / dist ) * force;
-                    energy -= force * 0.005;
+                    const mb = Math.max( 1, st.mass[o2] );
+                    const push = Math.min( BODY_COLLISION_MAX_IMPULSE, overlap * BODY_COLLISION_PUSH * 1.8 * ( mb / ( ma + mb ) ) * 2.0 );
+                    velX += ( dx / dist ) * push;
+                    velY += ( dy / dist ) * push;
+                    energy -= push * 0.004;
                     if ( energy < ZERO ) { energy = ZERO; }
                 }
             }
         }
+        if ( PROFILER_ENABLED ) { profExit( PROF_PHYS_COLLISIONS, profCollT0 ); }
     }
-    if ( PROFILER_ENABLED ) { profExit( PROF_PHYS_TREES, profTreesT0 ); }
-
-    // Body collisions: O(N) потокобезопасное отталкивание через swimbotGrid (пишем только в себя)
-    const profCollT0 = PROFILER_ENABLED ? profEnter( PROF_PHYS_COLLISIONS ) : 0;
-    if ( BODY_COLLISIONS_ENABLED )
-    {
-        const ma = Math.max( 1, bodyMass );
-        const ra = Math.max( 3, Math.sqrt( ma ) * 0.14 );
-        const nn = st.swimbotGrid.collect( posX, posY, ra + 26, _kernelGridBuf );
-        for ( let ni = 0; ni < nn; ni++ )
-        {
-            const o2 = _kernelGridBuf[ni];
-            if ( o2 === s || st.liveSwimbot[o2] !== 1 ) continue;
-            const dx = posX - st.botX[o2];
-            const dy = posY - st.botY[o2];
-            const rb = Math.max( 3, Math.sqrt( Math.max( 1, st.mass[o2] ) ) * 0.14 );
-            const rSum = ra + rb;
-            const d2 = dx * dx + dy * dy;
-            if ( d2 > 1e-6 && d2 < rSum * rSum )
-            {
-                const dist = Math.sqrt( d2 );
-                const overlap = rSum - dist;
-                const force = Math.min( 0.08, overlap * 0.04 );
-                velX += ( dx / dist ) * force;
-                velY += ( dy / dist ) * force;
-                energy -= force * 0.004;
-                if ( energy < ZERO ) { energy = ZERO; }
-            }
-        }
-    }
-    if ( PROFILER_ENABLED ) { profExit( PROF_PHYS_COLLISIONS, profCollT0 ); }
 
     // Wake grid: мягкое увлечение потоком воды (без саморазгона)
     if ( WAKE_GRID_ENABLED )
@@ -554,8 +516,8 @@ export function physicsPartA( s: number, st: SharedState ): void
             const sc = WAKE_MAX_SPEED / Math.sqrt( wm2 );
             wx *= sc; wy *= sc;
         }
-        velX += ( wx - velX ) * 0.025;
-        velY += ( wy - velY ) * 0.025;
+        velX += ( wx - velX ) * 0.06;
+        velY += ( wy - velY ) * 0.06;
     }
 
     // the remembered swimming direction follows the velocity slowly
@@ -580,10 +542,6 @@ export function physicsPartA( s: number, st: SharedState ): void
         energy -= Math.abs( turn ) * RUDDER_COST_PER_DEGREE;
         if ( energy < ZERO ) { energy = ZERO; }
     }
-
-    // Viscous water resistance for rotation: linear velocity is damped by
-    // drag, spin was not, so it accumulated and jerked the head left/right.
-    spin *= 0.82;
 
     posX += velX;
     posY += velY;
@@ -627,10 +585,7 @@ export function physicsPartA( s: number, st: SharedState ): void
         B[ b + B_LAST_ENERGY ] = energy;
     }
 
-    // a still, gliding ambusher lives more cheaply than an active swimmer
-    let basal = B[ b + B_BASAL ];
-    if (( glide > 0.2 ) && ( effort < 0.75 )) { basal *= ( ONE - 0.5 * glide ); }
-    energy -= CONTINUAL_ENERGY_DRAIN + basal;
+    energy -= CONTINUAL_ENERGY_DRAIN + B[ b + B_BASAL ];
 
     B[ b + B_GROWTH      ] = growth;
     B[ b + B_TIMER_DELTA ] = timerDelta;

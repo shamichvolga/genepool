@@ -283,7 +283,7 @@ let testNoEel = true;
         const rawGlide = genotype.getGeneValue( GLIDE_FACTOR_GENE );
         const rawJoint = genotype.getGeneValue( JOINT_LIMIT_GENE );
         const freqMult  = ( rawFreq === 0 || rawFreq === 128 ) ? 1.0 : Math.pow( 2.0, (( rawFreq - 128 ) / 127 ) * 0.9 );
-        const ampMult   = ( rawAmp  === 0 || rawAmp  === 128 ) ? 1.0 : Math.max( 0.75, Math.min( 1.25, Math.pow( 1.25, ( rawAmp - 128 ) / 127 )));
+        const ampMult   = ( rawAmp  === 0 || rawAmp  === 128 ) ? 1.0 : Math.pow( 1.6, ( rawAmp - 128 ) / 127 );
         _ampMult = ampMult;
         const glideVal  = ( rawGlide === 0 || rawGlide <= 128 ) ? 0.0 : (( rawGlide - 128 ) / 127 ) * 0.6;
         const jointBias = ( rawJoint === 0 || rawJoint === 128 ) ? 0.0 : (( rawJoint - 128 ) / 127 ) * 55.0;
@@ -419,7 +419,7 @@ let testNoEel = true;
         //---------------------------------
         // set the frequency...
         //---------------------------------
-        phenotype.frequency = Math.max( 0.015, Math.min( 0.18, _frequency * freqMult ));
+        phenotype.frequency = Math.max( 0.015, Math.min( 0.35, _frequency * freqMult ));
         
         // ВРЕМЕННО: хищники — чёрные, чтобы их было видно
         if (phenotype.predatorLevel > PREDATOR_LEVEL_THRESHOLD) {
@@ -503,22 +503,12 @@ testNoEel = false;
                         for (let b=0; b<_categoryValues[c].branchNumber; b++)
                         {
                             reflect = ONE;
-                            const reflectMode = _categoryValues[c].branchReflect;
-                            if ( reflectMode >= 2 )
-                            {
-                                // mirror the two halves of the fan instead of
-                                // alternating one branch at a time
-                                reflect = ( b < _categoryValues[c].branchNumber * 0.5 ) ? -ONE : ONE;
-                            }
-                            else if (( reflectMode > 0 ) && ( b % reflectMode === 0 ))
+                            if ( b % _categoryValues[c].branchReflect === 0 )
                             {
                                 reflect = -ONE;
                             }
 
                             let f = -ONE + ( b / ( _categoryValues[c].branchNumber - 1 ) ) * 2;
-                            // an odd fan has a central branch; tilt it a little
-                            // so it does not grow along the spine
-                            if (( _categoryValues[c].branchNumber % 2 === 1 ) && ( Math.abs( f ) < 0.05 )) { f = 0.35; }
 
                             this.generateBodySequence( phenotype, p, _categoryValues[c].branchAngle * f, c, reflect, _branchDepth[p] + 1 );
                         }
@@ -746,11 +736,8 @@ if ( testNoEel )
                 // apply reflection on amp & joint ROM
                 //-----------------------------------------------
                 phenotype.parts[ _partIndex ].amp *= reflect * _ampMult;
-                // the joint stop is relative to the branch's own attachment
-                // angle, otherwise steep side branches get clamped sideways
-                const baseAngle = phenotype.parts[ _partIndex ].angle;
-                phenotype.parts[ _partIndex ].jointMin = baseAngle + _categoryValues[c].jointMin;
-                phenotype.parts[ _partIndex ].jointMax = baseAngle + _categoryValues[c].jointMax;
+                phenotype.parts[ _partIndex ].jointMin = _categoryValues[c].jointMin;
+                phenotype.parts[ _partIndex ].jointMax = _categoryValues[c].jointMax;
 
                 //---------------------------------------------------
                 // set some other attributes

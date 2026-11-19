@@ -530,22 +530,22 @@ export const PLANT_REGROW_DELAY             = 1500;
 //------------------------------------------------------------------------------
 // Complex package (physics, ecology, morphology)
 //------------------------------------------------------------------------------
-export const BODY_COLLISIONS_ENABLED       = true;
+export const BODY_COLLISIONS_ENABLED       = false;
 export const BODY_COLLISION_PUSH            = 0.25;
 export const BODY_COLLISION_MAX_IMPULSE     = 0.45;
-export const TREE_OBSTACLES_ENABLED         = true;
+export const TREE_OBSTACLES_ENABLED         = false;
 export const TREE_OBSTACLE_RADIUS_BASE      = 4;
 export const TREE_OBSTACLE_RADIUS_SCALE     = 8;
-export const CAVITY_JET_ENABLED             = true;
+export const CAVITY_JET_ENABLED             = false;
 export const CAVITY_JET_C                  = 0.035;
 export const CAVITY_JET_MAX                 = 1.8;
 export const CAVITY_SUCTION_RADIUS_SCALE    = 1.8;
-export const WAKE_GRID_ENABLED              = true;
+export const WAKE_GRID_ENABLED              = false;
 export const WAKE_GRID_SIZE                 = 64;
 export const WAKE_DAMPING                   = 0.90;
 export const WAKE_DIFFUSION                = 0.02;
 export const WAKE_MAX_SPEED                = 1.2;
 export const WAKE_IMPULSE_SHARE             = 0.15;
-export const QUADRATIC_WATER_ENABLED        = true;
+export const QUADRATIC_WATER_ENABLED        = false;
 export const JOINT_MIN_ANGLE                = -75;
 export const JOINT_MAX_ANGLE                = 75;

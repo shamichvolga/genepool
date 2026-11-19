@@ -360,12 +360,8 @@ var    flopperYV = 0;
             perpStartY += _phenotype.parts[ parentIndex ].perpendicular.y;
 
             let length = Math.sqrt( perpStartX * perpStartX + perpStartY * perpStartY );
-            if ( length > 0.35 ) { perpStartX /= length; perpStartY /= length; }
-            else
-            {
-                perpStartX = _phenotype.parts[p].perpendicular.x;
-                perpStartY = _phenotype.parts[p].perpendicular.y;
-            }
+            perpStartX /= length;
+            perpStartY /= length;
         }
 
 
@@ -375,12 +371,8 @@ var    flopperYV = 0;
             perpEndY += _phenotype.parts[ _phenotype.parts[p].child ].perpendicular.y;
 
             let length = Math.sqrt( perpEndX * perpEndX + perpEndY * perpEndY );
-            if ( length > 0.35 ) { perpEndX /= length; perpEndY /= length; }
-            else
-            {
-                perpEndX = _phenotype.parts[p].perpendicular.x;
-                perpEndY = _phenotype.parts[p].perpendicular.y;
-            }
+            perpEndX /= length;
+            perpEndY /= length;
         }
 
         //--------------------------------------
