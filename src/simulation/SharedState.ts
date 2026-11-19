@@ -120,9 +120,9 @@ export const NUM_PARAMS         = 122;
 // makes the triangle-inequality visibility test valid anywhere in a cell.
 export const SDF_SIZE = 128;
 
-// 128x128 diffusion fields: plant energy, herbivore biomass, predator traces.
-// GenePool fills them once a step; perception reads an O(1) gradient from them.
-export const SCENT_GRID_N = 128;
+// 64x64 diffusion fields: plant energy, herbivore biomass, predator traces.
+// GenePool fills them every other step; perception reads an O(1) gradient.
+export const SCENT_GRID_N = 64;
 
 export * from "./MindLayout";
 import { MAX_THREADS, MIND_STRIDE, NUM_COUNTERS } from "./MindLayout";

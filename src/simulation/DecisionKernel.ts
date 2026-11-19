@@ -327,8 +327,9 @@ function wanderFocus( st: SharedState, s: number ): void
         gy = -0.5 + botRandom( st, s );
         length = Math.sqrt( gx * gx + gy * gy );
     }
-    gx += ( -BRAIN_WANDER_AMOUNT * 0.5 + botRandom( st, s ) * BRAIN_WANDER_AMOUNT );
-    gy += ( -BRAIN_WANDER_AMOUNT * 0.5 + botRandom( st, s ) * BRAIN_WANDER_AMOUNT );
+    const wander = BRAIN_WANDER_AMOUNT * 0.5;
+    gx += ( -wander * 0.5 + botRandom( st, s ) * wander );
+    gy += ( -wander * 0.5 + botRandom( st, s ) * wander );
     // While searching for food or prey (no close target), drift along the
     // smell gradient from the diffusion fields.
     const searchState = st.mind[ s * SS.MIND_STRIDE + SS.M_STATE ];
@@ -773,13 +774,15 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
     //-------------------------------------------------
     const previousX = B[ b + SS.B_FOCUS_X ], previousY = B[ b + SS.B_FOCUS_Y ];
     const goalX = B[ b + SS.B_GOAL_X ], goalY = B[ b + SS.B_GOAL_Y ];
-    let fx = previousX + goalX * BRAIN_FOCUS_TARGET_SHIFT_STRENGTH;
-    let fy = previousY + goalY * BRAIN_FOCUS_TARGET_SHIFT_STRENGTH;
+    const maxShift = Math.min( 0.12, BRAIN_FOCUS_TARGET_SHIFT_THRESHOLD );
+    const shiftStrength = Math.min( 0.12, BRAIN_FOCUS_TARGET_SHIFT_STRENGTH );
+    let fx = previousX + goalX * shiftStrength;
+    let fy = previousY + goalY * shiftStrength;
     const ddx = fx - previousX, ddy = fy - previousY;
-    if ( ddx * ddx + ddy * ddy > BRAIN_FOCUS_TARGET_SHIFT_THRESHOLD * BRAIN_FOCUS_TARGET_SHIFT_THRESHOLD )
+    if ( ddx * ddx + ddy * ddy > maxShift * maxShift )
     {
-        fx = previousX + goalX * BRAIN_FOCUS_TARGET_SHIFT_THRESHOLD;
-        fy = previousY + goalY * BRAIN_FOCUS_TARGET_SHIFT_THRESHOLD;
+        fx = previousX + goalX * maxShift;
+        fy = previousY + goalY * maxShift;
     }
     B[ b + SS.B_FOCUS_X ] = fx;
     B[ b + SS.B_FOCUS_Y ] = fy;

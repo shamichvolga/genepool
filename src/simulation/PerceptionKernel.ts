@@ -732,10 +732,10 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
     st.seenMate[s] = mate;
 
     //------------------------------------------------------------------
-    // Bilinear smell gradient of the 128x128 fields: continuous across
-    // cell borders. Food for a hungry herbivore, prey for a hunter, the
-    // density of its own trophic level while looking for a mate, away
-    // from danger (negative predator gradient) while fleeing.
+    // Fast central difference on the 64x64 fields: four neighbour reads,
+    // then the same exponential smoothing as before. Food for a hungry
+    // herbivore, prey for a hunter, the density of its own trophic level
+    // while looking for a mate, away from danger while fleeing.
     //------------------------------------------------------------------
     const stateNow = st.brainState[s];
     let field: Float32Array;
@@ -744,17 +744,11 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
     else if ( stateNow === BRAIN_STATE_LOOKING_FOR_MATE ) { field = iAmPredator ? st.predField : st.preyField; }
     else if ( iAmPredator )                          { field = st.preyField; }
     else                                             { field = st.foodField; }
-    const gxPos = ( myX - POOL_LEFT ) / SCENT_CELL_W - 0.5;
-    const gyPos = ( myY - POOL_TOP  ) / SCENT_CELL_H - 0.5;
-    const ix0 = Math.max( 0, Math.min( SCENT_GRID_N - 2, Math.floor( gxPos )));
-    const iy0 = Math.max( 0, Math.min( SCENT_GRID_N - 2, Math.floor( gyPos )));
-    const tx = Math.max( 0, Math.min( 1, gxPos - ix0 ));
-    const ty = Math.max( 0, Math.min( 1, gyPos - iy0 ));
-    const row0 = iy0 * SCENT_GRID_N, row1 = row0 + SCENT_GRID_N;
-    const F00 = field[ row0 + ix0 ], F10 = field[ row0 + ix0 + 1 ];
-    const F01 = field[ row1 + ix0 ], F11 = field[ row1 + ix0 + 1 ];
-    let gx = sign * (( 1 - ty ) * ( F10 - F00 ) + ty * ( F11 - F01 ));
-    let gy = sign * (( 1 - tx ) * ( F01 - F00 ) + tx * ( F11 - F10 ));
+    const ix = Math.max( 1, Math.min( SCENT_GRID_N - 2, Math.floor(( myX - POOL_LEFT ) / SCENT_CELL_W )));
+    const iy = Math.max( 1, Math.min( SCENT_GRID_N - 2, Math.floor(( myY - POOL_TOP  ) / SCENT_CELL_H )));
+    const fidx = iy * SCENT_GRID_N + ix;
+    let gx = sign * ( field[ fidx + 1 ] - field[ fidx - 1 ] );
+    let gy = sign * ( field[ fidx + SCENT_GRID_N ] - field[ fidx - SCENT_GRID_N ] );
     const glen = Math.sqrt( gx * gx + gy * gy );
     if ( glen > 1e-5 ) { gx /= glen; gy /= glen; } else { gx = 0; gy = 0; }
     if (( gx === 0 ) && ( gy === 0 ))

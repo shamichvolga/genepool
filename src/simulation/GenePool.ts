@@ -2924,7 +2924,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	//------------------------------------------------------------------------
 	this.updateSwimbotsInPhases = function()
 	{
-	    updateScentFields();
+	    if (( _clock & 1 ) === 0 ) { updateScentFields(); }
 	    if ( _clock % 8 === 0 ) { sortAliveByMorton(); }
 	    const list = _aliveSwimbotIndices;
 	    const n    = list.length;

@@ -198,22 +198,32 @@ export function physicsPartA( s: number, st: SharedState ): void
         if ( p > 1 ) // part 1 has nothing to bend off of
         {
             const ampModulator   = turnAmp  [ k + p ] * directionDot;
-            const phaseModulator = turnPhase[ k + p ] * directionDot;
+            const phaseModulator = turnPhase[ k + p ] * directionDot * 0.5;
             const radian = timer * frequency + ( phase[ k + p ] + phaseModulator );
-            pd[ i + B_A ] = ( amp[ k + p ] + ampModulator ) * fastSin( radian );
-            pd[ i + C_A ] += pd[ i + B_A ];
+            const baseRel = pd[ i + C_A ] - pd[ j + C_A ];
+            let bend = ( amp[ k + p ] + ampModulator ) * fastSin( radian );
 
-            // Асимметричный суставной упор ("колени" / Joint ROM):
-            // clamp AFTER the bend so the spline never sees > 170 degrees
+            // C1 joint stop: a smooth asymptotic limit instead of a hard
+            // clamp, so the bend never freezes at the peak of the stroke
+            const totalRel = baseRel + bend;
             const jMin = st.partJointMin[ k + p ] || JOINT_MIN_ANGLE;
             const jMax = st.partJointMax[ k + p ] || JOINT_MAX_ANGLE;
-            const relativeAngle = pd[ i + C_A ] - pd[ j + C_A ];
-            if ( relativeAngle < jMin ) { pd[ i + C_A ] = pd[ j + C_A ] + jMin; }
-            if ( relativeAngle > jMax ) { pd[ i + C_A ] = pd[ j + C_A ] + jMax; }
+            if ( totalRel > jMax )
+            {
+                const over = totalRel - jMax;
+                bend = ( jMax - baseRel ) + ( 15 * over ) / ( 15 + over );
+            }
+            else if ( totalRel < jMin )
+            {
+                const under = jMin - totalRel;
+                bend = ( jMin - baseRel ) - ( 15 * under ) / ( 15 + under );
+            }
+            pd[ i + B_A ] = bend;
+            pd[ i + C_A ] += bend;
 
             // flexural rigidity: a wide plate resists a sharp bend, so a
             // stiff armoured body and a narrow flexible tail each pay their way
-            const bendRad = relativeAngle * PI_OVER_180;
+            const bendRad = bend * PI_OVER_180;
             const widthNorm = st.partWidth[ k + p ] / 3.5;
             energy -= 0.00018 * bendRad * bendRad * widthNorm * widthNorm * effort;
             if ( energy < ZERO ) { energy = ZERO; }
@@ -536,8 +546,8 @@ export function physicsPartA( s: number, st: SharedState ): void
             const sc = WAKE_MAX_SPEED / Math.sqrt( wm2 );
             wx *= sc; wy *= sc;
         }
-        velX += ( wx - velX ) * 0.06;
-        velY += ( wy - velY ) * 0.06;
+        velX += ( wx - velX ) * 0.025;
+        velY += ( wy - velY ) * 0.025;
     }
 
     // the remembered swimming direction follows the velocity slowly
