@@ -21,12 +21,13 @@ import { ATTACK_SUCCESS_CHANCE, ENVIRONMENT_ATTACK_SUCCESS_CHANCE, PREDATOR_LEVE
 import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
 import { ATTRACTION_SIMILAR_COLOR, STARVING, SWIMBOT_MOUTH_LENGTH, SWIMBOT_VIEW_RADIUS } from "./SwimbotTypes";
 import { FOOD_BIT_GRAB_RADIUS } from "./FoodBit";
+import { PROFILER_ENABLED, profEnter, profExit, PROF_PERCEIVE, PROF_PERC_SWIMBOTS, PROF_PERC_FOOD, PROF_PERC_OBSTRUCTED } from "./Profiler";
 import { PREDATOR_DEFERENCE_ENABLED, KIN_NOT_EATEN_ENABLED, OLD_AGE_DURATION, WEAK_PREY_ENABLED, WEAK_STARVING_SHARE, JUVENILE_PREDATION_ENABLED, CROWD_AWARE_FOOD_CHOICE_ENABLED, FOOD_TARGET_PERSISTENCE_ENABLED, FOOD_SWITCH_RATIO_MIN, FOOD_KEEP_RADIUS_SCALE, SIZE_ASSORTATIVE_MATING_ENABLED } from "./Parameters";
 import { M_CURRENT_W, M_DISEASE, M_WEAK_PREF, MIND_STRIDE, M_VIEW_RADIUS, M_GRAB_RADIUS, M_DEFERENCE, M_FOOD, M_PERSIST, M_MATURE_AGE, M_SIZE_PICKY, M_MAX_ENERGY } from "./MindLayout";
 import { preyTargetScore } from "./EcologyGenes";
 import {
     BACKGROUND_SIZE, PARAM_MAX_LIFESPAN, B_NUM_PARTS, B_GROWTH, B_VEL_X, B_VEL_Y, BOT_STRIDE, MAX_SEEN, PARAM_ENV_ACTIVE, PARAM_STEP, PARAM_CURRENT, PARAM_ENV_FIELDS, PARAM_FOOD_TYPES,
-    PARAM_WALL_COUNT, PARAM_WALL_BASE, SharedState
+    PARAM_WALL_COUNT, PARAM_WALL_BASE, PARAM_WALL_MIN_X, PARAM_WALL_MAX_X, PARAM_WALL_MIN_Y, PARAM_WALL_MAX_Y, SharedState
 } from "./SharedState";
 
 export const STARVING_FOOD_CHOICE = 15;   // below this energy a swimbot eats anything
@@ -148,8 +149,18 @@ function selectNearestCandidates( count: number, limit: number, sc: PerceptionSc
 // is the line from (a0x, a0y) to (a1x, a1y) blocked by any of the walls?
 function obstructed( st: SharedState, a0x: number, a0y: number, a1x: number, a1y: number ): boolean
 {
+    const profT0 = PROFILER_ENABLED ? profEnter( PROF_PERC_OBSTRUCTED ) : 0;
+    try
+    {
     const P = st.params;
     const count = P[ PARAM_WALL_COUNT ];
+    if ( count <= 0 ) return false;
+
+    // a sight line entirely on one side of the walls' bounding box is free
+    if ( ( a0x < P[ PARAM_WALL_MIN_X ] && a1x < P[ PARAM_WALL_MIN_X ] )
+      || ( a0x > P[ PARAM_WALL_MAX_X ] && a1x > P[ PARAM_WALL_MAX_X ] )
+      || ( a0y < P[ PARAM_WALL_MIN_Y ] && a1y < P[ PARAM_WALL_MIN_Y ] )
+      || ( a0y > P[ PARAM_WALL_MAX_Y ] && a1y > P[ PARAM_WALL_MAX_Y ] ) ) return false;
 
     const aX = a1x - a0x, aY = a1y - a0y;
     const aPerpX = -aY, aPerpY = aX;
@@ -179,6 +190,8 @@ function obstructed( st: SharedState, a0x: number, a0y: number, a1x: number, a1y
     }
 
     return false;
+    }
+    finally { if ( PROFILER_ENABLED ) { profExit( PROF_PERC_OBSTRUCTED, profT0 ); } }
 }
 
 // brightness of the bottom (as Environment.backgroundAt)
@@ -205,6 +218,9 @@ function isWeak( st: SharedState, o: number ): boolean
 
 export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): void
 {
+    const profT0 = PROFILER_ENABLED ? profEnter( PROF_PERCEIVE ) : 0;
+    try
+    {
     const viewRadius            = st.mind[ s * MIND_STRIDE + M_VIEW_RADIUS ];   // (grows with mass when SIZE_SCALED_VISION_ENABLED)
     const viewRadiusSquared     = viewRadius * viewRadius;
     const preyViewRadius        = st.scanRadius[s];
@@ -225,6 +241,7 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
     //------------------------------------------------------------------
     // everybody within the search radius (wider for a hunting predator)
     //------------------------------------------------------------------
+    const profSwimT0 = PROFILER_ENABLED ? profEnter( PROF_PERC_SWIMBOTS ) : 0;
     const searchRadius = Math.min( 1100, iAmPredator ? preyViewRadius : viewRadius );
     const nearby = sc.nearbyIndices;
     let numNearby = 0;
@@ -290,6 +307,9 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
     st.seenCount[s] = numSeen;
     st.socialX[s]   = socialX;
     st.socialY[s]   = socialY;
+    if ( PROFILER_ENABLED ) { profExit( PROF_PERC_SWIMBOTS, profSwimT0 ); }
+
+    const profFoodT0 = PROFILER_ENABLED ? profEnter( PROF_PERC_FOOD ) : 0;
 
     //------------------------------------------------------------------
     // the best food bit
@@ -472,6 +492,7 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
     st.targetBaitPresent[s] = baitFound ? 1 : 0;
     st.targetBaitDistance[s] = baitDistance;
     st.targetBaitReward[s] = baitReward;
+    if ( PROFILER_ENABLED ) { profExit( PROF_PERC_FOOD, profFoodT0 ); }
 
     //------------------------------------------------------------------
     // prey (predators only): the nearest herbivore it can notice
@@ -660,6 +681,8 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
         }
     }
     st.seenMate[s] = mate;
+    }
+    finally { if ( PROFILER_ENABLED ) { profExit( PROF_PERCEIVE, profT0 ); } }
 }
 
 // does swimbot o accept swimbot s as a mate? (as Swimbot.acceptsMate)

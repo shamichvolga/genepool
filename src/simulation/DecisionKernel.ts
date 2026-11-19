@@ -47,6 +47,7 @@ import { FIELD_SIZE, PLANT_CELL_SIZE, SEASON_PERIOD, SEASON_AMPLITUDE_EQUATOR, S
 import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
 import { MAX_PARTS, NULL_PART, SWIMBOT_GENITAL_LENGTH, SWIMBOT_MOUTH_LENGTH, SWIMBOT_VIEW_RADIUS } from "./SwimbotTypes";
 import { FOOD_BIT_GRAB_RADIUS } from "./FoodBit";
+import { PROFILER_ENABLED, profEnter, profExit, PROF_DECIDE_STEP, PROF_NEURAL_THINK, PROF_EDIBLE_FOOD } from "./Profiler";
 import { transferToAtmosphere } from "./EnergyBudget";
 
 const PI_OVER_180 = Math.PI / 180;
@@ -152,6 +153,9 @@ const _touchBuffer = new Int32Array( 4096 );
 // a food bit this swimbot can eat, touching its mouth (-1: none)
 function edibleFoodAtMouth( st: SharedState, s: number, mouthX: number, mouthY: number ): number
 {
+    const profT0 = PROFILER_ENABLED ? profEnter( PROF_EDIBLE_FOOD ) : 0;
+    try
+    {
     const meatEater = isPredator( st, s );
     const EAT_RADIUS = SWIMBOT_MOUTH_LENGTH + st.mind[ s * SS.MIND_STRIDE + SS.M_GRAB_RADIUS ];
     const eatR2 = EAT_RADIUS * EAT_RADIUS;
@@ -167,6 +171,8 @@ function edibleFoodAtMouth( st: SharedState, s: number, mouthX: number, mouthY: 
         return f;
     }
     return -1;
+    }
+    finally { if ( PROFILER_ENABLED ) { profExit( PROF_EDIBLE_FOOD, profT0 ); } }
 }
 
 // FILTER_FEEDING_ENABLED: a sprout (a plant not yet grown up) that one of
@@ -332,6 +338,9 @@ const _newHidden = new Float64Array( NUM_HIDDEN );
 
 export function neuralThink( st: SharedState, s: number ): void
 {
+    const profT0 = PROFILER_ENABLED ? profEnter( PROF_NEURAL_THINK ) : 0;
+    try
+    {
     const M = st.mind, m = s * SS.MIND_STRIDE, B = st.bots, b = s * SS.BOT_STRIDE;
     const energy    = B[ b + SS.B_ENERGY ];
     const hunger    = M[ m + SS.M_HUNGER ];
@@ -448,6 +457,8 @@ export function neuralThink( st: SharedState, s: number ): void
     {
         M[ m + SS.M_CLIMATE_X ] = M[ m + SS.M_CLIMATE_Y ] = 0;
     }
+    }
+    finally { if ( PROFILER_ENABLED ) { profExit( PROF_NEURAL_THINK, profT0 ); } }
 }
 
 function canSelfFeed( st: SharedState, s: number ): boolean
@@ -463,6 +474,9 @@ function canSelfFeed( st: SharedState, s: number ): boolean
 //------------------------------------------------------------------------------
 export function decideStep( st: SharedState, s: number, counters: number ): void
 {
+    const profT0 = PROFILER_ENABLED ? profEnter( PROF_DECIDE_STEP ) : 0;
+    try
+    {
     const M = st.mind, m = s * SS.MIND_STRIDE, B = st.bots, b = s * SS.BOT_STRIDE;
     const random = () => botRandom( st, s );
 
@@ -782,6 +796,8 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
         B[ b + SS.B_ENERGY ] = Math.max( 0, energyBeforeDrain - THERMAL_MISMATCH_DRAIN * ( 1 - M[ m + SS.M_THERMAL_FIT ] ));
         transferToAtmosphere( energyBeforeDrain - B[ b + SS.B_ENERGY ] );
     }
+    }
+    finally { if ( PROFILER_ENABLED ) { profExit( PROF_DECIDE_STEP, profT0 ); } }
 }
 
 //------------------------------------------------------------------------------

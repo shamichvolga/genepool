@@ -48,8 +48,9 @@ import {
     B_LAST_ENERGY, B_LAST_X, B_LAST_Y, B_MOUTH_X, B_MOUTH_Y, B_NUM_PARTS, B_POS_X, B_POS_Y, B_SELECT_RADIUS,
     B_SPIN, B_SUM_LENGTHS, B_TIMER, B_TIMER_DELTA, B_VEL_X, B_VEL_Y, BOT_STRIDE, C_A, M_X, M_Y, N_X, N_Y, P_X,
     P_Y, PARAM_MAX_LIFESPAN, PARAM_STEP, PART_STRIDE, PS, Q_X, Q_Y, SharedState, V_X, V_Y,
-    PARAM_WALL_COUNT, PARAM_WALL_BASE
+    PARAM_WALL_COUNT, PARAM_WALL_BASE, PARAM_MATURE_TREE_COUNT
 } from "./SharedState";
+import { PROFILER_ENABLED, profEnter, profExit, PROF_PHYSICS_A, PROF_PHYS_KINEMATICS, PROF_PHYS_FLUID, PROF_PHYS_CAVITY_JET, PROF_PHYS_TREES, PROF_PHYS_COLLISIONS } from "./Profiler";
 
 //------------------------------------------------------------------------------
 // part A
@@ -57,6 +58,9 @@ import {
 
 export function physicsPartA( s: number, st: SharedState ): void
 {
+    const profT0 = PROFILER_ENABLED ? profEnter( PROF_PHYSICS_A ) : 0;
+    try
+    {
     const B   = st.bots;
     const b   = s * BOT_STRIDE;
     const pd  = st.parts;
@@ -92,6 +96,7 @@ export function physicsPartA( s: number, st: SharedState ): void
     //==================================================================
     // update body parts
     //==================================================================
+    const profKinT0 = PROFILER_ENABLED ? profEnter( PROF_PHYS_KINEMATICS ) : 0;
     if (( age < oldAgeThreshold ) || eternal )
     {
         if ( !GROWTH_COSTS_ENERGY_ENABLED )
@@ -207,9 +212,6 @@ export function physicsPartA( s: number, st: SharedState ): void
         pd[ i + A_Y ] = pd[ i + P_Y ] - pd[ j + P_Y ];
         pd[ i + N_X ] =  pd[ i + A_Y ] / partLength;
         pd[ i + N_Y ] = -pd[ i + A_X ] / partLength;
-
-        pd[ i + V_X ] = pd[ i + M_X ] - pd[ i + Q_X ];
-        pd[ i + V_Y ] = pd[ i + M_Y ] - pd[ i + Q_Y ];
     }
 
     // center of mass, shift the body so it stays in place, center of mass again
@@ -274,6 +276,8 @@ export function physicsPartA( s: number, st: SharedState ): void
     //==================================================================
     // fluid forces: the moving parts push the body forward and turn it
     //==================================================================
+    if ( PROFILER_ENABLED ) { profExit( PROF_PHYS_KINEMATICS, profKinT0 ); }
+    const profFluidT0 = PROFILER_ENABLED ? profEnter( PROF_PHYS_FLUID ) : 0;
     let accelerationX = ZERO, accelerationY = ZERO, torque = ZERO;
 
     for (let p = 1; p < numParts; p++)
@@ -281,6 +285,8 @@ export function physicsPartA( s: number, st: SharedState ): void
         const i = o + p * PS;
         const fractionOfWhole = length[ k + p ] / sumLengths;
 
+        // (the body was just shifted onto its center of mass, so the part
+        //  velocities are computed here, after the shift)
         pd[ i + V_X ] = pd[ i + M_X ] - pd[ i + Q_X ];
         pd[ i + V_Y ] = pd[ i + M_Y ] - pd[ i + Q_Y ];
 
@@ -320,6 +326,8 @@ export function physicsPartA( s: number, st: SharedState ): void
     }
 
     // Cavity Jet & Suction: геометрическое схлопывание и раскрытие парных веток без "абилок"
+    if ( PROFILER_ENABLED ) { profExit( PROF_PHYS_FLUID, profFluidT0 ); }
+    const profCavityT0 = PROFILER_ENABLED ? profEnter( PROF_PHYS_CAVITY_JET ) : 0;
     if ( CAVITY_JET_ENABLED && numParts >= 4 )
     {
         const p1 = st.cavityP1[s], p2 = st.cavityP2[s], sharedParent = st.cavityParent[s];
@@ -376,6 +384,7 @@ export function physicsPartA( s: number, st: SharedState ): void
     }
 
     // Wake grid: the whole body leaves one impulse in the cell it stands in
+    if ( PROFILER_ENABLED ) { profExit( PROF_PHYS_CAVITY_JET, profCavityT0 ); }
     if ( WAKE_GRID_ENABLED && ( accelerationX !== ZERO || accelerationY !== ZERO ))
     {
         const wcx = Math.max( 0, Math.min( _WAKE_N - 1, Math.floor( ( posX - POOL_LEFT ) / ( POOL_RIGHT - POOL_LEFT ) * _WAKE_N ) ) );
@@ -400,16 +409,21 @@ export function physicsPartA( s: number, st: SharedState ): void
     // half the steps, so the grid is walked half as often)
     if ((( st.params[ PARAM_STEP ] + s ) & 1 ) === 0 )
     {
-        // Tree obstacles: O(N) поиск стволов через foodGrid
+        // Tree obstacles: the compact list of adult trees (no grid walk)
+        const profTreesT0 = PROFILER_ENABLED ? profEnter( PROF_PHYS_TREES ) : 0;
         if ( TREE_OBSTACLES_ENABLED )
         {
-            const searchR = sumLengths * 0.5 + TREE_OBSTACLE_RADIUS_BASE + TREE_OBSTACLE_RADIUS_SCALE + 8;
-            const fn = st.foodGrid.collect( posX, posY, searchR, _kernelGridBuf );
-            for ( let fi = 0; fi < fn; fi++ )
+            const treeCount = st.params[ PARAM_MATURE_TREE_COUNT ];
+            const trees = st.matureTrees;
+            const treeReach = sumLengths * 0.5 + TREE_OBSTACLE_RADIUS_BASE + TREE_OBSTACLE_RADIUS_SCALE + 8;
+            const treeReachSquared = treeReach * treeReach;
+            for ( let ti = 0; ti < treeCount; ti++ )
             {
-                const tf = _kernelGridBuf[fi];
+                const tf = trees[ti];
                 if ( st.liveFood[tf] !== 1 || st.foodType[tf] === 2 || st.foodWood[tf] < WOOD_PER_FRUIT_TIER ) continue;
                 const tx = st.foodX[tf], ty = st.foodY[tf];
+                const bdx0 = posX - tx, bdy0 = posY - ty;
+                if ( bdx0 * bdx0 + bdy0 * bdy0 > treeReachSquared ) continue;
                 const tr = TREE_OBSTACLE_RADIUS_BASE + TREE_OBSTACLE_RADIUS_SCALE * Math.min( 1, st.foodWood[tf] / PLANT_TREE_ENERGY );
                 const maxBodyR = sumLengths * 0.6 + tr + 8;
                 const bdx = posX - tx, bdy = posY - ty;
@@ -433,8 +447,10 @@ export function physicsPartA( s: number, st: SharedState ): void
                 }
             }
         }
+        if ( PROFILER_ENABLED ) { profExit( PROF_PHYS_TREES, profTreesT0 ); }
 
         // Body collisions: O(N) потокобезопасное отталкивание через swimbotGrid (пишем только в себя)
+        const profCollT0 = PROFILER_ENABLED ? profEnter( PROF_PHYS_COLLISIONS ) : 0;
         if ( BODY_COLLISIONS_ENABLED )
         {
             const ra = Math.max( 3, Math.sqrt( Math.max( 1, bodyMass ) ) * 0.14 );
@@ -462,6 +478,7 @@ export function physicsPartA( s: number, st: SharedState ): void
                 }
             }
         }
+        if ( PROFILER_ENABLED ) { profExit( PROF_PHYS_COLLISIONS, profCollT0 ); }
     }
 
     // Wake grid: мягкое увлечение потоком воды (без саморазгона)
@@ -559,6 +576,8 @@ export function physicsPartA( s: number, st: SharedState ): void
     B[ b + B_POS_X       ] = posX;
     B[ b + B_POS_Y       ] = posY;
     B[ b + B_ANGLE       ] = angleNow;
+    }
+    finally { if ( PROFILER_ENABLED ) { profExit( PROF_PHYSICS_A, profT0 ); } }
 }
 
 //------------------------------------------------------------------------------

@@ -11,6 +11,7 @@ import { PARAM_DEFAULTS, PARAM_LIST, changedParams, setParameter } from "./Param
 import { BRAIN_SIZE } from "./NeuralBrain";
 import { WORLD_SCALE } from "./World";
 import { MAX_PARTS, MIN_PARTS } from "./SwimbotTypes";
+import { PROFILER_ENABLED, profEnter, profExit, profReportText, profReset, setProfilerEnabled, PROF_INTERACT, PROF_UPDATE_FOOD } from "./Profiler";
 declare const __GENEPOOL_VERSION__: string;
 import { currentAt, currentDriftX, currentDriftY, currentStrength, randomPointInCurrent } from "./Currents";
 import { bindPlantGenes, inheritPlantGenes, plantMatureAge, plantOldAge, plantRotAge, plantSeedDistance } from "./PlantGenes";
@@ -306,6 +307,15 @@ export function GenePool()
     let _renderer: any = null;  // создаётся после инициализации переменных
     // the highest swimbot slot ever used (the pool has 24 000 of them, most empty)
     let _maxSwimbotSlot = 0;
+    // where the last free slot was found: births start looking there, not at 0
+    let _deadBotHint   = 0;
+    let _deadPlantHint = 0;
+    let _deadMeatHint  = 0;
+    // the profiler window (the "P" key)
+    let _profileStepsLeft   = 0;
+    let _profileWindowSteps = 0;
+    let _profilerText       = "";
+    let _profileAutoPrint   = true;   // the browser "P" key prints; Node tools print themselves
 
 	//-------------------------------------
 	// create fixed-sized swimbot array
@@ -550,6 +560,9 @@ export function GenePool()
         //--------------------------------------
         _numSwimbots = 0;
         _maxSwimbotSlot = 0;
+        _deadBotHint = 0;
+        _deadPlantHint = 0;
+        _deadMeatHint = 0;
         for (let s=0; s<MAX_SWIMBOTS; s++)
         {
             _swimbots[s].die();
@@ -1742,6 +1755,30 @@ if ( mode === SimulationStartMode.SPECIES )
 	    _obstacle.writeGeometry( P, SS.PARAM_OB_MID_X, SS.PARAM_OB_MID_Y, SS.PARAM_OB_LENGTH, SS.PARAM_OB_PERP_X, SS.PARAM_OB_PERP_Y, SS.PARAM_OB_END_RADIUS );
 	    _obstacle.writeWalls( P, SS.PARAM_WALL_COUNT, SS.PARAM_WALL_BASE, SS.MAX_WALL_SEGMENTS );
 
+	    // the bounding box of the walls: a sight line that misses it is free
+	    const wallCount = P[ SS.PARAM_WALL_COUNT ];
+	    if ( wallCount > 0 )
+	    {
+	        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+	        for ( let w = 0; w < wallCount; w++ )
+	        {
+	            const p = SS.PARAM_WALL_BASE + w * 4;
+	            const x1 = P[ p ], y1 = P[ p + 1 ], x2 = P[ p + 2 ], y2 = P[ p + 3 ];
+	            if ( x1 < minX ) { minX = x1; }
+	            if ( x1 > maxX ) { maxX = x1; }
+	            if ( x2 < minX ) { minX = x2; }
+	            if ( x2 > maxX ) { maxX = x2; }
+	            if ( y1 < minY ) { minY = y1; }
+	            if ( y1 > maxY ) { maxY = y1; }
+	            if ( y2 < minY ) { minY = y2; }
+	            if ( y2 > maxY ) { maxY = y2; }
+	        }
+	        P[ SS.PARAM_WALL_MIN_X ] = minX;
+	        P[ SS.PARAM_WALL_MAX_X ] = maxX;
+	        P[ SS.PARAM_WALL_MIN_Y ] = minY;
+	        P[ SS.PARAM_WALL_MAX_Y ] = maxY;
+	    }
+
 	    // the environment, for the decision kernel (DecisionKernel.temperatureAt...)
 	    P[ SS.PARAM_TIME  ] = environment.getTime();
 	    P[ SS.PARAM_PETRI ] = environment.petri ? 1 : 0;
@@ -2330,6 +2367,43 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
         if ( _clock % _history.interval === 0 ) { recordHistory(); }
 
         _stepsThisSecond ++;
+
+        //--------------------------------------------------
+        // the "P" key: measure the next N steps and keep the table
+        //--------------------------------------------------
+        if ( _profileStepsLeft > 0 )
+        {
+            _profileStepsLeft --;
+            if ( _profileStepsLeft === 0 )
+            {
+                _profilerText = profReportText( _profileWindowSteps );
+                setProfilerEnabled( false );
+                if ( _profileAutoPrint && ( typeof console !== "undefined" )) { console.log( _profilerText ); }
+            }
+        }
+	}
+
+	//--------------------------------------------------------------
+	// the "P" key (browser) and tools/profile-deep.cjs (Node):
+	// turn the profiler on, measure the next N steps, then keep the
+	// text until somebody takes it
+	//--------------------------------------------------------------
+	this.profileSteps = function( steps, autoPrint = true )
+	{
+	    const n = Math.max( 1, Math.floor( steps || 200 ));
+	    profReset();
+	    setProfilerEnabled( true );
+	    _profileWindowSteps = n;
+	    _profileStepsLeft   = n;
+	    _profilerText       = "";
+	    _profileAutoPrint   = autoPrint !== false;
+	}
+
+	this.takeProfilerReport = function()
+	{
+	    const text = _profilerText;
+	    _profilerText = "";
+	    return text;
 	}
 
 	//--------------------------------------------------------------
@@ -2499,6 +2573,9 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	//------------------------------------------------------------------------
 	this.interact = function( s )
 	{
+	    const profT0 = PROFILER_ENABLED ? profEnter( PROF_INTERACT ) : 0;
+	    try
+	    {
 		const m = s * SS.MIND_STRIDE;
 		const M = _st.mind;
                 if ( _swimbots[s].hasCarriedSeed() ) { _swimbots[s].updateCarriedSeed(); }
@@ -2663,6 +2740,8 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
                         _swimbots[s].abortMating();
                     }
                 }         //    if ( swimbot[s].isTryingToMate() )
+	    }
+	    finally { if ( PROFILER_ENABLED ) { profExit( PROF_INTERACT, profT0 ); } }
 	}
 
 
@@ -2974,12 +3053,23 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	this.findLowestDeadSwimbotInArray = function()
 	{
         const limit = globalTweakers.populationLimitEnabled ? POPULATION_LIMIT : MAX_SWIMBOTS;
-        for ( let s = 0; s < limit; s++ )
+        const start = ( _deadBotHint < limit ) ? _deadBotHint : 0;
+        // below the hint first (see findLowestDeadFoodBitInArray)
+        for ( let s = 0; s < start; s++ )
+        {
+            if (( _botAlive[s] === 0 ) && !_swimbots[s].getAlive() )
+            {
+                _deadBotHint = s;
+                return s;
+            }
+        }
+        for ( let s = start; s < limit; s++ )
         {
             // (_botAlive is fast to scan; it can lag behind right after a new
             //  pool is made, so the swimbot itself confirms)
             if (( _botAlive[s] === 0 ) && !_swimbots[s].getAlive() )
             {
+                _deadBotHint = s;
                 if ( s + 1 > _maxSwimbotSlot ) { _maxSwimbotSlot = s + 1; }
                 return s;
             }
@@ -3058,9 +3148,13 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	//----------------------------
 	this.updateFood = function()
 	{
+	    const profT0 = PROFILER_ENABLED ? profEnter( PROF_UPDATE_FOOD ) : 0;
+	    try
+	    {
 	    if ( _mapMeatRate > 0 ) { this.rainMapMeat(); }
         let numType0FoodBits = 0;
         let numType1FoodBits = 0;
+        let treeCount = 0;                       // adult trees, for the collisions
         const counting = environment.active;
         if ( counting )
         {
@@ -3128,6 +3222,14 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
                 }
             }
 
+            // an adult tree: its trunk pushes bodies away (PhysicsKernel)
+            if (( type !== 2 ) && ( _st.foodFruit[f] !== 1 )
+            &&  ( _st.foodWood[f] >= WOOD_PER_FRUIT_TIER )
+            &&  ( treeCount < _st.matureTrees.length ))
+            {
+                _st.matureTrees[ treeCount ++ ] = f;
+            }
+
                  if ( type === 0 ) { numType0FoodBits ++; }
             else if ( type === 1 ) { numType1FoodBits ++; }
             else if ( _clock - born[f] > MEAT_DECAY_TIME )
@@ -3151,6 +3253,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
                 environment.plantCount[ type ][ environment.plantCellIndex( foodX[f], foodY[f] ) ] ++;
             }
         }
+        _st.params[ SS.PARAM_MATURE_TREE_COUNT ] = treeCount;
 
         if ( environment.active )
         {
@@ -3198,6 +3301,8 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
             let type = ( globalTweakers.numFoodTypes === 2 ) ? Math.floor( gpRandom() * 2 ) : 0;
             this.spawnPlant( _vectorUtility, type, numType0FoodBits, numType1FoodBits, false );
         }
+    }
+    finally { if ( PROFILER_ENABLED ) { profExit( PROF_UPDATE_FOOD, profT0 ); } }
     }
 
 
@@ -3584,11 +3689,18 @@ if ( !fundPlant( childFoodBitIndex, globalTweakers.foodBitEnergy )) return;
 	// cannot take the places the plants grow in.
 	this.findLowestDeadFoodBitInArray = function( meat = false )
 	{
-        // the lowest free slot (the alive flags are bytes in the shared state)
+        // the lowest free slot (the alive flags are bytes in the shared state).
+        // The hint remembers where the last search found one, so a pool full of
+        // living plants is not scanned from the start on every birth.
         const live = _st.liveFood;
         const split = Math.floor( MAX_FOODBITS * ( 1 - MEAT_SLOT_SHARE ));
         const from = meat ? split : 0, to = meat ? MAX_FOODBITS : split;
-        for (let f = from; f < to; f++) { if ( live[f] !== 1 ) return f; }
+        let hint = meat ? _deadMeatHint : _deadPlantHint;
+        if (( hint < from ) || ( hint >= to )) { hint = from; }
+        // below the hint first: that keeps the result exactly "the lowest free
+        // slot", so the world behaves as it always did
+        for (let f = from; f < hint; f++) { if ( live[f] !== 1 ) { if ( meat ) { _deadMeatHint = f; } else { _deadPlantHint = f; } return f; } }
+        for (let f = hint; f < to; f++) { if ( live[f] !== 1 ) { if ( meat ) { _deadMeatHint = f; } else { _deadPlantHint = f; } return f; } }
         return NULL_INDEX;
     }
 
@@ -4648,9 +4760,10 @@ const feedRoom = Math.min( 100, swimbot.getMaxEnergy() - swimbot.getEnergy() );
 	this.getNumFoodBitsOfType = function( type )
 	{
 	    let num = 0;
+	    const live = _st.liveFood, foodType = _st.foodType;
 	    for (let f=0; f<MAX_FOODBITS; f++)
 	    {
-	        if ( _foodBits[f].getAlive() && ( _foodBits[f].getType() === type )) { num ++; }
+	        if (( live[f] === 1 ) && ( foodType[f] === type )) { num ++; }
 	    }
 	    return num;
 	}
@@ -4750,10 +4863,11 @@ const feedRoom = Math.min( 100, swimbot.getMaxEnergy() - swimbot.getEnergy() );
 	this.getNumSwimbots = function()
 	{
         let num = 0;
+        const live = _st.liveSwimbot;
 
-        for (let s=0; s<MAX_SWIMBOTS; s++)
+        for (let s=0; s<_maxSwimbotSlot; s++)
         {
-            if ( _swimbots[s].getAlive() )
+            if ( live[s] === 1 )
             {
                 num ++;
             }

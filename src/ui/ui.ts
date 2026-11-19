@@ -878,6 +878,22 @@ function nextTab()
     openPanel( TAB_ORDER[ ( current + 1 ) % TAB_ORDER.length ] );
 }
 
+// the "P" key: measure 200 steps in the simulation thread and print the table
+function runProfiler()
+{
+    genePool.request( "profileSteps", 200 );
+    const startedAt = Date.now();
+    const poll = () =>
+    {
+        genePool.request( "takeProfilerReport" ).then( ( text ) =>
+        {
+            if ( text ) { console.log( text ); }
+            else if ( Date.now() - startedAt < 120000 ) { setTimeout( poll, 500 ); }
+        }).catch( () => {} );
+    };
+    setTimeout( poll, 1000 );
+}
+
 // keys that are not camera keys; true = handled
 function handleCommandKey( e ): boolean
 {
@@ -893,6 +909,7 @@ function handleCommandKey( e ): boolean
         case "KeyC":   toggleCurrents(); return true;
         case "KeyV":   genePool.toggleGpuUpClose(); return true;
         case "KeyH":   togglePanel(); return true;
+        case "KeyP":   runProfiler(); return true;
         case "Tab":    nextTab(); return true;
         case "F1":     toggleHelp(); return true;
         case "Slash":  if ( e.shiftKey ) { toggleHelp(); return true; } return false;

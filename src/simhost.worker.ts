@@ -21,13 +21,17 @@ import { startRunRecorder } from "./RunRecorder";
 import { SimulationStartMode } from "./simulation/Globals";
 import { WORLD_SCALE } from "./simulation/World";
 import { setParameter } from "./simulation/ParamStore";
+import { PROFILER_ENABLED, profEnter, profExit, PROF_SNAPSHOT } from "./simulation/Profiler";
 
-const SNAPSHOT_PERIOD_MS = 250;
+const SNAPSHOT_PERIOD_MS = 500;
+const CLUSTERS_CACHE_MS  = 2000;   // the genetic clustering is costly: twice a second is plenty
 const TICK_MS            = 20;     // background ticks when no screen refresh comes
 
 let pool: any = null;
 let offscreen: any = null;
 let glOffscreen: any = null;
+let clustersText = "";
+let clustersCachedAt = -1e9;
 let hidden = false;
 let snapshotSoon = 0;
 
@@ -38,10 +42,21 @@ const post = ( message: any, transfer: any[] = [] ) => ( self as any ).postMessa
 //------------------------------------------------------------
 function makeSnapshot()
 {
+    const profT0 = PROFILER_ENABLED ? profEnter( PROF_SNAPSHOT ) : 0;
+    try
+    {
     const selected    = pool.getSelectedSwimbotID();
     const environment = pool.getEnvironment();
     const history     = pool.getPopulationHistory();
     const phaseTimes  = pool.getPhaseTimes();
+
+    // the genetic clustering is expensive; the panel does not need it fresh
+    const now = ( typeof performance !== "undefined" ) ? performance.now() : Date.now();
+    if ( now - clustersCachedAt > CLUSTERS_CACHE_MS )
+    {
+        clustersText = pool.getGeneticClustersText();
+        clustersCachedAt = now;
+    }
 
     const snapshot =
     {
@@ -73,7 +88,7 @@ function makeSnapshot()
         environment       : { active: environment.active, season: environment.active ? environment.seasonName() : "" },
         foodOfType        : [ pool.getNumFoodBitsOfType( 0 ), pool.getNumFoodBitsOfType( 1 ), pool.getNumFoodBitsOfType( 2 ) ],
         swimbotPanelHTML  : ( selected >= 0 ) ? pool.getSwimbotPanelHTML() : "",
-        geneticClustersText: pool.getGeneticClustersText(),
+        geneticClustersText: clustersText,
         petri             : { zones: petriSettings.zones, layout: petriSettings.layout, softness: petriSettings.softness },
         selected          : ( selected >= 0 ) ? {
                                 id      : selected,
@@ -84,6 +99,8 @@ function makeSnapshot()
     };
     phaseTimes.fill( 0 );   // (the times are per snapshot)
     return snapshot;
+    }
+    finally { if ( PROFILER_ENABLED ) { profExit( PROF_SNAPSHOT, profT0 ); } }
 }
 
 function sendSnapshot()

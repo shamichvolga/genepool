@@ -127,6 +127,9 @@ const sandbox =
 {
     console,
     performance : { now: () => 0 },          // deterministic timing inside the sim
+    // the profiler's own clock (tools/profile-deep.cjs): real, high resolution,
+    // and never used for anything the simulation decides
+    __profNow   : () => Number( process.hrtime.bigint() ) / 1e6,
     Date        : Date,
     setTimeout  : () => 0,                   // the sim schedules itself; we drive it by hand
     clearTimeout: () => {},

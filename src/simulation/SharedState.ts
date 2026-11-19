@@ -105,7 +105,14 @@ export const PARAM_STEP         = 18;   // the simulation step (plant ages in th
 export const PARAM_WALL_COUNT   = 19;
 export const PARAM_WALL_BASE    = 20;
 export const MAX_WALL_SEGMENTS  = 24;
-export const NUM_PARAMS         = PARAM_WALL_BASE + MAX_WALL_SEGMENTS * 4;
+// the bounding box of all wall segments (computed once a step by GenePool):
+// a sight line that does not even cross this box cannot be blocked by a wall
+export const PARAM_WALL_MIN_X   = 116;
+export const PARAM_WALL_MAX_X   = 117;
+export const PARAM_WALL_MIN_Y   = 118;
+export const PARAM_WALL_MAX_Y   = 119;
+export const PARAM_MATURE_TREE_COUNT = 120;   // how many adult trees are in matureTrees
+export const NUM_PARAMS         = 121;
 
 export * from "./MindLayout";
 import { MAX_THREADS, MIND_STRIDE, NUM_COUNTERS } from "./MindLayout";
@@ -191,6 +198,7 @@ export class SharedState
     readonly cavityP1         : Int16Array;  // the cached pair of segments with one parent (Cavity Jet)
     readonly cavityP2         : Int16Array;
     readonly cavityParent     : Int16Array;
+    readonly matureTrees      : Int32Array;  // the adult trees (their food bit indices), for collisions
     readonly botGlide         : Float32Array;
     readonly partJointMin     : Float32Array;
     readonly partJointMax     : Float32Array;
@@ -330,6 +338,7 @@ export class SharedState
         this.cavityP1         = new Int16Array( make( "cavityP1", n * 2 ));
         this.cavityP2         = new Int16Array( make( "cavityP2", n * 2 ));
         this.cavityParent     = new Int16Array( make( "cavityParent", n * 2 ));
+        this.matureTrees      = new Int32Array( make( "matureTrees", MAX_FOODBITS * 4 ));
         this.botGlide         = new Float32Array( make( "botGlide", n * 4 ));
         this.partJointMin     = new Float32Array( make( "partJointMin", partCount * 4 ));
         this.partJointMax     = new Float32Array( make( "partJointMax", partCount * 4 ));
