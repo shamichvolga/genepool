@@ -977,6 +977,25 @@ this.setParent = function( parent )
 			_pd[ i + C_A ] = part.currentAngle;
 			_pd[ i + B_A ] = part.bendingAngle;
 		}
+
+		if ( _shared !== null && _slot >= 0 )
+		{
+			// CAVITY_JET: the first pair of segments that share a parent, cached once
+			let pair1 = -1, pair2 = -1, pairParent = -1;
+			const count = _phenotype.numParts;
+			for (let p = 1; p < count && ( pair1 < 0 ); p++)
+			{
+				const parent = _pParent[p];
+				if ( parent < 0 ) continue;
+				for (let q = p + 1; q < count; q++)
+				{
+					if ( _pParent[q] === parent ) { pair1 = p; pair2 = q; pairParent = parent; break; }
+				}
+			}
+			_shared.cavityP1[_slot]     = pair1;
+			_shared.cavityP2[_slot]     = pair2;
+			_shared.cavityParent[_slot] = pairParent;
+		}
 	}
 
 	//------------------------------------------------------------------

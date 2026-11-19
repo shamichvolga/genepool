@@ -304,6 +304,8 @@ export function GenePool()
         showSwimbotTrail: (s: number) => _this.showSwimbotTrail(s),
     };
     let _renderer: any = null;  // создаётся после инициализации переменных
+    // the highest swimbot slot ever used (the pool has 24 000 of them, most empty)
+    let _maxSwimbotSlot = 0;
 
 	//-------------------------------------
 	// create fixed-sized swimbot array
@@ -547,6 +549,7 @@ export function GenePool()
         // clear out all swimbots and food bits
         //--------------------------------------
         _numSwimbots = 0;
+        _maxSwimbotSlot = 0;
         for (let s=0; s<MAX_SWIMBOTS; s++)
         {
             _swimbots[s].die();
@@ -2496,11 +2499,13 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	//------------------------------------------------------------------------
 	this.interact = function( s )
 	{
-                _swimbots[s].updateCarriedSeed();
+		const m = s * SS.MIND_STRIDE;
+		const M = _st.mind;
+                if ( _swimbots[s].hasCarriedSeed() ) { _swimbots[s].updateCarriedSeed(); }
                 //-------------------------------------
                 // eating
                 //-------------------------------------
-                if ( _swimbots[s].getIsTryingToEat() )
+                if ( M[ m + SS.M_TRY_EAT ] === 1 )
                 {
                     // (in the phased step someone else may have eaten it first)
                     const food = _swimbots[s].getChosenFoodBit();
@@ -2518,7 +2523,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
                 //-------------------------------------
                 // hunting (prey)
                 //-------------------------------------
-                if ( _swimbots[s].getIsTryingToHunt() )
+                if ( M[ m + SS.M_TRY_HUNT ] === 1 )
                 {
                     _swimbots[s].huntEatChosenPrey();
                 }
@@ -2527,7 +2532,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
                 // giving birth to a new swimbot
                 //----------------------------------------
 
-                if ( _swimbots[s].getIsTryingToMate() )
+                if ( M[ m + SS.M_TRY_MATE ] === 1 )
                 {
                     let newBornSwimbotIndex = this.findLowestDeadSwimbotInArray();
 
@@ -2828,7 +2833,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	this.updateSwimbots = function()
 	{
 	    // Swimbots that died last step: leave the grid, maybe leave meat
-	    for (let s = 0; s < MAX_SWIMBOTS; s++)
+	    for (let s = 0; s < _maxSwimbotSlot; s++)
 	    {
             if (_swimbotWasAlive[s] && ( _st.liveSwimbot[s] === 0 ))
             {
@@ -2973,7 +2978,11 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
         {
             // (_botAlive is fast to scan; it can lag behind right after a new
             //  pool is made, so the swimbot itself confirms)
-            if (( _botAlive[s] === 0 ) && !_swimbots[s].getAlive() ) return s;
+            if (( _botAlive[s] === 0 ) && !_swimbots[s].getAlive() )
+            {
+                if ( s + 1 > _maxSwimbotSlot ) { _maxSwimbotSlot = s + 1; }
+                return s;
+            }
         }
         return NULL_INDEX;
     }

@@ -188,6 +188,9 @@ export class SharedState
     readonly wakeNextY        : Float32Array;
     readonly prevCavityArea   : Float64Array;
     readonly cavityValid      : Uint8Array;
+    readonly cavityP1         : Int16Array;  // the cached pair of segments with one parent (Cavity Jet)
+    readonly cavityP2         : Int16Array;
+    readonly cavityParent     : Int16Array;
     readonly botGlide         : Float32Array;
     readonly partJointMin     : Float32Array;
     readonly partJointMax     : Float32Array;
@@ -324,6 +327,9 @@ export class SharedState
         this.wakeNextY        = new Float32Array( make( "wakeNextY", wakeCells * 4 ));
         this.prevCavityArea   = f64( "prevCavityArea", n );
         this.cavityValid      = u8 ( "cavityValid", n );
+        this.cavityP1         = new Int16Array( make( "cavityP1", n * 2 ));
+        this.cavityP2         = new Int16Array( make( "cavityP2", n * 2 ));
+        this.cavityParent     = new Int16Array( make( "cavityParent", n * 2 ));
         this.botGlide         = new Float32Array( make( "botGlide", n * 4 ));
         this.partJointMin     = new Float32Array( make( "partJointMin", partCount * 4 ));
         this.partJointMax     = new Float32Array( make( "partJointMax", partCount * 4 ));

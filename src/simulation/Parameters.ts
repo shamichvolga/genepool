@@ -450,7 +450,7 @@ export const START_ENERGY_FACTOR            = 1.5;
 // came near).
 //------------------------------------------------------------------------------
 export const EVENT_DRIVEN_LOOK_ENABLED      = true;
-export const EVENT_CALM_LOOK_PERIOD         = 6;
+export const EVENT_CALM_LOOK_PERIOD         = 10;
 export const EVENT_CALM_MIN_DISTANCE        = 150;    // looks often again when the target is nearer than this
 
 //------------------------------------------------------------------------------

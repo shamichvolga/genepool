@@ -23,7 +23,7 @@ export const TASK_PHYSICS      = 2;   // move the bodies (PhysicsKernel)
 export const TASK_PREPARE_LOOK = 3;   // after moving: who looks around (DecisionKernel.prepareLook)
 export const TASK_LOOK         = 4;   // look around and take it in (PerceptionKernel + DecisionKernel.takeInLook)
 export const TASK_RENDER_DATA  = 5;   // before a frame: the visible bodies for the graphics card (RenderData.ts)
-export const CHUNK             = 16;  // swimbots per grab
+export const CHUNK             = 64;  // swimbots per grab
 
 //------------------------------------------------------------------------------
 // one task for one swimbot. thread = which row of st.counters to add to

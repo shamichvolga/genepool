@@ -23,7 +23,7 @@ export const NUM_BRAIN_STATES                =  9;
 //--------------------------------------------
 // perceiving
 //--------------------------------------------
-export const BRAIN_SENSORY_UPDATE_PERIOD           = 2;
+export const BRAIN_SENSORY_UPDATE_PERIOD           = 3;
 export const BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS   = 20;
 
 //const BRAIN_FOCUS_TARGET_SHIFT_STRENGTH	    = 0.2;

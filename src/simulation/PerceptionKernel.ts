@@ -225,7 +225,7 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
     //------------------------------------------------------------------
     // everybody within the search radius (wider for a hunting predator)
     //------------------------------------------------------------------
-    const searchRadius = iAmPredator ? preyViewRadius : viewRadius;
+    const searchRadius = Math.min( 1100, iAmPredator ? preyViewRadius : viewRadius );
     const nearby = sc.nearbyIndices;
     let numNearby = 0;
     const numInCells = st.swimbotGrid.collect( myX, myY, searchRadius, nearby, botX, botY );
@@ -392,7 +392,10 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
         {
             if ( viewDistanceSquared >= viewRadiusSquared ) continue;
             const e = ( type === PLANT_TYPE_WARM ) ? myEfficiencyWarm : myEfficiencyCold;
-            let scaled = viewDistanceSquared / ( e * e );
+            const e2 = e * e;
+            // (worth <= 5 and e <= 1: beyond that reach this plant can no longer win)
+            if ( viewDistanceSquared >= smallestDistanceSquared * 25 * e2 ) continue;
+            let scaled = viewDistanceSquared / e2;
             if ( PLANT_SIZE_ENABLED )
             {
                 const tough = plantToughness( st.foodWood[f] );
