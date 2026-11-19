@@ -14,7 +14,8 @@ import {
     SWIMBOT_LEVEL_OF_DETAIL_DOT, SWIMBOT_LEVEL_OF_DETAIL_HIGH, WOOD_PER_FRUIT_TIER
 } from "./Parameters";
 import { FOOD_BIT_GRAB_RADIUS, FOOD_BIT_SIZE, FOOD_BIT_SIZE_VIEW_SCALE, FOOD_OPACITY_INCREMENT } from "./FoodBit";
-import { plantSize } from "./PlantSize";
+import { plantSize, plantLifespan } from "./PlantSize";
+import { plantCrownRays } from "./PlantVisuals";
 import { currentAt, currentDriftX, currentDriftY, currentStrength, randomPointInCurrent } from "./Currents";
 import { TASK_RENDER_DATA } from "../parallel/ParallelWork";
 
@@ -224,7 +225,40 @@ export function createGenePoolRenderer( ctx: any )
                 : plant ? span : radius;
             add( x, y, x, y, coreRadius, baseRed, baseGreen, baseBlue, alpha );
 
-            if ( plant && !isFruit )
+            const adult = plant && !isFruit && ( wood[f] >= WOOD_PER_FRUIT_TIER );
+            if ( adult )
+            {
+                const age = ctx.clock - born[f];
+                const lifespan = plantLifespan( f, born[f] );
+                if ( span <= pixel * 2.5 )
+                {
+                    const crown = plantCrownRays( wood[f], _st.foodEnergy[f], age, lifespan, f, span * 3.35 );
+                    add( x, y, x, y, Math.max( span, pixel ), crown.colors.main.red, crown.colors.main.green, crown.colors.main.blue, alpha );
+                    continue;
+                }
+                const crown = plantCrownRays( wood[f], _st.foodEnergy[f], age, lifespan, f, span * 3.35 );
+                const trunk = crown.colors.trunk;
+                if ( crown.silhouette )
+                {
+                    for ( let ray = 0; ray < crown.rays.length; ray++ )
+                    {
+                        const r = crown.rays[ray];
+                        const length = r.lengthFactor / ( 0.5 + 0.5 * crown.completeness ) * ( span * 3.35 );
+                        add( x, y, x + Math.cos( r.angle ) * length, y + Math.sin( r.angle ) * length,
+                             span * 0.31, r.color.red, r.color.green, r.color.blue, alpha * 0.22 );
+                    }
+                }
+                for ( let ray = 0; ray < crown.rays.length; ray++ )
+                {
+                    const r = crown.rays[ray];
+                    if ( !r.visible ) continue;
+                    const length = r.lengthFactor * ( span * 3.35 );
+                    add( x, y, x + Math.cos( r.angle ) * length, y + Math.sin( r.angle ) * length,
+                         span * 0.31, r.color.red, r.color.green, r.color.blue, alpha );
+                }
+                add( x, y, x, y, span * 0.48, trunk.red, trunk.green, trunk.blue, alpha );
+            }
+            else if ( plant && !isFruit )
             {
                 if ( stage === 0 )
                 {
@@ -247,21 +281,6 @@ export function createGenePoolRenderer( ctx: any )
                              x + Math.cos( a ) * leafRadius, y + Math.sin( a ) * leafRadius,
                              span * 0.34, 0.28, 0.77, 0.22, alpha );
                     }
-                }
-                else
-                {
-                    // взрослая крона: восьмилучевая розетка
-                    const crownRadius = span * 3.35;
-                    for ( let leaf = 0; leaf < 8; leaf++ )
-                    {
-                        const a = leaf * Math.PI / 4;
-                        const length = crownRadius * ( leaf % 2 === 0 ? 1 : 0.78 );
-                        const lightLeaf = leaf % 2 !== 0;
-                        add( x + Math.cos( a ) * crownRadius * 0.16, y + Math.sin( a ) * crownRadius * 0.16,
-                             x + Math.cos( a ) * length, y + Math.sin( a ) * length,
-                             span * 0.31, lightLeaf ? 0.40 : 0.22, lightLeaf ? 0.85 : 0.70, lightLeaf ? 0.24 : 0.18, alpha );
-                    }
-                    add( x, y, x, y, span * 0.48, 0.12, 0.43, 0.16, alpha );
                 }
             }
         }

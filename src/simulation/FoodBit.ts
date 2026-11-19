@@ -1,7 +1,8 @@
 import { transferToAtmosphere } from "./EnergyBudget";
 import { simClock, gpRandom } from "./Globals";
 import { NULL_INDEX, ONE, ONE_HALF, PI2, ZERO } from "./MathConstants";
-import { plantSize } from "./PlantSize";
+import { plantSize, plantLifespan } from "./PlantSize";
+import { plantCrownRays } from "./PlantVisuals";
 import { MEAT_PIECE_ENERGY, PLANT_SIZE_ENABLED, PLANT_TREE_ENERGY, PLANT_EVOLUTION_ENABLED, PLANT_STAGES_ENABLED, PLANT_STAGES_SHOWN, SPAWN_FOOD_RANDOMLY_IN_POOL, WOOD_PER_FRUIT_TIER } from "./Parameters";
 import { plantGrowthOf, plantSpreadOf, plantSproutGrowth, plantStage, randomizePlantGenes } from "./PlantGenes";
 import { POOL_BOTTOM, POOL_HEIGHT, POOL_LEFT, POOL_RIGHT, POOL_TOP, POOL_WIDTH } from "./Pool";
@@ -352,14 +353,34 @@ export function FoodBit()
 	        capsules.add( _position.x, _position.y, _position.x, _position.y, radius, _red, _green, _blue, opacity() );
 	        return;
 	    }
-	    // a star: 4 thin capsules through the middle (8 rays) and a small core
-	    const ray = radius * 1.8, w = radius * 0.28, r = _red * 0.8, g = _green * 0.8, b = _blue * 0.8;
-	    for (let k = 0; k < 4; k++)
+	    const age = simClock.step - _fb[ _fi ];
+	    const lifespan = plantLifespan( _fi, _fb[ _fi ] );
+	    const crown = plantCrownRays( _fw[ _fi ], _fe[ _fi ], age, lifespan, _fi, radius * 3.35 );
+	    const px = viewScale / Math.max( 1, 1280 );
+	    if ( radius <= px * 2.5 )
 	    {
-	        const a = k * Math.PI / 4, dx = Math.cos( a ) * ray, dy = Math.sin( a ) * ray;
-	        capsules.add( _position.x - dx, _position.y - dy, _position.x + dx, _position.y + dy, w, r, g, b, opacity() );
+	        capsules.add( _position.x, _position.y, _position.x, _position.y, Math.max( radius, px ), crown.colors.main.red, crown.colors.main.green, crown.colors.main.blue, opacity() );
+	        return;
 	    }
-	    capsules.add( _position.x, _position.y, _position.x, _position.y, radius * 0.55, r, g, b, opacity() );
+	    const w = radius * 0.22;
+	    const trunk = crown.colors.trunk;
+	    if ( crown.silhouette )
+	    {
+	        for ( let rayIndex = 0; rayIndex < crown.rays.length; rayIndex++ )
+	        {
+	            const r = crown.rays[rayIndex];
+	            const length = r.lengthFactor / ( 0.5 + 0.5 * crown.completeness ) * ( radius * 3.35 );
+	            capsules.add( _position.x, _position.y, _position.x + Math.cos( r.angle ) * length, _position.y + Math.sin( r.angle ) * length, w, r.color.red, r.color.green, r.color.blue, opacity() * 0.22 );
+	        }
+	    }
+	    for ( let rayIndex = 0; rayIndex < crown.rays.length; rayIndex++ )
+	    {
+	        const r = crown.rays[rayIndex];
+	        if ( !r.visible ) continue;
+	        const length = r.lengthFactor * ( radius * 3.35 );
+	        capsules.add( _position.x, _position.y, _position.x + Math.cos( r.angle ) * length, _position.y + Math.sin( r.angle ) * length, w, r.color.red, r.color.green, r.color.blue, opacity() );
+	    }
+	    capsules.add( _position.x, _position.y, _position.x, _position.y, radius * 0.55, trunk.red, trunk.green, trunk.blue, opacity() );
 	}
 
 	this.render = function( vewScale )
@@ -421,19 +442,44 @@ export function FoodBit()
 	        }
 	        else
 	        {
-	            const crownRadius = span * 3.35;
-	            for ( let shade = 0; shade < 2; shade++ )
+	            const age = simClock.step - _fb[ _fi ];
+	            const lifespan = plantLifespan( _fi, _fb[ _fi ] );
+	            const crown = plantCrownRays( _fw[ _fi ], _fe[ _fi ], age, lifespan, _fi, span * 3.35 );
+	            if ( span <= pixel * 2.5 )
 	            {
-	                canvas.beginPath();
-	                canvas.strokeStyle = ( shade === 0 ? "rgba( 56, 179, 48, " : "rgba( 102, 217, 61, " ) + opacity() + ")";
-	                canvas.lineWidth = span * 0.62;
-	                for ( let leaf = shade; leaf < 8; leaf += 2 )
+	                const main = crown.colors.main;
+	                canvas.fillStyle = "rgba( " + Math.floor( main.red * 255 ) + ", " + Math.floor( main.green * 255 ) + ", " + Math.floor( main.blue * 255 ) + ", " + opacity() + " )";
+	                canvas.beginPath(); canvas.arc( _position.x, _position.y, Math.max( span, pixel ), 0, PI2, false ); canvas.fill(); canvas.closePath();
+	                canvas.restore();
+	                return;
+	            }
+	            const w = span * 0.62;
+	            if ( crown.silhouette )
+	            {
+	                canvas.globalAlpha = 0.22;
+	                for ( let rayIndex = 0; rayIndex < crown.rays.length; rayIndex++ )
 	                {
-	                    const a = leaf * Math.PI / 4;
-	                    const length = crownRadius * ( leaf % 2 === 0 ? 1 : 0.78 );
-	                    canvas.moveTo( _position.x + Math.cos( a ) * crownRadius * 0.16, _position.y + Math.sin( a ) * crownRadius * 0.16 );
-	                    canvas.lineTo( _position.x + Math.cos( a ) * length, _position.y + Math.sin( a ) * length );
+	                    const r = crown.rays[rayIndex];
+	                    const length = r.lengthFactor / ( 0.5 + 0.5 * crown.completeness ) * ( span * 3.35 );
+	                    canvas.beginPath();
+	                    canvas.strokeStyle = "rgba( " + Math.floor( r.color.red * 255 ) + ", " + Math.floor( r.color.green * 255 ) + ", " + Math.floor( r.color.blue * 255 ) + ", " + opacity() + ")";
+	                    canvas.lineWidth = w;
+	                    canvas.moveTo( _position.x, _position.y );
+	                    canvas.lineTo( _position.x + Math.cos( r.angle ) * length, _position.y + Math.sin( r.angle ) * length );
+	                    canvas.stroke();
 	                }
+	                canvas.globalAlpha = 1;
+	            }
+	            for ( let rayIndex = 0; rayIndex < crown.rays.length; rayIndex++ )
+	            {
+	                const r = crown.rays[rayIndex];
+	                if ( !r.visible ) continue;
+	                const length = r.lengthFactor * ( span * 3.35 );
+	                canvas.beginPath();
+	                canvas.strokeStyle = "rgba( " + Math.floor( r.color.red * 255 ) + ", " + Math.floor( r.color.green * 255 ) + ", " + Math.floor( r.color.blue * 255 ) + ", " + opacity() + ")";
+	                canvas.lineWidth = w;
+	                canvas.moveTo( _position.x, _position.y );
+	                canvas.lineTo( _position.x + Math.cos( r.angle ) * length, _position.y + Math.sin( r.angle ) * length );
 	                canvas.stroke();
 	            }
 	        }
