@@ -358,6 +358,10 @@ this.setParent = function( parent )
 	let _numTips = 0;
 	this.getNumLimbTips = function() { return _numTips; }
 
+	// raptorial front appendages: sharp branches near the head (claws / mandibles)
+	let _numFrontAppendages = 0;
+	this.getNumFrontAppendages = function() { return _numFrontAppendages; }
+
 	//------------------------------------------------------------------------
 	// PLANT_STAGES_ENABLED: a sprout gives little, an old plant much; small
 	// bodies digest sprouts best, big bodies old plants (one plant, three ages)
@@ -1322,6 +1326,19 @@ _position.copyFrom( position );
             for (let q=1; q<_phenotype.numParts; q++) { if ( _phenotype.parts[q].parent === p ) { hasChild = true; break; } }
             if ( !hasChild ) { _numTips ++; }
         }
+
+        // front appendages: forward-pointing branches off the first segments
+        _numFrontAppendages = 0;
+        for (let p=2; p<_phenotype.numParts; p++)
+        {
+            const part = _phenotype.parts[p];
+            if ( part.parent <= 2 && Math.abs( part.angle ) < 70 )
+            {
+                _numFrontAppendages ++;
+                if ( _numFrontAppendages >= 3 ) { break; }
+            }
+        }
+        if ( _shared !== null && _slot >= 0 ) { _shared.frontAppendages[ _slot ] = _numFrontAppendages; }
 
         // part colours and the width at the part's start (a "splined" part
         // grows from its parent's width, as the detailed drawing shows it),
@@ -2399,7 +2416,9 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	    const preyMeanWidth = chosenPrey().getPhenotypeMass() / Math.max( 1, chosenPrey().getBoundingRadius() );
 	    if ( preyMeanWidth > 4.2 ) { gape *= ( ONE - Math.min( 0.35, ( preyMeanWidth - 4.2 ) * 0.12 )); }
 	    if ( PREDATOR_GAPE_CURVE_ENABLED ) { _M[ _m + SS.M_HUNT_CD ] = ATTACK_COOLDOWN * ( 1 + GAPE_COOLDOWN_SLOPE * sizeRatio ); }
-	    if ( gpRandom() > ( environment.active ? ENVIRONMENT_ATTACK_SUCCESS_CHANCE : ATTACK_SUCCESS_CHANCE ) * gape )
+	    // claws / mandibles: a firmer grip raises the chance of a successful bite
+	    const biteChance = Math.min( ONE, ( environment.active ? ENVIRONMENT_ATTACK_SUCCESS_CHANCE : ATTACK_SUCCESS_CHANCE ) * gape + 0.04 * _numFrontAppendages );
+	    if ( gpRandom() > biteChance )
 	    {
 	        simCounters.failedAttacks ++;
 	        chosenPrey().notifyAttackedBy( this );

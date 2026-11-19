@@ -207,7 +207,7 @@ function limbsTouchBody( st: SharedState, s: number, p: number ): boolean
     for (let k = 2; k < n; k++)
     {
         const x = st.parts[ o + k * SS.PS + SS.P_X ], y = st.parts[ o + k * SS.PS + SS.P_Y ];
-        if ( mouthTouchesBody( st, p, x, y )) return true;      // (same reach rule, from the limb's end)
+        if ( mouthTouchesBody( st, s, p, x, y )) return true;   // (same reach rule, from the limb's end)
     }
     return false;
 }
@@ -216,14 +216,16 @@ function limbsTouchBody( st: SharedState, s: number, p: number ): boolean
 // parent's end to its own end; the mouth touches it when it is nearer to that
 // line than the mouth length plus the part's width (anywhere along it, not
 // only at the ends and the middle)
-function mouthTouchesBody( st: SharedState, p: number, mouthX: number, mouthY: number ): boolean
+function mouthTouchesBody( st: SharedState, s: number, p: number, mouthX: number, mouthY: number ): boolean
 {
     const numParts = st.bots[ p * SS.BOT_STRIDE + SS.B_NUM_PARTS ];
     const o = p * SS.PART_STRIDE, w = p * MAX_PARTS;
+    // Raptorial front appendages (claws / mandibles) extend the grab reach.
+    const mouthReach = SWIMBOT_MOUTH_LENGTH * ( 1 + 0.10 * st.frontAppendages[s] );
     for (let k = 0; k < numParts; k++)
     {
         const i = o + k * SS.PS;
-        const reach = SWIMBOT_MOUTH_LENGTH + st.partWidth[ w + k ];
+        const reach = mouthReach + st.partWidth[ w + k ];
         const bx = st.parts[ i + SS.P_X ], by = st.parts[ i + SS.P_Y ];
         const parent = st.partParent[ w + k ];
         let ax = bx, ay = by;
@@ -330,7 +332,8 @@ function wanderFocus( st: SharedState, s: number ): void
     // While searching for food or prey (no close target), drift along the
     // smell gradient from the diffusion fields.
     const searchState = st.mind[ s * SS.MIND_STRIDE + SS.M_STATE ];
-    if (( searchState === BRAIN_STATE_LOOKING_FOR_FOOD ) || ( searchState === BRAIN_STATE_LOOKING_FOR_PREY ))
+    if (( searchState === BRAIN_STATE_LOOKING_FOR_FOOD ) || ( searchState === BRAIN_STATE_LOOKING_FOR_PREY )
+    ||  ( searchState === BRAIN_STATE_LOOKING_FOR_MATE ))
     {
         gx += st.scentGradX[s] * 0.15;
         gy += st.scentGradY[s] * 0.15;
@@ -621,12 +624,12 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
             if ( BITE_AT_CONTACT_ENABLED )
             {
                 // the mouth must be at one of the prey's body parts
-                if ( mouthTouchesBody( st, prey, mouthX, mouthY )) { M[ m + SS.M_TRY_HUNT ] = 1; }
+                if ( mouthTouchesBody( st, s, prey, mouthX, mouthY )) { M[ m + SS.M_TRY_HUNT ] = 1; }
             }
             else
             {
                 const p = prey * SS.BOT_STRIDE;
-                const biteDistance = SWIMBOT_MOUTH_LENGTH + B[ p + SS.B_SUM_LENGTHS ] * 0.5;
+                const biteDistance = SWIMBOT_MOUTH_LENGTH * ( 1 + 0.10 * st.frontAppendages[s] ) + B[ p + SS.B_SUM_LENGTHS ] * 0.5;
                 const xx = B[ p + SS.B_POS_X ] - mouthX, yy = B[ p + SS.B_POS_Y ] - mouthY;
                 if ( Math.sqrt( xx * xx + yy * yy ) < biteDistance ) { M[ m + SS.M_TRY_HUNT ] = 1; }
             }
@@ -670,7 +673,7 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
     {
         const young = M[ m + SS.M_PREY ];
         if (( young >= 0 ) && ( st.liveSwimbot[ young ] === 1 ) && ( M[ m + SS.M_HUNT_CD ] === 0 )
-        &&  ( mouthTouchesBody( st, young, mouthX, mouthY ) || ( LIMBS_CATCH_YOUNG_ENABLED && limbsTouchBody( st, s, young ))))
+        &&  ( mouthTouchesBody( st, s, young, mouthX, mouthY ) || ( LIMBS_CATCH_YOUNG_ENABLED && limbsTouchBody( st, s, young ))))
         {
             M[ m + SS.M_TRY_HUNT ] = 1;
         }

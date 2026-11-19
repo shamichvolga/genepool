@@ -37,7 +37,7 @@ import { POOL_BOTTOM, POOL_HEIGHT, POOL_LEFT, POOL_RIGHT, POOL_TOP, POOL_WIDTH, 
 import { UniformGrid } from "./UniformGrid";
 import * as SS from "./SharedState";
 import { buildFamilyTreeText, buildSwimbotPanelHTML, geneticClustersText } from "../ui/panelTexts";
-import { doTask, TASK_DECIDE, TASK_LOOK, TASK_PHYSICS, TASK_PREPARE_LOOK, TASK_RENDER_DATA } from "../parallel/ParallelWork";
+import { doTask, TASK_DECIDE, TASK_DECIDE_PHYSICS, TASK_LOOK, TASK_PHYSICS, TASK_PREPARE_LOOK, TASK_RENDER_DATA } from "../parallel/ParallelWork";
 import { perceive, PerceptionScratch } from "./PerceptionKernel";
 import { physicsStep, stepWakeGrid } from "./PhysicsKernel";
 import { ORIGINAL_FOOD_ENABLED, WAKE_GRID_ENABLED } from "./Parameters";
@@ -2819,11 +2819,16 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	{
 	    const N = SS.SCENT_GRID_N, cells = N * N;
 	    const food = _st.foodField, prey = _st.preyField, pred = _st.predField;
-	    for (let i = 0; i < cells; i++)
+	    // Deposits happen every step; the grid-wide decay and blur only on
+	    // even steps, with the equivalent two-step decay and stronger blur.
+	    if (( _clock & 1 ) === 0 )
 	    {
-	        food[i] *= 0.86;
-	        prey[i] *= 0.86;
-	        pred[i] *= 0.86;
+	        for (let i = 0; i < cells; i++)
+	        {
+	            food[i] *= 0.74;
+	            prey[i] *= 0.74;
+	            pred[i] *= 0.74;
+	        }
 	    }
 
 	    // plants: their energy is the food smell
@@ -2846,25 +2851,28 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	        else                                              { prey[idx] += _botMass[s] * 0.003; }
 	    }
 
-	    // one light diffusion pass; read from a snapshot so the result does
-	    // not depend on the order in which cells are visited
-	    const tmp = _scentTmp;
-	    for (let f = 0; f < 3; f++)
+	    // one light diffusion pass on even steps; read from a snapshot so the
+	    // result does not depend on the order in which cells are visited
+	    if (( _clock & 1 ) === 0 )
 	    {
-	        const a = f === 0 ? food : ( f === 1 ? prey : pred );
-	        tmp.set( a );
-	        for (let y = 0; y < N; y++)
+	        const tmp = _scentTmp;
+	        for (let f = 0; f < 3; f++)
 	        {
-	            const row = y * N;
-	            const up = y > 0 ? row - N : row;
-	            const down = y < N - 1 ? row + N : row;
-	            for (let x = 0; x < N; x++)
+	            const a = f === 0 ? food : ( f === 1 ? prey : pred );
+	            tmp.set( a );
+	            for (let y = 0; y < N; y++)
 	            {
-	                const i = row + x;
-	                const l = x > 0 ? i - 1 : i;
-	                const r = x < N - 1 ? i + 1 : i;
-	                const avg = 0.25 * ( tmp[l] + tmp[r] + tmp[up + x] + tmp[down + x] );
-	                a[i] = tmp[i] + 0.06 * ( avg - tmp[i] );
+	                const row = y * N;
+	                const up = y > 0 ? row - N : row;
+	                const down = y < N - 1 ? row + N : row;
+	                for (let x = 0; x < N; x++)
+	                {
+	                    const i = row + x;
+	                    const l = x > 0 ? i - 1 : i;
+	                    const r = x < N - 1 ? i + 1 : i;
+	                    const avg = 0.25 * ( tmp[l] + tmp[r] + tmp[up + x] + tmp[down + x] );
+	                    a[i] = tmp[i] + 0.11 * ( avg - tmp[i] );
+	                }
 	            }
 	        }
 	    }
@@ -2925,19 +2933,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 
 	    let t = now();
 
-	    // 1. decide (many threads), then what only this thread can do
-	    _runner.task( TASK_DECIDE, list, n );
-	    for (let i = 0; i < n; i++)
-	    {
-	        const s = list[i];
-	        if (( M[ s * SS.MIND_STRIDE + SS.M_EVENTS ] & ( SS.EVENT_REGROW | SS.EVENT_SELF_FEED )) && _swimbots[s].getAlive() )
-	        {
-	            _swimbots[s].handleEventsBeforeMoving();
-	        }
-	    }
-	    t = phaseTime( 0, t );
-
-	    // 2. move (many threads)
+	    // 1. decide and move in one worker pass: one barrier instead of two
         const B = _st.bots;
         if ( _energyBeforePhysics !== null && ( environment.active || CLOSED_ENERGY_CYCLE_ENABLED ))
         {
@@ -2948,7 +2944,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
             }
         }
 	    if ( WAKE_GRID_ENABLED ) { stepWakeGrid( _st ); }
-	    _runner.task( TASK_PHYSICS, list, n );
+	    _runner.task( TASK_DECIDE_PHYSICS, list, n );
         if ( _energyBeforePhysics !== null && ( environment.active || CLOSED_ENERGY_CYCLE_ENABLED ))
         {
             for ( let i = 0; i < n; i++ )
@@ -2959,9 +2955,18 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
                 energyCycleCounters.nutrientsFromSwimming += environment.returnSwimmingEnergyAt( B[ b + SS.B_POS_X ], B[ b + SS.B_POS_Y ], spent );
             }
         }
-	    t = phaseTime( 1, t );
+	    t = phaseTime( 0, t );
 
-	    // 3. died of old age or hunger while moving
+	    // 2. what only this thread can do, then deaths while moving
+	    for (let i = 0; i < n; i++)
+	    {
+	        const s = list[i];
+	        if (( M[ s * SS.MIND_STRIDE + SS.M_EVENTS ] & ( SS.EVENT_REGROW | SS.EVENT_SELF_FEED )) && _swimbots[s].getAlive() )
+	        {
+	            _swimbots[s].handleEventsBeforeMoving();
+	        }
+	    }
+	    t = phaseTime( 1, t );
 	    for (let i = 0; i < n; i++)
 	    {
 	        const s = list[i];

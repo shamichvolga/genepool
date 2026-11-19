@@ -210,14 +210,26 @@ export function physicsPartA( s: number, st: SharedState ): void
             const relativeAngle = pd[ i + C_A ] - pd[ j + C_A ];
             if ( relativeAngle < jMin ) { pd[ i + C_A ] = pd[ j + C_A ] + jMin; }
             if ( relativeAngle > jMax ) { pd[ i + C_A ] = pd[ j + C_A ] + jMax; }
+
+            // flexural rigidity: a wide plate resists a sharp bend, so a
+            // stiff armoured body and a narrow flexible tail each pay their way
+            const bendRad = relativeAngle * PI_OVER_180;
+            const widthNorm = st.partWidth[ k + p ] / 3.5;
+            energy -= 0.00018 * bendRad * bendRad * widthNorm * widthNorm * effort;
+            if ( energy < ZERO ) { energy = ZERO; }
         }
 
-        const radian = pd[ i + C_A ] * PI_OVER_180;
+        // one argument reduction, one shared r2 for both sine and cosine
+        let r = pd[ i + C_A ] * PI_OVER_180;
+        r -= Math.round( r * INV_PI2 ) * PI2;
+        const r2 = r * r;
+        const sinR = r * ( 0.99999995 - r2 * ( 0.16666657 - r2 * ( 0.00833301 - r2 * 0.00019807 )));
+        const cosR = 0.99999995 - r2 * ( 0.49999905 - r2 * ( 0.04166358 - r2 * 0.00138537 ));
         let partLength = length[ k + p ];
         if ( growth < ONE ) { partLength *= NEWBORN_SIZE_SCALE + ( ONE - NEWBORN_SIZE_SCALE ) * growth; }
 
-        const x = partLength * fastSin( radian );
-        const y = partLength * fastCos( radian );
+        const x = partLength * sinR;
+        const y = partLength * cosR;
         pd[ i + Q_X ] = pd[ i + M_X ];
         pd[ i + Q_Y ] = pd[ i + M_Y ];
         pd[ i + M_X ] = pd[ i + P_X ];

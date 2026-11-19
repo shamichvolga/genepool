@@ -218,6 +218,7 @@ export class SharedState
     readonly scentGradY       : Float32Array;
     readonly partJointMin     : Float32Array;
     readonly partJointMax     : Float32Array;
+    readonly frontAppendages  : Uint8Array;    // number of raptorial front limbs (0..3)
 
     readonly foodX        : Float64Array;
     readonly foodY        : Float64Array;
@@ -365,6 +366,7 @@ export class SharedState
         this.scentGradY       = new Float32Array( make( "scentGradY", n * 4 ));
         this.partJointMin     = new Float32Array( make( "partJointMin", partCount * 4 ));
         this.partJointMax     = new Float32Array( make( "partJointMax", partCount * 4 ));
+        this.frontAppendages  = u8 ( "frontAppendages", n );
 
         this.foodX      = f64( "foodX", MAX_FOODBITS );
         this.foodY      = f64( "foodY", MAX_FOODBITS );

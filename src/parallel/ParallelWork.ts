@@ -23,6 +23,7 @@ export const TASK_PHYSICS      = 2;   // move the bodies (PhysicsKernel)
 export const TASK_PREPARE_LOOK = 3;   // after moving: who looks around (DecisionKernel.prepareLook)
 export const TASK_LOOK         = 4;   // look around and take it in (PerceptionKernel + DecisionKernel.takeInLook)
 export const TASK_RENDER_DATA  = 5;   // before a frame: the visible bodies for the graphics card (RenderData.ts)
+export const TASK_DECIDE_PHYSICS = 6; // decide and move in one pass: one barrier instead of two
 export const CHUNK             = 64;  // swimbots per grab
 
 //------------------------------------------------------------------------------
@@ -31,15 +32,15 @@ export const CHUNK             = 64;  // swimbots per grab
 //------------------------------------------------------------------------------
 export function doTask( task: number, st: SharedState, scratch: PerceptionScratch, s: number, thread: number ): void
 {
-    if ( task === TASK_DECIDE )
+    if ( task === TASK_DECIDE || task === TASK_DECIDE_PHYSICS )
     {
         if ( st.liveSwimbot[s] === 1 ) { decideStep( st, s, thread * NUM_COUNTERS ); }
     }
-    else if ( task === TASK_PHYSICS )
+    if ( task === TASK_PHYSICS || task === TASK_DECIDE_PHYSICS )
     {
         if ( st.alive[s] ) { physicsStep( s, st ); }
     }
-    else if ( task === TASK_PREPARE_LOOK )
+    if ( task === TASK_PREPARE_LOOK )
     {
         // positions straight from the physics numbers
         const k = s * BOT_STRIDE, B = st.bots;
