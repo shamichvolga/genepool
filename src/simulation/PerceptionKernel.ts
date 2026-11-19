@@ -371,6 +371,10 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
 
     let chosenFood = -1;
     let smallestDistanceSquared = Number.MAX_SAFE_INTEGER;
+    // AABB of the current best: candidates further out on any axis are skipped
+    // before their distance, wood hardness or line of sight is evaluated.
+    let bestDist = viewRadius;
+    let bestDistSq = viewRadiusSquared;
     let bestMeatScore = -Infinity;
     let bestMeatBase = 0, bestMeatD = 0;   // only the chosen bait needs a Math.sqrt
     const meatTravelWeight = st.preyTravelWeight[s];
@@ -379,21 +383,24 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
     const meatReach = swimSpeed * Math.max( 1, PREY_SCAN_COOLDOWN );
     let baitFound = false;
     let baitDistance = 0, baitReward = 0;
-    // Search far enough from the body center to include food touching the
-    // forward mouth, then apply the normal view-radius test from the mouth.
+    // Search from the mouth with the same reach as before (body radius plus
+    // mouth length and grab reach), then apply the normal view-radius test.
     const foodSearchRadius = viewRadius + SWIMBOT_MOUTH_LENGTH + st.mind[ s * MIND_STRIDE + M_GRAB_RADIUS ];
-    const numFoodInCells = st.foodGrid.collect( myX, myY, foodSearchRadius, sc.foodGridResult );
+    // the grid is rebuilt only every 4 steps; +16 covers the small drift of
+    // sprouts and new extras until the next rebuild
+    const numFoodInCells = st.foodGrid.collect( myMouthX, myMouthY, foodSearchRadius + 16, sc.foodGridResult );
 
     for (let k = 0; k < numFoodInCells; k++)
     {
         const f  = sc.foodGridResult[k];
+        const dx = foodX[f] - myMouthX, dy = foodY[f] - myMouthY;
+        if (( dx >= bestDist ) || ( dx <= -bestDist ) || ( dy >= bestDist ) || ( dy <= -bestDist )) continue;
+        const viewDistanceSquared = dx * dx + dy * dy;
+        if (( viewDistanceSquared >= bestDistSq ) && ( viewDistanceSquared >= smallestDistanceSquared )) continue;
         const fx = foodX[f] - myX;
         const fy = foodY[f] - myY;
         const type = foodType[f];
         const bodyDistanceSquared = fx * fx + fy * fy;
-        const mx = myMouthX - foodX[f];
-        const my = myMouthY - foodY[f];
-        const viewDistanceSquared = mx * mx + my * my;
         if ( type === 2 )
         {
             if ( viewDistanceSquared >= viewRadiusSquared ) continue;
@@ -449,6 +456,8 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
                 bestMeatScore = score;
                 bestMeatBase = base;
                 bestMeatD = distance;
+                bestDist = distance;
+                bestDistSq = viewDistanceSquared;
                 baitFound = true;
                 chosenFood = f;
                 baitDistance = distanceCost;
@@ -500,6 +509,8 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
             if ( scaled < smallestDistanceSquared && !obstructed( st, myMouthX, myMouthY, foodX[f], foodY[f] ))
             {
                 smallestDistanceSquared = scaled;
+                bestDist = Math.sqrt( viewDistanceSquared );
+                bestDistSq = viewDistanceSquared;
                 chosenFood = f;
             }
             continue;
@@ -510,6 +521,8 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
             if ( !obstructed( st, myMouthX, myMouthY, foodX[f], foodY[f] ))
             {
                 smallestDistanceSquared = viewDistanceSquared;
+                bestDist = Math.sqrt( viewDistanceSquared );
+                bestDistSq = viewDistanceSquared;
                 chosenFood = f;
             }
         }

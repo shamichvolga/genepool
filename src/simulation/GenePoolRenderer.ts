@@ -145,6 +145,14 @@ export function createGenePoolRenderer( ctx: any )
     {
         const _camera = ctx.camera, _foodBits = ctx.foodBits, _aliveFoodBitIndices = ctx.aliveFoodBitIndices;
         const _capsuleRenderer = ctx.capsuleRenderer;
+        // World-space screen rectangle with a plant-sized margin. This skips
+        // off-screen plants before any capsule/outline data is prepared.
+        const viewW = _camera.getXDimension(), viewH = _camera.getYDimension();
+        const plantPad = Math.max( FOOD_BIT_GRAB_RADIUS, 120 );
+        const left = _camera.getPosition().x - viewW / 2 - plantPad;
+        const right = left + viewW + 2 * plantPad;
+        const top = _camera.getPosition().y - viewH / 2 - plantPad;
+        const bottom = top + viewH + 2 * plantPad;
 
         // простые точки на видеокарте: один плотный цикл по общим массивам
         if ( useGraphicsCard && !( PLANT_STAGES_ENABLED && PLANT_STAGES_SHOWN ) && !PLANT_EVOLUTION_ENABLED )
@@ -156,8 +164,10 @@ export function createGenePoolRenderer( ctx: any )
         {
             const f = _aliveFoodBitIndices[i];
             if ( !_foodBits[f].getAlive() ) continue;
+            const pos = _foodBits[f].getPosition();
+            if (( pos.x < left ) || ( pos.x > right ) || ( pos.y < top ) || ( pos.y > bottom )) continue;
 
-            if ( _camera.getWithinView( _foodBits[f].getPosition(), FOOD_BIT_GRAB_RADIUS ) )
+            if ( _camera.getWithinView( pos, FOOD_BIT_GRAB_RADIUS ) )
             {
                 if ( useGraphicsCard ) { _foodBits[f].writeCapsule( _capsuleRenderer, _camera.getScale() ); }
                 else                   { _foodBits[f].render( _camera.getScale() ); }
@@ -176,7 +186,7 @@ export function createGenePoolRenderer( ctx: any )
         const fx = _st.foodX, fy = _st.foodY, ft = _st.foodType, born = _st.foodBorn, live = _st.liveFood, fruit = _st.foodFruit, wood = _st.foodWood;
         const n = _aliveFoodBitIndices.length;
         const viewW = _camera.getXDimension(), viewH = _camera.getYDimension();
-        const pad = FOOD_BIT_GRAB_RADIUS;
+        const pad = Math.max( FOOD_BIT_GRAB_RADIUS, 120 );
         const left = _camera.getPosition().x - viewW / 2 - pad, right = left + viewW + 2 * pad;
         const top  = _camera.getPosition().y - viewH / 2 - pad, bottom = top + viewH + 2 * pad;
         const radius = FOOD_BIT_SIZE + _camera.getScale() * FOOD_BIT_SIZE_VIEW_SCALE * FOOD_BIT_SIZE_VIEW_SCALE;
@@ -273,6 +283,14 @@ export function createGenePoolRenderer( ctx: any )
         const cameraPos = _camera.getPosition();
         const cameraChanged = !ctx.lastCameraPosition.equals( cameraPos );
         ctx.lastCameraPosition.copyFrom( cameraPos );
+        // A wider-than-screen AABB: bodies and their render buffers are not
+        // prepared at all when the camera is zoomed into a small area.
+        const viewW = _camera.getXDimension(), viewH = _camera.getYDimension();
+        const bodyPad = 250;
+        const left = cameraPos.x - viewW / 2 - bodyPad;
+        const right = left + viewW + 2 * bodyPad;
+        const top = cameraPos.y - viewH / 2 - bodyPad;
+        const bottom = top + viewH + 2 * bodyPad;
 
         while ( _renderBatch.length > 0 ) { releaseBatchObject( _renderBatch.pop() ); }
 
@@ -282,6 +300,7 @@ export function createGenePoolRenderer( ctx: any )
             if ( _swimbots[s].getAlive() )
             {
                 const position = _swimbots[s].getPosition();
+                if (( position.x < left ) || ( position.x > right ) || ( position.y < top ) || ( position.y > bottom )) continue;
                 const boundingRadius = _swimbots[s].getBoundingRadius();
 
                 if ( _camera.getWithinView( position, boundingRadius ) )

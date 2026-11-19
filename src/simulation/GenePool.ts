@@ -158,6 +158,7 @@ export function GenePool()
 	let _poolCenter             = new Vector2D();
 	let _canvas                 = null;
 	let _clock                  = 0;
+	let _lastFoodGridCount      = -1;   // food grid is rebuilt only when it must be
 	let _numSwimbots 	        = 0;
     let _numNearbySwimbots      = 0;
 	let _numFoodBits 	        = 0;
@@ -1076,6 +1077,7 @@ if ( mode === SimulationStartMode.SPECIES )
 		// reset clock to 0
 		//---------------------------------
 		_clock = 0;
+		_lastFoodGridCount = -1;
 		simClock.step = 0;
 	    resetSimulationCounters();
 	    resetHistory();
@@ -2714,7 +2716,15 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
                                 const dParts = Math.abs( _swimbots[s].getNumParts() - _potentialMate.getNumParts() ) / 12;
                                 const dMass  = Math.min( 1, Math.abs( Math.log( Math.max( 1, _swimbots[s].getPhenotypeMass() ) / Math.max( 1, _potentialMate.getPhenotypeMass() ))) / 1.5 );
                                 const dTotal = 0.65 * dJunk + 0.20 * dParts + 0.15 * dMass;
-                                const compatProb = Math.exp( -( dTotal * dTotal ) / ( 2 * 0.42 * 0.42 ));
+                                let compatProb = Math.exp( -( dTotal * dTotal ) / ( 2 * 0.42 * 0.42 ));
+                                // Rare-morph mate choice: unusual partners are
+                                // attractive, a morph that already dominates
+                                // the herbivores meets with less demand.
+                                const mateMorph = _potentialMate.getMorphologySummary();
+                                const mateBucket = SS.getMorphBucket( mateMorph.numParts, mateMorph.branchFraction > 0, mateMorph.meanWidth );
+                                const mateShare = _st.morphBucketShare[ mateBucket ];
+                                if ( mateShare < 0.08 ) compatProb = Math.min( 1, compatProb * 1.25 );
+                                else if ( mateShare > 0.25 ) compatProb *= 0.80;
 
                                 // Parents under stress explore new forms faster.
                                 const avgEnergyRatio = 0.5 * ( _swimbots[s].getEnergy() / Math.max( 1, _swimbots[s].getMaxEnergy() )
@@ -2744,6 +2754,36 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
                                 //------------------------------------------------
                                 let myEnergyContribution    = _swimbots[s].contributeToOffspring();
                                 let mateEnergyContribution  = _potentialMate.contributeToOffspring();
+                                // Microclimate vitality: parents well fitted to their
+                                // current place can afford a slightly stronger start
+                                // for the child. The adjustment comes out of (or goes
+                                // back to) their own reserves, never beyond them.
+                                if ( environment.active )
+                                {
+                                    const mateOffset = chosenMateIndex * SS.MIND_STRIDE;
+                                    const avgFit = 0.5 * ( M[ m + SS.M_THERMAL_FIT ] + M[ mateOffset + SS.M_THERMAL_FIT ] );
+                                    const vitality = Math.max( 0.85, Math.min( 1.12, 0.85 + avgFit * 0.32 ));
+                                    const adjust = ( bot: any, amount: number ): number =>
+                                    {
+                                        const target = amount * vitality;
+                                        let actual = amount;
+                                        const reserve = bot.getEnergy();
+                                        if ( target > actual )
+                                        {
+                                            const extra = Math.min( target - actual, reserve );
+                                            bot.setEnergy( reserve - extra );
+                                            actual += extra;
+                                        }
+                                        else if ( target < actual )
+                                        {
+                                            bot.setEnergy( reserve + ( actual - target ));
+                                            actual = target;
+                                        }
+                                        return actual;
+                                    };
+                                    myEnergyContribution   = adjust( _swimbots[s], myEnergyContribution );
+                                    mateEnergyContribution = adjust( _potentialMate, mateEnergyContribution );
+                                }
                                 let energyToOffspring       = myEnergyContribution + mateEnergyContribution;
 
                                 //console.log( "energyToOffspring = " + energyToOffspring );
@@ -3186,8 +3226,13 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	    // rebuild the food grid from the living food bits (their position, type
 	    // and energy are already in the shared state: FoodBit.bindShared)
 	    _st.foodAlive.set( _st.liveFood );
-        if (( _clock & 15 ) === 0 ) { sortAliveFoodByMorton(); }
-        _foodBitGrid.build( _aliveFoodBitIndices, _aliveFoodBitIndices.length, _foodX, _foodY );
+        const foodGridCount = _aliveFoodBitIndices.length;
+        if ((( _clock & 3 ) === 0 ) || ( foodGridCount !== _lastFoodGridCount ))
+        {
+            if (( _clock & 15 ) === 0 ) { sortAliveFoodByMorton(); }
+            _foodBitGrid.build( _aliveFoodBitIndices, foodGridCount, _foodX, _foodY );
+            _lastFoodGridCount = foodGridCount;
+        }
 
         this.updateSwimbotsInPhases();
 

@@ -2364,6 +2364,18 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
                 }
             }
 
+            // Continuous gut specialisation: the more predatory the bot,
+            // the less it gets from plants and the more from meat.
+            const predatorLevel = this.getPredatorLevel();
+            if ( foodType !== 2 )
+            {
+                energyFromFoodBit *= Math.max( 0.50, Math.min( 1.20, 1.20 - 0.85 * predatorLevel ));
+            }
+            else
+            {
+                energyFromFoodBit *= Math.max( 0.65, Math.min( 1.25, 0.65 + 0.75 * predatorLevel ));
+            }
+
             // (meat: only part of it is kept - the food pyramid)
             if ( foodType === 2 ) { energyFromFoodBit *= MEAT_ASSIMILATION; }
             // closed energy cycle: digestion losses return to the pool; a bonus
