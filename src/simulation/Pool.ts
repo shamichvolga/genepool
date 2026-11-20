@@ -230,7 +230,9 @@ const POOL_BOUNDARY_MARGIN      = 1200.0;
         }
 
         // Baked shore ice: one drawImage, only in winter, always below the
-        // plants and swimbots that the renderer draws after this call.
+        // plants and swimbots that the renderer draws after this call. The
+        // canvas is baked once at construction; the camera transform already
+        // in effect scales the image with the current zoom.
         if ( _seasonActive && _winterAlpha > 0.01 && _shoreIceCanvas !== null )
         {
             canvas.globalAlpha = _winterAlpha * 0.85;

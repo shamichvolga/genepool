@@ -43,6 +43,11 @@ import { ATTRACTION_BIG, ATTRACTION_CLOSEST, ATTRACTION_COLORFUL, ATTRACTION_CRO
 import { Color, assert } from "./Utility";
 import { SharedVector2D, Vector2D } from "./Vector2D";
 
+// Precomputed inverse cell sizes for the scent/food field: multiplication is
+// cheaper than dividing by the cell width on every lookup.
+const INV_SCENT_CELL_W = SS.SCENT_GRID_N / ( POOL_RIGHT - POOL_LEFT );
+const INV_SCENT_CELL_H = SS.SCENT_GRID_N / ( POOL_BOTTOM - POOL_TOP );
+
 
 export function Swimbot()
 {
@@ -2493,11 +2498,9 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	    // Grove cover: the plant smell field is also a map of thick vegetation.
 	    // Small or still-growing prey can slip through a predator's gape there.
 	    const scentN = SS.SCENT_GRID_N;
-	    const scentCellW = ( POOL_RIGHT - POOL_LEFT ) / scentN;
-	    const scentCellH = ( POOL_BOTTOM - POOL_TOP ) / scentN;
 	    const preyPos = chosenPrey().getPosition();
-	    const gx = Math.max( 0, Math.min( scentN - 1, Math.floor(( preyPos.x - POOL_LEFT ) / scentCellW )));
-	    const gy = Math.max( 0, Math.min( scentN - 1, Math.floor(( preyPos.y - POOL_TOP ) / scentCellH )));
+	    const gx = Math.max( 0, Math.min( scentN - 1, Math.floor(( preyPos.x - POOL_LEFT ) * INV_SCENT_CELL_W )));
+	    const gy = Math.max( 0, Math.min( scentN - 1, Math.floor(( preyPos.y - POOL_TOP ) * INV_SCENT_CELL_H )));
 	    const foodDensity = st.foodField[ gy * scentN + gx ];
 	    if (( foodDensity > 1.5 ) && (( preyMorph.numParts <= 6 ) || ( chosenPrey().getGrowthScale() < 0.75 ))) { gape *= 0.80; }
 	    // Aposematic colour: a saturated warning pattern advertises skin toxin.

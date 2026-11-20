@@ -449,7 +449,11 @@ export function createGenePoolRenderer( ctx: any )
             // (выбор, линия к цели, рты), лежало сверху
             _canvas.save();
             _canvas.resetTransform();
+            // 1:1 blit: bilinear interpolation would just re-sample millions
+            // of pixels that already match the target canvas one to one.
+            _canvas.imageSmoothingEnabled = false;
             _canvas.drawImage( _capsuleRenderer.getCanvas(), 0, 0, _canvasWidth, _canvasHeight );
+            _canvas.imageSmoothingEnabled = true;
             _canvas.restore();
         }
         else if ( _capsuleRenderer !== null )

@@ -2621,6 +2621,28 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	// the graphics-card renderer (set up by main.ts in the browser)
 	this.setCapsuleRenderer = function( renderer ) { _capsuleRenderer = renderer; }
 
+	// A parent's vitality may add a little energy to a child (or take a little
+	// back), always within its own reserve. Defined once, outside the step, so
+	// a birth does not allocate a closure.
+	function adjustOffspringContribution( bot: any, amount: number, vitality: number ): number
+	{
+	    const target = amount * vitality;
+	    let actual = amount;
+	    const reserve = bot.getEnergy();
+	    if ( target > actual )
+	    {
+	        const extra = Math.min( target - actual, reserve );
+	        bot.setEnergy( reserve - extra );
+	        actual += extra;
+	    }
+	    else if ( target < actual )
+	    {
+	        bot.setEnergy( reserve + ( actual - target ));
+	        actual = target;
+	    }
+	    return actual;
+	}
+
 	//--------------------------------
 	//------------------------------------------------------------------------
 	// what a swimbot does with the world after it moved and looked around:
@@ -2769,26 +2791,8 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
                                     const mateOffset = chosenMateIndex * SS.MIND_STRIDE;
                                     const avgFit = 0.5 * ( M[ m + SS.M_THERMAL_FIT ] + M[ mateOffset + SS.M_THERMAL_FIT ] );
                                     const vitality = Math.max( 0.85, Math.min( 1.12, 0.85 + avgFit * 0.32 ));
-                                    const adjust = ( bot: any, amount: number ): number =>
-                                    {
-                                        const target = amount * vitality;
-                                        let actual = amount;
-                                        const reserve = bot.getEnergy();
-                                        if ( target > actual )
-                                        {
-                                            const extra = Math.min( target - actual, reserve );
-                                            bot.setEnergy( reserve - extra );
-                                            actual += extra;
-                                        }
-                                        else if ( target < actual )
-                                        {
-                                            bot.setEnergy( reserve + ( actual - target ));
-                                            actual = target;
-                                        }
-                                        return actual;
-                                    };
-                                    myEnergyContribution   = adjust( _swimbots[s], myEnergyContribution );
-                                    mateEnergyContribution = adjust( _potentialMate, mateEnergyContribution );
+                                    myEnergyContribution   = adjustOffspringContribution( _swimbots[s], myEnergyContribution, vitality );
+                                    mateEnergyContribution = adjustOffspringContribution( _potentialMate, mateEnergyContribution, vitality );
                                 }
                                 let energyToOffspring       = myEnergyContribution + mateEnergyContribution;
 

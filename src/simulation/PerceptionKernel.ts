@@ -48,8 +48,8 @@ function fastDist( dx: number, dy: number ): number
     return ax > ay ? ( ax + 0.337 * ay ) : ( ay + 0.337 * ax );
 }
 
-const SCENT_CELL_W = POOL_WIDTH  / SCENT_GRID_N;
-const SCENT_CELL_H = POOL_HEIGHT / SCENT_GRID_N;
+const INV_SCENT_CELL_W = SCENT_GRID_N / POOL_WIDTH;
+const INV_SCENT_CELL_H = SCENT_GRID_N / POOL_HEIGHT;
 
 //------------------------------------------------------------
 // scratch arrays: one set per thread
@@ -305,6 +305,9 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
         // the grid is rebuilt from live bots only, so no alive[] test is needed
         const dx = myGenitalX - hot[ h + 2 ];
         const dy = myGenitalY - hot[ h + 3 ];
+        // reject the corners of the grid square with two comparisons, before
+        // paying for the multiply or the square root further down
+        if ( dx >= viewRadius || dx <= -viewRadius || dy >= viewRadius || dy <= -viewRadius ) continue;
         const distanceSquared = dx * dx + dy * dy;
         if ( distanceSquared < viewRadiusSquared )
         {
@@ -834,8 +837,8 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
     else if ( stateNow === BRAIN_STATE_LOOKING_FOR_MATE ) { field = iAmPredator ? st.predField : st.preyField; }
     else if ( iAmPredator )                          { field = st.preyField; }
     else                                             { field = st.foodField; }
-    const ix = Math.max( 1, Math.min( SCENT_GRID_N - 2, Math.floor(( myX - POOL_LEFT ) / SCENT_CELL_W )));
-    const iy = Math.max( 1, Math.min( SCENT_GRID_N - 2, Math.floor(( myY - POOL_TOP  ) / SCENT_CELL_H )));
+    const ix = Math.max( 1, Math.min( SCENT_GRID_N - 2, Math.floor(( myX - POOL_LEFT ) * INV_SCENT_CELL_W )));
+    const iy = Math.max( 1, Math.min( SCENT_GRID_N - 2, Math.floor(( myY - POOL_TOP  ) * INV_SCENT_CELL_H )));
     const fidx = iy * SCENT_GRID_N + ix;
     let gx = sign * ( field[ fidx + 1 ] - field[ fidx - 1 ] );
     let gy = sign * ( field[ fidx + SCENT_GRID_N ] - field[ fidx - SCENT_GRID_N ] );
