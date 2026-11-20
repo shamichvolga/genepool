@@ -663,6 +663,7 @@ export function requestToLoadPoolFromPreset()
     else if ( _chosenPoolToLoad === SimulationStartMode.BIG_BANG       ) { poolText = "'big bang'";      }
     else if ( _chosenPoolToLoad === SimulationStartMode.BAD_PARENTS    ) { poolText = "'bad parents'";   }
     else if ( _chosenPoolToLoad === SimulationStartMode.EMPTY          ) { poolText = "'empty'";         }
+    else if ( _chosenPoolToLoad === SimulationStartMode.TEST_MINI_POOL ) { poolText = "'test mini-pool'"; }
     switchToChosenPresetPool();
 }
 
@@ -671,10 +672,43 @@ export function switchToChosenPresetPool()
 {
     closePopupPanel();
     genePool.startSimulation( _chosenPoolToLoad );
-    clearViewMode();
+    // the mini test world starts already tracking its first swimbot; don't undo that
+    if ( _chosenPoolToLoad !== SimulationStartMode.TEST_MINI_POOL ) { clearViewMode(); }
     updateEcosystemUI();
     _graph.initialize();
     setRendering( true );
+}
+
+//---------------------------------------------------------------
+// 3×3 gait filmstrip: nine close-ups of the selected swimbot,
+// taken three steps apart. The worker renders them and sends PNG
+// bytes back; the page saves them and tries to copy the image.
+//---------------------------------------------------------------
+export async function downloadFilmstrip()
+{
+    const bytes = await genePool.captureFilmstrip();
+    if ( !( bytes instanceof Uint8Array ) || bytes.length === 0 )
+    {
+        console.warn( "Filmstrip could not be made:", bytes );
+        return;
+    }
+    const blob = new Blob([ bytes ], { type: "image/png" });
+    const url  = URL.createObjectURL( blob );
+    const link = document.createElement( "a" );
+    link.href = url;
+    link.download = "swimbot_filmstrip.png";
+    document.body.appendChild( link );
+    link.click();
+    link.remove();
+    window.setTimeout( () => URL.revokeObjectURL( url ), 2000 );
+    try
+    {
+        if ( navigator.clipboard && ( window as any ).ClipboardItem )
+        {
+            await navigator.clipboard.write([ new ( window as any ).ClipboardItem({ "image/png": blob }) ]);
+        }
+    }
+    catch ( e ) { /* the download already happened; the clipboard is optional */ }
 }
 
 //------------------------------------------------------------

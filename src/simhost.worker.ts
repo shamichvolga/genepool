@@ -211,6 +211,15 @@ async function saveWorld( id: number, withFamilyTree: boolean )
     post({ type: "reply", id, value }, value.bytes ? [ value.bytes.buffer ] : []);
 }
 
+async function captureFilmstrip( id: number )
+{
+    let value: any = null;
+    try { value = await pool.captureFilmstrip(); }
+    catch ( error ) { console.error( "simulation thread: filmstrip failed:", error ); value = { error: String( error ) }; }
+    post({ type: "reply", id, value });
+    snapshotAfterCall();
+}
+
 async function loadWorld( id: number, bytes: Uint8Array )
 {
     let value: any;
@@ -261,6 +270,7 @@ self.onmessage = ( e: MessageEvent ) =>
     }
     else if ( m.type === "request" )
     {
+        if ( m.name === "captureFilmstrip" ) { captureFilmstrip( m.id ); return; }
         let value = null;
         try { value = pool[ m.name ]( ...m.args ); }
         catch ( error ) { console.error( "simulation thread: request failed:", m.name, error ); }

@@ -135,6 +135,10 @@ export { SOIL_GRID_N };
 export * from "./MindLayout";
 import { MAX_THREADS, MIND_STRIDE, NUM_COUNTERS } from "./MindLayout";
 
+// A pair may not produce another child until both parents have recovered for
+// this many steps. Newborns carry the same delay so they cannot breed at once.
+export const MATING_COOLDOWN_STEPS = 140;
+
 // the plant counting grid (as in Environment)
 export const PLANT_COLUMNS = Math.ceil( ( POOL_RIGHT  - POOL_LEFT ) / PLANT_CELL_SIZE );
 export const PLANT_ROWS    = Math.ceil( ( POOL_BOTTOM - POOL_TOP  ) / PLANT_CELL_SIZE );

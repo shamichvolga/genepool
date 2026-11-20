@@ -87,6 +87,7 @@ export const NUM_IMMUNE_MEMORY = 3;
 export const M_CANNIBAL_GENE = 80;   // the gene for eating the young (0..1)
 export const M_CURRENT_W     = 81;   // the gene: how the stream counts in choosing a target (-1 .. +1, CURRENT_AWARENESS_ENABLED)
 export const M_LAST_CURRENT  = 82;   // how strong the stream was around it at the last look
+export const M_REPRO_CD      = 83;   // steps before this swimbot may mate again (slots 83-87 were free)
 export const MIND_STRIDE     = 88;
 
 // what the decision kernel asks the main thread to do (bits in M_EVENTS)

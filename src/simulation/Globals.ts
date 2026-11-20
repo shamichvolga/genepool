@@ -14,7 +14,8 @@ export const SimulationStartMode =
     EMPTY        : 8,
     FILE         : 9,
     SPECIES      : 10,
-    PETRI        : 11      // "petri": zones of rising temperature, life starts in the mildest one
+    PETRI        : 11,     // "petri": zones of rising temperature, life starts in the mildest one
+    TEST_MINI_POOL : 12    // four adults and 25 plants in a small, easy-to-watch test world
 };
 
 export const CameraNavigationAction = 

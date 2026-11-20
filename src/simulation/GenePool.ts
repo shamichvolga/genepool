@@ -21,7 +21,7 @@ import { petriSettings, petriStartZone } from "./Petri";
 import { IGNORE_FOOD_EFFICIENCY, preyVisibility, TWO_PLANT_TYPES } from "./Ecology";
 import { START_ENERGY_FACTOR, PLANT_ROT_ENABLED, START_FOOD_FILL, START_FOOD_CLUMP, START_FOOD_CLUMP_RADIUS, PLANT_STAGES_SHOWN, NURSERY_ENABLED, NURSERY_STEPS, NURSERY_START_FOOD_FACTOR, NURSERY_EXTRA_SEEDS, PLANT_EVOLUTION_ENABLED, PLANT_SEED_PARENT_TRIES, CURRENTS_ENABLED, CURRENT_SPEED, CLASSIC_SEED_RAIN_FRACTION, MEAT_PIECE_ENERGY, MEAT_PIECE_SCATTER, PLANT_STAGES_ENABLED, PLANT_ROT_AGE, DIET_SWITCH_RATE, CLASSIC_NUM_SWIMBOTS, CLASSIC_NUM_FOODBITS, GARDEN_RADIUS, ENVIRONMENT_PLANT_SPREAD_RATE, ENVIRONMENT_SEEDS_PER_PERIOD, LOCAL_ENVIRONMENT_PLANT_GROWTH, PLANT_CELL_CAPACITY, PLANT_PARENT_SEED_FRACTION, PLANT_SEED_MIN_DISTANCE, PLANT_SEED_MAX_DISTANCE } from "./Parameters";
 
-import { BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_PREY } from "./Brain";
+import { BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS, BRAIN_STATE_LOOKING_FOR_MATE, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_MATE, BRAIN_STATE_PURSUING_PREY } from "./Brain";
 import { Camera } from "./Camera";
 import { asymmetryFromGene, BRIGHTNESS_FROM_GENES, Embryology, isExperimentalEmbryologyGene } from "./Embryology";
 import { FamilyTree } from "./FamilyTree";
@@ -36,6 +36,7 @@ import { PhyloTree } from "./PhyloTree";
 import { POOL_BOTTOM, POOL_HEIGHT, POOL_LEFT, POOL_RIGHT, POOL_TOP, POOL_WIDTH, Pool } from "./Pool";
 import { UniformGrid } from "./UniformGrid";
 import * as SS from "./SharedState";
+import { MATING_COOLDOWN_STEPS } from "./SharedState";
 import { buildFamilyTreeText, buildSwimbotPanelHTML, geneticClustersText } from "../ui/panelTexts";
 import { doTask, TASK_DECIDE, TASK_DECIDE_PHYSICS, TASK_LOOK, TASK_PHYSICS, TASK_PREPARE_LOOK, TASK_RENDER_DATA } from "../parallel/ParallelWork";
 import { perceive, PerceptionScratch } from "./PerceptionKernel";
@@ -134,6 +135,7 @@ export function GenePool()
     const BANG_VIEW_SCALE                   = POOL_WIDTH * 0.2;
     const PARENT_VIEW_SCALE                 = POOL_WIDTH * 0.05;
     const NEIGHBORHOOD_VIEW_SCALE           = POOL_WIDTH * 0.4;
+    const TEST_MINI_POOL_VIEW_SCALE         = 3200;   // a compact world for watching a few swimbots
     const NEIGHBORHOOD_FREQ                 = 5.0;
     const DEBUG_SHOW_SWIMBOT_TRAIL          = false;
     //const SWIMBOT_DATA_UPDATE_PERIOD        = 30;
@@ -756,6 +758,12 @@ _camera.setScale( POOL_WIDTH );
             _numSwimbots = 0;
             //this.randomizeFood();
         }
+        else if ( mode === SimulationStartMode.TEST_MINI_POOL )
+        {
+            _numSwimbots = 4;
+            this.setFoodToTestMiniPool();
+            _camera.setScale( TEST_MINI_POOL_VIEW_SCALE );
+        }
 
         //----------------------------------
         // initialize swimbots
@@ -780,6 +788,13 @@ if ( mode === SimulationStartMode.SPECIES )
     }
 
     initialPosition.setXY( x, y )
+}
+else if ( mode === SimulationStartMode.TEST_MINI_POOL )
+{
+    // four corners of a small square around the food in the centre
+    const dx = ( i % 2 === 0 ) ? -800 : 800;
+    const dy = ( i < 2 )      ? -800 : 800;
+    initialPosition.setXY( _poolCenter.x + dx, _poolCenter.y + dy );
 }
 
 
@@ -997,6 +1012,11 @@ if ( mode === SimulationStartMode.SPECIES )
                     : gpRandom() * thresholdGeneValue;
                 setTrait( _myGenotype, GENES_PREDATOR, Math.floor( predatorGeneValue ) / 255 );
             }
+            else if ( mode === SimulationStartMode.TEST_MINI_POOL )
+            {
+                // the first two are herbivores, the last two are predators
+                setTrait( _myGenotype, GENES_PREDATOR, i < 2 ? 0.1 * gpRandom() : 0.8 + 0.2 * gpRandom() );
+            }
 
             //-------------------------------------------------------------------------------
             // This is not the most elegant way to do this, but just to get it working.....
@@ -1085,6 +1105,13 @@ if ( mode === SimulationStartMode.SPECIES )
 		// clear this!
 		//---------------------------------
         setSelectedSwimbot( NULL_INDEX );
+
+        // the test pool is small: follow one bot right away so the zoom is useful
+        if ( mode === SimulationStartMode.TEST_MINI_POOL )
+        {
+            setSelectedSwimbot( 0 );
+            this.setViewMode( ViewTrackingMode.SELECTED );
+        }
 
 		//---------------------------------
 		// set _simulationRunning to true
@@ -2202,6 +2229,33 @@ if ( mode === SimulationStartMode.SPECIES )
         this.setFoodSpread( MIN_FOOD_BIT_MAX_SPAWN_RADIUS );
 	}
 
+	//-------------------------------------------
+	// 25 plants in a ring at the centre of the test world
+	//-------------------------------------------
+	this.setFoodToTestMiniPool = function()
+	{
+        // randomizeFood() has already sown the standard number of plants;
+        // retire the extras so the test world really has only 25 of them
+        const oldCount = _numFoodBits;
+        _numFoodBits = 0;
+        const p = new Vector2D();
+        const num = 25;
+        for (let f=0; f<num; f++)
+        {
+            const angle = ( f / num ) * PI2;
+            p.x = _poolCenter.x + 520 * Math.cos( angle );
+            p.y = _poolCenter.y + 520 * Math.sin( angle );
+            _foodBits[ _numFoodBits ].initialize( f );
+            _foodBits[ _numFoodBits ].setPosition( p );
+            _numFoodBits ++;
+        }
+        for (let f=num; f<oldCount; f++) { _foodBits[f].kill(); }
+        _aliveFoodBitIndices.length = 0;
+        for (let f=0; f<num; f++) { _aliveFoodBitIndices.push( f ); }
+        this.setFoodGrowthDelay( MAX_FOOD_REGENERATION_PERIOD );
+        this.setFoodSpread( MIN_FOOD_BIT_MAX_SPAWN_RADIUS );
+	}
+
 
 	//--------------------------------
     this.setAttraction = function(a)
@@ -2434,6 +2488,19 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	//--------------------------------------------------------------
 	// one step of the simulation
 	//--------------------------------------------------------------
+	// The mating recharge is only a counter in the mind row: decrement it
+	// once per step for the live bots before decisions are made.
+	function stepMatingCooldowns()
+	{
+	    const M = _st.mind, stride = SS.MIND_STRIDE, field = SS.M_REPRO_CD;
+	    const list = _aliveSwimbotIndices;
+	    for ( let i = 0; i < list.length; i++ )
+	    {
+	        const k = list[i] * stride + field;
+	        if ( M[k] > 0 ) { M[k] --; }
+	    }
+	}
+
 	this.simulateStep = function()
 	{
         //--------------------
@@ -2441,6 +2508,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
         //--------------------
         _clock ++;
         simClock.step = _clock;
+        stepMatingCooldowns();
         const stepStart = now();
 
         if ( environment.active )
@@ -2755,6 +2823,27 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 
                         if ( _potentialMate.getAlive() )
                         {
+                            // A pair can produce one child at a time: both must
+                            // be recovered, courting, and fed well above hunger.
+                            const mb = chosenMateIndex * SS.MIND_STRIDE;
+                            const myState  = _swimbots[s].getBrainState();
+                            const mateState = _potentialMate.getBrainState();
+                            const readyToMate =
+                                   M[ m + SS.M_REPRO_CD ] === 0
+                                && M[ mb + SS.M_REPRO_CD ] === 0
+                                && ( myState === BRAIN_STATE_LOOKING_FOR_MATE || myState === BRAIN_STATE_PURSUING_MATE )
+                                && ( mateState === BRAIN_STATE_LOOKING_FOR_MATE || mateState === BRAIN_STATE_PURSUING_MATE )
+                                && ( _swimbots[s].getEnergy() > _swimbots[s].getHungerThreshold() * 1.15 )
+                                && ( _potentialMate.getEnergy() > _potentialMate.getHungerThreshold() * 1.15 );
+                            if ( !readyToMate )
+                            {
+                                // They are not a real pair: separate them now so
+                                // they cannot hammer the birth path every tick.
+                                _swimbots[s].abortMating();
+                                _potentialMate.abortMating();
+                            }
+                            else
+                            {
                             simCounters.reproductivePairAttempts ++;
                             // Predators and herbivores never have children together.
                             if ( !_potentialMate.sameDiet( _swimbots[s] ))
@@ -2869,6 +2958,14 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
                                 let initialAngle = getRandomAngleInDegrees();
                                 _swimbots[ newBornSwimbotIndex ].create( newBornSwimbotIndex, 0, _vectorUtility, initialAngle, energyToOffspring, _childGenotype, _embryology )
                                 syncSwimbot( newBornSwimbotIndex );
+                                // The child and both parents sit out the next
+                                // mating season; neither parent keeps courting
+                                // the partner that just produced the child.
+                                _swimbots[ newBornSwimbotIndex ].setMatingCooldown( MATING_COOLDOWN_STEPS );
+                                _swimbots[s].setMatingCooldown( MATING_COOLDOWN_STEPS );
+                                _potentialMate.setMatingCooldown( MATING_COOLDOWN_STEPS );
+                                _swimbots[s].abortMating();
+                                _potentialMate.abortMating();
                                 // (who its family is: KIN_NOT_EATEN_ENABLED; a founder gets its number now)
                                 if ( _swimbots[s].getSerial() <= 0 ) { _swimbots[s].setFamily( ++ _serial, 0, 0 ); }
                                 if ( _swimbots[ chosenMateIndex ].getSerial() <= 0 ) { _swimbots[ chosenMateIndex ].setFamily( ++ _serial, 0, 0 ); }
@@ -2894,7 +2991,8 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
                                     simCounters.reproductiveJunkBlocks ++;
                                 }
                             }
-                        }
+                            }   // readyToMate else
+                        }   // mate alive
                     }      //   if (( newBornSwimbotIndex != -1 ) &&  ( swimbot[s].getChosenMateIndex() != -1 ))
 
                     //------------------------------------------------------------------
@@ -4749,6 +4847,93 @@ const feedRoom = Math.min( 100, swimbot.getMaxEnergy() - swimbot.getEnergy() );
 	this.writeFoodDots              = function()                 { _renderer.writeFoodDots(); }
 	this.renderSwimbotsWithBatching = function( g )             { _renderer.renderSwimbotsWithBatching( g ); }
 	this.renderSwimbotOverlays      = function( g )             { _renderer.renderSwimbotOverlays( g ); }
+
+	//---------------------------------------------------------------------
+	// Filmstrip 3×3: nine close-ups of the chosen swimbot's gait. The
+	// frames are 360×360 world units, three steps apart (step +0 … +24).
+	// Everything runs inside one worker tick; only PNG encoding is awaited.
+	//---------------------------------------------------------------------
+	this.captureFilmstrip = async function()
+	{
+        const makeCanvas = ( w: number, h: number ): any =>
+        {
+            if ( typeof OffscreenCanvas !== "undefined" ) { return new OffscreenCanvas( w, h ); }
+            const c = document.createElement( "canvas" );
+            c.width = w; c.height = h;
+            return c;
+        };
+        const toPNG = async ( canvas: any ): Promise<Uint8Array> =>
+        {
+            if ( typeof canvas.convertToBlob === "function" )
+            {
+                const blob = await canvas.convertToBlob({ type: "image/png" });
+                return new Uint8Array( await blob.arrayBuffer() );
+            }
+            const base64 = canvas.toDataURL( "image/png" ).split( "," )[1];
+            const binary = atob( base64 );
+            const bytes  = new Uint8Array( binary.length );
+            for ( let i = 0; i < binary.length; i++ ) { bytes[i] = binary.charCodeAt( i ); }
+            return bytes;
+        };
+
+        if ( _selectedSwimbot === NULL_INDEX || !_swimbots[ _selectedSwimbot ].getAlive() )
+        {
+            if ( _aliveSwimbotIndices.length === 0 ) { return new Uint8Array( 0 ); }
+            setSelectedSwimbot( _aliveSwimbotIndices[0] );
+        }
+        const id = _selectedSwimbot;
+        const bot = _swimbots[ id ];
+        const pos = bot.getPosition();
+        let lastX = pos.x, lastY = pos.y, lastAngle = bot.getAngle(), lastSpeed = bot.getSpeed();
+
+        const savedCanvas = _canvas, savedW = _canvasWidth, savedH = _canvasHeight;
+        const savedCamera = _camera, savedCapsule = _capsuleRenderer;
+        const savedTrackingLabel = _showViewTrackingMode;
+        const sheet = makeCanvas( 900, 900 );
+        const sheetCtx: any = sheet.getContext( "2d" );
+        sheetCtx.fillStyle = "#101418";
+        sheetCtx.fillRect( 0, 0, 900, 900 );
+        _capsuleRenderer = null;
+        _showViewTrackingMode = false;
+        try
+        {
+            for ( let frame = 0; frame < 9; frame++ )
+            {
+                if ( frame > 0 ) { for ( let k = 0; k < 3; k++ ) { _this.simulateStep(); } }
+                if ( bot.getAlive() )
+                {
+                    const p = bot.getPosition();
+                    lastX = p.x; lastY = p.y;
+                    lastAngle = bot.getAngle(); lastSpeed = bot.getSpeed();
+                }
+                const viewCanvas = makeCanvas( 300, 300 );
+                const view = viewCanvas.getContext( "2d" );   // the renderer draws into a 2D context
+                const cam  = new Camera();
+                const centre = new Vector2D();
+                centre.setXY( lastX, lastY );
+                cam.setAspectRatio( 1 );
+                cam.setScale( 360 );
+                cam.setPosition( centre );
+                _canvas = view; _canvasWidth = 300; _canvasHeight = 300; _camera = cam;
+                _renderer.render();
+                const col = frame % 3, row = Math.floor( frame / 3 );
+                sheetCtx.drawImage( viewCanvas, col * 300, row * 300 );
+                sheetCtx.fillStyle = "rgba( 0, 0, 0, 0.68 )";
+                sheetCtx.fillRect( col * 300, row * 300 + 266, 300, 34 );
+                sheetCtx.fillStyle = "#dfe8f0";
+                sheetCtx.font = "14px Arial";
+                sheetCtx.fillText( "step +" + ( frame * 3 ) + "  " + lastAngle.toFixed( 0 ) + "°  " + lastSpeed.toFixed( 2 ),
+                                   col * 300 + 8, row * 300 + 289 );
+            }
+        }
+        finally
+        {
+            _canvas = savedCanvas; _canvasWidth = savedW; _canvasHeight = savedH;
+            _camera = savedCamera; _capsuleRenderer = savedCapsule;
+            _showViewTrackingMode = savedTrackingLabel;
+        }
+        return await toPNG( sheet );
+	}
 
 	// the V key: up close, bodies on the graphics card too (faster, a little plainer)
 	let _gpuUpClose = false;

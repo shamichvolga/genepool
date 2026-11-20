@@ -51,10 +51,10 @@ export const MAX_AMP               =  60.0;
 export const MIN_PHASE             =  -1.0;
 export const MAX_PHASE             =   1.0;	
 
-// Deadzone asymmetry: small deviations from 0.5 are neutral; beyond ±0.38 the
-// gene is rescaled to the full -1..+1 range. Left and right paired branches
-// then grow with slightly different angles, lengths and stroke phases.
-export const ASYMMETRY_DEADZONE = 0.38;
+// Deadzone asymmetry: small deviations from 0.5 are neutral; beyond ±0.48 the
+// gene is rescaled to the full -1..+1 range. The wider neutral band keeps
+// around half the population classically symmetric even after 100k steps.
+export const ASYMMETRY_DEADZONE = 0.48;
 export function asymmetryFromGene( geneNorm: number ): number
 {
     const raw = geneNorm * 2 - 1;

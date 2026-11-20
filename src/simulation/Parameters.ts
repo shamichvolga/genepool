@@ -71,7 +71,7 @@ export const PREDATOR_LEVEL_THRESHOLD      = 0.6;
 export const SWIMBOT_MAX_ENERGY            = MAX_SWIMBOT_HUNGER_THRESHOLD;
 
 // Какая доля энергии жертвы достаётся хищнику (1.0 = вся; в природе 0.1–0.3).
-export const PREDATION_ENERGY_TRANSFER     = 0.3;
+export const PREDATION_ENERGY_TRANSFER     = 0.55;
 // a kill also gives the prey's body: energy per unit of body mass
 // (typical prey ~400 -> +24; a kill gives ~40 in all, before only 10-20.
 //  0.12 with predators from the start: predators grew to 57% and the pool crashed)
@@ -103,8 +103,13 @@ export const ATTACK_SUCCESS_CHANCE         = 0.25;
 // in the environment pool prey hides (camouflage) and the world is big;
 // tests (tools/predators.cjs): at 0.25 and 0.4 predators dwindle to a few,
 // at 0.6 they hold on with real predator-prey cycles
-export const ENVIRONMENT_ATTACK_SUCCESS_CHANCE = 0.35;   // (0.5 with predators from the start: too many predators)
+export const ENVIRONMENT_ATTACK_SUCCESS_CHANCE = 0.55;   // tuned with the mating cooldown: keeps enough hunters through 100k steps
 export const ATTACK_COOLDOWN               = 60;
+// A predator's strike reaches a little farther than a herbivore's mouth, and a
+// missed strike costs less time (no extra energy is charged), so hunters can
+// persist instead of crashing to a few dozen individuals.
+export const PREDATOR_CAPTURE_RADIUS_SCALE = 1.12;
+export const FAILED_HUNT_COOLDOWN_FRACTION = 0.35;
 
 // Доля хищников в стартовой популяции (у остальных ген хищности низкий).
 export const INITIAL_PREDATOR_FRACTION     = 0.1;

@@ -108,6 +108,8 @@
                         <button id = "pool8Button" class = "basicButton" onClick = "choosePoolToLoad( SimulationStartMode.EMPTY        ); requestToLoadPoolFromPreset();" >empty</button>
                     </div>
 
+                    <button id = "poolTestMiniButton" class = "basicButton wide" onClick = "choosePoolToLoad( SimulationStartMode.TEST_MINI_POOL ); requestToLoadPoolFromPreset();" title = "4 adults (2 herbivores, 2 predators) and 25 plants in the centre, camera follows the selected bot" >test mini-pool</button>
+
                     <button id = "mapEditorPoolButton" class = "basicButton wide" onClick = "openMapEditor();" title = "map editor: draw the world before it starts" >map editor…</button>
 
                     <div class = "gpHeading">petri: life starts in the mildest zone and must conquer the others</div>
@@ -182,6 +184,7 @@
                             <button id = "tweakGenesButton"       class = "basicButton" onClick = "openTweakGenesPanel( genePool.getSelectedSwimbotID() ); genePool.setViewMode( ViewTrackingMode.SELECTED );" >tweak genes</button>
                             <button id = "saveGenesButton"        class = "basicButton" onClick = "downloadSwimbotGenes( genePool.getSelectedSwimbotID() );" >save genes</button>
                             <button id = "loadGenesButton"        class = "basicButton" onClick = "document.getElementById('loadSwimbotFile').click();" >load genes…</button>
+                            <button id = "filmstripButton"        class = "basicButton" onClick = "downloadFilmstrip();" title = "9 frames of this swimbot's gait, 3 steps apart (step +0 … step +24)" >filmstrip 3×3</button>
                         </div>
                     </div>
                 </div>

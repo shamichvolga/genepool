@@ -68,6 +68,9 @@ export function createRemotePool( worker: Worker, onPetriLoaded: () => void )
         saveWorldFile: ( withFamilyTree = true ) => ask({ type: "saveWorld", withFamilyTree }),
         loadWorldFile: ( bytes: Uint8Array ) => ask({ type: "loadWorld", bytes }, [ bytes.buffer ]),
 
+        // renders 9 frames in the simulation thread and returns PNG bytes
+        captureFilmstrip: () => request( "captureFilmstrip" ),
+
         // read from the snapshot
         getTimeStep:            () => S.timeStep,
         getNumSwimbots:         () => S.numSwimbots,

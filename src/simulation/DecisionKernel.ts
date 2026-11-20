@@ -20,7 +20,7 @@
 // result does not depend on the number of threads.
 //------------------------------------------------------------------------------
 import { areKin } from "./Kin";
-import { FILTER_FEEDING_ENABLED, FILTER_FEEDING_PERIOD, FILTER_FEEDING_REACH } from "./Parameters";
+import { FILTER_FEEDING_ENABLED, FILTER_FEEDING_PERIOD, FILTER_FEEDING_REACH, PREDATOR_CAPTURE_RADIUS_SCALE } from "./Parameters";
 import { plantMatureAge } from "./PlantGenes";
 import * as SS from "./SharedState";
 import { SharedState } from "./SharedState";
@@ -227,7 +227,7 @@ function mouthTouchesBody( st: SharedState, s: number, p: number, mouthX: number
     const numParts = st.bots[ p * SS.BOT_STRIDE + SS.B_NUM_PARTS ];
     const o = p * SS.PART_STRIDE, w = p * MAX_PARTS;
     // Raptorial front appendages (claws / mandibles) extend the grab reach.
-    const mouthReach = SWIMBOT_MOUTH_LENGTH * ( 1 + 0.10 * st.frontAppendages[s] );
+    const mouthReach = SWIMBOT_MOUTH_LENGTH * ( 1 + 0.10 * st.frontAppendages[s] ) * PREDATOR_CAPTURE_RADIUS_SCALE;
     for (let k = 0; k < numParts; k++)
     {
         const i = o + k * SS.PS;
@@ -638,7 +638,7 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
             else
             {
                 const p = prey * SS.BOT_STRIDE;
-                const biteDistance = SWIMBOT_MOUTH_LENGTH * ( 1 + 0.10 * st.frontAppendages[s] ) + B[ p + SS.B_SUM_LENGTHS ] * 0.5;
+                const biteDistance = SWIMBOT_MOUTH_LENGTH * ( 1 + 0.10 * st.frontAppendages[s] ) * PREDATOR_CAPTURE_RADIUS_SCALE + B[ p + SS.B_SUM_LENGTHS ] * 0.5;
                 const xx = B[ p + SS.B_POS_X ] - mouthX, yy = B[ p + SS.B_POS_Y ] - mouthY;
                 if ( Math.sqrt( xx * xx + yy * yy ) < biteDistance ) { M[ m + SS.M_TRY_HUNT ] = 1; }
             }

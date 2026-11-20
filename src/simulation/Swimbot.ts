@@ -37,7 +37,7 @@ import { Genotype } from "./Genotype";
 import { globalTweakers, gpRandom, simClock, simCounters } from "./Globals";
 import { NULL_INDEX, ONE, ONE_HALF, ONE_THIRD, PI_OVER_180, ZERO } from "./MathConstants";
 import { BIG_BODY_STOMACH_ENABLED, STOMACH_REFERENCE_MASS } from "./Parameters";
-import { AUTOTOMY_REGROW_DELAY, AUTOTOMY_DECOY_SPAN, PREY_BODY_ENERGY, ATTACK_COOLDOWN, ATTACK_SUCCESS_CHANCE, ENVIRONMENT_ATTACK_SUCCESS_CHANCE, BASAL_METABOLISM, DEFAULT_SWIMBOT_HUNGER_THRESHOLD, FOOD_TYPE_OFFSET, NEWBORN_SIZE_SCALE, OLD_AGE_DURATION, PREDATION_ENERGY_TRANSFER, PREDATOR_FLEE_RADIUS, PREDATOR_LEVEL_THRESHOLD, PREY_SCAN_COOLDOWN, PREY_SCAN_RADIUS_GROWTH, PREY_SCAN_RADIUS_MAX_SCALE, RANDOM_MATING_CONTROL, SWIMBOT_MAX_ENERGY, SWIMBOT_SELECT_RADIUS_SCALAR, YOUNG_AGE_DURATION } from "./Parameters";
+import { AUTOTOMY_REGROW_DELAY, AUTOTOMY_DECOY_SPAN, PREY_BODY_ENERGY, ATTACK_COOLDOWN, ATTACK_SUCCESS_CHANCE, ENVIRONMENT_ATTACK_SUCCESS_CHANCE, BASAL_METABOLISM, DEFAULT_SWIMBOT_HUNGER_THRESHOLD, FAILED_HUNT_COOLDOWN_FRACTION, FOOD_TYPE_OFFSET, NEWBORN_SIZE_SCALE, OLD_AGE_DURATION, PREDATION_ENERGY_TRANSFER, PREDATOR_FLEE_RADIUS, PREDATOR_LEVEL_THRESHOLD, PREY_SCAN_COOLDOWN, PREY_SCAN_RADIUS_GROWTH, PREY_SCAN_RADIUS_MAX_SCALE, RANDOM_MATING_CONTROL, SWIMBOT_MAX_ENERGY, SWIMBOT_SELECT_RADIUS_SCALAR, YOUNG_AGE_DURATION } from "./Parameters";
 import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
 import { SwimbotRenderer } from "./SwimbotRenderer";
 import { ATTRACTION_BIG, ATTRACTION_CLOSEST, ATTRACTION_COLORFUL, ATTRACTION_CROOKED, ATTRACTION_HYPER, ATTRACTION_LONG, ATTRACTION_NO_COLOR, ATTRACTION_RANDOM, ATTRACTION_SHORT, ATTRACTION_SIMILAR_COLOR, ATTRACTION_SIMILAR_HYPER, ATTRACTION_SIMILAR_LENGTH, ATTRACTION_SIMILAR_SIZE, ATTRACTION_SIMILAR_STRAIGHT, ATTRACTION_SMALL, ATTRACTION_STILL, ATTRACTION_STRAIGHT, CONTINUAL_ENERGY_DRAIN, ENERGY_EFFICIENCY_MEASUREMENT_PERIOD, ENERGY_USED_UP_SWIMMING, GENITAL_INDEX, MAX_PARTS, MOUTH_INDEX, NULL_PART, Phenotype, ROOT_PART, STARVING, STARVING_TIMER_DELTA, SWIMBOT_GENITAL_LENGTH, SWIMBOT_MOUTH_LENGTH, SWIMBOT_VIEW_RADIUS, TIMER_DELTA_INCREASE_RATE, WALL_BOUNCE } from "./SwimbotTypes";
@@ -2072,6 +2072,8 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	//--------------------------------------------------------------------------------------------------------
 	this.getIsTryingToEat               = function() { return _M[ _m + SS.M_TRY_EAT ] === 1;                                 }
 	this.getIsTryingToMate              = function() { return _M[ _m + SS.M_TRY_MATE ] === 1;                                }
+	this.getMatingCooldown              = function() { return _M[ _m + SS.M_REPRO_CD ];                                      }
+	this.setMatingCooldown              = function( steps ) { _M[ _m + SS.M_REPRO_CD ] = Math.max( 0, steps );              }
 	this.getIndex                       = function() { return _index;                                       }
 	this.getAge                         = function() { return _B[ _b + SS.B_AGE ];                                         }
 	this.getAlive                       = function() { return _live[ _liveAt ] === 1;                       }
@@ -2590,6 +2592,11 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	    if ( gpRandom() > biteChance )
 	    {
 	        simCounters.failedAttacks ++;
+	        // A missed strike costs no extra energy; it only ties up the mouth
+	        // for a shorter recovery than a successful bite. That keeps hungry
+	        // predators in the population instead of letting them spiral down
+	        // after a few unlucky attacks.
+	        _M[ _m + SS.M_HUNT_CD ] = Math.min( _M[ _m + SS.M_HUNT_CD ], ATTACK_COOLDOWN * FAILED_HUNT_COOLDOWN_FRACTION );
 	        chosenPrey().notifyAttackedBy( this );
 	        return;
 	    }
@@ -3152,6 +3159,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
         _M[ _m + SS.M_SCAN_CD ]       = 0;
         _B[ _b + SS.B_ETERNAL ] = 0;
         _M[ _m + SS.M_HUNT_CD ]       = 0;
+        _M[ _m + SS.M_REPRO_CD ]      = 0;
     }
 
 
