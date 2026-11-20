@@ -29,6 +29,7 @@ import { sizeSignature, SEARCH_IMAGE_LEARNING, SEARCH_IMAGE_GAIN, SEARCH_IMAGE_F
 // --------------------------------------------------------------------------
 import { SWIMBOT_DOT_RENDER_RADIUS } from "./Parameters";
 import { drawFromAtmosphere, settleEnergyTransfer, transferToAtmosphere } from "./EnergyBudget";
+import { depositSoilEnergy, withdrawSoilEnergy } from "./SoilField";
 import { BRAIN_FOCUS_TARGET_SHIFT_STRENGTH, BRAIN_FOCUS_TARGET_SHIFT_THRESHOLD, BRAIN_SENSORY_UPDATE_PERIOD, BRAIN_STATE_FLEEING_PREDATOR, BRAIN_STATE_LOOKING_FOR_FOOD, BRAIN_STATE_LOOKING_FOR_MATE, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_FOOD, BRAIN_STATE_PURSUING_MATE, BRAIN_STATE_PURSUING_PREY, BRAIN_STATE_SELF_FEED, BRAIN_STATE_RESTING, BRAIN_WANDER_AMOUNT, Brain } from "./Brain";
 import { GREATEST_POSSIBLE_SWIMBOT_LENGTH, GREATEST_POSSIBLE_SWIMBOT_MASS } from "./Embryology";
 import { DEFAULT_FOOD_BIT_ENERGY, FOOD_BIT_GRAB_RADIUS, FoodBit } from "./FoodBit";
@@ -366,6 +367,15 @@ this.setParent = function( parent )
 	// raptorial front appendages: sharp branches near the head (claws / mandibles)
 	let _numFrontAppendages = 0;
 	this.getNumFrontAppendages = function() { return _numFrontAppendages; }
+
+	// functional anatomy read from the grown body: antennae widen the senses,
+	// a broad tail fin cuts drag and a deep belly stores ripe wood energy
+	let _numAntennae = 0;
+	let _hasBelly = false;
+	let _hasTailFin = false;
+	this.getNumAntennae = function() { return _numAntennae; }
+	this.hasBelly = function() { return _hasBelly; }
+	this.hasTailFin = function() { return _hasTailFin; }
 
 	//------------------------------------------------------------------------
 	// PLANT_STAGES_ENABLED: a sprout gives little, an old plant much; small
@@ -1329,14 +1339,26 @@ _position.copyFrom( position );
 	//---------------------------------------------------------------
     this.processPhenotype = function()
     {
-        // limb tips (parts nobody grows from)
+        // limb tips (parts nobody grows from), body width and the caudal tip
         _numTips = 0;
+        let widthSum = ZERO, widthCount = 0, tailWidth = ZERO, coreWidth = ZERO;
         for (let p=1; p<_phenotype.numParts; p++)
         {
+            const part = _phenotype.parts[p];
+            widthSum += part.width;
+            widthCount ++;
+            if ( p <= 3 ) { coreWidth = Math.max( coreWidth, part.width ); }
             let hasChild = false;
             for (let q=1; q<_phenotype.numParts; q++) { if ( _phenotype.parts[q].parent === p ) { hasChild = true; break; } }
-            if ( !hasChild ) { _numTips ++; }
+            if ( !hasChild )
+            {
+                _numTips ++;
+                tailWidth = Math.max( tailWidth, part.width );
+            }
         }
+        const meanBodyWidth = widthCount > 0 ? widthSum / widthCount : ZERO;
+        _hasBelly  = coreWidth > 4.2;
+        _hasTailFin = tailWidth > meanBodyWidth * 1.08;
 
         // front appendages: forward-pointing branches off the first segments
         _numFrontAppendages = 0;
@@ -1349,7 +1371,25 @@ _position.copyFrom( position );
                 if ( _numFrontAppendages >= 3 ) { break; }
             }
         }
-        if ( _shared !== null && _slot >= 0 ) { _shared.frontAppendages[ _slot ] = _numFrontAppendages; }
+
+        // antennae: thin, long branches off the head. They are sensory, not
+        // raptorial, and each one widens the food/threat radius by 12%.
+        _numAntennae = 0;
+        for (let p=1; p<_phenotype.numParts; p++)
+        {
+            const part = _phenotype.parts[p];
+            if (( part.parent <= 1 ) && ( part.width < 2.2 ) && ( part.length > 11 ))
+            {
+                _numAntennae ++;
+                if ( _numAntennae >= 2 ) { break; }
+            }
+        }
+        if ( _shared !== null && _slot >= 0 )
+        {
+            _shared.frontAppendages[ _slot ] = _numFrontAppendages;
+            _shared.antennae         [ _slot ] = _numAntennae;
+            _shared.tailFin          [ _slot ] = _hasTailFin ? 1 : 0;
+        }
 
         // part colours and the width at the part's start (a "splined" part
         // grows from its parent's width, as the detailed drawing shows it),
@@ -1483,13 +1523,16 @@ _position.copyFrom( position );
         _M[ _m + SS.M_MATURE_AGE ]      = SIZE_MATURITY_ENABLED
             ? YOUNG_AGE_DURATION * Math.min( 4, Math.max( 0.5, _phenotype.mass / 410 ))
             : YOUNG_AGE_DURATION;
-        _M[ _m + SS.M_VIEW_RADIUS ]     = SIZE_SCALED_VISION_ENABLED ? SWIMBOT_VIEW_RADIUS * Math.pow( Math.max( 1, _phenotype.mass ) / 410, 0.35 ) : SWIMBOT_VIEW_RADIUS;
+        const antennaBonus = 1 + 0.12 * Math.min( 2, _numAntennae );
+        _M[ _m + SS.M_VIEW_RADIUS ]     = ( SIZE_SCALED_VISION_ENABLED ? SWIMBOT_VIEW_RADIUS * Math.pow( Math.max( 1, _phenotype.mass ) / 410, 0.35 ) : SWIMBOT_VIEW_RADIUS ) * antennaBonus;
         _M[ _m + SS.M_GRAB_RADIUS ]     = SIZE_SCALED_GRAB_ENABLED ? FOOD_BIT_GRAB_RADIUS * Math.pow( Math.max( 1, _phenotype.mass ) / 410, 0.25 ) : FOOD_BIT_GRAB_RADIUS;
-        _M[ _m + SS.M_MAX_ENERGY ]      = MASS_SCALED_STOMACH_ENABLED
+        // A deep belly (coreWidth > 4.2 over parts 1..3) is a larger stomach.
+        const bellyCapacity = _hasBelly ? 1.15 : 1;
+        _M[ _m + SS.M_MAX_ENERGY ]      = ( MASS_SCALED_STOMACH_ENABLED
             ? Math.max( 60, SWIMBOT_MAX_ENERGY * Math.pow( _phenotype.mass / 410, 0.75 ))
             : BIG_BODY_STOMACH_ENABLED
                 ? SWIMBOT_MAX_ENERGY * Math.max( 1, _phenotype.mass / STOMACH_REFERENCE_MASS )
-                : SWIMBOT_MAX_ENERGY;
+                : SWIMBOT_MAX_ENERGY ) * bellyCapacity;
         if ( _slot >= 0 ) { _shared.brainWeights.set( _genotype.getBrain(), _slot * BRAIN_SIZE ); }
 
         // the inherited hunger threshold (environment pool; classic pools: the setting)
@@ -2297,6 +2340,10 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
             let energyFromFoodBit = chosenFoodBit().getEnergy();
             const foodType = chosenFoodBit().getType();
             const foodWood = ( foodType === 2 ) ? 0 : chosenFoodBit().getWood();
+            // A deep belly is an adaptation to ripe timber: more stomach room
+            // and an 8-point digestion bonus, but only on woody plants.
+            const bellyBonus = _hasBelly && ( foodWood >= WOOD_PER_FRUIT_TIER );
+            const maxEnergy = _M[ _m + SS.M_MAX_ENERGY ];
 
             if ( globalTweakers.numFoodTypes > 1 )
             {
@@ -2347,7 +2394,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
             {
                 const plant  = chosenFoodBit();
                 const gain   = Math.max( 0.05, energyFromFoodBit / Math.max( 1e-9, plant.getEnergy() ));     // (digestion and climate)
-                const room   = Math.max( ZERO, _M[ _m + SS.M_MAX_ENERGY ] - _B[ _b + SS.B_ENERGY ] );
+                const room   = Math.max( ZERO, maxEnergy - _B[ _b + SS.B_ENERGY ] );
                 const bite   = Math.min( biteEnergy( _phenotype.mass, plant.getWood(), plant.getEnergy() ), room / gain );
                 if ( bite <= ZERO ) { _M[ _m + SS.M_TRY_EAT ] = 0; return _M[ _m + SS.M_FOOD ]; }      // too tough for my mouth, or full
                 energyFromFoodBit = bite * gain;
@@ -2418,10 +2465,27 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 
             // (meat: only part of it is kept - the food pyramid)
             if ( foodType === 2 ) { energyFromFoodBit *= MEAT_ASSIMILATION; }
-            // closed energy cycle: digestion losses return to the pool; a bonus
-            // (a mature plant pays more than it stores) is funded by the pool
-            energyFromFoodBit = settleEnergyTransfer( removedEnergy, energyFromFoodBit );
-            _B[ _b + SS.B_ENERGY ] += energyFromFoodBit;
+            // The gut assimilates eta in [0.35, 0.92] of a bite; everything
+            // else is undigested and becomes living soil food under the
+            // feeder. Niche / predator / belly bonuses are paid by that same
+            // local soil (wood and fruit were grown out of it), not printed by
+            // the atmosphere. Both directions are bounded by the soil really
+            // present, so the closed world's total never changes.
+            const eta = Math.max( 0.35, Math.min( 0.92,
+                energyFromFoodBit / Math.max( 1e-9, removedEnergy ) + ( bellyBonus ? 0.08 : 0 )));
+            const gutGain = removedEnergy * eta;
+            const undigested = removedEnergy - gutGain;
+            if ( _shared !== null )
+            {
+                // Take the bonus from the soil that is already there, before
+                // returning this meal's own waste to it.
+                const fromSoil = energyFromFoodBit > gutGain
+                    ? withdrawSoilEnergy( _shared, _position.x, _position.y, energyFromFoodBit - gutGain ) : 0;
+                _B[ _b + SS.B_ENERGY ] += fromSoil;
+                depositSoilEnergy( _shared, _position.x, _position.y, undigested );
+                if ( energyFromFoodBit < gutGain ) { depositSoilEnergy( _shared, _position.x, _position.y, gutGain - energyFromFoodBit ); }
+            }
+            _B[ _b + SS.B_ENERGY ] += gutGain;
 
             _numFoodBitsEaten ++;
             if ( chosenFoodBit().getType() === 2 )
@@ -2557,6 +2621,9 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 
 	    this.learnSearchImage( chosenPrey() );
 	    chosenPrey().die( "predation" );
+	    // the whole reserve was just split between hunter, atmosphere and
+	    // carrion; leave none for the soil in the death pass
+	    chosenPrey().setEnergy( 0 );
 
 	    simCounters.attackCount ++;
 	    _numPreyEaten ++;
@@ -3006,11 +3073,16 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	        else simCounters.otherDeaths ++;
 	    }
         _live[ _liveAt ] = 0;
-    // closed energy cycle: return the reserve right now. Waiting for the next
-    // step's death handling is too late - a newborn may reuse this slot within
-    // this step, and the reserve would vanish with the body.
-    // (predation: the hunter already settled the reserve in huntEatChosenPrey)
-    if ( cause !== "predation" ) { transferToAtmosphere( _B[ _b + SS.B_ENERGY ] ); }
+    // Settle the reserve NOW, into the soil under the corpse. Waiting for the
+    // next step's death pass is too late: a newborn can reuse this slot inside
+    // this very step and the reserve would vanish with the old body. Predation
+    // is settled by the hunter in huntEatChosenPrey and leaves nothing behind.
+    if ( cause !== "predation" )
+    {
+        const reserve = Math.max( 0, _B[ _b + SS.B_ENERGY ] );
+        if ( reserve > 0 && _shared !== null ) { depositSoilEnergy( _shared, _position.x, _position.y, reserve ); }
+        _B[ _b + SS.B_ENERGY ] = ZERO;
+    }
 
 	    //assert( _index != NULL_INDEX, "Swimbot.js: this.die: _index != NULL_INDEX" )
 	    if ( _index != NULL_INDEX )

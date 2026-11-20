@@ -15,6 +15,7 @@ import {
 } from "./Parameters";
 import { FOOD_BIT_GRAB_RADIUS, FOOD_BIT_SIZE, FOOD_BIT_SIZE_VIEW_SCALE, FOOD_OPACITY_INCREMENT } from "./FoodBit";
 import { plantSize } from "./PlantSize";
+import { setPlantSeason } from "./PlantVisuals";
 import { currentAt, currentDriftX, currentDriftY, currentStrength, randomPointInCurrent } from "./Currents";
 import { SEASON_PERIOD } from "./Environment";
 import { PARAM_ENV_ACTIVE, PARAM_TIME } from "./SharedState";
@@ -35,6 +36,15 @@ export function createGenePoolRenderer( ctx: any )
     const _markPoint = { x: 0, y: 0 };
     const _treeParts: number[] = [];
     let _lastMarkTime = 0;
+
+    // 45 decorative motes that ride the current map; visuals only, never
+    // touching the simulation random state.
+    const NUM_DRIFT = 45;
+    const _drift: any[] = [];
+    for ( let i = 0; i < NUM_DRIFT; i++ )
+    {
+        _drift.push({ x: 0, y: 0, seeded: false, age: Math.random() * 4, life: 5 + Math.random() * 5 });
+    }
 
     function getBatchObject()
     {
@@ -104,6 +114,71 @@ export function createGenePoolRenderer( ctx: any )
             _canvas.moveTo( m.x - vx / n * tail, m.y - vy / n * tail );
             _canvas.lineTo( m.x, m.y );
             _canvas.stroke();
+        }
+    }
+
+    // Decorative drift motes: a fixed set of 45, moved by the current field.
+    function renderDriftParticles()
+    {
+        const _canvas = ctx.canvas, _camera = ctx.camera;
+        if ( !( ctx.currentSpeed > 0 )) return;
+        const viewW = _camera.getXDimension(), viewH = _camera.getYDimension();
+        const left = _camera.getPosition().x - viewW / 2, top = _camera.getPosition().y - viewH / 2;
+        const right = left + viewW, bottom = top + viewH;
+        const speed = viewW * 0.018;
+        const dt = 0.016;
+        for ( let i = 0; i < NUM_DRIFT; i++ )
+        {
+            const p = _drift[i];
+            if ( !p.seeded || ( p.x < left ) || ( p.x > right ) || ( p.y < top ) || ( p.y > bottom ))
+            {
+                p.x = left + Math.random() * viewW;
+                p.y = top + Math.random() * viewH;
+                p.age = 0; p.life = 5 + Math.random() * 5; p.seeded = true;
+            }
+            currentAt( p.x, p.y );
+            p.x += currentDriftX() * speed * dt;
+            p.y += currentDriftY() * speed * dt;
+            p.age += dt;
+            const fade = Math.min( 1, p.age / 0.5, ( p.life - p.age ) / 0.8 );
+            if ( fade <= 0 ) continue;
+            _canvas.fillStyle = "rgba( 190, 232, 255, " + ( 0.28 * fade ).toFixed( 3 ) + " )";
+            _canvas.beginPath();
+            _canvas.arc( p.x, p.y, Math.max( 1, viewW / 1400 ), 0, PI2, false );
+            _canvas.fill();
+        }
+    }
+
+    // Root filaments: four pulsing threads under a plant that is sucking soil.
+    function renderRootFilaments()
+    {
+        const _canvas = ctx.canvas, _camera = ctx.camera, _st = ctx.st;
+        const sucking = _st.foodSucking;
+        if ( sucking === undefined ) return;
+        const fx = _st.foodX, fy = _st.foodY, clock = ctx.clock;
+        const viewW = _camera.getXDimension(), viewH = _camera.getYDimension();
+        const pad = 160;
+        const left = _camera.getPosition().x - viewW / 2 - pad, top = _camera.getPosition().y - viewH / 2 - pad;
+        const right = left + viewW + 2 * pad, bottom = top + viewH + 2 * pad;
+        _canvas.lineCap = "round";
+        _canvas.lineWidth = Math.max( 1, viewW / 1200 );
+        _canvas.strokeStyle = "rgba( 165, 220, 105, 0.28 )";
+        for ( let f = 0; f < sucking.length; f++ )
+        {
+            const s = sucking[f];
+            if ( s <= 0.08 ) continue;
+            const x = fx[f], y = fy[f];
+            if (( x < left ) || ( x > right ) || ( y < top ) || ( y > bottom )) continue;
+            const pulse = ( clock * 0.06 + f * 0.37 ) % 1;
+            const reach = ( 14 + 18 * s ) * ( 0.65 + 0.35 * pulse );
+            for ( let t = 0; t < 4; t++ )
+            {
+                const a = t * ( PI2 / 4 ) + 0.35;
+                _canvas.beginPath();
+                _canvas.moveTo( x, y );
+                _canvas.lineTo( x + Math.cos( a ) * reach, y + Math.sin( a ) * reach );
+                _canvas.stroke();
+            }
         }
     }
 
@@ -424,12 +499,16 @@ export function createGenePoolRenderer( ctx: any )
         const envActive = params[ PARAM_ENV_ACTIVE ] === 1;
         const yearPhase = PI2 * ( params[ PARAM_TIME ] / SEASON_PERIOD ) + PI2 / 4;
         ctx.pool.setSeason( yearPhase, envActive );
+        setPlantSeason( yearPhase, envActive );
+        ctx.pool.setSoilView( ctx.st.soilField, ctx.clock );
         ctx.pool.render( ctx.seconds, _camera );
         ctx.obstacle.render( _camera );
         renderCurrents();
+        renderDriftParticles();
 
         phaseStart = renderPhase( 0, phaseStart );
         renderFoodBits( useGraphicsCard );
+        renderRootFilaments();
         phaseStart = renderPhase( 1, phaseStart );
 
         renderSwimbotsWithBatching( useGraphicsCard );

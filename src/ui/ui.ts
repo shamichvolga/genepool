@@ -819,6 +819,25 @@ export function updateUI()
     setTimeout( updateUI, UI_UPDATE_PERIOD );
 }
 
+// A 14x14 season dial: the four phenomena around the ring, the active one
+// bright, and a warming/cooling arrow in the middle.
+function seasonDial( name: string ): string
+{
+    const seasons = [ "winter", "spring", "summer", "autumn" ];
+    const glyphs: Record<string, string> = { winter: "❄", spring: "🌱", summer: "☀", autumn: "🍂" };
+    const pos = [ [ 3.6, 4.8 ], [ 10.4, 4.8 ], [ 3.6, 11.2 ], [ 10.4, 11.2 ]];
+    const arrow = ( name === "spring" || name === "winter" ) ? "↑" : "↓";
+    let svg = "<svg width='14' height='14' viewBox='0 0 14 14' style='vertical-align:-3px'>"
+            + "<circle cx='7' cy='7' r='6.4' fill='none' stroke='rgba(255,255,255,0.30)' stroke-width='0.7'/>";
+    for ( let i = 0; i < 4; i++ )
+    {
+        svg += "<text x='" + pos[i][0] + "' y='" + pos[i][1] + "' text-anchor='middle' font-size='4.6' opacity='"
+             + ( seasons[i] === name ? 1 : 0.28 ) + "'>" + glyphs[ seasons[i] ] + "</text>";
+    }
+    svg += "<text x='7' y='9' text-anchor='middle' font-size='5' fill='#dfe8f5'>" + arrow + "</text></svg>";
+    return svg;
+}
+
 //------------------------------------------------------------
 // the status over the pool (also while the drawing is off)
 //------------------------------------------------------------
@@ -837,7 +856,7 @@ function updateHud()
     const html =
         ( paused ? "<span class='hudPaused'>FROZEN (space)</span> · " : "" )
         + "step <b>" + genePool.getTimeStep() + "</b>"
-        + ( environment.active ? " · " + environment.seasonName() : "" )
+        + ( environment.active ? " · " + seasonDial( environment.seasonName() ) + " " + environment.seasonName() : "" )
         + " · " + Math.round( genePool.getStepsPerSecond() ) + " steps/s " + speedName
         + "<br>"
         + "<span class='hudHerb'>herbivores " + herbivores + "</span> · "
@@ -905,7 +924,6 @@ function handleCommandKey( e ): boolean
     if ( e.repeat ) return false;
     switch ( e.code )
     {
-        case "Space":  toggleSimulationRunning(); return true;
         case "Digit1": case "Numpad1": setSpeed( 1 ); return true;
         case "Digit2": case "Numpad2": setSpeed( 2 ); return true;
         case "Digit3": case "Numpad3": setSpeed( 3 ); return true;
@@ -1092,11 +1110,31 @@ const CAMERA_KEYS =
     KeyQ: CameraNavigationAction.OUT,   Minus:      CameraNavigationAction.OUT,  NumpadSubtract: CameraNavigationAction.OUT,
 };
 
-function isTypingInAField( e )
+// Only real text entry swallows keys. Buttons, sliders and selects are
+// blurred on click below, so Space must not accidentally activate them.
+function isTextEntry( e )
 {
     const tag = e.target && e.target.tagName;
-    return ( tag === "INPUT" ) || ( tag === "TEXTAREA" ) || ( tag === "SELECT" );
+    return ( tag === "INPUT" ) || ( tag === "TEXTAREA" );
 }
+function isFocusedControl( e )
+{
+    const tag = e.target && e.target.tagName;
+    return ( tag === "BUTTON" ) || ( tag === "SELECT" );
+}
+
+const MOVEMENT_KEYS = new Set([ "KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight" ]);
+const heldMovementKeys = new Set<string>();
+
+// A click leaves the world's focus on the canvas, never on a control: this
+// keeps Space from toggling a button while the owner is swimming around.
+document.addEventListener( "click", function( e )
+{
+    const target = e.target as HTMLElement | null;
+    if ( !target || !target.closest ) return;
+    const control = target.closest( "button, input[type=\"range\"], select" ) as HTMLElement | null;
+    if ( control ) { control.blur(); }
+});
 
 //--------------------------------
 // key down
@@ -1104,7 +1142,21 @@ function isTypingInAField( e )
 document.onkeydown = function(e: any)
 {
     if ( typeof genePool == "undefined" ) return;
-    if ( isTypingInAField(e) || e.ctrlKey || e.metaKey || e.altKey ) return;
+    if ( e.ctrlKey || e.metaKey || e.altKey || isTextEntry( e )) return;
+
+    if ( MOVEMENT_KEYS.has( e.code )) { heldMovementKeys.add( e.code ); }
+
+    // Space pauses only when the pool is not being steered. Holding W/A/S/D
+    // or an arrow (or auto-repeat) must never flip the pause flag.
+    if ( e.code === "Space" )
+    {
+        e.preventDefault();
+        if ( e.repeat || heldMovementKeys.size > 0 ) return;
+        toggleSimulationRunning();
+        return;
+    }
+
+    if ( isFocusedControl( e )) return;
 
     if ( handleCommandKey( e )) { e.preventDefault(); return; }
 
@@ -1124,6 +1176,7 @@ document.onkeyup = function(e: any)
 {
     if ( typeof genePool == "undefined" ) return;
 
+    heldMovementKeys.delete( e.code );
     const action = CAMERA_KEYS[ e.code ];
     if ( action !== undefined )
     {
@@ -1134,6 +1187,7 @@ document.onkeyup = function(e: any)
 // switching to another window while a key is held: stop moving
 window.addEventListener( "blur", function()
 {
+    heldMovementKeys.clear();
     if ( typeof genePool != "undefined" ) { genePool.stopAllCameraNavigation(); }
     _middleDragging = false;
 });

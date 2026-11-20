@@ -15,7 +15,7 @@ import { PROFILER_ENABLED, profEnter, profExit, profReportText, profReset, setPr
 declare const __GENEPOOL_VERSION__: string;
 import { currentAt, currentDriftX, currentDriftY, currentStrength, randomPointInCurrent } from "./Currents";
 import { bindPlantGenes, inheritPlantGenes, plantMatureAge, plantOldAge, plantRotAge, plantSeedDistance } from "./PlantGenes";
-import { geneAverage, convertOldGenes, GENE_LAYOUT_VERSION, setTrait, gaussian, thermalWidthToGene, preyTargetScore, GENES_PREDATOR, GENES_THERMAL_OPTIMUM, GENES_THERMAL_WIDTH, GENES_DIGESTION, GENES_BRIGHTNESS, GENES_CHOOSINESS, GENES_HUNGER, GENES_AUTOTOMY_BITE, GENES_AUTOTOMY_THREAT, GENES_AUTOTOMY_AMOUNT, GENES_AUTOTOMY_WHICH, GENES_PERSISTENCE, GENES_INVESTMENT, GENES_SIZE_PICKINESS, GENES_DEFERENCE, GENES_RUDDER, GENES_WEAK_PREY, GENES_IMMUNE, GENES_CANNIBAL, GENES_CURRENT } from "./EcologyGenes";
+import { geneAverage, convertOldGenes, GENE_LAYOUT_VERSION, setTrait, gaussian, thermalWidthToGene, preyTargetScore, GENES_PREDATOR, GENES_THERMAL_OPTIMUM, GENES_THERMAL_WIDTH, GENES_DIGESTION, GENES_BRIGHTNESS, GENES_CHOOSINESS, GENES_HUNGER, GENES_AUTOTOMY_BITE, GENES_AUTOTOMY_THREAT, GENES_AUTOTOMY_AMOUNT, GENES_AUTOTOMY_WHICH, GENES_PERSISTENCE, GENES_INVESTMENT, GENES_SIZE_PICKINESS, GENES_DEFERENCE, GENES_RUDDER, GENES_WEAK_PREY, GENES_IMMUNE, GENES_CANNIBAL, GENES_CURRENT, GENES_ASYMMETRY } from "./EcologyGenes";
 import { environment, FLAT_ENVIRONMENT, INITIAL_SOIL_NUTRIENT_PER_CELL, NUTRIENT_CYCLE_ENABLED, SWIMMING_ENERGY_RECYCLE_ENABLED, PLANT_CELL_SIZE, SOIL_DIFFUSION_INTERVAL, PLANT_TYPE_WARM, PLANT_TYPE_COLD, SEASONAL_PLANT_GROWTH_ENABLED, SEASONAL_PLANT_GROWTH_AMPLITUDE, SOIL_NUTRIENT_CAPACITY_PER_CELL } from "./Environment";
 import { petriSettings, petriStartZone } from "./Petri";
 import { IGNORE_FOOD_EFFICIENCY, preyVisibility, TWO_PLANT_TYPES } from "./Ecology";
@@ -23,7 +23,7 @@ import { START_ENERGY_FACTOR, PLANT_ROT_ENABLED, START_FOOD_FILL, START_FOOD_CLU
 
 import { BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_PREY } from "./Brain";
 import { Camera } from "./Camera";
-import { BRIGHTNESS_FROM_GENES, Embryology, isExperimentalEmbryologyGene } from "./Embryology";
+import { asymmetryFromGene, BRIGHTNESS_FROM_GENES, Embryology, isExperimentalEmbryologyGene } from "./Embryology";
 import { FamilyTree } from "./FamilyTree";
 import { DEFAULT_FOOD_BIT_ENERGY, DEFAULT_FOOD_BIT_MAX_SPAWN_RADIUS, FOOD_BIT_BOUNDARY_MARGIN, FOOD_BIT_GRAB_RADIUS, FOOD_BIT_SIZE, FOOD_BIT_SIZE_VIEW_SCALE, FOOD_OPACITY_INCREMENT, FoodBit, MAX_FOOD_BIT_ENERGY, MAX_FOOD_BIT_MAX_SPAWN_RADIUS, MIN_FOOD_BIT_ENERGY, MIN_FOOD_BIT_MAX_SPAWN_RADIUS } from "./FoodBit";
 import { Genotype, NUM_GENES, PRESET_GENOTYPE_DARWIN, PRESET_GENOTYPE_DENNETT, PRESET_GENOTYPE_MENDEL, PRESET_GENOTYPE_TURING, PRESET_GENOTYPE_WILSON } from "./Genotype";
@@ -52,6 +52,14 @@ import { ViewTracking, ViewTrackingMode } from "./ViewTracking";
 import { GenePoolState } from "./core/GenePoolState";
 import { createGenePoolRenderer } from "./GenePoolRenderer";
 import * as Serializer from "./GenePoolSerializer";
+import { depositSoilEnergy, seedSoilField, soilPlantGrowth, stepSoilField, totalSoilEnergy } from "./SoilField";
+
+// The living soil has its own ambient reservoir. Energy that a swimmer spends
+// is split 70/30 between the soil under it and this reservoir; every eighth
+// step 3% of the reservoir trickles back into the soil. Both buffers are part
+// of the world total, so the split never creates or destroys energy.
+let _ambientEnergy = 0;
+let _totalWorldEnergy = 0;
 
 //------------------
 export function GenePool()
@@ -606,6 +614,13 @@ export function GenePool()
         resetAtmosphere( INITIAL_NUM_SWIMBOTS * SWIMBOT_MAX_ENERGY * START_ENERGY_FACTOR
                        + MAX_FOODBITS * globalTweakers.foodBitEnergy * ( 1 + ATMOSPHERE_RESERVE_WORLDS ));
 
+        // the living soil starts each run with a few fertile oases, paid for
+        // out of the same endowment (nothing is created from nothing)
+        _ambientEnergy = 0;
+        _st.soilField.fill( 0 );
+        _st.foodSucking.fill( 0 );
+        seedSoilField( _st );
+
         //-------------------------------------------------------------------
         // The "random" pool lives in the new environment (temperature map,
         // warm and cold plants, several gardens) and fills the big world.
@@ -918,6 +933,9 @@ if ( mode === SimulationStartMode.SPECIES )
             {
                 if ( !isExperimentalEmbryologyGene( g )) { _myGenotype.setGeneValue( g, 0 ); }
             }
+            // founders must differ at the asymmetry locus even when they come
+            // from a preset genome (where the junk tail is all zeroes)
+            _myGenotype.setGeneValue( GENES_ASYMMETRY[0], Math.floor( gpRandom() * BYTE_SIZE ));
 
             //-------------------------------------------------------------------
             // environment: each swimbot starts in one of the gardens (one per
@@ -1081,6 +1099,11 @@ if ( mode === SimulationStartMode.SPECIES )
 		simClock.step = 0;
 	    resetSimulationCounters();
 	    resetHistory();
+
+	    // the reference total is taken only after the founders and the starting
+	    // plants are in place (and the soil has been seeded), so that the
+	    // conservation check measures the closed loop, not the initialization
+	    _totalWorldEnergy = this.getTotalWorldEnergy();
 	}
 
 
@@ -1322,6 +1345,7 @@ if ( mode === SimulationStartMode.SPECIES )
 	        if ( parts >= lo && parts <= hi ) return;
 	        _myGenotype.randomize();
 	        for (let g = NUM_GENES_USED; g < NUM_GENES; g++) { if ( !isExperimentalEmbryologyGene( g )) { _myGenotype.setGeneValue( g, 0 ); } }
+	        _myGenotype.setGeneValue( GENES_ASYMMETRY[0], Math.floor( gpRandom() * BYTE_SIZE ));
 	    }
 	}
 
@@ -1504,7 +1528,7 @@ if ( mode === SimulationStartMode.SPECIES )
 	            _foodBits[ child ].initialize( child );
 	            if ( PLANT_EVOLUTION_ENABLED && ( parent !== null )) { inheritPlantGenes( child, parent.getIndex() ); }
 	            _foodBits[ child ].setType( type );
-	            if ( !fundPlant( child, globalTweakers.foodBitEnergy )) return;
+	            if ( !fundPlant( child, globalTweakers.foodBitEnergy, parent !== null ? parent.getIndex() : NULL_INDEX )) return;
 	            _foodBits[ child ].setPosition( _vectorUtility );
 	            environment.plantCount[ type ][ environment.plantCellIndex( _vectorUtility.x, _vectorUtility.y ) ] ++;
 	            if ( type === PLANT_TYPE_WARM ) { numType0FoodBits ++; } else { numType1FoodBits ++; }
@@ -1551,6 +1575,9 @@ if ( mode === SimulationStartMode.SPECIES )
 	        }
 	        _foodBits[ child ].initialize( child );
 	        _foodBits[ child ].setType( parent.getType() );
+	        // Background plankton photosynthesis: this is world regrowth, not a
+	        // biological seed. The parent only supplies a place to scatter, so
+	        // the energy comes from the atmosphere (true seeds pay their parent).
 	        if ( !fundPlant( child, globalTweakers.foodBitEnergy )) return;
 	        _foodBits[ child ].setPosition( _vectorUtility );
 	        environment.plantCount[ parent.getType() ][ environment.plantCellIndex( _vectorUtility.x, _vectorUtility.y ) ] ++;
@@ -2240,6 +2267,9 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
             _foodBits[f].setPosition( _vectorUtility );
             _foodBits[f].setEnergy( piece );
         }
+        // pieces are at least 0.5: a smaller remainder cannot be placed, but
+        // it must not disappear from the closed world either
+        if ( rest > 0 ) { depositSoilEnergy( _st, x, y, rest ); }
     }
 
     this.spawnMeatFoodBits = function(position, count)
@@ -2411,6 +2441,11 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
         // update swimbots...
         //----------------------
         this.updateSwimbots();
+
+        // Every eighth step the ambient reservoir feeds the soil and the
+        // field diffuses. The amount drawn is removed from the reservoir here,
+        // so the world total is unchanged.
+        _ambientEnergy -= stepSoilField( _st, _clock, _ambientEnergy );
 
         //------------------
         // update food
@@ -3061,7 +3096,11 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
             {
                 const s = list[i], b = s * SS.BOT_STRIDE;
                 const spent = Math.max( 0, _energyBeforePhysics[s] - Math.max( 0, B[ b + SS.B_ENERGY ] ));
-                transferToAtmosphere( spent );   // closed cycle: swimming, drag and basal metabolism return to the pool
+                // 70% of what a swimmer burns feeds the living soil under it;
+                // the other 30% goes to the ambient reservoir, which trickles
+                // 3% back into the soil every eighth step.
+                depositSoilEnergy( _st, B[ b + SS.B_POS_X ], B[ b + SS.B_POS_Y ], spent * 0.70 );
+                _ambientEnergy += spent * 0.30;
                 energyCycleCounters.nutrientsFromSwimming += environment.returnSwimmingEnergyAt( B[ b + SS.B_POS_X ], B[ b + SS.B_POS_Y ], spent );
             }
         }
@@ -3163,11 +3202,13 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	// all living swimbots. Must stay constant over a whole run.
 	this.getTotalWorldEnergy = function()
 	{
-	    let total = getAtmosphereEnergy();
+	    let total = getAtmosphereEnergy() + _ambientEnergy + totalSoilEnergy( _st );
 	    for (let f = 0; f < MAX_FOODBITS; f++) { if ( _st.liveFood[f] === 1 ) total += _st.foodEnergy[f]; }
 	    for (let s = 0; s < MAX_SWIMBOTS; s++) { if ( _st.liveSwimbot[s] === 1 ) total += _st.bots[ s * SS.BOT_STRIDE + SS.B_ENERGY ]; }
 	    return total;
 	}
+	this.getInitialWorldEnergy = function() { return _totalWorldEnergy; }
+	this.getAmbientEnergy = function() { return _ambientEnergy; }
 	this.getEcologyStats = function()
 	{
 	    let plants = 0, trees = 0, fruits = 0, carriedSeeds = 0;
@@ -3179,12 +3220,23 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	        if ( _st.foodWood[f] >= WOOD_PER_FRUIT_TIER ) trees ++;
 	        if ( _st.foodFruit[f] === 1 ) fruits ++;
 	    }
+	    let alive = 0, asymAbs = 0, asymStrong = 0;
 	    for ( let s = 0; s < MAX_SWIMBOTS; s++ )
 	    {
-	        if ( _st.liveSwimbot[s] === 1 && _swimbots[s].hasCarriedSeed() ) carriedSeeds ++;
+	        if ( _st.liveSwimbot[s] !== 1 ) continue;
+	        alive ++;
+	        if ( _swimbots[s].hasCarriedSeed() ) carriedSeeds ++;
+	        const gene = _swimbots[s].getGenotype().getGeneValue( GENES_ASYMMETRY[0] ) / BYTE_SIZE;
+	        const asym = Math.abs( asymmetryFromGene( gene ));
+	        asymAbs += asym;
+	        if ( asym > 0.05 ) asymStrong ++;
 	    }
 	    return { plants, trees, fruits, carriedSeeds, soil: environment.getTotalSoilNutrient(),
-	             atmosphere: getAtmosphereEnergy(), totalEnergy: this.getTotalWorldEnergy() };
+	             soilEnergy: totalSoilEnergy( _st ), ambientEnergy: _ambientEnergy,
+	             atmosphere: getAtmosphereEnergy(), totalEnergy: this.getTotalWorldEnergy(),
+	             initialEnergy: _totalWorldEnergy,
+	             asymmetryMean: alive > 0 ? asymAbs / alive : 0,
+	             asymmetryShare: alive > 0 ? asymStrong / alive : 0 };
 	}
 	this.getPhaseTimes = function() { return _phaseTimes; }
 
@@ -3201,6 +3253,15 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 
                 _swimbotWasAlive[s] = false;
                 if ( this.onSwimbotDied ) { this.onSwimbotDied( _swimbots[s] ); }     // (src/RunRecorder.ts)
+
+                // whatever was still inside the body when it died soaks into
+                // the soil cell under the corpse (nothing is lost from the world)
+                const residual = Math.max( 0, _swimbots[s].getEnergy() );
+                if ( residual > 0 )
+                {
+                    depositSoilEnergy( _st, deadPosition.x, deadPosition.y, residual );
+                    _swimbots[s].setEnergy( 0 );
+                }
 
 
                 // CARCASS_ENABLED: a body that died not eaten leaves its body as
@@ -3373,6 +3434,8 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
         {
             environment.returnMeatDetritusAt( _st.foodX[f], _st.foodY[f], _st.foodEnergy[f] );
         }
+        // FoodBit.kill() returns the remaining crown energy to the atmosphere,
+        // so no extra soil deposit is needed here (that would double-count).
         _foodBits[f].kill();
     }
 
@@ -3437,6 +3500,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	    const profT0 = PROFILER_ENABLED ? profEnter( PROF_UPDATE_FOOD ) : 0;
 	    try
 	    {
+	    _st.foodSucking.fill( 0 );
 	    if ( _mapMeatRate > 0 ) { this.rainMapMeat(); }
         let numType0FoodBits = 0;
         let numType1FoodBits = 0;
@@ -3466,21 +3530,17 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
             {
                 const cell = environment.plantCellIndex( foodX[f], foodY[f] );
                 const shade = ( _st.foodWood[f] < WOOD_PER_FRUIT_TIER ) ? _plantShade[cell] : 0;
+                const full = plantFullEnergy( environment.getSoilNutrientAtCell( cell ));
                 const age = ( _clock - born[f] ) / ( 1 + ( SHADED_PLANT_AGING_FACTOR - 1 ) * shade );
                 if (( PLANT_LIFESPAN > 0 ) && ( age > plantLifespan( f, born[f] ))) { killPlant( f ); continue; }
 
-                const soil = environment.getSoilNutrientAtCell( cell );
-                const full = plantFullEnergy( soil );
+                // A plant is a pump, not a printer: the crown can only grow by
+                // sucking energy out of the nine soil cells under it. The tier
+                // cap and the three small caps live in SoilField.stepPlantGrowth.
                 let e = _st.foodEnergy[f];
-                if ( e < full )
-                {
-                    let wanted = ( full - e ) * PLANT_LEAF_REGROWTH * ( 1 - shade );
-                    if ( CLOSED_ENERGY_CYCLE_ENABLED ) wanted = Math.min( wanted, getAtmosphereEnergy() );
-                    const free = Math.min( wanted, Math.max( 0, PLANT_SPROUT_ENERGY - e ));
-                    const funded = environment.takeSoilNutrientForGrowthAt( foodX[f], foodY[f], wanted - free );
-                    const grown = free + funded;
-                    if ( grown > 0 ) { e += drawFromAtmosphere( grown ); _st.foodEnergy[f] = e; }
-                }
+                const grown = soilPlantGrowth( _st, foodX[f], foodY[f], e );
+                if ( grown > 0 ) { e += grown; _st.foodEnergy[f] = e; }
+                _st.foodSucking[f] = grown > 0 ? Math.min( 1, grown / 0.28 ) : 0;
                 _st.foodWood[f] = Math.max( _st.foodWood[f], e );
 
                 const crownStarved = e < _st.foodWood[f] * 0.05
@@ -3518,20 +3578,35 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 
                  if ( type === 0 ) { numType0FoodBits ++; }
             else if ( type === 1 ) { numType1FoodBits ++; }
-            else if ( _clock - born[f] > MEAT_DECAY_TIME )
+            else
             {
-                simCounters.meatDecayEvents ++;
-                if ( counting && NUTRIENT_CYCLE_ENABLED )
+                // carrion rots a little every step; the rot is real energy in
+                // the soil, not an invisible disappearance into the atmosphere
+                let e = _st.foodEnergy[f];
+                const rot = Math.min( e, Math.max( 0.008, e * 0.004 ));
+                if ( rot > 0 )
                 {
-                    simCounters.nutrientsFromMeatDecay += environment.returnMeatDetritusAt( foodX[f], foodY[f], _st.foodEnergy[f] );
+                    depositSoilEnergy( _st, foodX[f], foodY[f], rot );
+                    e -= rot;
+                    _st.foodEnergy[f] = e;
                 }
-                _foodBits[f].kill();
-            }
-            else if ( _currentSpeed > 0 )
-            {
-                currentAt( foodX[f], foodY[f] );
-                foodX[f] = Math.max( POOL_LEFT + 1, Math.min( POOL_RIGHT  - 1, foodX[f] + _currentSpeed * currentDriftX() ));
-                foodY[f] = Math.max( POOL_TOP  + 1, Math.min( POOL_BOTTOM - 1, foodY[f] + _currentSpeed * currentDriftY() ));
+                if ( e <= 0.02 )
+                {
+                    if ( e > 0 ) { depositSoilEnergy( _st, foodX[f], foodY[f], e ); }
+                    _st.foodEnergy[f] = 0;
+                    simCounters.meatDecayEvents ++;
+                    if ( counting && NUTRIENT_CYCLE_ENABLED )
+                    {
+                        simCounters.nutrientsFromMeatDecay += environment.returnMeatDetritusAt( foodX[f], foodY[f], e );
+                    }
+                    _foodBits[f].kill();
+                }
+                else if ( _currentSpeed > 0 )
+                {
+                    currentAt( foodX[f], foodY[f] );
+                    foodX[f] = Math.max( POOL_LEFT + 1, Math.min( POOL_RIGHT  - 1, foodX[f] + _currentSpeed * currentDriftX() ));
+                    foodY[f] = Math.max( POOL_TOP  + 1, Math.min( POOL_BOTTOM - 1, foodY[f] + _currentSpeed * currentDriftY() ));
+                }
             }
 
             if ( counting && ( type !== 2 ) && ( live[f] === 1 ))
@@ -3540,6 +3615,30 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
             }
         }
         _st.params[ SS.PARAM_MATURE_TREE_COUNT ] = treeCount;
+
+        // Last-resort seedbank: when the plants are nearly gone, the ambient
+        // reservoir pays for one small sprout. The 3.0 leaves the reservoir
+        // and becomes the plant's energy, so the world total stays the same.
+        const livingPlants = numType0FoodBits + numType1FoodBits;
+        if ( livingPlants < 350 && _ambientEnergy > 20 )
+        {
+            const child = this.findLowestDeadFoodBitInArray();
+            if ( child !== NULL_INDEX )
+            {
+                this.randomPointInPool( _vectorUtility );
+                const type = environment.active ? this.choosePlantTypeAt( _vectorUtility.x, _vectorUtility.y ) : 0;
+                if ( !environment.active || this.plantCanGrowAt( _vectorUtility.x, _vectorUtility.y, type ))
+                {
+                    _ambientEnergy -= 3.0;
+                    _foodBits[child].initialize( child );
+                    _foodBits[child].setType( type );
+                    _foodBits[child].setEnergy( 3.0 );
+                    _foodBits[child].setPosition( _vectorUtility );
+                    _foodBitGrid.addExtra( child );
+                    if ( type === PLANT_TYPE_WARM ) { numType0FoodBits ++; } else { numType1FoodBits ++; }
+                }
+            }
+        }
 
         if ( environment.active )
         {
@@ -3572,7 +3671,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
             let parent = this.findRandomLivingPlant();
             if ( parent === null ) break;
 
-            this.spawnPlant( parent.getPosition(), parent.getType(), numType0FoodBits, numType1FoodBits, true );
+            this.spawnPlant( parent.getPosition(), parent.getType(), numType0FoodBits, numType1FoodBits, true, parent.getIndex() );
         }
 
         //------------------------------------------------------------------
@@ -3600,16 +3699,28 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
     // closed energy cycle: a new plant is photosynthesis - its energy comes
     // from the pool, never from nowhere. An empty pool means no sprout
     // (auto-throttling); a nearly empty one means a smaller sprout.
-    function fundPlant( f, requested )
+    function fundPlant( f, requested, donor: number = NULL_INDEX )
     {
         const needed = ( PLANT_SIZE_ENABLED && environment.active && ( _st.foodType[f] !== 2 )) ? PLANT_SPROUT_ENERGY : requested;
-        const funded = drawFromAtmosphere( needed );
+        let funded: number;
+        if ( donor !== NULL_INDEX )
+        {
+            // A seed is paid for by its parent, not printed by the atmosphere.
+            const available = _foodBits[donor].getEnergy();
+            if ( available < needed ) { _foodBits[f].setEnergy( 0 ); _foodBits[f].kill(); return false; }
+            _foodBits[donor].setEnergy( available - needed );
+            funded = needed;
+        }
+        else
+        {
+            funded = drawFromAtmosphere( needed );
+        }
         if ( funded <= 0 ) { _foodBits[f].setEnergy( 0 ); _foodBits[f].kill(); return false; }
         _foodBits[f].setEnergy( funded );
         return true;
     }
 
-    this.spawnPlant = function( position, type, numType0, numType1, scatter )
+    this.spawnPlant = function( position, type, numType0, numType1, scatter, donor: number = NULL_INDEX )
     {
         if ( globalTweakers.numFoodTypes === 2 )
         {
@@ -3623,7 +3734,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
         _foodBits[ child ].initialize( child );
         _foodBits[ child ].setType( type );
         _foodBits[ child ].setMaxSpawnRadius( LOCAL_PLANT_SEED_RADIUS );
-        if ( !fundPlant( child, globalTweakers.foodBitEnergy )) return false;
+        if ( !fundPlant( child, globalTweakers.foodBitEnergy, donor )) return false;
 
         _seedSource.getPosition().set( position );
 
@@ -3734,7 +3845,7 @@ if ( !fundPlant( childFoodBitIndex, globalTweakers.foodBitEnergy )) return;
         }
 
         _foodBits[ childFoodBitIndex ].spawnFromParent( _foodBits[ parentFoodBitIndex ], childFoodBitIndex, newFoodType );
-        if ( !fundPlant( childFoodBitIndex, _foodBits[ parentFoodBitIndex ].getEnergy() )) return;
+        if ( !fundPlant( childFoodBitIndex, _foodBits[ parentFoodBitIndex ].getEnergy(), parentFoodBitIndex )) return;
 
         if ( PLANT_EVOLUTION_ENABLED )
         {
@@ -5546,6 +5657,7 @@ this.testPredation = function()
         for (let g = NUM_GENES_USED; g < NUM_GENES; g++) {
             if ( !isExperimentalEmbryologyGene( g )) { _myGenotype.setGeneValue(g, 0); }
         }
+        _myGenotype.setGeneValue( GENES_ASYMMETRY[0], Math.floor( gpRandom() * BYTE_SIZE ));
 
         setPredatorGene(_myGenotype, predatorGeneValue255);
 

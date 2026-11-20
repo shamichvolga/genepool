@@ -38,7 +38,11 @@ export const GENES_WEAK_PREY          = [ 164 ];   // how much a predator prefer
 export const GENES_IMMUNE            = [ 165, 166, 167, 168 ];
 export const GENES_CURRENT          = [ 170 ];   // the feel for the current (CURRENT_AWARENESS_ENABLED)
 export const GENES_CANNIBAL          = [ 169 ];   // eating the young of one's kind (an ability)   // the immune profile (DISEASE_ENABLED)
-export function isDeferenceGene( g ) { return ( g === GENES_DEFERENCE[0] ) || ( g === GENES_RUDDER[0] ) || ( g === GENES_WEAK_PREY[0] ) || (( g >= 165 ) && ( g <= 170 )); }   // (small-step genes outside the ecology block)
+// Functional asymmetry of paired branches. The locus sits past every body,
+// ecology and experimental block; founders get a random value at reset.
+export const GENES_ASYMMETRY         = [ 210 ];
+export function isAsymmetryGene( g ) { return g === GENES_ASYMMETRY[0]; }
+export function isDeferenceGene( g ) { return ( g === GENES_DEFERENCE[0] ) || ( g === GENES_RUDDER[0] ) || ( g === GENES_WEAK_PREY[0] ) || (( g >= 165 ) && ( g <= 170 )) || isAsymmetryGene( g ); }   // (small-step genes outside the ecology block)
 
 export function isSelfFeedingGene( g ): boolean
 {

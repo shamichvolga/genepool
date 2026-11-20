@@ -1,4 +1,4 @@
-import { GENES_AUTOTOMY_BITE, GENES_AUTOTOMY_THREAT, GENES_AUTOTOMY_AMOUNT, GENES_AUTOTOMY_WHICH, geneAverage, thermalWidthOf, GENES_HUNGER, GENES_PREDATOR, GENES_THERMAL_OPTIMUM, GENES_DIGESTION, GENES_BRIGHTNESS, GENES_CHOOSINESS } from "./EcologyGenes";
+import { GENES_AUTOTOMY_BITE, GENES_AUTOTOMY_THREAT, GENES_AUTOTOMY_AMOUNT, GENES_AUTOTOMY_WHICH, GENES_ASYMMETRY, geneAverage, thermalWidthOf, GENES_HUNGER, GENES_PREDATOR, GENES_THERMAL_OPTIMUM, GENES_DIGESTION, GENES_BRIGHTNESS, GENES_CHOOSINESS } from "./EcologyGenes";
 import { environment } from "./Environment";
 //--------------------------------------------------------------------------
 //                                                                        
@@ -50,6 +50,18 @@ export const MIN_AMP               = -60.0;
 export const MAX_AMP               =  60.0;
 export const MIN_PHASE             =  -1.0;
 export const MAX_PHASE             =   1.0;	
+
+// Deadzone asymmetry: small deviations from 0.5 are neutral; beyond ±0.38 the
+// gene is rescaled to the full -1..+1 range. Left and right paired branches
+// then grow with slightly different angles, lengths and stroke phases.
+export const ASYMMETRY_DEADZONE = 0.38;
+export function asymmetryFromGene( geneNorm: number ): number
+{
+    const raw = geneNorm * 2 - 1;
+    if ( raw > ASYMMETRY_DEADZONE ) { return ( raw - ASYMMETRY_DEADZONE ) / ( 1 - ASYMMETRY_DEADZONE ); }
+    if ( raw < -ASYMMETRY_DEADZONE ) { return ( raw + ASYMMETRY_DEADZONE ) / ( 1 - ASYMMETRY_DEADZONE ); }
+    return 0;
+}
 export const MIN_COLOR             =   ZERO;
 export const MAX_COLOR             =   ONE;
 const BRIGHTNESS_COLOR_SHARE        =   0.6;    // how much the brightness decides the body color
@@ -109,7 +121,7 @@ export function isGP6MechanicsGene( g: number ): boolean
 export function isExperimentalEmbryologyGene( g: number ): boolean
 {
     return isIterativeGrowthGene( g ) || isGP6MechanicsGene( g )
-        || ( g >= 206 && g <= 209 );
+        || ( g >= 206 && g <= 209 ) || ( g === GENES_ASYMMETRY[0] );
 }
 
 
@@ -180,6 +192,7 @@ let testNoEel = true;
     let _numGenesUsed           = 0;
     let _numGenesPerCategory    = 0;
     let _cutOff                 = 0;
+    let _asymmetry              = 0;
     let preferredFoodTypeGene   = 0;
     let digestibleFoodTypeGene  = 0;
     
@@ -228,6 +241,7 @@ let testNoEel = true;
 		    assert( _normalizedGenes[g] >= ZERO, "normalizedGenes[g] >= ZERO" );
 		    assert( _normalizedGenes[g] <= ONE,  "normalizedGenes[g] <= ONE"  );
 		}
+        _asymmetry = asymmetryFromGene( _normalizedGenes[ GENES_ASYMMETRY[0] ] );
 
         //------------------------------------------------------------
         // get the ranges...
@@ -493,7 +507,7 @@ testNoEel = false;
                     if ( _categoryValues[c].branchNumber === 1 )
                     {
                         reflect = ONE;
-                        this.generateBodySequence( phenotype, p, _categoryValues[c].branchAngle, c, reflect, _branchDepth[p] + 1 );
+                        this.generateBodySequence( phenotype, p, _categoryValues[c].branchAngle, c, reflect, _branchDepth[p] + 1, _categoryValues[c].branchAngle < 0 ? -1 : 1 );
                     }
                     else
                     {
@@ -510,7 +524,7 @@ testNoEel = false;
 
                             let f = -ONE + ( b / ( _categoryValues[c].branchNumber - 1 ) ) * 2;
 
-                            this.generateBodySequence( phenotype, p, _categoryValues[c].branchAngle * f, c, reflect, _branchDepth[p] + 1 );
+                            this.generateBodySequence( phenotype, p, _categoryValues[c].branchAngle * f, c, reflect, _branchDepth[p] + 1, f );
                         }
                     }                    
                 }
@@ -659,7 +673,7 @@ copyPart( testParts[p], phenotype.parts[p] );
 	//---------------------------------------------------------------------------------
 	// generate body sequence
 	//---------------------------------------------------------------------------------
-	this.generateBodySequence = function( phenotype, parent, branchAngle, c, reflect, depth = 0 )
+	this.generateBodySequence = function( phenotype, parent, branchAngle, c, reflect, depth = 0, branchSide = 0 )
 	{
         const secondaryTip = SECONDARY_BRANCHING_ENABLED && depth === 1
             && _normalizedGenes[ SECONDARY_BRANCHING_GENE ] >= 0.25;
@@ -671,6 +685,15 @@ copyPart( testParts[p], phenotype.parts[p] );
         const growthPhase = GROWTH_TURN_ENABLED ? 2 * _normalizedGenes[ GROWTH_TURN_FIRST_GENE + c * 3 + 1 ] - 1 : 0;
         const growthAcc   = GROWTH_TURN_ENABLED ? 0.5 * ( _normalizedGenes[ GROWTH_TURN_FIRST_GENE + c * 3 + 2 ] - 0.5 ) : 0;
         let growthTurn = 0;
+
+        // Paired branches inherit opposite multipliers. A negative branch angle
+        // is the left side; with a positive asymmetry gene the left grows a
+        // little longer and swings a little wider, and the right does the
+        // opposite. The root body (depth 0) is never touched.
+        const asymSide  = branchSide !== 0 ? ( branchSide < 0 ? -1 : 1 ) : ( branchAngle < 0 ? -1 : 1 );
+        const asymAngle = depth > 0 ? ( asymSide < 0 ? 1 + 0.35 * _asymmetry : 1 - 0.35 * _asymmetry ) : 1;
+        const asymSize  = depth > 0 ? ( asymSide < 0 ? 1 + 0.22 * _asymmetry : 1 - 0.22 * _asymmetry ) : 1;
+        const asymPhase = depth > 0 ? ( asymSide < 0 ? 1 + 0.45 * _asymmetry : 1 - 0.45 * _asymmetry ) : 1;
 
         for (let i=0; i<_categoryValues[c].sequenceCount; i++)
         {
@@ -692,9 +715,9 @@ copyPart( testParts[p], phenotype.parts[p] );
                 {
                     phenotype.parts[ _partIndex ].branch    = true;
                     phenotype.parts[ _partIndex ].parent    = parent;
-                    phenotype.parts[ _partIndex ].angle     = branchAngle;
+                    phenotype.parts[ _partIndex ].angle     = branchAngle * asymAngle;
                     phenotype.parts[ _partIndex ].amp       = _categoryValues[c].branchAmp;
-                    phenotype.parts[ _partIndex ].phase     = _categoryValues[c].branchPhase * _partIndex;
+                    phenotype.parts[ _partIndex ].phase     = _categoryValues[c].branchPhase * _partIndex * asymPhase;
                     phenotype.parts[ _partIndex ].turnAmp   = _categoryValues[c].branchTurnAmp;
                     phenotype.parts[ _partIndex ].turnPhase = _categoryValues[c].branchTurnPhase * _partIndex;
                     if ( BRANCH_AMP_FLIP_ENABLED && _normalizedGenes[ BRANCH_AMP_FLIP_GENE ] >= 0.5 && reflect < 0 )
@@ -713,7 +736,7 @@ copyPart( testParts[p], phenotype.parts[p] );
                     phenotype.parts[ _partIndex ].angle     = ZERO;
 
                     phenotype.parts[ _partIndex ].amp       = _categoryValues[c].amp;
-                    phenotype.parts[ _partIndex ].phase     = _categoryValues[c].phase * _partIndex;
+                    phenotype.parts[ _partIndex ].phase     = _categoryValues[c].phase * _partIndex * asymPhase;
                     phenotype.parts[ _partIndex ].turnAmp   = _categoryValues[c].turnAmp;
                     phenotype.parts[ _partIndex ].turnPhase = _categoryValues[c].turnPhase;
                     if ( GROWTH_TURN_ENABLED )
@@ -759,8 +782,8 @@ if ( testNoEel )
                     fraction = source / ( _categoryValues[c].sequenceCount - 1 );
                 }
 
-                phenotype.parts[ _partIndex ].width  = _categoryValues[c].startWidth  + fraction * ( _categoryValues[c].endWidth  - _categoryValues[c].startWidth   );
-                phenotype.parts[ _partIndex ].length = _categoryValues[c].startLength + fraction * ( _categoryValues[c].endLength - _categoryValues[c].startLength  );
+                phenotype.parts[ _partIndex ].width  = ( _categoryValues[c].startWidth  + fraction * ( _categoryValues[c].endWidth  - _categoryValues[c].startWidth  )) * asymSize;
+                phenotype.parts[ _partIndex ].length = ( _categoryValues[c].startLength + fraction * ( _categoryValues[c].endLength - _categoryValues[c].startLength )) * asymSize;
                 phenotype.parts[ _partIndex ].red    = _categoryValues[c].startRed    + fraction * ( _categoryValues[c].endRed    - _categoryValues[c].startRed     );
                 phenotype.parts[ _partIndex ].green  = _categoryValues[c].startGreen  + fraction * ( _categoryValues[c].endGreen  - _categoryValues[c].startGreen   );
                 phenotype.parts[ _partIndex ].blue   = _categoryValues[c].startBlue   + fraction * ( _categoryValues[c].endBlue   - _categoryValues[c].startBlue    );

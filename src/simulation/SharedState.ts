@@ -171,6 +171,7 @@ export class SharedState
     readonly foodField    : Float32Array;   // SCENT_GRID_N² plant energy density
     readonly preyField    : Float32Array;   // herbivore biomass density
     readonly predField    : Float32Array;   // predator traces
+    readonly soilField    : Float32Array;   // living soil: energy in SCENT_GRID_N² cells
 
     //--------------------------------------------------------
     // what perception reads (one number per swimbot slot)
@@ -233,6 +234,8 @@ export class SharedState
     readonly partJointMin     : Float32Array;
     readonly partJointMax     : Float32Array;
     readonly frontAppendages  : Uint8Array;    // number of raptorial front limbs (0..3)
+    readonly antennae         : Uint8Array;    // thin long anterior branches (0..2), widen the senses
+    readonly tailFin          : Uint8Array;    // 1 = broad tail fin, less drag
     readonly morphBucketShare : Float32Array;  // 16 morphospace shares among living herbivores
 
     readonly foodX        : Float64Array;
@@ -246,6 +249,7 @@ export class SharedState
     readonly foodFruitAt  : Float64Array;   // the next step this tree may drop a fruit
     readonly plantGrowth  : Float32Array;   // plant genes (PlantGenes.ts)
     readonly plantSpread  : Float32Array;
+    readonly foodSucking  : Float32Array;   // root suction strength, for the root-thread visuals
 
     readonly background   : Float32Array;   // environment: brightness of the bottom
     readonly temperature  : Float32Array;   // environment: base temperature map (FIELD_SIZE²)
@@ -326,6 +330,7 @@ export class SharedState
         this.foodField     = new Float32Array( make( "foodField", scentCells * 4 ));
         this.preyField     = new Float32Array( make( "preyField", scentCells * 4 ));
         this.predField     = new Float32Array( make( "predField", scentCells * 4 ));
+        this.soilField     = new Float32Array( make( "soilField", scentCells * 4 ));
 
         const u8  = ( name: string, count: number ) => new Uint8Array( make( name, count ));
         const n = maxSwimbots;
@@ -386,6 +391,8 @@ export class SharedState
         this.partJointMin     = new Float32Array( make( "partJointMin", partCount * 4 ));
         this.partJointMax     = new Float32Array( make( "partJointMax", partCount * 4 ));
         this.frontAppendages  = u8 ( "frontAppendages", n );
+        this.antennae         = u8 ( "antennae", n );
+        this.tailFin          = u8 ( "tailFin", n );
         this.morphBucketShare = new Float32Array( make( "morphBucketShare", 16 * 4 ));
 
         this.foodX      = f64( "foodX", MAX_FOODBITS );
@@ -399,6 +406,7 @@ export class SharedState
         this.foodFruitAt = f64( "foodFruitAt", MAX_FOODBITS );
         this.plantGrowth = new Float32Array( make( "plantGrowth", MAX_FOODBITS * 4 ));
         this.plantSpread = new Float32Array( make( "plantSpread", MAX_FOODBITS * 4 ));
+        this.foodSucking = new Float32Array( make( "foodSucking", MAX_FOODBITS * 4 ));
 
         this.background = new Float32Array( make( "background", BACKGROUND_SIZE * BACKGROUND_SIZE * 4 ));
         this.temperature = new Float32Array( make( "temperature", FIELD_SIZE * FIELD_SIZE * 4 ));

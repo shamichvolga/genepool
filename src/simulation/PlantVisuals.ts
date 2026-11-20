@@ -49,6 +49,29 @@ const AMBER: CrownColor = { red: 212 / 255, green: 163 / 255, blue: 56 / 255 };
 const TERRACOTTA: CrownColor = { red: 217 / 255, green: 119 / 255, blue: 87 / 255 };
 const COPPER: CrownColor = { red: 140 / 255, green: 59 / 255, blue: 43 / 255 };
 
+// Season decorations: spring blossoms, autumn fruit, winter frost on the rays.
+const BLOSSOM: CrownColor = { red: 250 / 255, green: 198 / 255, blue: 214 / 255 };
+const FRUIT:   CrownColor = { red: 244 / 255, green: 118 / 255, blue: 32 / 255 };
+const FROST:   CrownColor = { red: 208 / 255, green: 232 / 255, blue: 250 / 255 };
+
+// Continuous season weights, set once per frame by the renderer.
+const _season = { winter: 0, spring: 0, summer: 1, autumn: 0 };
+export function setPlantSeason( yearPhase: number, active: boolean ): void
+{
+    if ( !active )
+    {
+        _season.winter = 0; _season.spring = 0; _season.summer = 1; _season.autumn = 0;
+        return;
+    }
+    const w = Math.max( 0, Math.cos( yearPhase ));
+    const s = Math.max( 0, Math.sin( yearPhase ));
+    const u = Math.max( 0, -Math.cos( yearPhase ));
+    const a = Math.max( 0, -Math.sin( yearPhase ));
+    const total = w + s + u + a || 1;
+    _season.winter = w / total; _season.spring = s / total;
+    _season.summer = u / total; _season.autumn = a / total;
+}
+
 const SCRATCH_MAIN: CrownColor = { red: 0, green: 0, blue: 0 };
 const SCRATCH_LIGHT: CrownColor = { red: 0, green: 0, blue: 0 };
 const SCRATCH_TRUNK: CrownColor = { red: 0, green: 0, blue: 0 };
@@ -97,6 +120,11 @@ export function plantCrownColors( wood: number, energy: number, age: number, lif
     {
         lerpColor( TERRACOTTA, COPPER, ( tau - 0.86 ) / 0.14, SCRATCH_MAIN );
     }
+    // Season phenology on top of the age palette: spring flushes fresh green,
+    // autumn turns amber, winter lays a pale frost over the crown.
+    if ( _season.spring > 0 ) { lerpColor( SCRATCH_MAIN, GREEN_LIGHT, 0.30 * _season.spring, SCRATCH_MAIN ); }
+    if ( _season.autumn > 0 ) { lerpColor( SCRATCH_MAIN, AMBER,      0.45 * _season.autumn, SCRATCH_MAIN ); }
+    if ( _season.winter > 0 ) { lerpColor( SCRATCH_MAIN, FROST,      0.40 * _season.winter, SCRATCH_MAIN ); }
     if ( tau <= 0.60 )
     {
         SCRATCH_LIGHT.red = GREEN_LIGHT.red;
@@ -136,7 +164,11 @@ export function plantCrownRays( wood: number, energy: number, age: number, lifes
         }
         SCRATCH_RAYS[i].angle = angle;
         SCRATCH_RAYS[i].lengthFactor = ( i % 2 === 0 ? 1.0 : 0.78 ) * ( removed ? 1.0 : scale );
-        SCRATCH_RAYS[i].color = i % 2 === 0 ? SCRATCH_MAIN : SCRATCH_LIGHT;
+        let rayColor: CrownColor = i % 2 === 0 ? SCRATCH_MAIN : SCRATCH_LIGHT;
+        if ( _season.spring > 0.35 && i % 3 === 0 ) { rayColor = BLOSSOM; }
+        else if ( _season.autumn > 0.35 && i % 3 === 0 ) { rayColor = FRUIT; }
+        else if ( _season.winter > 0.45 && i % 2 === 1 ) { rayColor = FROST; }
+        SCRATCH_RAYS[i].color = rayColor;
         SCRATCH_RAYS[i].visible = !removed;
     }
     SCRATCH_RESULT.completeness = completeness;

@@ -473,7 +473,8 @@ export function physicsPartA( s: number, st: SharedState ): void
     {
         // Long, narrow bodies slip through the water; broad ones pay more.
         const streamlined = ( numParts >= 7 && meanWidth < 3.4 ) ? 0.84 : 1;
-        const effectiveDrag = motion.drag * ( ( glide > 0 && effort < 0.85 ) ? ( 1 - 0.35 * glide ) : 1 ) * streamlined;
+        const tailFin = st.tailFin[ s ] === 1 ? 0.90 : 1;
+        const effectiveDrag = motion.drag * ( ( glide > 0 && effort < 0.85 ) ? ( 1 - 0.35 * glide ) : 1 ) * streamlined * tailFin;
         const drag = applyWaterDrag( velX, velY, bodyMass, sumLengths, effectiveDrag );
         velX = drag.velocityX;
         velY = drag.velocityY;

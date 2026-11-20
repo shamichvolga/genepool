@@ -137,6 +137,57 @@ const POOL_BOUNDARY_MARGIN      = 1200.0;
     let _winterAlpha = 0;
     let _shoreIceCanvas: HTMLCanvasElement | null = null;
 
+    //------------------------------------------------
+    // living soil: a 128x128 overlay painted from the energy field
+    //------------------------------------------------
+    const SOIL_TEX = 128;
+    let _soilCanvas: any = null;
+    let _soilCtx: any = null;
+    let _soilImage: ImageData | null = null;
+    let _soilClock = -1;
+
+    function ensureSoilCanvas(): void
+    {
+        if ( _soilCanvas !== null ) return;
+        if ( typeof OffscreenCanvas !== "undefined" ) { _soilCanvas = new OffscreenCanvas( SOIL_TEX, SOIL_TEX ); }
+        else if ( typeof document !== "undefined" )
+        {
+            const c = document.createElement( "canvas" );
+            c.width = SOIL_TEX; c.height = SOIL_TEX;
+            _soilCanvas = c;
+        }
+        if ( _soilCanvas === null ) return;
+        _soilCtx = _soilCanvas.getContext( "2d" );
+        if ( _soilCtx !== null ) { _soilImage = _soilCtx.createImageData( SOIL_TEX, SOIL_TEX ); }
+    }
+
+    this.setSoilView = function( field: Float32Array, clock: number ): void
+    {
+        ensureSoilCanvas();
+        if ( _soilCanvas === null || _soilCtx === null || _soilImage === null ) return;
+        if ( _soilClock >= 0 && ( clock - _soilClock ) < 8 ) return;
+        _soilClock = clock;
+        const n = Math.max( 1, Math.round( Math.sqrt( field.length )));
+        const data = _soilImage.data;
+        for ( let py = 0; py < SOIL_TEX; py++ )
+        {
+            const sy = Math.min( n - 1, Math.floor( py * n / SOIL_TEX ));
+            const row = sy * n;
+            for ( let px = 0; px < SOIL_TEX; px++ )
+            {
+                const sx = Math.min( n - 1, Math.floor( px * n / SOIL_TEX ));
+                const soil = field[ row + sx ];
+                const t = Math.max( 0, Math.min( 1, soil / 40 ));
+                const i = ( py * SOIL_TEX + px ) * 4;
+                data[ i     ] = 78  + ( 138 - 78 )  * t;
+                data[ i + 1 ] = 126 + ( 164 - 126 ) * t;
+                data[ i + 2 ] = 68  + ( 62  - 68 )  * t;
+                data[ i + 3 ] = soil < 1.5 ? 0 : Math.round( 115 * ( 1 - Math.exp( -soil / 32 )));
+            }
+        }
+        _soilCtx.putImageData( _soilImage, 0, 0 );
+    };
+
     function bakeShoreIce(): void
     {
         if ( typeof document === "undefined" ) return;
@@ -227,6 +278,15 @@ const POOL_BOUNDARY_MARGIN      = 1200.0;
             canvas.globalAlpha = 0.72;
             canvas.drawImage( _backgroundImage, POOL_LEFT, POOL_TOP, POOL_WIDTH, POOL_HEIGHT );
             canvas.globalAlpha = 1.0;
+        }
+
+        // The living soil oases, stretched over the whole pool. Refreshed from
+        // the energy field every eighth simulation step, never regenerated.
+        if ( _soilCanvas !== null )
+        {
+            canvas.imageSmoothingEnabled = false;
+            canvas.drawImage( _soilCanvas, POOL_LEFT, POOL_TOP, POOL_WIDTH, POOL_HEIGHT );
+            canvas.imageSmoothingEnabled = true;
         }
 
         // Baked shore ice: one drawImage, only in winter, always below the

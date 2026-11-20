@@ -48,7 +48,6 @@ import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
 import { MAX_PARTS, NULL_PART, SWIMBOT_GENITAL_LENGTH, SWIMBOT_MOUTH_LENGTH, SWIMBOT_VIEW_RADIUS } from "./SwimbotTypes";
 import { FOOD_BIT_GRAB_RADIUS } from "./FoodBit";
 import { PROFILER_ENABLED, profEnter, profExit, PROF_DECIDE_STEP, PROF_NEURAL_THINK, PROF_EDIBLE_FOOD } from "./Profiler";
-import { transferToAtmosphere } from "./EnergyBudget";
 
 const PI_OVER_180 = Math.PI / 180;
 
@@ -834,9 +833,10 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
     {
         if ((( age + index ) & 3 ) === 0 ) { updateBodyTemperature( st, s, 4 ); }
         if ((( age + index ) % THERMAL_FIT_UPDATE_PERIOD ) === 0 ) { updateThermalFit( st, s ); }
-        const energyBeforeDrain = B[ b + SS.B_ENERGY ];
-        B[ b + SS.B_ENERGY ] = Math.max( 0, energyBeforeDrain - THERMAL_MISMATCH_DRAIN * ( 1 - M[ m + SS.M_THERMAL_FIT ] ));
-        transferToAtmosphere( energyBeforeDrain - B[ b + SS.B_ENERGY ] );
+        // The drain stays out of the pool here: GenePool's spent accounting
+        // already returns the whole per-step loss (this drain included) to
+        // the soil/ambient reservoirs, so crediting it twice would create energy.
+        B[ b + SS.B_ENERGY ] = Math.max( 0, B[ b + SS.B_ENERGY ] - THERMAL_MISMATCH_DRAIN * ( 1 - M[ m + SS.M_THERMAL_FIT ] ));
     }
     }
     finally { if ( PROFILER_ENABLED ) { profExit( PROF_DECIDE_STEP, profT0 ); } }
