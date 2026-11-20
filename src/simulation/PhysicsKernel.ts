@@ -598,6 +598,10 @@ export function physicsPartA( s: number, st: SharedState ): void
         if ( energy < ZERO ) { energy = ZERO; }
     }
 
+    // viscous water resists rotation: without damping, stroke torque oscillations
+    // accumulate into a high-frequency spin/heading jitter (twitch)
+    spin *= 0.88;
+
     posX += velX;
     posY += velY;
     angleNow += spin;
