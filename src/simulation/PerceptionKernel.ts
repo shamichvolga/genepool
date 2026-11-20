@@ -268,7 +268,8 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
     const myMouthY              = st.mouthY[s];
     const iAmPredator           = predatorLevel > PREDATOR_LEVEL_THRESHOLD;
 
-    const botX = st.botX, botY = st.botY, genitalX = st.genitalX, genitalY = st.genitalY;
+    const botX = st.botX, botY = st.botY;   // the grid walks the original arrays
+    const hot = st.botHot;   // [x, y, genitalX, genitalY] packed for cache locality
     const alive = st.alive, predator = st.predator;
 
     //------------------------------------------------------------------
@@ -298,9 +299,10 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
     for (let i = 0; i < numNearby; i += stride)
     {
         const o = nearby[i];
+        const h = o * 4;
         // the grid is rebuilt from live bots only, so no alive[] test is needed
-        const dx = myGenitalX - genitalX[o];
-        const dy = myGenitalY - genitalY[o];
+        const dx = myGenitalX - hot[ h + 2 ];
+        const dy = myGenitalY - hot[ h + 3 ];
         const distanceSquared = dx * dx + dy * dy;
         if ( distanceSquared < viewRadiusSquared )
         {
@@ -316,7 +318,8 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
     for (let i = 0; i < numNearest; i++)
     {
         const o = sc.nearestIndices[i];
-        if ( obstructed( st, myGenitalX, myGenitalY, genitalX[o], genitalY[o] ) && ( numCandidates > numNearest ))
+        const h = o * 4;
+        if ( obstructed( st, myGenitalX, myGenitalY, hot[ h + 2 ], hot[ h + 3 ] ) && ( numCandidates > numNearest ))
         {
             sortCandidatesByDistance( numCandidates, sc );
             nearestList = sc.candidateIndices;
@@ -333,12 +336,13 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
     for (let i = 0; i < numNearest && numSeen < MAX_SEEN; i++)
     {
         const o = nearestList[i];
-        if ( !obstructed( st, myGenitalX, myGenitalY, genitalX[o], genitalY[o] ))
+        const h = o * 4;
+        if ( !obstructed( st, myGenitalX, myGenitalY, hot[ h + 2 ], hot[ h + 3 ] ))
         {
             st.seen[ seenBase + numSeen ] = o;
             numSeen ++;
-            socialX += botX[o] - myX;
-            socialY += botY[o] - myY;
+            socialX += hot[h] - myX;
+            socialY += hot[ h + 1 ] - myY;
         }
     }
     if ( PROFILER_ENABLED ) { profExit( PROF_PERC_OBSTRUCTED, profObstructedT0 ); }
@@ -612,8 +616,9 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
             const weak = WEAK_PREY_ENABLED && isWeak( st, o );
             if (( st.mass[o] > myMass * PREY_MAX_MASS_RATIO ) && !young && !weak ) continue;
 
-            const px = myMouthX - botX[o];
-            const py = myMouthY - botY[o];
+            const h = o * 4;
+            const px = myMouthX - hot[h];
+            const py = myMouthY - hot[ h + 1 ];
             const distSq = px * px + py * py;
             if ( !weak && ( distSq > preyRadiusSq )) continue;   // the common case needs no square root
             const realDistance = fastDist( px, py );             // octagonal, no Math.sqrt
@@ -631,15 +636,15 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
                 for (let j = 0; j < numPredators; j++)
                 {
                     const q = sc.predatorIndices[j];
-                    const qx = st.mouthX[q] - botX[o];
+                    const qx = st.mouthX[q] - hot[h];
                     if ( Math.abs( qx ) >= realDistance ) continue;   // cheap reject before the square
-                    const qy = st.mouthY[q] - botY[o];
+                    const qy = st.mouthY[q] - hot[ h + 1 ];
                     if ( qx * qx + qy * qy < realDistanceSq ) rivals ++;
                 }
                 distance *= 1 + st.mind[ s * MIND_STRIDE + M_DEFERENCE ] * rivals;
             }
             if ( distance > preyViewRadius ) continue;
-            if ( obstructed( st, myMouthX, myMouthY, botX[o], botY[o] )) continue;   // (no seeing through the wall)
+            if ( obstructed( st, myMouthX, myMouthY, hot[h], hot[ h + 1 ] )) continue;   // (no seeing through the wall)
             // Kinship is pure and comparatively costly: check it only after the
             // cheap distance, size and visibility tests have accepted the prey.
             if ( KIN_NOT_EATEN_ENABLED && areKin( st, s, o )) continue;   // not my parent, child, brother or sister
@@ -650,11 +655,11 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
             {
                 const image = searchImageFactor( imageStrength,
                     st.colorR[o] - imageR, st.colorG[o] - imageG, st.colorB[o] - imageB, st.sizeSignature[o] - imageSize );
-                if ( distance > preyViewRadius * image * preyVisibility( st.brightness[o], backgroundAt( st, botX[o], botY[o] ))) continue;
+                if ( distance > preyViewRadius * image * preyVisibility( st.brightness[o], backgroundAt( st, hot[h], hot[ h + 1 ] ))) continue;
             }
 
             // (the way down the stream is shorter in time: the gene "feel for the current")
-            const travel = ( awareness !== 0 ) ? distance * currentTravelFactor( driftX, driftY, botX[o] - myMouthX, botY[o] - myMouthY, ownSpeed, awareness ) : distance;
+            const travel = ( awareness !== 0 ) ? distance * currentTravelFactor( driftX, driftY, hot[h] - myMouthX, hot[ h + 1 ] - myMouthY, ownSpeed, awareness ) : distance;
             let value = -travel + st.energy[o] * 0.001;
             if ( PREDATOR_TARGET_SELECTION_ENABLED )
             {
@@ -720,11 +725,12 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
             // young any more) is no danger to me: the same rule it hunts by
             if ( !iAmYoung && !iAmWeak && ( st.mass[s] > st.mass[o] * PREY_MAX_MASS_RATIO )) continue;
 
-            const gx = myGenitalX - genitalX[o];
-            const gy = myGenitalY - genitalY[o];
+            const h = o * 4;
+            const gx = myGenitalX - hot[ h + 2 ];
+            const gy = myGenitalY - hot[ h + 3 ];
             const distanceSq = gx * gx + gy * gy;   // squares keep the order, no square root needed
             if ( distanceSq > viewRadiusSquared ) continue;
-            if ( obstructed( st, myGenitalX, myGenitalY, genitalX[o], genitalY[o] )) continue;   // (no seeing through the wall)
+            if ( obstructed( st, myGenitalX, myGenitalY, hot[ h + 2 ], hot[ h + 3 ] )) continue;   // (no seeing through the wall)
 
             if ( distanceSq < anyDistanceSq ) { anyDistanceSq = distanceSq; anyPredator = o; }
 
@@ -754,8 +760,9 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
         let keepMate = false;
         if (( currentMate >= 0 ) && ( st.liveSwimbot[currentMate] === 1 ))
         {
-            const mx = myGenitalX - genitalX[currentMate];
-            const my = myGenitalY - genitalY[currentMate];
+            const h = currentMate * 4;
+            const mx = myGenitalX - hot[ h + 2 ];
+            const my = myGenitalY - hot[ h + 3 ];
             keepMate = fastDist( mx, my ) < viewRadius * 1.25;
         }
         const scoreMate = ( o: number ): number =>

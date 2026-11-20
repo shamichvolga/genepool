@@ -2448,7 +2448,8 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	    // unusual one slips past the predator's search image.
 	    const preyMorph = chosenPrey().getMorphologySummary();
 	    const preyBucket = SS.getMorphBucket( preyMorph.numParts, preyMorph.branchFraction > 0, preyMorph.meanWidth );
-	    const preyShare = SS.sharedState().morphBucketShare[ preyBucket ];
+	    const st = SS.sharedState();
+	    const preyShare = st.morphBucketShare[ preyBucket ];
 	    if ( preyShare < 0.08 ) gape *= 0.82;
 	    else if ( preyShare > 0.22 ) gape *= Math.min( 1.22, 1 + ( preyShare - 0.22 ) * 0.8 );
 	    // a broad, armour-like body is harder to get past the predator's gape
@@ -2462,8 +2463,14 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	    const preyPos = chosenPrey().getPosition();
 	    const gx = Math.max( 0, Math.min( scentN - 1, Math.floor(( preyPos.x - POOL_LEFT ) / scentCellW )));
 	    const gy = Math.max( 0, Math.min( scentN - 1, Math.floor(( preyPos.y - POOL_TOP ) / scentCellH )));
-	    const foodDensity = SS.sharedState().foodField[ gy * scentN + gx ];
+	    const foodDensity = st.foodField[ gy * scentN + gx ];
 	    if (( foodDensity > 1.5 ) && (( preyMorph.numParts <= 6 ) || ( chosenPrey().getGrowthScale() < 0.75 ))) { gape *= 0.80; }
+	    // Aposematic colour: a saturated warning pattern advertises skin toxin.
+	    const preySlot = chosenPrey().getSlot();
+	    const cr = st.colorR[preySlot], cg = st.colorG[preySlot], cb = st.colorB[preySlot];
+	    const colorChroma = Math.max( 0, Math.min( 1, Math.max( cr, cg, cb ) - Math.min( cr, cg, cb )));
+	    const toxic = ( colorChroma > 0.65 ) && ( preyMorph.numParts <= 8 );
+	    if ( toxic ) { gape *= 0.78; }
 	    if ( PREDATOR_GAPE_CURVE_ENABLED ) { _M[ _m + SS.M_HUNT_CD ] = ATTACK_COOLDOWN * ( 1 + GAPE_COOLDOWN_SLOPE * sizeRatio ); }
 	    // claws / mandibles: a firmer grip raises the chance of a successful bite
 	    const biteChance = Math.min( ONE, ( environment.active ? ENVIRONMENT_ATTACK_SUCCESS_CHANCE : ATTACK_SUCCESS_CHANCE ) * gape + 0.04 * _numFrontAppendages );
@@ -2472,6 +2479,14 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	        simCounters.failedAttacks ++;
 	        chosenPrey().notifyAttackedBy( this );
 	        return;
+	    }
+
+	    // Detoxification is paid by the hunter, and a poisonous mouthful keeps
+	    // it out of action for longer even when the strike succeeded.
+	    if ( toxic )
+	    {
+	        this.setEnergy( Math.max( ZERO, this.getEnergy() - 3.5 ));
+	        _M[ _m + SS.M_HUNT_CD ] += 12;
 	    }
 
 	    let preyPosition = new Vector2D();

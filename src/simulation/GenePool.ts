@@ -3023,6 +3023,17 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	    if ( _clock % 8 === 0 ) { sortAliveByMorton(); updateMorphBucketShares(); }
 	    const list = _aliveSwimbotIndices;
 	    const n    = list.length;
+	    // pack the four hot coordinates of every live bot into one small buffer,
+	    // so a dense school of neighbours is read from a few L1 cache lines
+	    const hot = _st.botHot;
+	    for ( let i = 0; i < n; i++ )
+	    {
+	        const s = list[i], h = s * 4;
+	        hot[h]     = _botX[s];
+	        hot[h + 1] = _botY[s];
+	        hot[h + 2] = _genitalX[s];
+	        hot[h + 3] = _genitalY[s];
+	    }
 	    const M    = _st.mind;
 	    this.writePerceptionParams();
 

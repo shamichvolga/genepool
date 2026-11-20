@@ -109,6 +109,7 @@ export function physicsPartA( s: number, st: SharedState ): void
     const frequency = B[ b + B_FREQUENCY ];
     const sumLengths= B[ b + B_SUM_LENGTHS ];
     const bodyMass  = B[ b + B_BODY_MASS ];
+    const meanWidth = sumLengths > ZERO ? ( bodyMass / sumLengths ) : 3.5;
     const motion    = bodyMotionFactors( bodyMass, sumLengths > ZERO ? bodyMass / sumLengths : ZERO );
     let energy      = B[ b + B_ENERGY ];
     let growth      = B[ b + B_GROWTH ];
@@ -163,6 +164,9 @@ export function physicsPartA( s: number, st: SharedState ): void
     const glide = st.botGlide[s];
     const effort = B[ b + B_EFFORT ];
     const glideScale = ( glide > 0 && effort < 0.85 ) ? ( 1 - 0.35 * glide ) : 1;
+    // Branching gliders carry the current instead of stroking: their paddling
+    // energy bill is lower while they drift.
+    const jellyGlide = ( numParts >= 8 && st.cavityP1[s] > 0 && effort < 0.6 ) ? 0.85 : 1;
     const timer = B[ b + B_TIMER ] + timerDelta * effort * glideScale;
 
     // modulators: the dot between the heading's perpendicular and the focus direction
@@ -338,9 +342,9 @@ export function physicsPartA( s: number, st: SharedState ): void
         const strokeForceY = pd[ i + N_Y ] * strokeAmplitude;
 
         if ( motion.enabled )
-            energy -= Math.abs( strokeAmplitude ) * ENERGY_USED_UP_SWIMMING * motion.strokeCost;
+            energy -= Math.abs( strokeAmplitude ) * ENERGY_USED_UP_SWIMMING * motion.strokeCost * jellyGlide;
         else
-            energy -= Math.abs( strokeAmplitude ) * ENERGY_USED_UP_SWIMMING;
+            energy -= Math.abs( strokeAmplitude ) * ENERGY_USED_UP_SWIMMING * jellyGlide;
         if ( energy < ZERO ) { energy = ZERO; }
 
         const partVectorFromCenterX = pd[ i + M_X ] - posX;
@@ -441,7 +445,9 @@ export function physicsPartA( s: number, st: SharedState ): void
     let velY = B[ b + B_VEL_Y ] + accelerationY;
     if ( motion.enabled )
     {
-        const effectiveDrag = motion.drag * ( ( glide > 0 && effort < 0.85 ) ? ( 1 - 0.35 * glide ) : 1 );
+        // Long, narrow bodies slip through the water; broad ones pay more.
+        const streamlined = ( numParts >= 7 && meanWidth < 3.4 ) ? 0.84 : 1;
+        const effectiveDrag = motion.drag * ( ( glide > 0 && effort < 0.85 ) ? ( 1 - 0.35 * glide ) : 1 ) * streamlined;
         const drag = applyWaterDrag( velX, velY, bodyMass, sumLengths, effectiveDrag );
         velX = drag.velocityX;
         velY = drag.velocityY;

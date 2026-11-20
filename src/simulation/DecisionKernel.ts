@@ -128,6 +128,9 @@ function updateBodyTemperature( st: SharedState, s: number ): void
     const ambient = feltTemperature( st, s, B[ b + SS.B_POS_X ], B[ b + SS.B_POS_Y ] );
     const sumLengths = B[ b + SS.B_SUM_LENGTHS ];
     const meanBodyWidth = sumLengths > 0 ? st.mass[s] / sumLengths : 0;
+    // Wide, heavy shells take longer to warm up or cool down: their thermal
+    // inertia lets them forage across a sharper temperature boundary.
+    const inertiaScale = ( st.mass[s] / Math.max( 1, sumLengths ) > 4.2 ) ? 0.70 : 1;
     if ( !BODY_TEMPERATURE_INERTIA_ENABLED )
     {
         M[ m + SS.M_BODY_TEMP ] = ambient;
@@ -141,7 +144,9 @@ function updateBodyTemperature( st: SharedState, s: number ): void
     }
     else
     {
-        M[ m + SS.M_BODY_TEMP ] = advanceBodyTemperature( M[ m + SS.M_BODY_TEMP ], ambient, st.mass[s], meanBodyWidth );
+        const previousTemp = M[ m + SS.M_BODY_TEMP ];
+        const nextTemp = advanceBodyTemperature( previousTemp, ambient, st.mass[s], meanBodyWidth );
+        M[ m + SS.M_BODY_TEMP ] = previousTemp + ( nextTemp - previousTemp ) * inertiaScale;
     }
 }
 
@@ -250,6 +255,15 @@ function normalize( B: Float64Array, k: number ): void
     const length = Math.sqrt( x * x + y * y );
     if ( length > 0 ) { B[k] = x / length; B[k + 1] = y / length; }
     else              { B[k] = 1;          B[k + 1] = 0;          }
+}
+
+// Rational approximation of the logistic function inside the range the neural
+// outputs normally occupy. Outside it, the exact sigmoid keeps the tails sane.
+function fastSigmoid( x: number ): number
+{
+    if ( x < -9 || x > 9 ) return sigmoid( x );
+    const x2 = x * x;
+    return 0.5 + 0.5 * (( 0.5 * x ) * ( 27 + 0.25 * x2 ) / ( 27 + 2.25 * x2 ));
 }
 
 // the direction to the goal = from (fromX, fromY) to (toX, toY), normalized
@@ -413,8 +427,8 @@ export function neuralThink( st: SharedState, s: number ): void
 
     // These outputs stay unchanged until the next thought, so their transfer
     // functions are needed only here, not on every intervening step.
-    st.preyValueWeight [s] = sigmoid( outputs[ OUT_PREY_VALUE ] );
-    st.preyTravelWeight[s] = sigmoid( outputs[ OUT_PREY_TRAVEL ] );
+    st.preyValueWeight [s] = fastSigmoid( outputs[ OUT_PREY_VALUE ] );
+    st.preyTravelWeight[s] = fastSigmoid( outputs[ OUT_PREY_TRAVEL ] );
     st.preyBaitBias    [s] = Math.tanh( outputs[ OUT_PREY_BAIT ] );
     st.preyChoiceReady [s] = 1;
 
@@ -543,13 +557,16 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
             if ( st.seenThreat[s] < 0 )
             {
                 const mx = B[ b + SS.B_MOUTH_X ], my = B[ b + SS.B_MOUTH_Y ];
+                const calmRadiusSq = EVENT_CALM_MIN_DISTANCE * EVENT_CALM_MIN_DISTANCE;
                 if (( stateBefore === BRAIN_STATE_PURSUING_FOOD ) && foodAlive )
                 {
-                    calm = Math.hypot( st.foodX[f] - mx, st.foodY[f] - my ) > EVENT_CALM_MIN_DISTANCE;
+                    const cx = st.foodX[f] - mx, cy = st.foodY[f] - my;
+                    calm = cx * cx + cy * cy > calmRadiusSq;
                 }
                 else if (( stateBefore === BRAIN_STATE_PURSUING_MATE ) && mateAlive )
                 {
-                    calm = Math.hypot( st.genitalX[ mate ] - B[ b + SS.B_GENITAL_X ], st.genitalY[ mate ] - B[ b + SS.B_GENITAL_Y ] ) > EVENT_CALM_MIN_DISTANCE;
+                    const cx = st.genitalX[ mate ] - B[ b + SS.B_GENITAL_X ], cy = st.genitalY[ mate ] - B[ b + SS.B_GENITAL_Y ];
+                    calm = cx * cx + cy * cy > calmRadiusSq;
                 }
             }
             M[ m + SS.M_NEXT_LOOK ] = age + ( calm ? EVENT_CALM_LOOK_PERIOD : BRAIN_SENSORY_UPDATE_PERIOD );
@@ -785,6 +802,14 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
             fy = previousY + goalY * BRAIN_FOCUS_TARGET_SHIFT_THRESHOLD;
         }
     }
+    // A goal exactly behind the current focus can cancel it to zero; the
+    // normalizer would then snap to a fixed heading and the limbs twitch.
+    // Step around the zero point along the old focus's perpendicular instead.
+    if ( fx * fx + fy * fy < 1e-4 )
+    {
+        fx += -previousY * 0.08;
+        fy +=  previousX * 0.08;
+    }
     B[ b + SS.B_FOCUS_X ] = fx;
     B[ b + SS.B_FOCUS_Y ] = fy;
     normalize( B, b + SS.B_FOCUS_X );
@@ -794,8 +819,8 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
     if ( st.preyChoiceReady[s] === 0 )
     {
         const o = s * NUM_OUTPUTS, out = st.nnOutputs;
-        st.preyValueWeight [s] = sigmoid( out[ o + OUT_PREY_VALUE ] );
-        st.preyTravelWeight[s] = sigmoid( out[ o + OUT_PREY_TRAVEL ] );
+        st.preyValueWeight [s] = fastSigmoid( out[ o + OUT_PREY_VALUE ] );
+        st.preyTravelWeight[s] = fastSigmoid( out[ o + OUT_PREY_TRAVEL ] );
         st.preyBaitBias    [s] = Math.tanh( out[ o + OUT_PREY_BAIT ] );
         st.preyChoiceReady [s] = 1;
     }

@@ -46,6 +46,7 @@ export let _tweakGenesCategory         = 0;
 export let _runningFast                = false;
 export let _lastSwimbotPanelHTML       = "";
 export let _lastGraphDataHTML          = "";
+let _lastHudRawHTML                    = "";
 
 //----------------------------
 export function initializeUI()
@@ -59,7 +60,7 @@ export function initializeUI()
     // a new language: the parts the code fills are filled again
     window.addEventListener( "genepool:language", () =>
     {
-        _lastSwimbotPanelHTML = ""; _lastGraphDataHTML = "";
+        _lastSwimbotPanelHTML = ""; _lastGraphDataHTML = ""; _lastHudRawHTML = "";
         showRunning();
         setInfoPage( _currentInfoPage );
         showPetriPicture();
@@ -844,6 +845,10 @@ function updateHud()
         + "<span class='hudPlant'>plants " + plants + "</span>"
         + (( genePool.getNumSick && genePool.getNumSick() > 0 ) ? " · <span style='color:#e6dc8c'>sick " + genePool.getNumSick() + "</span>" : "" );
 
+    // The English source changes only when one of the numbers above changes;
+    // translating and touching the DOM on every animation tick is wasted work.
+    if ( html === _lastHudRawHTML ) return;
+    _lastHudRawHTML = html;
     const shown = translateHTML( html );
     const hud = document.getElementById( "hud" );
     if ( hud && hud.innerHTML !== shown ) { hud.innerHTML = shown; }

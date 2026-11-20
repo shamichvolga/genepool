@@ -179,6 +179,8 @@ export class SharedState
     readonly botY         : Float64Array;
     readonly genitalX     : Float64Array;
     readonly genitalY     : Float64Array;
+    // [x, y, genitalX, genitalY] per swimbot: 4 neighbours fit one 64-byte line
+    readonly botHot       : Float32Array;
     readonly mouthX       : Float64Array;
     readonly mouthY       : Float64Array;
     readonly predator     : Float64Array;   // predator level 0..1
@@ -327,6 +329,7 @@ export class SharedState
         this.botY       = f64( "botY", n );
         this.genitalX   = f64( "genitalX", n );
         this.genitalY   = f64( "genitalY", n );
+        this.botHot     = new Float32Array( make( "botHot", n * 4 * 4 ));
         this.mouthX     = f64( "mouthX", n );
         this.mouthY     = f64( "mouthY", n );
         this.predator   = f64( "predator", n );
