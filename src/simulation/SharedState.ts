@@ -181,6 +181,10 @@ export class SharedState
     readonly genitalY     : Float64Array;
     // [x, y, genitalX, genitalY] per swimbot: 4 neighbours fit one 64-byte line
     readonly botHot       : Float32Array;
+    // cached adult hydrodynamics: invalidated when the slot is reused
+    readonly botDragCache   : Float32Array;
+    readonly botAccelCache  : Float32Array;
+    readonly botStrokeCache : Float32Array;
     readonly mouthX       : Float64Array;
     readonly mouthY       : Float64Array;
     readonly predator     : Float64Array;   // predator level 0..1
@@ -330,6 +334,9 @@ export class SharedState
         this.genitalX   = f64( "genitalX", n );
         this.genitalY   = f64( "genitalY", n );
         this.botHot     = new Float32Array( make( "botHot", n * 4 * 4 ));
+        this.botDragCache   = new Float32Array( make( "botDragCache", n * 4 ));
+        this.botAccelCache  = new Float32Array( make( "botAccelCache", n * 4 ));
+        this.botStrokeCache = new Float32Array( make( "botStrokeCache", n * 4 ));
         this.mouthX     = f64( "mouthX", n );
         this.mouthY     = f64( "mouthY", n );
         this.predator   = f64( "predator", n );

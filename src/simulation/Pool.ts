@@ -22,7 +22,10 @@ export const POOL_Y_CENTER = POOL_TOP  + POOL_HEIGHT   * ONE_HALF;
 //--------------------------------------------------
 export function Pool()
 {
-const POOL_COLOR                = "rgba( 50, 63, 80, 1.0 )";
+// Seasonal water: winter, spring, summer, autumn. The renderer supplies the
+// continuous phase; these four colours are interpolated, never regenerated.
+const SEASON_WATER = [ [ 36, 54, 78 ], [ 44, 70, 82 ], [ 52, 74, 92 ], [ 48, 60, 74 ]];
+const ICE_SIZE = 512;
 
     const BOUNDARY_MARGIN_COLOR     = "rgb(  0,  0,  0 )";
     const EFFECT_COLOR 	            = "220, 240, 255";
@@ -125,6 +128,85 @@ const POOL_BOUNDARY_MARGIN      = 1200.0;
 	let _backgroundImage = null;
 	this.setBackgroundImage = function( image ) { _backgroundImage = image; }
 
+    //------------------------------------------------
+    // season tint and the once-baked shore ice
+    //------------------------------------------------
+    let _seasonFill = "rgb( 52, 74, 92 )";
+    let _seasonKey = -1;
+    let _seasonActive = false;
+    let _winterAlpha = 0;
+    let _shoreIceCanvas: HTMLCanvasElement | null = null;
+
+    function bakeShoreIce(): void
+    {
+        if ( typeof document === "undefined" ) return;
+        const off = document.createElement( "canvas" );
+        off.width = ICE_SIZE; off.height = ICE_SIZE;
+        const g = off.getContext( "2d" );
+        if ( !g ) return;
+
+        const base = ICE_SIZE * 0.035;
+        const wave = ( t: number ) => base * ( 0.65 + 0.25 * Math.sin( 5 * t )
+                                                + 0.15 * Math.sin( 13 * t + 1.1 )
+                                                + 0.08 * Math.sin( 23 * t + 2.4 ));
+        const ring = ( scale: number, alpha: number ) =>
+        {
+            g.beginPath();
+            const steps = 96;
+            for ( let e = 0; e < 4; e++ )
+            {
+                for ( let i = 0; i <= steps; i++ )
+                {
+                    const u = i / steps;
+                    const t = PI2 * ( e + u ) / 4;
+                    const w = wave( t ) * scale;
+                    let x = 0, y = 0;
+                    if ( e === 0 )      { x = u * ICE_SIZE;           y = w; }
+                    else if ( e === 1 ) { x = ICE_SIZE - w;           y = u * ICE_SIZE; }
+                    else if ( e === 2 ) { x = ICE_SIZE - u * ICE_SIZE; y = ICE_SIZE - w; }
+                    else                { x = w;                       y = ICE_SIZE - u * ICE_SIZE; }
+                    if ( e === 0 && i === 0 ) { g.moveTo( x, y ); } else { g.lineTo( x, y ); }
+                }
+            }
+            g.closePath();
+            g.rect( 0, 0, ICE_SIZE, ICE_SIZE );
+            g.fillStyle = "rgba( 190, 224, 248, " + alpha + " )";
+            g.fill( "evenodd" );
+        };
+        // the shelf fades softly into open water; the outermost ring is faintest
+        ring( 1.0, 0.24 );
+        ring( 1.7, 0.10 );
+        ring( 2.6, 0.05 );
+        g.strokeStyle = "rgba( 235, 248, 255, 0.45 )";
+        g.lineWidth = 2;
+        g.strokeRect( 1, 1, ICE_SIZE - 2, ICE_SIZE - 2 );
+        _shoreIceCanvas = off;
+    }
+    bakeShoreIce();   // once, off-screen: no per-frame geometry or allocation
+
+    this.setSeason = function( yearPhase: number, active: boolean )
+    {
+        _seasonActive = active;
+        let phase = yearPhase % PI2;
+        if ( phase < 0 ) phase += PI2;
+        const quarter = PI2 / 4;
+        const k = Math.floor( phase / quarter ) % 4;
+        const n = ( k + 1 ) % 4;
+        const t = active ? ( phase - k * quarter ) / quarter : 0;
+        const ci = active ? k : 2, cj = active ? n : 2;
+        const r = SEASON_WATER[ci][0] + ( SEASON_WATER[cj][0] - SEASON_WATER[ci][0] ) * t;
+        const g = SEASON_WATER[ci][1] + ( SEASON_WATER[cj][1] - SEASON_WATER[ci][1] ) * t;
+        const b = SEASON_WATER[ci][2] + ( SEASON_WATER[cj][2] - SEASON_WATER[ci][2] ) * t;
+        const key = ( Math.round( r ) << 16 ) | ( Math.round( g ) << 8 ) | Math.round( b );
+        if ( key !== _seasonKey )
+        {
+            _seasonKey = key;
+            _seasonFill = "rgb( " + Math.round( r ) + ", " + Math.round( g ) + ", " + Math.round( b ) + " )";
+        }
+        const rawWinter = active ? Math.max( 0, Math.cos( phase )) : 0;
+        _winterAlpha = rawWinter * rawWinter * ( 3 - 2 * rawWinter );
+    }
+
 	//------------------------------------------------
 	// render
 	//------------------------------------------------
@@ -135,14 +217,25 @@ const POOL_BOUNDARY_MARGIN      = 1200.0;
 		//------------------------------
         let lineWidth = 0.005 + 0.001 * viewport.getScale(); 	
 
-        canvas.fillStyle = POOL_COLOR;		
+        canvas.fillStyle = _seasonFill;
         canvas.fillRect( POOL_LEFT, POOL_TOP, POOL_WIDTH, POOL_HEIGHT );
 
         // the temperature map of the environment (cold = blue, warm = brown)
         if ( _backgroundImage !== null )
         {
             canvas.imageSmoothingEnabled = true;
+            canvas.globalAlpha = 0.72;
             canvas.drawImage( _backgroundImage, POOL_LEFT, POOL_TOP, POOL_WIDTH, POOL_HEIGHT );
+            canvas.globalAlpha = 1.0;
+        }
+
+        // Baked shore ice: one drawImage, only in winter, always below the
+        // plants and swimbots that the renderer draws after this call.
+        if ( _seasonActive && _winterAlpha > 0.01 && _shoreIceCanvas !== null )
+        {
+            canvas.globalAlpha = _winterAlpha * 0.85;
+            canvas.drawImage( _shoreIceCanvas, POOL_LEFT, POOL_TOP, POOL_WIDTH, POOL_HEIGHT );
+            canvas.globalAlpha = 1.0;
         }
 
 

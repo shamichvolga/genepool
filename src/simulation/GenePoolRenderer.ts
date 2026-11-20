@@ -16,6 +16,8 @@ import {
 import { FOOD_BIT_GRAB_RADIUS, FOOD_BIT_SIZE, FOOD_BIT_SIZE_VIEW_SCALE, FOOD_OPACITY_INCREMENT } from "./FoodBit";
 import { plantSize } from "./PlantSize";
 import { currentAt, currentDriftX, currentDriftY, currentStrength, randomPointInCurrent } from "./Currents";
+import { SEASON_PERIOD } from "./Environment";
+import { PARAM_ENV_ACTIVE, PARAM_TIME } from "./SharedState";
 import { TASK_RENDER_DATA } from "../parallel/ParallelWork";
 
 const OUTSIDE_POOL_COLOR = "rgb( 22, 26, 30 )";   // экран за краями бассейна
@@ -416,6 +418,12 @@ export function createGenePoolRenderer( ctx: any )
         if ( useGraphicsCard ) { _capsuleRenderer.begin(); }
 
         let phaseStart = performance.now();
+        // The environment's sine season peaks in summer at phase PI/2; shift it
+        // so that 0 is the winter peak, as the water palette expects.
+        const params = ctx.st.params;
+        const envActive = params[ PARAM_ENV_ACTIVE ] === 1;
+        const yearPhase = PI2 * ( params[ PARAM_TIME ] / SEASON_PERIOD ) + PI2 / 4;
+        ctx.pool.setSeason( yearPhase, envActive );
         ctx.pool.render( ctx.seconds, _camera );
         ctx.obstacle.render( _camera );
         renderCurrents();

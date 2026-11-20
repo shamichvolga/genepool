@@ -13,8 +13,8 @@
 //------------------------------------------------------------------------------
 import { currentAt, currentDriftX, currentDriftY } from "./Currents";
 import { ONE, ONE_HALF, PI_OVER_180, ZERO } from "./MathConstants";
-import { GROWTH_COSTS_ENERGY_ENABLED, GROWTH_ENERGY_PER_MASS, MAX_SWIMBOTS, NEWBORN_SIZE_SCALE, OLD_AGE_DURATION, RUDDER_COST_PER_DEGREE, RUDDER_ENABLED, STEER_BY_SWIM_DIRECTION_ENABLED, SWIM_DIRECTION_SMOOTHING, SWIMBOT_SELECT_RADIUS_SCALAR, YOUNG_AGE_DURATION } from "./Parameters";
-import { applyWaterDrag, bodyMotionFactors } from "./BodyPhysics";
+import { BODY_HYDRODYNAMICS_ENABLED, GROWTH_COSTS_ENERGY_ENABLED, GROWTH_ENERGY_PER_MASS, MAX_SWIMBOTS, NEWBORN_SIZE_SCALE, OLD_AGE_DURATION, RUDDER_COST_PER_DEGREE, RUDDER_ENABLED, STEER_BY_SWIM_DIRECTION_ENABLED, SWIM_DIRECTION_SMOOTHING, SWIMBOT_SELECT_RADIUS_SCALAR, YOUNG_AGE_DURATION } from "./Parameters";
+import { applyWaterDrag, bodyMotionFactors, BodyMotionFactors } from "./BodyPhysics";
 import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
 import { CONTINUAL_ENERGY_DRAIN, ENERGY_EFFICIENCY_MEASUREMENT_PERIOD, ENERGY_USED_UP_SWIMMING, GENITAL_INDEX, MAX_PARTS, MOUTH_INDEX, ROOT_PART, STARVING, STARVING_TIMER_DELTA, TIMER_DELTA_INCREASE_RATE, WALL_BOUNCE } from "./SwimbotTypes";
 import { BODY_COLLISIONS_ENABLED, BODY_COLLISION_PUSH, BODY_COLLISION_MAX_IMPULSE, TREE_OBSTACLES_ENABLED, TREE_OBSTACLE_RADIUS_BASE, TREE_OBSTACLE_RADIUS_SCALE, CAVITY_JET_ENABLED, CAVITY_JET_C, CAVITY_JET_MAX, CAVITY_SUCTION_RADIUS_SCALE, WAKE_GRID_ENABLED, WAKE_GRID_SIZE, WAKE_DAMPING, WAKE_DIFFUSION, WAKE_MAX_SPEED, WAKE_IMPULSE_SHARE, QUADRATIC_WATER_ENABLED, JOINT_MIN_ANGLE, JOINT_MAX_ANGLE, PLANT_TREE_ENERGY, WOOD_PER_FRUIT_TIER } from "./Parameters";
@@ -24,6 +24,9 @@ const _kernelGridBuf = new Int32Array( 512 );
 // per-bot steering memory: a slew limiter for the wobble fed into the stroke
 const _smoothedDirectionDot = new Float32Array( MAX_SWIMBOTS );
 const MAX_DIRECTION_DOT_JUMP = 0.18;
+// one reused scratch record for the cached hydrodynamic factors of the bot
+// currently being integrated (the kernel walks the list sequentially)
+const _motionValues: BodyMotionFactors = { enabled: false, acceleration: 1, drag: 1, strokeCost: 1 };
 
 // Polynomial sine and cosine with the argument reduced to [-pi, pi].
 // The reduced range is small enough for a short Remez-style polynomial,
@@ -110,9 +113,27 @@ export function physicsPartA( s: number, st: SharedState ): void
     const sumLengths= B[ b + B_SUM_LENGTHS ];
     const bodyMass  = B[ b + B_BODY_MASS ];
     const meanWidth = sumLengths > ZERO ? ( bodyMass / sumLengths ) : 3.5;
-    const motion    = bodyMotionFactors( bodyMass, sumLengths > ZERO ? bodyMass / sumLengths : ZERO );
     let energy      = B[ b + B_ENERGY ];
     let growth      = B[ b + B_GROWTH ];
+
+    // Adult bodies hardly change their hydrodynamics. Recompute the factors
+    // only on the first step in a slot, while growing, and every 32 steps.
+    const dragCache = st.botDragCache, accelCache = st.botAccelCache, strokeCache = st.botStrokeCache;
+    if ( dragCache[ s ] === ZERO || growth < ONE || ( age & 31 ) === 0 )
+    {
+        bodyMotionFactors( bodyMass, sumLengths > ZERO ? ( bodyMass / sumLengths ) : ZERO, _motionValues );
+        dragCache  [ s ] = _motionValues.drag;
+        accelCache [ s ] = _motionValues.acceleration;
+        strokeCache[ s ] = _motionValues.strokeCost;
+    }
+    else
+    {
+        _motionValues.enabled      = BODY_HYDRODYNAMICS_ENABLED && bodyMass > ZERO && sumLengths > ZERO;
+        _motionValues.drag         = dragCache[ s ];
+        _motionValues.acceleration = accelCache[ s ];
+        _motionValues.strokeCost   = strokeCache[ s ];
+    }
+    const motion = _motionValues;
     let timerDelta  = B[ b + B_TIMER_DELTA ];
     let posX        = B[ b + B_POS_X ];
     let posY        = B[ b + B_POS_Y ];

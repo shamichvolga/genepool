@@ -1142,7 +1142,11 @@ this.setParent = function( parent )
 	this.create = function( index, age, position, angle, energy, genotype, embryology )
 	{
 	    _carriedSeed = 0;
-	    if ( _shared !== null && _slot >= 0 ) { _shared.cavityValid[ _slot ] = 0; }
+	    if ( _shared !== null && _slot >= 0 )
+	    {
+	        _shared.cavityValid[ _slot ] = 0;
+	        _shared.botDragCache[ _slot ] = 0;   // a new body has new hydrodynamics
+	    }
 	    _deathCause = "";      // (set again by die(); a newborn must not carry the last life of its slot)
 	    // (healthy, and with no immunity: DISEASE_ENABLED)
 	    _M[ _m + SS.M_DISEASE ] = 0; _M[ _m + SS.M_DISEASE_TIMER ] = 0;
@@ -2353,19 +2357,41 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
             // are quick on the young sprouts instead.
             if ( foodType !== 2 )
             {
+                const numParts = _phenotype.numParts;
                 if ( foodWood >= WOOD_PER_FRUIT_TIER )
                 {
-                    // Only real giants can digest timber well; the middle-sized
-                    // herbivores get a smaller bonus so they cannot overrun the
-                    // groves and crowd out the other morphologies.
-                    if ( _phenotype.numParts >= 13 ) energyFromFoodBit *= 1.25;
-                    else if ( _phenotype.numParts >= 9 ) energyFromFoodBit *= 1.10;
-                    else if ( _phenotype.numParts <= 5 ) energyFromFoodBit *= 0.65;
+                    // Four body sizes, four different parts of a plant:
+                    // giants on timber, big herbivores on mature wood,
+                    // medium ones on saplings, tiny ones on sprouts.
+                    if ( numParts >= 13 ) energyFromFoodBit *= 1.25;
+                    else if ( numParts >= 9 ) energyFromFoodBit *= 1.20;
+                    else if ( numParts >= 6 ) energyFromFoodBit *= 0.92;
+                    else energyFromFoodBit *= 0.65;
                 }
-                else if (( foodWood < 1 ) && ( _phenotype.numParts <= 5 ))
+                else if ( foodWood >= 1 )
                 {
-                    energyFromFoodBit *= 1.15;
+                    if ( numParts >= 6 && numParts <= 8 ) energyFromFoodBit *= 1.22;
                 }
+                else
+                {
+                    if ( numParts <= 5 ) energyFromFoodBit *= 1.18;
+                    else if ( numParts >= 13 ) energyFromFoodBit *= 0.85;
+                }
+
+                // Kill-the-Winner: a morphology that fills its own niche meets
+                // more competition, a rare one keeps a small search advantage.
+                // (no object allocation here: plant meals happen thousands
+                //  of times per step)
+                let widthSum = ZERO, branchCount = 0;
+                for (let p = 0; p < numParts; p++)
+                {
+                    widthSum += _pWidth[p];
+                    if ( _phenotype.parts[p].branch ) branchCount ++;
+                }
+                const myBucket = SS.getMorphBucket( numParts, branchCount > 0, numParts ? widthSum / numParts : ZERO );
+                const myShare = SS.sharedState().morphBucketShare[ myBucket ];
+                if ( myShare > 0.16 ) energyFromFoodBit *= Math.max( 0.82, 1 - ( myShare - 0.16 ) * 0.9 );
+                else if ( myShare < 0.06 ) energyFromFoodBit *= 1.12;
             }
 
             // Continuous gut specialisation: the more predatory the bot,
@@ -2967,6 +2993,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	this.die = function( cause = "other" )
 	{
 	    _deathCause = cause;
+	    if ( _shared !== null && _slot >= 0 ) { _shared.botDragCache[ _slot ] = 0; }
 	    if ( _live[ _liveAt ] === 1 )
 	    {
 	        simCounters.numDeadSwimbots ++;

@@ -122,7 +122,7 @@ function updateThermalFit( st: SharedState, s: number ): void
         : 1;
 }
 
-function updateBodyTemperature( st: SharedState, s: number ): void
+function updateBodyTemperature( st: SharedState, s: number, stepScale = 1 ): void
 {
     const M = st.mind, m = s * SS.MIND_STRIDE, B = st.bots, b = s * SS.BOT_STRIDE;
     const ambient = feltTemperature( st, s, B[ b + SS.B_POS_X ], B[ b + SS.B_POS_Y ] );
@@ -146,7 +146,9 @@ function updateBodyTemperature( st: SharedState, s: number ): void
     {
         const previousTemp = M[ m + SS.M_BODY_TEMP ];
         const nextTemp = advanceBodyTemperature( previousTemp, ambient, st.mass[s], meanBodyWidth );
-        M[ m + SS.M_BODY_TEMP ] = previousTemp + ( nextTemp - previousTemp ) * inertiaScale;
+        // one update every four steps: stretch the step, never overshoot
+        const mix = Math.min( 1, inertiaScale * stepScale );
+        M[ m + SS.M_BODY_TEMP ] = previousTemp + ( nextTemp - previousTemp ) * mix;
     }
 }
 
@@ -830,7 +832,7 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
     //-------------------------------------------------
     if ( st.params[ SS.PARAM_ENV_ACTIVE ] === 1 )
     {
-        updateBodyTemperature( st, s );
+        if ((( age + index ) & 3 ) === 0 ) { updateBodyTemperature( st, s, 4 ); }
         if ((( age + index ) % THERMAL_FIT_UPDATE_PERIOD ) === 0 ) { updateThermalFit( st, s ); }
         const energyBeforeDrain = B[ b + SS.B_ENERGY ];
         B[ b + SS.B_ENERGY ] = Math.max( 0, energyBeforeDrain - THERMAL_MISMATCH_DRAIN * ( 1 - M[ m + SS.M_THERMAL_FIT ] ));

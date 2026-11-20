@@ -66,11 +66,20 @@ export const KINESIS_MAX_TURN           = 120;     // degrees
 export const EMERGENCY_THERMAL_FIT      = 0.2;     // below this: look around and head for the best way
 export const EMERGENCY_PROBE_DISTANCE   = 300;
 
+// A short rational approximation of exp(-x) on x >= 0: the Gaussian tail in
+// thermalFit never needs the exact exponential to this precision.
+function fastExpNeg( x: number ): number
+{
+    if ( x > 12 ) return 0;
+    const d = 1 + x * ( 1 + x * ( 0.5 + x * ( 0.1666667 + x * 0.0416667 )));
+    return 1 / d;
+}
+
 export function thermalFit( temperature: number, optimum: number, width: number ): number
 {
     if ( !TEMPERATURE_ENABLED ) return 1;             // (temperature off: everyone suits everywhere)
     const d = temperature - optimum;
-    return Math.exp( -( d * d ) / ( 2 * width * width ));
+    return fastExpNeg( ( d * d ) / ( 2 * width * width ));
 }
 
 export function thermalPeak( width: number ): number
