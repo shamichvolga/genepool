@@ -10,21 +10,27 @@
 import { drawFromAtmosphere } from "./EnergyBudget";
 import { gpRandom } from "./Globals";
 import { POOL_BOTTOM, POOL_HEIGHT, POOL_LEFT, POOL_TOP, POOL_WIDTH } from "./Pool";
-import { SharedState, SOIL_GRID_N } from "./SharedState";
+import { SOIL_GRID_N } from "./SoilGrid";
+import { SharedState } from "./SharedState";
 
 export const SOIL_N = SOIL_GRID_N;
 const CELLS = SOIL_N * SOIL_N;
 const INV_W = SOIL_N / POOL_WIDTH;
 const INV_H = SOIL_N / POOL_HEIGHT;
 
-const BASE_SOIL = 3.0;              // a thin fertile background everywhere
-const PATCH_COUNT = 22;             // compact oases scattered over the 256² field
-// 22 x 42,500 + 65,536 x 3.0 = 1,131,608: the intended starting soil endowment.
-// With a sigma of 7.8-8.0 cells the discrete peak of one patch is ~101-113,
-// i.e. rich enough for full trees but no artificial energy multiplier.
-const PATCH_ENERGY = 42500;         // energy per oasis, drawn from the atmosphere
-const PATCH_SIGMA_MIN = 7.8;        // radius of an oasis, in soil cells
-const PATCH_SIGMA_SPAN = 0.2;
+const BASE_SOIL = 6.0;              // a thin fertile background: sprouts only
+const PATCH_COUNT = 24;             // oases scattered over the 256² field
+// 24 x 26,000 + 65,536 x 6.0 = 1,017,216. With a sigma of 7.0-7.8 cells each
+// oasis peaks at ~68-85 (2D Gaussian peak = E / 2πσ²), its visible halo spans
+// roughly 7-11 cells. That is rich enough for full trees under the 9/18/30
+// thresholds and keeps the whole world close to 1.8M.
+const PATCH_ENERGY = 26000;         // energy per oasis, drawn from the atmosphere
+const PATCH_SIGMA_MIN = 7.0;        // core radius of an oasis, in soil cells
+const PATCH_SIGMA_SPAN = 0.8;
+
+// The world's initial soil endowment is also the amount taken from the
+// atmosphere at reset; GenePool uses it to size the starting energy budget.
+export const SOIL_START_ENERGY = CELLS * BASE_SOIL + PATCH_COUNT * PATCH_ENERGY;
 const DIFFUSION = 0.04;
 const DIFFUSION_INTERVAL = 16;
 
@@ -240,10 +246,10 @@ export function soilPlantGrowth( st: SharedState, x: number, y: number, currentE
     // Four soil niches on the 256x256 grid: bare ground carries sprouts only,
     // the oases can carry full trees. The caps stay finite and local, so a
     // crown can never pull more energy than the soil under it really holds.
-    const maxPlantE = local < 14 ? 5.5
-                    : local < 32 ? 16
-                    : local < 58 ? 34
-                    : Math.min( 85, 34 + ( local - 58 ) * 0.85 );
+    const maxPlantE = local < 9 ? 6.0
+                    : local < 18 ? 16
+                    : local < 30 ? 34
+                    : Math.min( 85, 34 + ( local - 30 ) * 1.1 );
     const wanted = maxPlantE - currentEnergy;
     if ( wanted <= 0 ) return 0;
     const suck = Math.min( 0.28, wanted * 0.02, pool * 0.015 );

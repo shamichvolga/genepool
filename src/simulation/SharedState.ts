@@ -127,7 +127,10 @@ export const SCENT_GRID_N = 64;
 
 // The energy-bearing soil has its own, much finer grid: 256 x 256 cells,
 // 62.5 world units on a side. It stays independent of the scent resolution.
-export const SOIL_GRID_N = 256;
+// The value itself lives in a dependency-free module so Pool.ts can use it
+// without importing this file (that edge closed a startup import cycle).
+import { SOIL_GRID_N } from "./SoilGrid";
+export { SOIL_GRID_N };
 
 export * from "./MindLayout";
 import { MAX_THREADS, MIND_STRIDE, NUM_COUNTERS } from "./MindLayout";

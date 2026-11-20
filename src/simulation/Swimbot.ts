@@ -2471,8 +2471,19 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
             // local soil (wood and fruit were grown out of it), not printed by
             // the atmosphere. Both directions are bounded by the soil really
             // present, so the closed world's total never changes.
-            const eta = Math.max( 0.35, Math.min( 0.92,
+            let eta = Math.max( 0.35, Math.min( 0.92,
                 energyFromFoodBit / Math.max( 1e-9, removedEnergy ) + ( bellyBonus ? 0.08 : 0 )));
+            // Protect the trees: on woody plants only a matched body size can
+            // digest timber efficiently. Tiny grazers cannot strip an adult
+            // crown, so the large herbivores keep their niche on the 256² soil.
+            if ( foodWood >= WOOD_PER_FRUIT_TIER )
+            {
+                const parts = _phenotype.numParts;
+                eta = parts <= 5 ? 0.45
+                    : parts <= 8 ? 0.68
+                    : parts <= 12 ? 0.86
+                    : 0.92;
+            }
             const gutGain = removedEnergy * eta;
             const undigested = removedEnergy - gutGain;
             if ( _shared !== null )

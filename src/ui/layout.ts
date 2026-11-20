@@ -131,8 +131,8 @@ export function initializeLayout(): void
     layout = load();
     const panel = document.getElementById( "masterPanel" )!;
     makeWindow( "panel", panel, document.getElementById( "panelHeader" )!, true );
-    const hud = document.getElementById( "hud" )!;
-    makeWindow( "hud", hud, hud );
+    // #hud now lives inside the docked #statusBar footer: it must stay docked
+    // so it never covers the pool, and is no longer a draggable window.
     window.addEventListener( "resize", () => { for ( const key in windows ) { if ( layout[ key ] && windows[ key ].el.classList.contains( "floating" )) place( key ); } });
 }
 

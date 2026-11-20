@@ -22,12 +22,13 @@
     top:            0;
     right:          0;
     bottom:         0;
-    width:          380px;
+    height:         100vh;
+    width:          clamp( 340px, 24vw, 430px );
     box-sizing:     border-box;
-    padding:        8px 10px 6px 10px;
+    padding:        6px 10px 5px 10px;
     display:        flex;
     flex-direction: column;
-    gap:            8px;
+    gap:            5px;
     overflow:       hidden;
     font-family:    Arial, sans-serif;
     font-size:      12px;
@@ -218,12 +219,21 @@
     height:             27px;
 }
 
-/* the box with the tab contents fills the rest and scrolls if needed */
+/* the box with the tab contents flexes into the remaining height; compact
+   spacing keeps every control visible without a vertical scrollbar */
 #mainPanel
 {
     flex:           1 1 auto;
-    overflow-y:     auto;
+    display:        flex;
+    flex-direction: column;
     min-height:     0;
+    overflow:       hidden;
+}
+#mainPanel .menuPanel.active
+{
+    flex:           1 1 auto;
+    min-height:     0;
+    overflow:       hidden;
 }
 
 /* only the open tab is shown (ui.ts adds / removes "active") */
@@ -380,28 +390,45 @@
 body.panelHidden #masterPanel       { display: none; }
 body.panelHidden #panelToggleButton { right: 8px; }
 
-/* --------------------------------------------- status over the pool ----- */
-#hud
+/* ---------------------------------------- docked status bar ------------- */
+/* A real footer: the canvas is shortened by ui.resize() so the bar never
+   covers water or swimbots. It spans exactly the pool's viewing area. */
+#statusBar
 {
     position:       fixed;
-    left:           10px;
-    bottom:         10px;
+    left:           0;
+    right:          clamp( 340px, 24vw, 430px );
+    bottom:         0;
     z-index:        15;
-    padding:        6px 10px;
-    border-radius:  6px;
-    background:     rgba( 20, 26, 20, 0.62 );
+    box-sizing:     border-box;
+    min-height:     48px;
+    padding:        4px 10px;
+    border-top:     1px solid #5b6456;
+    background:     rgba( 20, 26, 20, 0.94 );
     color:          #e8eadc;
     font-family:    Arial, sans-serif;
-    font-size:      12px;
-    line-height:    1.45;
+    font-size:      clamp( 10px, 0.85vh, 12px );
+    line-height:    1.35;
+    display:        flex;
+    align-items:    center;
+}
+body.panelHidden #statusBar, body.panelFloating #statusBar { right: 0; }
+#statusBar #hud
+{
+    position:       static !important;
+    width:          100%;
     pointer-events: none;
-    white-space:    nowrap;
+    white-space:    normal;
 }
 #hud b          { color: #ffffff; }
 #hud .hudPred   { color: #ff9a88; }
 #hud .hudHerb   { color: #ffc070; }
 #hud .hudPlant  { color: #9fe08a; }
+#hud .hudSoil   { color: #cfe08a; }
 #hud .hudPaused { color: #ffdd55; font-weight: bold; }
+#hud .hudOk     { color: #8ee08a; font-weight: bold; }
+#hud .hudWarn   { color: #ffb060; font-weight: bold; }
+#hud .hudBad    { color: #ff7560; font-weight: bold; }
 
 /* ------------------------------------------------------ keys help ------- */
 #helpOverlay
@@ -547,6 +574,7 @@ body.panelHidden #noRenderPanel { left: 50% !important; }
 #graphCanvas
 {
     aspect-ratio:   16 / 10;
+    max-height:     clamp( 110px, 18vh, 175px );
     background:     none;
     margin-bottom:  2px;
     cursor:         crosshair;
@@ -597,8 +625,7 @@ body.panelHidden #masterPanel #graphBox.big { display: none; }
 }
 body.panelFloating #panelToggleButton { display: none; }
 
-#hud.floating { pointer-events: auto; right: auto; bottom: auto; }
-#hud          { pointer-events: auto; cursor: move; touch-action: none; user-select: none; }
+#statusBar    { pointer-events: none; user-select: none; }
 
 #mapEditorButton, #speciesButton, #debugButton { padding: 0 6px; font-size: 14px; cursor: pointer; }
 #mapEditorButton { margin-left: auto; }
@@ -770,3 +797,25 @@ body.panelFloating #panelToggleButton { display: none; }
 #meInfo    { margin-top: 6px; color: #33402e; }
 #meMessage { min-height: 30px; color: #6a3a10; }
 #meTools .meBig { text-align: center; font-weight: bold; padding: 9px; background: #d8e8c8; }
+
+/* --------------------------------- short screens: no sidebar scroll ------ */
+@media ( max-height: 900px )
+{
+    #masterPanel              { gap: 3px; padding: 4px 8px 4px 8px; font-size: clamp( 10px, 1.35vh, 12px ); }
+    #masterPanel .gpBox       { padding: 5px; }
+    #masterPanel .gpHeading   { margin: 5px 0 3px 0; font-size: clamp( 10px, 1.4vh, 12px ); }
+    #masterPanel .gpNote      { line-height: 1.3; margin-bottom: 4px; }
+    #masterPanel .basicButton { height: clamp( 22px, 3.6vh, 30px ); font-size: clamp( 9px, 1.3vh, 12px ); }
+    #masterPanel #viewTrackingPanel .basicButton { height: clamp( 21px, 3.2vh, 28px ); }
+    #mainTitle                { font-size: 15px; }
+    #graphCanvas              { max-height: clamp( 110px, 18vh, 140px ); }
+    #contactPanel             { font-size: 10px; line-height: 1.3; }
+    #statusBar                { min-height: 44px; }
+}
+@media ( min-width: 1700px ) and ( min-height: 1000px )
+{
+    #masterPanel              { gap: 7px; font-size: 12px; }
+    #masterPanel .gpBox       { padding: 8px; }
+    #masterPanel .gpHeading   { margin: 9px 0 5px 0; }
+    #graphCanvas              { max-height: 175px; }
+}

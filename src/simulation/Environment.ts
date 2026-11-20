@@ -20,19 +20,22 @@ import { SOIL_NUTRIENT_PER_ENERGY, TEMPERATURE_ENABLED } from "./Parameters";
 import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
 import { petriLevel, petriPosition, petriTemperature, petriSettings } from "./Petri";
 
-// Control experiment "no environment": set to true and the map is flat
-// (T = 0.5 everywhere, plants grow anywhere) while all other rules stay.
-// (24.10: the temperature gradient is off - TEMPERATURE_ENABLED in Parameters.ts; flat = no map)
-export const FLAT_ENVIRONMENT          = !TEMPERATURE_ENABLED;
+// Control experiment "no environment": the map is flat (T = 0.5 everywhere,
+// plants grow anywhere) while all other rules stay. It is a function, not a
+// module-level constant: reading TEMPERATURE_ENABLED while Parameters.ts is
+// still initialising used to throw a TDZ ReferenceError in the browser.
+export function isFlatEnvironment(): boolean { return !TEMPERATURE_ENABLED; }
 
 // Soil is a mineral index, not an energy store. Biomass decay and metabolism
 // return it locally; only crown growth above the soft-plant ceiling spends it.
 export const NUTRIENT_CYCLE_ENABLED              = true;
 export const SWIMMING_ENERGY_RECYCLE_ENABLED     = true;
-export const SWIMMING_ENERGY_TO_NUTRIENT         = SOIL_NUTRIENT_PER_ENERGY;
+// Read the imported constant lazily, never at module load time: the old
+// top-level aliases were another edge of the startup TDZ cycle.
+export function swimmingEnergyToNutrient(): number { return SOIL_NUTRIENT_PER_ENERGY; }
+export function meatDetritusYield(): number { return SOIL_NUTRIENT_PER_ENERGY; }
 export const INITIAL_SOIL_NUTRIENT_PER_CELL      = 3.0;
 export const SOIL_NUTRIENT_CAPACITY_PER_CELL     = 24.0;
-export const MEAT_DETRITUS_YIELD                 = SOIL_NUTRIENT_PER_ENERGY;
 export const SOIL_NUTRIENT_DECAY_PER_STEP        = 0.000001;
 export const SOIL_DIFFUSION_INTERVAL             = 80;
 export const SOIL_DIFFUSION_PER_NEIGHBOR         = 0.0005;
@@ -314,7 +317,7 @@ export class Environment
         this.ageSoilNutrient( cell );
         const returned = Math.min(
             Math.max( 0, SOIL_NUTRIENT_CAPACITY_PER_CELL - this.soilNutrient[ cell ] ),
-            meatEnergy * MEAT_DETRITUS_YIELD
+            meatEnergy * meatDetritusYield()
         );
         this.soilNutrient[ cell ] += returned;
         return returned;
@@ -327,7 +330,7 @@ export class Environment
         this.ageSoilNutrient( cell );
         const returned = Math.min(
             Math.max( 0, SOIL_NUTRIENT_CAPACITY_PER_CELL - this.soilNutrient[ cell ] ),
-            energy * SWIMMING_ENERGY_TO_NUTRIENT
+            energy * swimmingEnergyToNutrient()
         );
         this.soilNutrient[ cell ] += returned;
         return returned;
@@ -410,7 +413,7 @@ export class Environment
     //--------------------------------------------------------------------
     temperatureAt( x: number, y: number ): number
     {
-        if ( !this.active || FLAT_ENVIRONMENT ) return 0.5;
+        if ( !this.active || isFlatEnvironment() ) return 0.5;
 
         const fx = ( x - POOL_LEFT ) / ( POOL_RIGHT  - POOL_LEFT ) * FIELD_SIZE - 0.5;
         const fy = ( y - POOL_TOP  ) / ( POOL_BOTTOM - POOL_TOP  ) * FIELD_SIZE - 0.5;
@@ -440,7 +443,7 @@ export class Environment
     // background brightness at a point (0 = dark .. 1 = light)
     backgroundAt( x: number, y: number ): number
     {
-        if ( !this.active || FLAT_ENVIRONMENT ) return 0.5;
+        if ( !this.active || isFlatEnvironment() ) return 0.5;
         const i = Math.min( FIELD_SIZE - 1, Math.max( 0, Math.floor( ( x - POOL_LEFT ) / ( POOL_RIGHT  - POOL_LEFT ) * FIELD_SIZE )));
         const j = Math.min( FIELD_SIZE - 1, Math.max( 0, Math.floor( ( y - POOL_TOP  ) / ( POOL_BOTTOM - POOL_TOP  ) * FIELD_SIZE )));
         return this.background[ j * FIELD_SIZE + i ];
@@ -457,7 +460,7 @@ export class Environment
     // how well a plant type grows at temperature T (0..1)
     plantSuitability( type: number, temperature: number ): number
     {
-        if ( !this.active || FLAT_ENVIRONMENT ) return 1;
+        if ( !this.active || isFlatEnvironment() ) return 1;
         const d = temperature - PLANT_OPTIMUM[ type ];
         return Math.exp( -( d * d ) / ( 2 * PLANT_TOLERANCE * PLANT_TOLERANCE ));
     }
@@ -514,7 +517,7 @@ export class Environment
         {
             // hue = temperature (cold: deep blue-grey; hot: muted brown-olive),
             // lightness = background brightness (the pool keeps its calm look)
-            const on = this.active && !FLAT_ENVIRONMENT;
+            const on = this.active && !isFlatEnvironment();
             const t  = on ? this.baseTemperature[k] : 0.5;
             const l  = 0.62 + 0.76 * ( on ? this.background[k] : 0.5 );
             pixels.data[ k * 4     ] = ( 38 + t * 40 ) * l;

@@ -875,25 +875,55 @@ function seasonDial( name: string ): string
 function updateHud()
 {
     if ( typeof genePool == "undefined" ) return;
+    const t: any = genePool.getTelemetry ? genePool.getTelemetry() : null;
     const history = genePool.getPopulationHistory();
     const n = history.step.length;
-    const herbivores = n > 0 ? history.herbivores[ n - 1 ] : 0;
-    const predators  = n > 0 ? history.predators [ n - 1 ] : 0;
-    const plants     = n > 0 ? history.plants    [ n - 1 ] : 0;
     const environment = genePool.getEnvironment();
     const paused = !genePool.getSimulationRunning();
     const speedName = [ "", ">", ">>", ">>>" ][ genePool.getSpeedLevel() ] || "";
+    const fmt = ( v: number ) => Math.round( v ).toLocaleString( "en-US" );
+
+    // line 1: the living world
+    let animals: string, plantLine: string;
+    if ( t )
+    {
+        animals = "<span class='hudHerb'>herbivores " + fmt( t.herbSmall + t.herbMed + t.herbLarge )
+                + " (small " + fmt( t.herbSmall ) + " / med " + fmt( t.herbMed ) + " / large " + fmt( t.herbLarge ) + ")</span> · "
+                + "<span class='hudPred'>predators " + fmt( t.predators ) + "</span>";
+        plantLine = "<span class='hudPlant'>sprouts " + fmt( t.sprouts ) + " · young " + fmt( t.young )
+                  + " · grown " + fmt( t.grown ) + " · trees " + fmt( t.trees ) + " · meat " + fmt( t.eMeat ) + "</span>";
+    }
+    else
+    {
+        const herbivores = n > 0 ? history.herbivores[ n - 1 ] : 0;
+        animals = "<span class='hudHerb'>herbivores " + herbivores + "</span> · "
+                + "<span class='hudPred'>predators " + ( n > 0 ? history.predators[ n - 1 ] : 0 ) + "</span>";
+        plantLine = "<span class='hudPlant'>plants " + ( n > 0 ? history.plants[ n - 1 ] : 0 ) + "</span>";
+    }
+
+    // line 2: thermodynamics and soil
+    let thermo = "";
+    if ( t )
+    {
+        const dPct = t.eInitial !== 0 ? ( t.eDelta / t.eInitial ) * 100 : 0;
+        const dClass = Math.abs( dPct ) < 0.05 ? "hudOk" : ( Math.abs( dPct ) < 0.5 ? "hudWarn" : "hudBad" );
+        const sign = t.eDelta >= 0 ? "+" : "";
+        thermo = "<span class='hudSoil'>soil fertilizer " + fmt( t.soilTotal ) + "</span> · "
+               + "E_total <b>" + fmt( t.eTotal ) + "</b> <span class='" + dClass + "'>(" 
+               + sign + t.eDelta.toFixed( 1 ) + " / " + sign + dPct.toFixed( 3 ) + "%)</span>"
+               + " · bots " + fmt( t.eBots ) + " · plants " + fmt( t.ePlants )
+               + " · meat " + fmt( t.eMeat ) + " · soil " + fmt( t.eSoil )
+               + " · water " + fmt( t.eAtmosphere ) + " · air " + fmt( t.eAmbient );
+    }
 
     const html =
         ( paused ? "<span class='hudPaused'>FROZEN (space)</span> · " : "" )
         + "step <b>" + genePool.getTimeStep() + "</b>"
         + ( environment.active ? " · " + seasonDial( environment.seasonName() ) + " " + environment.seasonName() : "" )
         + " · " + Math.round( genePool.getStepsPerSecond() ) + " steps/s " + speedName
-        + "<br>"
-        + "<span class='hudHerb'>herbivores " + herbivores + "</span> · "
-        + "<span class='hudPred'>predators " + predators + "</span> · "
-        + "<span class='hudPlant'>plants " + plants + "</span>"
-        + (( genePool.getNumSick && genePool.getNumSick() > 0 ) ? " · <span style='color:#e6dc8c'>sick " + genePool.getNumSick() + "</span>" : "" );
+        + " | " + "Animals: " + animals + " | " + "Plants: " + plantLine
+        + (( genePool.getNumSick && genePool.getNumSick() > 0 ) ? " · <span style='color:#e6dc8c'>sick " + genePool.getNumSick() + "</span>" : "" )
+        + "<br>" + thermo;
 
     // The English source changes only when one of the numbers above changes;
     // translating and touching the DOM on every animation tick is wasted work.
@@ -1021,8 +1051,14 @@ export function togglePanel()
 export function resize()
 {
     let rightMargin = ( document.body.classList.contains( "panelHidden" ) || document.body.classList.contains( "panelFloating" )) ? 0 : 400;   // (a panel moved off the edge floats over the pool)
+    const panel = document.getElementById( "masterPanel" );
+    if ( panel && rightMargin > 0 ) { rightMargin = Math.ceil( panel.getBoundingClientRect().width ); }
     let width  = Math.max( 1, Math.floor( window.innerWidth  - rightMargin ));   // (a narrow window: at least 1)
-    let height = Math.max( 1, Math.floor( window.innerHeight - 15 ));
+    // The status bar is a docked footer: shorten the canvas so it never
+    // overlaps the water, the plants or the swimbots.
+    const statusBar = document.getElementById( "statusBar" );
+    const bottomMargin = statusBar ? Math.ceil( statusBar.getBoundingClientRect().height ) : 48;
+    let height = Math.max( 1, Math.floor( window.innerHeight - bottomMargin ));
     canvasID.style.width  = width  + "px";
     canvasID.style.height = height + "px";
 

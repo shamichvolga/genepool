@@ -64,6 +64,10 @@ const RU: Record<string, string> =
     "population": "население", "whole population": "всё население", "mutate all (50%)": "мутировать всех (50%)", "mutate half": "мутировать половину",
     "randomize all": "случайные гены всем", "randomize half": "случайные гены половине", "all": "всё", "last 50k": "последние 50k", "last 10k": "последние 10k",
     "herbivores": "травоядные", "predators": "хищники", "plants": "растения", "meat": "мясо", "step": "шаг",
+    // docked status bar
+    "Animals:": "Животные:", "Plants:": "Растения:", "small ": "мелкие ", "med ": "средние ", "large ": "крупные ",
+    "sprouts": "ростки", "young": "молодые", "grown": "кусты", "trees": "деревья",
+    "soil fertilizer": "удобрения в почве", "bots": "боты", "water": "вода", "air": "воздух",
     // info
     "previous": "назад", "next": "дальше",
     // keys help

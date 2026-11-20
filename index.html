@@ -17,8 +17,10 @@
 
 		
         
-		<!-- what is going on in the pool, over the pool (see ui.ts updateHud) -->
-		<div id = "hud" title = "press ? for the keys"></div>
+		<!-- docked status bar below the pool: living world + thermodynamics (see ui.ts updateHud) -->
+		<footer id = "statusBar" title = "press ? for the keys">
+			<div id = "hud"></div>
+		</footer>
 
 		<!-- the keys (press ? or F1) -->
 		<div id = "helpOverlay" onClick = "toggleHelp();">

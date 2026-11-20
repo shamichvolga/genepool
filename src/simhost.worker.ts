@@ -86,6 +86,7 @@ function makeSnapshot()
         history           : { interval: history.interval, step: history.step.slice(), herbivores: history.herbivores.slice(),
                               predators: history.predators.slice(), plants: history.plants.slice(), meat: history.meat.slice() },
         phaseTimes        : Array.from( phaseTimes ),
+        telemetry         : { ...pool.getTelemetry() },
         environment       : { active: environment.active, season: environment.active ? environment.seasonName() : "" },
         foodOfType        : [ pool.getNumFoodBitsOfType( 0 ), pool.getNumFoodBitsOfType( 1 ), pool.getNumFoodBitsOfType( 2 ) ],
         swimbotPanelHTML  : ( selected >= 0 ) ? pool.getSwimbotPanelHTML() : "",

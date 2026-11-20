@@ -1,7 +1,13 @@
 import { WORLD_AREA_FACTOR, WORLD_SCALE } from "./World";
-import { DEFAULT_FOOD_BIT_ENERGY, DEFAULT_FOOD_BIT_MAX_SPAWN_RADIUS } from "./FoodBit";
 import { ONE, ONE_HALF, ZERO } from "./MathConstants";
-import { ATTRACTION_SIMILAR_COLOR } from "./SwimbotTypes";
+
+// Pure primitives only: importing FoodBit / SwimbotTypes here used to pull
+// Pool -> SharedState -> Environment back into Parameters while it was still
+// initialising, which made TEMPERATURE_ENABLED a TDZ error at browser startup.
+// These three values mirror their definitions in those modules.
+const FOOD_SPREAD_DEFAULT            = 4000.0;   // FoodBit.DEFAULT_FOOD_BIT_MAX_SPAWN_RADIUS
+const FOOD_BIT_ENERGY_DEFAULT        = 50.0;     // FoodBit.DEFAULT_FOOD_BIT_ENERGY
+const ATTRACTION_SIMILAR_COLOR_VALUE = 10;       // SwimbotTypes.ATTRACTION_SIMILAR_COLOR
 
 
 
@@ -131,7 +137,7 @@ export const OBSTACLE_ENABLED               = true;
 // neural brain (stage 6): used in the environment ("random") pool
 export const NEURAL_BRAIN_ENABLED          = true;
 // TEMPERATURE_ENABLED (24.10, the owner: the temperature gradient did not prove itself - switched off
-// everywhere): false = no temperature map (Environment.FLAT_ENVIRONMENT), every swimbot suits every
+// everywhere): false = no temperature map (Environment.isFlatEnvironment()), every swimbot suits every
 // place (thermal genes do nothing), food is worth the same everywhere, no pull towards a temperature,
 // no temperature fill in the map editor. true = as before.
 export const TEMPERATURE_ENABLED           = false;
@@ -255,12 +261,12 @@ export function GlobalTweakers()
     this.maximumLifeSpan        = DEFAULT_MAXIMUM_AGE;
     this.maximumParts           = 16;
     this.populationLimitEnabled = true;
-	this.foodSpread             = DEFAULT_FOOD_BIT_MAX_SPAWN_RADIUS;
-	this.foodBitEnergy          = DEFAULT_FOOD_BIT_ENERGY;
+	this.foodSpread             = FOOD_SPREAD_DEFAULT;
+	this.foodBitEnergy          = FOOD_BIT_ENERGY_DEFAULT;
 	this.foodRegenerationPeriod = DEFAULT_FOOD_REGENERATION_PERIOD;
 	this.hungerThreshold        = DEFAULT_SWIMBOT_HUNGER_THRESHOLD;
 	this.numFoodTypes           = DEFAULT_NUM_FOOD_TYPES;
-	this.attractionCriterion    = ATTRACTION_SIMILAR_COLOR;
+	this.attractionCriterion    = ATTRACTION_SIMILAR_COLOR_VALUE;
 }
 
 

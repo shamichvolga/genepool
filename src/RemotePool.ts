@@ -24,6 +24,8 @@ export function createRemotePool( worker: Worker, onPetriLoaded: () => void )
         populationLimitEnabled: true, maximumSwimbotParts: 16,
         history: { interval: 50, step: [], herbivores: [], predators: [], plants: [], meat: [] },
         phaseTimes: [ 0, 0, 0, 0, 0, 0, 0, 0 ], environment: { active: false, season: "" }, foodOfType: [ 0, 0, 0 ],
+        telemetry: { eTotal: 0, eInitial: 0, eDelta: 0, eBots: 0, ePlants: 0, eMeat: 0, eSoil: 0, eAmbient: 0, eAtmosphere: 0,
+                     sprouts: 0, young: 0, grown: 0, trees: 0, herbSmall: 0, herbMed: 0, herbLarge: 0, predators: 0, soilTotal: 0 },
         swimbotPanelHTML: "", geneticClustersText: "genetic clusters: …", petri: null, selected: null,
     };
     let fixed: any = { numGeneCategories: 1, numGenesPerCategory: 1, geneNames: [] };
@@ -92,6 +94,7 @@ export function createRemotePool( worker: Worker, onPetriLoaded: () => void )
         getMaximumSwimbotParts: () => S.maximumSwimbotParts,
         getPopulationHistory:   () => S.history,
         getPhaseTimes:          () => S.phaseTimes,
+        getTelemetry:           () => S.telemetry,
         getEnvironment:         () => ({ active: S.environment.active, seasonName: () => S.environment.season }),
         getNumFoodBitsOfType:   ( type ) => S.foodOfType[ type ] || 0,
         getSwimbotPanelHTML:    () => S.swimbotPanelHTML,

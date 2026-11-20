@@ -1,5 +1,5 @@
 import { ONE, ONE_HALF, PI2, ZERO } from "./MathConstants";
-import { SOIL_GRID_N } from "./SharedState";
+import { SOIL_GRID_N } from "./SoilGrid";
 import { WORLD_SCALE } from "./World";
 import { Touch } from "./Touch";
 import { Vector2D } from "./Vector2D";
@@ -139,7 +139,7 @@ const POOL_BOUNDARY_MARGIN      = 1200.0;
     let _shoreIceCanvas: HTMLCanvasElement | null = null;
 
     //------------------------------------------------
-    // living soil: a 256x256 watercolor overlay painted from the energy field
+    // living soil: a 256x256 crisp cell overlay painted from the energy field
     //------------------------------------------------
     const SOIL_TEX = SOIL_GRID_N;
     let _soilCanvas: any = null;
@@ -181,15 +181,15 @@ const POOL_BOUNDARY_MARGIN      = 1200.0;
             {
                 const sx = Math.min( n - 1, Math.floor( px * n / SOIL_TEX ));
                 const soil = field[ row + sx ];
-                // Watercolor: bare ground is fully transparent; the fertile
-                // oases fade in smoothly from green to olive, never opaque.
-                const t = Math.max( 0, Math.min( 1, ( soil - 12 ) / 148 ));
-                const fade = t * t * ( 3 - 2 * t );
+                // Crisp cells, no radial blur: poor ground is completely clear,
+                // fertile ground shifts from green to amber and brightens as a
+                // tree draws the nutrient out of the nine cells under its crown.
+                const t = Math.max( 0, Math.min( 1, ( soil - 7.5 ) / 37.5 ));
                 const i = ( py * SOIL_TEX + px ) * 4;
-                data[ i     ] = 88  + ( 146 - 88  ) * t;
-                data[ i + 1 ] = 134 + ( 164 - 134 ) * t;
-                data[ i + 2 ] = 72  + ( 58  - 72  ) * t;
-                data[ i + 3 ] = soil < 12 ? 0 : Math.round( 92 * fade );
+                data[ i     ] = 108 + ( 168 - 108 ) * t;
+                data[ i + 1 ] = 158 + ( 174 - 158 ) * t;
+                data[ i + 2 ] = 62  + (  54 -  62 ) * t;
+                data[ i + 3 ] = soil < 7.5 ? 0 : Math.min( 115, Math.round( 24 + ( soil - 7.5 ) * 1.4 ));
             }
         }
         _soilCtx.putImageData( _soilImage, 0, 0 );
@@ -288,12 +288,13 @@ const POOL_BOUNDARY_MARGIN      = 1200.0;
         }
 
         // The living soil oases, stretched over the whole pool. Refreshed from
-        // the energy field every sixteenth simulation step. Bilinear smoothing
-        // turns the fine 256² cells into soft watercolor patches.
+        // the energy field every sixteenth simulation step. Nearest-neighbour
+        // sampling keeps every 256² cell visible as a distinct square.
         if ( _soilCanvas !== null && _soilVisible )
         {
-            canvas.imageSmoothingEnabled = true;
+            canvas.imageSmoothingEnabled = false;
             canvas.drawImage( _soilCanvas, POOL_LEFT, POOL_TOP, POOL_WIDTH, POOL_HEIGHT );
+            canvas.imageSmoothingEnabled = true;
         }
 
         // Baked shore ice: one drawImage, only in winter, always below the

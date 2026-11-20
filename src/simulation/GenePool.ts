@@ -16,7 +16,7 @@ declare const __GENEPOOL_VERSION__: string;
 import { currentAt, currentDriftX, currentDriftY, currentStrength, randomPointInCurrent } from "./Currents";
 import { bindPlantGenes, inheritPlantGenes, plantMatureAge, plantOldAge, plantRotAge, plantSeedDistance } from "./PlantGenes";
 import { geneAverage, convertOldGenes, GENE_LAYOUT_VERSION, setTrait, gaussian, thermalWidthToGene, preyTargetScore, GENES_PREDATOR, GENES_THERMAL_OPTIMUM, GENES_THERMAL_WIDTH, GENES_DIGESTION, GENES_BRIGHTNESS, GENES_CHOOSINESS, GENES_HUNGER, GENES_AUTOTOMY_BITE, GENES_AUTOTOMY_THREAT, GENES_AUTOTOMY_AMOUNT, GENES_AUTOTOMY_WHICH, GENES_PERSISTENCE, GENES_INVESTMENT, GENES_SIZE_PICKINESS, GENES_DEFERENCE, GENES_RUDDER, GENES_WEAK_PREY, GENES_IMMUNE, GENES_CANNIBAL, GENES_CURRENT, GENES_ASYMMETRY } from "./EcologyGenes";
-import { environment, FLAT_ENVIRONMENT, INITIAL_SOIL_NUTRIENT_PER_CELL, NUTRIENT_CYCLE_ENABLED, SWIMMING_ENERGY_RECYCLE_ENABLED, PLANT_CELL_SIZE, SOIL_DIFFUSION_INTERVAL, PLANT_TYPE_WARM, PLANT_TYPE_COLD, SEASONAL_PLANT_GROWTH_ENABLED, SEASONAL_PLANT_GROWTH_AMPLITUDE, SOIL_NUTRIENT_CAPACITY_PER_CELL } from "./Environment";
+import { environment, isFlatEnvironment, INITIAL_SOIL_NUTRIENT_PER_CELL, NUTRIENT_CYCLE_ENABLED, SWIMMING_ENERGY_RECYCLE_ENABLED, PLANT_CELL_SIZE, SOIL_DIFFUSION_INTERVAL, PLANT_TYPE_WARM, PLANT_TYPE_COLD, SEASONAL_PLANT_GROWTH_ENABLED, SEASONAL_PLANT_GROWTH_AMPLITUDE, SOIL_NUTRIENT_CAPACITY_PER_CELL } from "./Environment";
 import { petriSettings, petriStartZone } from "./Petri";
 import { IGNORE_FOOD_EFFICIENCY, preyVisibility, TWO_PLANT_TYPES } from "./Ecology";
 import { START_ENERGY_FACTOR, PLANT_ROT_ENABLED, START_FOOD_FILL, START_FOOD_CLUMP, START_FOOD_CLUMP_RADIUS, PLANT_STAGES_SHOWN, NURSERY_ENABLED, NURSERY_STEPS, NURSERY_START_FOOD_FACTOR, NURSERY_EXTRA_SEEDS, PLANT_EVOLUTION_ENABLED, PLANT_SEED_PARENT_TRIES, CURRENTS_ENABLED, CURRENT_SPEED, CLASSIC_SEED_RAIN_FRACTION, MEAT_PIECE_ENERGY, MEAT_PIECE_SCATTER, PLANT_STAGES_ENABLED, PLANT_ROT_AGE, DIET_SWITCH_RATE, CLASSIC_NUM_SWIMBOTS, CLASSIC_NUM_FOODBITS, GARDEN_RADIUS, ENVIRONMENT_PLANT_SPREAD_RATE, ENVIRONMENT_SEEDS_PER_PERIOD, LOCAL_ENVIRONMENT_PLANT_GROWTH, PLANT_CELL_CAPACITY, PLANT_PARENT_SEED_FRACTION, PLANT_SEED_MIN_DISTANCE, PLANT_SEED_MAX_DISTANCE } from "./Parameters";
@@ -52,7 +52,7 @@ import { ViewTracking, ViewTrackingMode } from "./ViewTracking";
 import { GenePoolState } from "./core/GenePoolState";
 import { createGenePoolRenderer } from "./GenePoolRenderer";
 import * as Serializer from "./GenePoolSerializer";
-import { depositSoilEnergy, seedSoilField, soilPlantGrowth, stepSoilField, totalSoilEnergy } from "./SoilField";
+import { depositSoilEnergy, seedSoilField, soilPlantGrowth, SOIL_START_ENERGY, stepSoilField, totalSoilEnergy } from "./SoilField";
 
 // The living soil has its own ambient reservoir. Energy that a swimmer spends
 // is split 70/30 between the soil under it and this reservoir; every sixteenth
@@ -61,6 +61,10 @@ import { depositSoilEnergy, seedSoilField, soilPlantGrowth, stepSoilField, total
 let _ambientEnergy = 0;
 let _totalWorldEnergy = 0;
 let _showSoil = true;             // the soil overlay is on by default
+
+// Founders start across a wide disk instead of a tight knot: 2.5 x the old
+// Garden of Eden radius gives every newcomer room and access to plants.
+const START_SPAWN_SPREAD = 2.5;
 
 //------------------
 export function GenePool()
@@ -610,14 +614,18 @@ export function GenePool()
         this.setPopulationLimitEnabled( true );
         this.setMaximumSwimbotParts ( 16 );
 
-        // closed energy cycle: the whole endowment of the world, granted once.
-        // Founders keep their starting energy; starting plants draw from the pool.
-        resetAtmosphere( INITIAL_NUM_SWIMBOTS * SWIMBOT_MAX_ENERGY * START_ENERGY_FACTOR
-                       + MAX_FOODBITS * globalTweakers.foodBitEnergy * ( 1 + ATMOSPHERE_RESERVE_WORLDS ));
+        // Closed energy cycle, calibrated for the 256x256 soil grid. Founders
+        // keep their starting energy outside the atmosphere (as before); the
+        // atmosphere funds only the soil, the first plants and a small reserve.
+        // Together with _ambientEnergy = 110,000 this puts E_total at ~1.8M:
+        // enough soil for oasis trees, far from the old 2.8M energy bath.
+        const START_FOOD_ENERGY        = INITIAL_NUM_FOODBITS * PLANT_SPROUT_ENERGY;
+        const START_ATMOSPHERE_RESERVE = 25000;
+        resetAtmosphere( SOIL_START_ENERGY + START_FOOD_ENERGY + START_ATMOSPHERE_RESERVE );
 
         // the living soil starts each run with a few fertile oases, paid for
         // out of the same endowment (nothing is created from nothing)
-        _ambientEnergy = 0;
+        _ambientEnergy = 110000;
         _st.soilField.fill( 0 );
         _st.foodSucking.fill( 0 );
         seedSoilField( _st );
@@ -756,7 +764,7 @@ _camera.setScale( POOL_WIDTH );
         {
             let initialPosition = new Vector2D();
 
-            initialPosition.setToRandomLocationInDisk( _poolCenter, _gardenOfEdenRadius );
+            initialPosition.setToRandomLocationInDisk( _poolCenter, _gardenOfEdenRadius * START_SPAWN_SPREAD );
 
 
 if ( mode === SimulationStartMode.SPECIES )
@@ -810,8 +818,9 @@ if ( mode === SimulationStartMode.SPECIES )
                 let xFraction = xMod / sqrt;
                 let yFraction = yMod / sqrt;
 
-                let x = _poolCenter.x - _gardenOfEdenRadius + xFraction * _gardenOfEdenRadius * 2;
-                let y = _poolCenter.y - _gardenOfEdenRadius + yFraction * _gardenOfEdenRadius * 2;
+                const spawnRadius = _gardenOfEdenRadius * START_SPAWN_SPREAD;
+                let x = _poolCenter.x - spawnRadius + xFraction * spawnRadius * 2;
+                let y = _poolCenter.y - spawnRadius + yFraction * spawnRadius * 2;
 
                 initialPosition.setXY( x, y );
 
@@ -1434,7 +1443,7 @@ if ( mode === SimulationStartMode.SPECIES )
 	this.regrowFoodEnvironment = function( numType0FoodBits, numType1FoodBits )
 	{
 	    const seasonalPlantGrowth = SEASONAL_PLANT_GROWTH_ENABLED
-	        && environment.active && !FLAT_ENVIRONMENT && !environment.petri
+	        && environment.active && !isFlatEnvironment() && !environment.petri
 	        ? Math.max( 0, 1 + SEASONAL_PLANT_GROWTH_AMPLITUDE * environment.seasonPhase() )
 	        : 1;
 	    let parentSeedChance = PLANT_PARENT_SEED_FRACTION;
@@ -1785,7 +1794,7 @@ if ( mode === SimulationStartMode.SPECIES )
 	    P[ SS.PARAM_CURRENT      ] = _currentSpeed;
 	    P[ SS.PARAM_STEP         ] = _clock;
 	    P[ SS.PARAM_ENV_ACTIVE   ] = environment.active ? 1 : 0;
-	    P[ SS.PARAM_ENV_FIELDS   ] = ( environment.active && !FLAT_ENVIRONMENT ) ? 1 : 0;
+	    P[ SS.PARAM_ENV_FIELDS   ] = ( environment.active && !isFlatEnvironment() ) ? 1 : 0;
 	    P[ SS.PARAM_FOOD_TYPES   ] = globalTweakers.numFoodTypes;
 	    P[ SS.PARAM_SHOW_SOIL    ] = _showSoil ? 1 : 0;
 	    P[ SS.PARAM_OBSTACLE_X1  ] = _obstacle.getEnd1Position().x;
@@ -3244,6 +3253,67 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	             asymmetryMean: alive > 0 ? asymAbs / alive : 0,
 	             asymmetryShare: alive > 0 ? asymStrong / alive : 0 };
 	}
+	// Bottom status bar: every reservoir and every life stage in one pass.
+	// The same object is filled again every 8 steps, so the UI can read it on
+	// every animation frame without allocating or walking the world again.
+	const _telemetry =
+	{
+	    eTotal: 0, eInitial: 0, eDelta: 0,
+	    eBots: 0, ePlants: 0, eMeat: 0, eSoil: 0, eAmbient: 0, eAtmosphere: 0,
+	    sprouts: 0, young: 0, grown: 0, trees: 0,
+	    herbSmall: 0, herbMed: 0, herbLarge: 0, predators: 0, soilTotal: 0
+	};
+	let _telemetryAt = -1;
+	this.getTelemetry = function()
+	{
+	    if ( _telemetryAt >= 0 && ( _clock - _telemetryAt ) < 8 ) return _telemetry;
+	    _telemetryAt = _clock;
+	    let eBots = 0, ePlants = 0, eMeat = 0;
+	    let sprouts = 0, young = 0, grown = 0, trees = 0;
+	    for ( let f = 0; f < MAX_FOODBITS; f++ )
+	    {
+	        if ( _st.liveFood[f] !== 1 ) continue;
+	        const e = _st.foodEnergy[f];
+	        if ( _st.foodType[f] === 2 ) { eMeat += e; continue; }
+	        ePlants += e;
+	        if ( e < 9 ) sprouts ++;
+	        else if ( e < 20 ) young ++;
+	        else if ( e < 42 ) grown ++;
+	        else trees ++;
+	    }
+	    let herbSmall = 0, herbMed = 0, herbLarge = 0, predators = 0;
+	    for ( let s = 0; s < MAX_SWIMBOTS; s++ )
+	    {
+	        if ( _st.liveSwimbot[s] !== 1 ) continue;
+	        const base = s * SS.BOT_STRIDE;
+	        eBots += _st.bots[ base + SS.B_ENERGY ];
+	        if ( _swimbots[s].getPredatorLevel() > PREDATOR_LEVEL_THRESHOLD ) { predators ++; continue; }
+	        const parts = _st.bots[ base + SS.B_NUM_PARTS ];
+	        if ( parts <= 5 ) herbSmall ++;
+	        else if ( parts <= 8 ) herbMed ++;
+	        else herbLarge ++;
+	    }
+	    _telemetry.eBots       = eBots;
+	    _telemetry.ePlants     = ePlants;
+	    _telemetry.eMeat       = eMeat;
+	    _telemetry.eSoil       = totalSoilEnergy( _st );
+	    _telemetry.eAmbient    = _ambientEnergy;
+	    _telemetry.eAtmosphere = getAtmosphereEnergy();
+	    _telemetry.eTotal      = eBots + ePlants + eMeat + _telemetry.eSoil
+	                           + _ambientEnergy + _telemetry.eAtmosphere;
+	    _telemetry.eInitial    = _totalWorldEnergy;
+	    _telemetry.eDelta      = _telemetry.eTotal - _totalWorldEnergy;
+	    _telemetry.sprouts     = sprouts;
+	    _telemetry.young       = young;
+	    _telemetry.grown       = grown;
+	    _telemetry.trees       = trees;
+	    _telemetry.herbSmall   = herbSmall;
+	    _telemetry.herbMed     = herbMed;
+	    _telemetry.herbLarge   = herbLarge;
+	    _telemetry.predators   = predators;
+	    _telemetry.soilTotal   = _telemetry.eSoil;
+	    return _telemetry;
+	}
 	this.getPhaseTimes = function() { return _phaseTimes; }
 
 
@@ -3589,7 +3659,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
                 // carrion rots a little every step; the rot is real energy in
                 // the soil, not an invisible disappearance into the atmosphere
                 let e = _st.foodEnergy[f];
-                const rot = Math.min( e, Math.max( 0.02, e * 0.012 ));
+                const rot = Math.min( e, Math.max( 0.008, e * 0.004 ));
                 if ( rot > 0 )
                 {
                     depositSoilEnergy( _st, foodX[f], foodY[f], rot );
