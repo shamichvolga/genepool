@@ -23,7 +23,7 @@ import { assert } from "../simulation/Utility";
 import { ViewTrackingMode } from "../simulation/ViewTracking";
 import { Graph } from "./graph";
 import { getInfoText } from "./info";
-import { _chosenPoolToLoad, _username, setChosenPoolToLoad } from "./saveLoad";
+import { _chosenPoolToLoad, _username, setChosenPoolToLoad, syncPoolStartupInputs, syncSwimbotNameInput } from "./saveLoad";
 import { decorateSwimbotCard, setupHints, tr, translateHTML, translatePage } from "./lang";
 import { USER_SWIMBOTS } from "./userSwimbots";
 
@@ -57,6 +57,7 @@ export function initializeUI()
     setupUserSwimbots();
     setupHints();
     setupSoilButton();
+    syncPoolStartupInputs();
     translatePage();
     // a new language: the parts the code fills are filled again
     window.addEventListener( "genepool:language", () =>
@@ -529,19 +530,12 @@ export function toggleCurrents()
     setTimeout( () => { document.getElementById( "currentsButton" ).classList.toggle( "activeButton", genePool.getCurrentsOn() ); }, 300 );
 }
 
-// The soil toggle lives in code (next to the currents button), so it stays with
-// the UI module and needs no change to index.html.
+// The soil toggle is the third button of the view-toggle row, together with
+// mouth/genital and currents. The HTML button already has its onclick; here we
+// only refresh its pressed state after a snapshot arrives.
 function setupSoilButton()
 {
-    const currents = document.getElementById( "currentsButton" );
-    if ( !currents || document.getElementById( "soilButton" )) return;
-    const button = document.createElement( "button" );
-    button.id = "soilButton";
-    button.className = "basicButton";
-    button.textContent = "soil";
-    button.title = "soil oases on / off";
-    button.onclick = () => toggleSoil();
-    currents.parentNode!.insertBefore( button, currents.nextSibling );
+    if ( !document.getElementById( "soilButton" )) return;
     setTimeout( syncSoilButton, 300 );
 }
 
@@ -834,6 +828,7 @@ export function updateUI()
             {
                 showPart( 'selectedSwimbotPanel',   true  );
                 showPart( 'noSelectedSwimbotPanel', false );
+                syncSwimbotNameInput();
                 let swimbotPanelHTML = genePool.getSwimbotPanelHTML();
 
                 if (swimbotPanelHTML !== _lastSwimbotPanelHTML)

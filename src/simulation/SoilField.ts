@@ -217,7 +217,7 @@ export function stepSoilField( st: SharedState, clock: number, ambient: number )
 // A plant can only suck from the nine cells under its crown. The 3x3 weighted
 // mean chooses how much energy its tier can hold; the three caps keep each
 // sucking event small, finite and limited by what the soil actually has.
-export function soilPlantGrowth( st: SharedState, x: number, y: number, currentEnergy: number ): number
+export function soilPlantGrowth( st: SharedState, x: number, y: number, currentEnergy: number, maxPlantOverride?: number ): number
 {
     cellAt( x, y, _cell );
     const ix = _cell.ix, iy = _cell.iy;
@@ -246,7 +246,8 @@ export function soilPlantGrowth( st: SharedState, x: number, y: number, currentE
     // Four soil niches on the 256x256 grid: bare ground carries sprouts only,
     // the oases can carry full trees. The caps stay finite and local, so a
     // crown can never pull more energy than the soil under it really holds.
-    const maxPlantE = local < 9 ? 6.0
+    const maxPlantE = ( maxPlantOverride !== undefined ) ? maxPlantOverride
+                    : local < 9 ? 6.0
                     : local < 18 ? 16
                     : local < 30 ? 34
                     : Math.min( 85, 34 + ( local - 30 ) * 1.1 );

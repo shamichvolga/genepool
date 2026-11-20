@@ -12,7 +12,7 @@ import { environment } from "./Environment";
 //    This software is intended for education, game design, and research. 
 //                                                                        
 // -------------------------------------------------------------------------- 
-import { NUM_GENES } from "./Genotype";
+import { Genotype, NUM_GENES } from "./Genotype";
 import { globalTweakers } from "./Globals";
 import { BYTE_SIZE, NULL_INDEX, ONE, ZERO } from "./MathConstants";
 import { PREDATOR_LEVEL_THRESHOLD } from "./Parameters";
@@ -884,6 +884,62 @@ if ( testNoEel )
     
     
 } // function Embryology()
+
+
+//-----------------------------------------------------------------------------
+// A body made from a gene file, without creating a swimbot or touching the
+// world. Used by the folder gallery: every card shows the real segments,
+// branches, widths and colours that Embryology would give these genes.
+// The pose is [ startX, startY, endX, endY, width, red, green, blue ] per part,
+// turned so that the mouth points right, centred near (0, 0).
+//-----------------------------------------------------------------------------
+export type CreaturePreview =
+{
+    pose: number[], parts: number, genesUsed: number,
+    diet: "herbivore" | "predator", color: [ number, number, number ], name: string,
+};
+
+export function previewFromGenes( genes: number[] ): CreaturePreview
+{
+    const genotype = new Genotype();
+    for (let g = 0; g < NUM_GENES; g++)
+    {
+        const v = genes && genes[g];
+        genotype.setGeneValue( g, ( typeof v === "number" && isFinite( v )) ? Math.max( 0, Math.min( BYTE_SIZE - 1, Math.floor( v ))) : 0 );
+    }
+    const embryo = new Embryology();
+    const ph = embryo.generatePhenotypeFromGenotype( genotype );
+
+    const x = new Array<number>( MAX_PARTS ).fill( 0 );
+    const y = new Array<number>( MAX_PARTS ).fill( 0 );
+    const a = new Array<number>( MAX_PARTS ).fill( 0 );
+    const pose: number[] = [];
+    let red = 0, green = 0, blue = 0;
+
+    for (let p = 1; p < ph.numParts; p++)
+    {
+        const part = ph.parts[p];
+        const parent = ( part.parent >= 0 && part.parent < p ) ? part.parent : 0;
+        a[p] = a[parent] + part.angle;
+        const rad = ( a[p] - a[1] ) * Math.PI / 180;          // the mouth points right
+        const ex = x[parent] + part.length * Math.cos( rad );
+        const ey = y[parent] - part.length * Math.sin( rad );
+        x[p] = ex; y[p] = ey;
+        const pr = Math.max( 0, Math.min( 1, part.red ));
+        const pg = Math.max( 0, Math.min( 1, part.green ));
+        const pb = Math.max( 0, Math.min( 1, part.blue ));
+        red += pr; green += pg; blue += pb;
+        pose.push( x[parent], y[parent], ex, ey, part.width, pr, pg, pb );
+    }
+    const n = Math.max( 1, ph.numParts - 1 );
+    const color: [ number, number, number ] = [ red / n, green / n, blue / n ];
+    const hex = color.map( c => Math.max( 0, Math.min( 255, Math.round( c * 255 ))).toString( 16 ).padStart( 2, "0" )).join( "" );
+    return {
+        pose, parts: ph.numParts, genesUsed: embryo.getNumGenesUsed(),
+        diet: ( ph.predatorLevel > PREDATOR_LEVEL_THRESHOLD ) ? "predator" : "herbivore",
+        color, name: "bot_" + ph.numParts + "seg_" + hex,
+    };
+}
 
 
 

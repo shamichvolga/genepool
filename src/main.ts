@@ -35,6 +35,7 @@ import * as lang     from "./ui/lang";
 import * as debug    from "./ui/debug";
 import * as worldFile from "./ui/worldFile";
 import * as species  from "./ui/species";
+import * as gallery  from "./ui/gallery";
 import * as mapEditor from "./ui/mapEditor";
 import { initializeLayout } from "./ui/layout";
 import { setParameter } from "./simulation/ParamStore";
@@ -56,7 +57,7 @@ Object.assign( window,
     Brain, Camera, Embryology, FamilyTree, FoodBit, GenePoolModule, Genotype, Globals,
     MathConstants, Obstacle, Parameters, PhyloTree, Pool, Swimbot,
     SwimbotRenderer, SwimbotTypes, Touch, Utility, Vector2D, ViewTracking,
-    graph, info, logger, saveLoad, ui, lang, debug, worldFile, species, mapEditor );
+    graph, info, logger, saveLoad, ui, lang, debug, worldFile, species, gallery, mapEditor );
 
 //------------------------------------------------------------------------------
 // prepare the UI: turn on the info panel and set it to the first page
@@ -89,6 +90,7 @@ resizeAll();
 ui.openPanel( "menuInfoButton" );
 ui.setInfoPage( 2 );
 ui.initializeUI();
+gallery.initializeGallery();
 initializeLayout();
 debug.initializeDebug();
 
@@ -97,50 +99,30 @@ window.addEventListener( "resize", resizeAll );
 //------------------------------------------------------------------------------
 // loading a single swimbot from a .json gene file
 //------------------------------------------------------------------------------
-document.getElementById( "loadSwimbotFile" ).addEventListener( "change", function( event: any )
+document.getElementById( "loadSwimbotFile" ).addEventListener( "change", async function( event: any )
 {
-    let file = event.target.files[0];
+    const file = event.target.files[0];
     if ( !file ) return;
-
-    let reader = new FileReader();
-    reader.onload = function( e: any )
+    event.target.value = "";
+    try
     {
-        try
+        const parsed = gallery.parseCreatureBytes( file.name, await file.arrayBuffer());
+        if ( parsed )
         {
-            let data = JSON.parse( e.target.result );
-            let hasValidGenes = false;
-
-            if ( data.genes && Array.isArray( data.genes ) && data.genes.length === Genotype.NUM_GENES )
-            {
-                hasValidGenes = true;
-                for ( let i = 0; i < data.genes.length; i++ )
-                {
-                    let gene = data.genes[i];
-                    let isInteger = ( typeof gene === "number" ) && isFinite( gene ) && ( Math.floor( gene ) === gene );
-                    if ( !isInteger || gene < 0 || gene >= MathConstants.BYTE_SIZE )
-                    {
-                        hasValidGenes = false;
-                        break;
-                    }
-                }
-            }
-
-            if ( hasValidGenes )
-            {
-                genePool.createNewSwimbotWithGenes( data.genes );
-                alert( lang.tr( "Swimbot loaded successfully!" ));
-            }
-            else
-            {
-                alert( lang.tr( "Error: the file does not contain valid genes." ));
-            }
+            genePool.createNewSwimbotWithGenes( parsed.genes );
+            const nameField = document.getElementById( "swimbotNameInput" ) as HTMLInputElement | null;
+            if ( nameField ) { nameField.value = parsed.name; }
+            alert( lang.tr( "Swimbot loaded successfully!" ));
         }
-        catch ( err )
+        else
         {
-            alert( lang.tr( "Error reading the file: " ) + err.message );
+            alert( lang.tr( "Error: the file does not contain valid genes." ));
         }
-    };
-    reader.readAsText( file );
+    }
+    catch ( err )
+    {
+        alert( lang.tr( "Error reading the file: " ) + err.message );
+    }
 });
 
 //------------------------------------------------------------------------------

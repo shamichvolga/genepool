@@ -39,7 +39,9 @@ export const MIN_SWIMBOT_HUNGER_THRESHOLD          = ZERO;
 export const POPULATION_LIMIT = 1500 * WORLD_AREA_FACTOR;
 export const MAX_SWIMBOTS = POPULATION_LIMIT * 4;
 
-export const INITIAL_NUM_SWIMBOTS =  500 * WORLD_AREA_FACTOR;
+// A live startup setting: the exact number of founders in a new random pool.
+// 500 per area unit at the default world scale (2 x 2) gives the usual 2000.
+export const INITIAL_NUM_SWIMBOTS =  2000;
 
 export const MAX_FOODBITS           = 4000 * WORLD_AREA_FACTOR;   // (x2 on 17.10: the first generation well fed)
 export const MAX_FOODBITS_PER_TYPE  = 1000 * WORLD_AREA_FACTOR;

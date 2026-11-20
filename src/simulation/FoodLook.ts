@@ -35,7 +35,7 @@ const SAPLING_PIXELS  = 5.0;
 const CROWN_PIXELS    = 9.0;
 
 // the starburst: eight rays, long ones (0, 2, 4, 6) at 45 degree steps from "up"
-const CROWN_RAYS = 8;
+const CROWN_RAYS = 12;
 
 //------------------------------------------------------------------------------
 // one capsule as the screen wants it (the same numbers CapsuleRenderer.add takes)

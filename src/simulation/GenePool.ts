@@ -2,7 +2,7 @@ import { WORLD_AREA_FACTOR } from "./World";
 import { CARCASS_ENABLED, DISEASE_ENABLED, CANNIBAL_GENE_FOUNDER_MAX, PLANT_REGROW_CHANCE, PLANT_REGROW_DELAY } from "./Parameters";
 import { exportStrains, importStrains, updateDiseases } from "./Disease";
 import { PILE_PARTS, PreparedZone, barrierFlat, insideAny, prepareZones, randomPointInZone } from "./MapZones";
-import { plantCrown, plantFullEnergy, plantLifespan, plantSize } from "./PlantSize";
+import { plantCrown, plantLifespan, plantSize } from "./PlantSize";
 import { PLANT_SIZE_ENABLED, PLANT_SEEDS_BY_SIZE, PLANT_LEAF_REGROWTH, PLANT_LIFESPAN, PLANT_SPROUT_ENERGY, PLANT_TREE_ENERGY,
          WOOD_PER_FRUIT_TIER, PLANT_FRUIT_PERIOD, PLANT_FRUIT_ENERGY, PLANT_CANOPY_RADIUS, SHADED_PLANT_AGING_FACTOR, WOOD_DECAY_STEPS } from "./Parameters";
 import { Environment } from "./Environment";
@@ -128,7 +128,9 @@ export function GenePool()
     const DEFAULT_MILLISECONDS_PER_UPDATE = 20;
 
 //const LEVEL_OF_DETAIL_THRESHOLD         = 1000.0;
-    const LEVEL_OF_DETAIL_THRESHOLD         = 1200.0;
+    // Dividing the viewScale threshold by 3 keeps detailed segments three times
+    // higher (further away from the pool) before the low-detail drawing takes over.
+    const LEVEL_OF_DETAIL_THRESHOLD         = 1200.0 / 3;
 
     const INITIAL_VIEW_SCALE                = POOL_WIDTH * 0.1;
     const RACE_VIEW_SCALE                   = POOL_WIDTH * 0.3;
@@ -659,7 +661,7 @@ export function GenePool()
             this.setGardenOfEdenRadius( GARDEN_RADIUS );
             _camera.setScale( POOL_WIDTH );   // show the whole world with all its gardens
 
-            _numSwimbots = INITIAL_NUM_SWIMBOTS;
+            _numSwimbots = Math.max( 0, Math.floor( INITIAL_NUM_SWIMBOTS ));
             _numFoodBits = INITIAL_NUM_FOODBITS;
             globalTweakers.numFoodTypes = TWO_PLANT_TYPES ? 2 : 1;
             if ( _map && (( _map.base === "blank" ) || ( _mapPlantZones.length > 0 ))) { environment.clearPlantCounts(); _numFoodBits = 0; }
@@ -1400,7 +1402,7 @@ else if ( mode === SimulationStartMode.TEST_MINI_POOL )
 	    return {
 	        left: POOL_LEFT, top: POOL_TOP, width: POOL_WIDTH, height: POOL_HEIGHT, field: preview.temperatureGrid(),
 	        environment: preview.getState(), gardens: gardens.map( g => ({ x: g.x, y: g.y })), gardenRadius: GARDEN_RADIUS,
-	        numSwimbots: INITIAL_NUM_SWIMBOTS, maxSwimbots: MAX_SWIMBOTS,
+	        numSwimbots: Math.max( 0, Math.floor( INITIAL_NUM_SWIMBOTS )), maxSwimbots: MAX_SWIMBOTS,
 	    };
 	}
 
@@ -3704,7 +3706,14 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
             {
                 const cell = environment.plantCellIndex( foodX[f], foodY[f] );
                 const shade = ( _st.foodWood[f] < WOOD_PER_FRUIT_TIER ) ? _plantShade[cell] : 0;
-                const full = plantFullEnergy( environment.getSoilNutrientAtCell( cell ));
+                // Soil niches: bare ground keeps sprouts, richer oases make bushes,
+                // and only the deepest soil can feed a twelve-ray tree. The cap is
+                // passed to the pump so the crown cannot outgrow what its cell holds.
+                const localSoil = environment.getSoilNutrientAtCell( cell );
+                const full = localSoil < 8 ? 6.0
+                           : localSoil < 13 ? 16
+                           : localSoil < 21 ? 34
+                           : Math.min( 85, 34 + ( localSoil - 21 ) * 1.1 );
                 const age = ( _clock - born[f] ) / ( 1 + ( SHADED_PLANT_AGING_FACTOR - 1 ) * shade );
                 if (( PLANT_LIFESPAN > 0 ) && ( age > plantLifespan( f, born[f] ))) { killPlant( f ); continue; }
 
@@ -3712,7 +3721,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
                 // sucking energy out of the nine soil cells under it. The tier
                 // cap and the three small caps live in SoilField.stepPlantGrowth.
                 let e = _st.foodEnergy[f];
-                const grown = soilPlantGrowth( _st, foodX[f], foodY[f], e );
+                const grown = soilPlantGrowth( _st, foodX[f], foodY[f], e, full );
                 if ( grown > 0 ) { e += grown; _st.foodEnergy[f] = e; }
                 _st.foodSucking[f] = grown > 0 ? Math.min( 1, grown / 0.28 ) : 0;
                 _st.foodWood[f] = Math.max( _st.foodWood[f], e );
@@ -4298,6 +4307,47 @@ if ( !fundPlant( childFoodBitIndex, globalTweakers.foodBitEnergy )) return;
 
 
         setSelectedSwimbot( index );
+    }
+
+
+    // Gallery action: give the selected body the genes of a saved creature,
+    // keeping its place, age and energy so the world around it is undisturbed.
+    this.replaceSelectedWithGenes = function( genes )
+    {
+        const ID = this.getSelectedSwimbotID();
+        if ( ID === NULL_INDEX ) { this.createNewSwimbotWithGenes( genes ); return; }
+
+        _myGenotype.setGenes( genes );
+        const initialAge    = _swimbots[ ID ].getAge();
+        const initialAngle  = _swimbots[ ID ].getAngle();
+        const initialEnergy = Math.max( 1, _swimbots[ ID ].getEnergy() * ONE_HALF );
+        const at = new Vector2D();
+        at.copyFrom( _swimbots[ ID ].getPosition() );
+
+        _swimbots[ ID ].create( ID, initialAge, at, initialAngle, initialEnergy, _myGenotype, _embryology );
+        _familyTree.addNode( ID, NULL_INDEX, NULL_INDEX, _clock, this.getSwimbotGenes( ID ));
+        setSelectedSwimbot( ID );
+    }
+
+
+    // Gallery action: place a small herd of the saved creature around the
+    // middle of the view. They are ordinary swimbots: no special flags.
+    this.spawnHerdFromGenes = function( genes, count = 10 )
+    {
+        const center = _camera.getPosition();
+        const total = Math.max( 1, Math.floor( count ));
+        const radius = 70;
+        for (let i = 0; i < total; i++)
+        {
+            this.createNewSwimbotWithGenes( genes );
+            const ID = this.getSelectedSwimbotID();
+            if ( ID === NULL_INDEX ) return;
+            const a = ( i / total ) * Math.PI * 2;
+            const at = new Vector2D();
+            at.x = Math.max( POOL_LEFT + 2, Math.min( POOL_RIGHT - 2, center.x + Math.cos( a ) * radius ));
+            at.y = Math.max( POOL_TOP  + 2, Math.min( POOL_BOTTOM - 2, center.y + Math.sin( a ) * radius ));
+            _swimbots[ ID ].setPosition( at );
+        }
     }
 
 

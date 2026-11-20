@@ -78,8 +78,11 @@
                     <button id = "speed2Button"   class = "basicButton speedButton" onClick = "setSpeed(2);" title = "fast (250 steps per second)" >&#x25B6;&#xFE0E;&#x25B6;&#xFE0E;</button>
                     <button id = "speed3Button"   class = "basicButton speedButton" onClick = "setSpeed(3);" title = "as fast as the computer can" >&#x25B6;&#xFE0E;&#x25B6;&#xFE0E;&#x25B6;&#xFE0E;</button>
                     <button id = "noRenderButton" class = "basicButton" onClick = "toggleRendering();" title = "drawing off: faster" >rendering OFF</button>
-                    <button id = "viewGoalButton" class = "basicButton" onClick = "toggleGoalOverlay();"       >mouth/genital</button>
-                    <button id = "currentsButton" class = "basicButton" onClick = "toggleCurrents();" title = "water currents: big slow eddies carry swimbots and meat (C)" >currents</button>
+                    <div id = "viewTogglePanel" class = "gpGrid3 wide">
+                        <button id = "viewGoalButton" class = "basicButton" onClick = "toggleGoalOverlay();"       >mouth/genital</button>
+                        <button id = "currentsButton" class = "basicButton" onClick = "toggleCurrents();" title = "water currents: big slow eddies carry swimbots and meat (C)" >currents</button>
+                        <button id = "soilButton" class = "basicButton" onClick = "toggleSoil();" title = "soil oases on / off" >soil</button>
+                    </div>
                 </div>
             </section>
 
@@ -96,54 +99,70 @@
 
                 <!-- ============================== pool ============================== -->
                 <div id = "poolPanel" class = "menuPanel">
-                    <div class = "gpHeading">start a new pool</div>
-                    <div class = "gpGrid2">
-                        <button id = "pool1Button" class = "basicButton" onClick = "choosePoolToLoad( SimulationStartMode.RANDOM       ); requestToLoadPoolFromPreset();" >random</button>
-                        <button id = "pool2Button" class = "basicButton" onClick = "choosePoolToLoad( SimulationStartMode.NEIGHBORHOOD ); requestToLoadPoolFromPreset();" >neighborhoods</button>
-                        <button id = "pool3Button" class = "basicButton" onClick = "choosePoolToLoad( SimulationStartMode.FROGGIES     ); requestToLoadPoolFromPreset();" >froggies</button>
-                        <button id = "pool4Button" class = "basicButton" onClick = "choosePoolToLoad( SimulationStartMode.SPECIES      ); requestToLoadPoolFromPreset();" >speciation</button>
-                        <button id = "pool5Button" class = "basicButton" onClick = "choosePoolToLoad( SimulationStartMode.RACE         ); requestToLoadPoolFromPreset();" >food race</button>
-                        <button id = "pool6Button" class = "basicButton" onClick = "choosePoolToLoad( SimulationStartMode.BIG_BANG     ); requestToLoadPoolFromPreset();" >big bang</button>
-                        <button id = "pool7Button" class = "basicButton" onClick = "choosePoolToLoad( SimulationStartMode.BARRIER      ); requestToLoadPoolFromPreset();" >genetic barrier</button>
-                        <button id = "pool8Button" class = "basicButton" onClick = "choosePoolToLoad( SimulationStartMode.EMPTY        ); requestToLoadPoolFromPreset();" >empty</button>
+                    <div class = "gpCards3">
+
+                        <section class = "gpCard">
+                            <div class = "gpHeading">presets</div>
+                            <div class = "gpGrid2">
+                                <button id = "pool1Button" class = "basicButton" onClick = "choosePoolToLoad( SimulationStartMode.RANDOM       ); requestToLoadPoolFromPreset();" >random</button>
+                                <button id = "pool2Button" class = "basicButton" onClick = "choosePoolToLoad( SimulationStartMode.NEIGHBORHOOD ); requestToLoadPoolFromPreset();" >neighborhoods</button>
+                                <button id = "pool3Button" class = "basicButton" onClick = "choosePoolToLoad( SimulationStartMode.FROGGIES     ); requestToLoadPoolFromPreset();" >froggies</button>
+                                <button id = "poolTestMiniButton" class = "basicButton" onClick = "choosePoolToLoad( SimulationStartMode.TEST_MINI_POOL ); requestToLoadPoolFromPreset();" title = "4 adults (2 herbivores, 2 predators) and 25 plants in the centre" >mini-pool test</button>
+                                <button id = "pool8Button" class = "basicButton" onClick = "choosePoolToLoad( SimulationStartMode.EMPTY        ); requestToLoadPoolFromPreset();" >empty</button>
+                            </div>
+                            <button id = "mapEditorPoolButton" class = "basicButton wide" onClick = "openMapEditor();" title = "map editor: draw the world before it starts" >map editor…</button>
+
+                            <div class = "gpSubheading">world size</div>
+                            <div id = "worldSizePanel" class = "gpGrid4">
+                                <button id = "world1Button" class = "basicButton" onClick = "setWorldSize(1);" title = "8000 × 8000" >small</button>
+                                <button id = "world2Button" class = "basicButton" onClick = "setWorldSize(2);" title = "16000 × 16000" >normal</button>
+                                <button id = "world3Button" class = "basicButton" onClick = "setWorldSize(3);" title = "24000 × 24000" >large</button>
+                                <button id = "world4Button" class = "basicButton" onClick = "setWorldSize(4);" title = "32000 × 32000" >huge</button>
+                            </div>
+
+                            <div class = "gpSubheading">petri</div>
+                            <div id = "petriPanel">
+                                <button id = "petriButton" class = "basicButton" onClick = "startPetri();" title = "start a 'petri' pool with these settings" >petri</button>
+                                <label title = "how many zones (2-12)">zones <input id = "petriZones" type = "number" min = "2" max = "12" value = "7" ></label>
+                                <canvas id = "petriPicture" width = "44" height = "44" title = "the shape of the zones: click to change" onClick = "nextPetriLayout();"></canvas>
+                                <label title = "border between zones: 0 = sharp, 1 = soft">border <input id = "petriSoftness" type = "number" min = "0" max = "1" step = "0.05" value = "0.1" ></label>
+                            </div>
+                            <div id = "petriLayoutName" class = "gpNote">stripes</div>
+                        </section>
+
+                        <section class = "gpCard">
+                            <div class = "gpHeading">startup params</div>
+                            <div class = "gpNote">Applied before the next pool starts. The number of bots is exact; bigger worlds simply have more room.</div>
+                            <label class = "gpParamRow" for = "poolInitialBots"><span>initial bots</span><input id = "poolInitialBots" type = "number" min = "0" max = "20000" step = "50" value = "2000"></label>
+                            <label class = "gpParamRow" for = "poolWorldEnergy"><span>world energy</span><input id = "poolWorldEnergy" type = "number" min = "0.1" max = "10" step = "0.1" value = "1.5"></label>
+                            <button id = "applyPoolParamsButton" class = "basicButton wide" onClick = "applyPoolStartupParams();" >apply startup params</button>
+                            <div class = "gpNote">Then choose a preset. The settings are also saved with the panel.</div>
+                            <button id = "familyTreeButton" class = "basicButton wide" onClick = "printFamilyTree( false );" >print swimbot data</button>
+                        </section>
+
+                        <section class = "gpCard">
+                            <div class = "gpHeading">pool files</div>
+                            <div class = "gpNote">Everything goes into one file: swimbots, plants, diseases, climate and the clock. A loaded pool goes on from the same step.</div>
+                            <div class = "gpGrid2">
+                                <button id = "savePoolGnpButton" class = "basicButton" onClick = "savePoolFile('gnp');" title = "download the whole pool as a .gnp file" >save .gnp</button>
+                                <button id = "savePoolJsonButton" class = "basicButton" onClick = "savePoolFile('json');" title = "download the whole pool as a .json file" >save .json</button>
+                                <button id = "loadPoolFileButton" class = "basicButton wide" onClick = "choosePoolFile();" title = "load a .gnp or .json pool file" >load pool…</button>
+                            </div>
+                            <label class = "gpNote" title = "the family tree grows with every birth; it is not needed for the pool to go on"><input id = "worldWithTree" type = "checkbox" checked> with the family tree</label>
+
+                            <div class = "gpSubheading">autosave slots</div>
+                            <div class = "gpGrid3">
+                                <button class = "basicButton" onClick = "saveAutosaveSlot('A');" title = "save to slot A" >save A</button>
+                                <button class = "basicButton" onClick = "saveAutosaveSlot('B');" title = "save to slot B" >save B</button>
+                                <button class = "basicButton" onClick = "saveAutosaveSlot('C');" title = "save to slot C" >save C</button>
+                                <button class = "basicButton" onClick = "loadAutosaveSlot('A');" title = "load slot A" >load A</button>
+                                <button class = "basicButton" onClick = "loadAutosaveSlot('B');" title = "load slot B" >load B</button>
+                                <button class = "basicButton" onClick = "loadAutosaveSlot('C');" title = "load slot C" >load C</button>
+                            </div>
+                            <div id = "autosaveInfo" class = "gpNote">Slots live in this browser.</div>
+                        </section>
+
                     </div>
-
-                    <button id = "poolTestMiniButton" class = "basicButton wide" onClick = "choosePoolToLoad( SimulationStartMode.TEST_MINI_POOL ); requestToLoadPoolFromPreset();" title = "4 adults (2 herbivores, 2 predators) and 25 plants in the centre, camera follows the selected bot" >test mini-pool</button>
-
-                    <button id = "mapEditorPoolButton" class = "basicButton wide" onClick = "openMapEditor();" title = "map editor: draw the world before it starts" >map editor…</button>
-
-                    <div class = "gpHeading">petri: life starts in the mildest zone and must conquer the others</div>
-                    <div id = "petriPanel">
-                        <button id = "petriButton" class = "basicButton" onClick = "startPetri();" title = "start a 'petri' pool with these settings" >petri</button>
-                        <label title = "how many zones (2-12)">zones <input id = "petriZones" type = "number" min = "2" max = "12" value = "7" ></label>
-                        <canvas id = "petriPicture" width = "44" height = "44" title = "the shape of the zones: click to change" onClick = "nextPetriLayout();"></canvas>
-                        <label title = "border between zones: 0 = sharp, 1 = soft (as wide as a zone)">border <input id = "petriSoftness" type = "number" min = "0" max = "1" step = "0.05" value = "0.1" ></label>
-                    </div>
-                    <div id = "petriLayoutName" class = "gpNote">stripes</div>
-
-                    <div class = "gpHeading">world size (starts a new random pool)</div>
-                    <div id = "worldSizePanel" class = "gpGrid4">
-                        <button id = "world1Button" class = "basicButton" onClick = "setWorldSize(1);" title = "8000 × 8000, about 500 swimbots"     >small</button>
-                        <button id = "world2Button" class = "basicButton" onClick = "setWorldSize(2);" title = "16000 × 16000, about 2000 swimbots"   >normal</button>
-                        <button id = "world3Button" class = "basicButton" onClick = "setWorldSize(3);" title = "24000 × 24000, about 4500 swimbots"   >large</button>
-                        <button id = "world4Button" class = "basicButton" onClick = "setWorldSize(4);" title = "32000 × 32000, about 8000 swimbots (needs a fast computer)" >huge</button>
-                    </div>
-
-                    <div class = "gpHeading">save the world</div>
-                    <div class = "gpNote">Everything goes into one file: every swimbot and plant, diseases, climate, the clock. A loaded world goes on from the same step.</div>
-                    <div class = "gpGrid2">
-                        <button id = "saveWorldButton" class = "basicButton" onClick = "saveWorldToFile();" title = "download the whole world as a .gpworld file" >save world</button>
-                        <button id = "loadWorldButton" class = "basicButton" onClick = "chooseWorldFile();" title = "load a .gpworld file and go on from there" >load world…</button>
-                    </div>
-                    <label class = "gpNote" title = "the family tree grows with every birth; it is not needed for the world to go on"><input id = "worldWithTree" type = "checkbox" checked> with the family tree</label>
-
-                    <div class = "gpHeading">research data</div>
-                    <div id = "saveLoadPanel" class = "gpNote">
-                        Run a pool (for example "speciation") for tens of thousands of steps,
-                        then get the data collected during the simulation and load it into
-                        <a href = "https://lnegoita.shinyapps.io/gene-pool-laboratory/" target = "_blank">GenePool Lab</a>.
-                    </div>
-                    <button id = "familyTreeButton" class = "basicButton wide" onClick = "printFamilyTree( false );" >print swimbot data</button>
                 </div>
 
                 <!-- ============================== swimbot ============================== -->
@@ -155,6 +174,7 @@
                             <button id = "createRandomSwimbotButton" class = "basicButton" onClick = "genePool.makeNewRandomSwimbot();" >random genes</button>
                             <button id = "loadSwimbotButton"         class = "basicButton" onClick = "document.getElementById('loadSwimbotFile').click();" >load genes…</button>
                         </div>
+                        <button id = "loadFolderButton" class = "basicButton wide" onClick = "openFolderGallery();" title = "open a folder of .dna, .json or .txt creatures" >load from folder…</button>
                         <div class = "gpHeading">from a preset</div>
                         <div class = "gpGrid4">
                             <button id = "presetSwimbot1Button" class = "basicButton" onClick = "loadSwimbotFromPreset(0);" >Darwin</button>
@@ -173,6 +193,7 @@
 
                     <div id = "selectedSwimbotPanel">
                         <div id = "swimbotDataPanel"></div>
+                        <label class = "gpNameRow" for = "swimbotNameInput"><span>name</span><input id = "swimbotNameInput" type = "text" maxlength = "48" placeholder = "swimbot"></label>
                         <div class = "gpGrid3">
                             <button id = "zapSwimbotButton"       class = "basicButton" onClick = "genePool.zapSwimbot( genePool.getSelectedSwimbotID(), 0.2 );" >mutate</button>
                             <button id = "randomizeSwimbotButton" class = "basicButton" onClick = "genePool.randomizeSwimbot( genePool.getSelectedSwimbotID() );" >randomize</button>
@@ -184,6 +205,7 @@
                             <button id = "tweakGenesButton"       class = "basicButton" onClick = "openTweakGenesPanel( genePool.getSelectedSwimbotID() ); genePool.setViewMode( ViewTrackingMode.SELECTED );" >tweak genes</button>
                             <button id = "saveGenesButton"        class = "basicButton" onClick = "downloadSwimbotGenes( genePool.getSelectedSwimbotID() );" >save genes</button>
                             <button id = "loadGenesButton"        class = "basicButton" onClick = "document.getElementById('loadSwimbotFile').click();" >load genes…</button>
+                            <button id = "gallerySelectedButton"  class = "basicButton" onClick = "openFolderGallery();" title = "open a folder of .dna, .json or .txt creatures" >folder gallery…</button>
                             <button id = "filmstripButton"        class = "basicButton" onClick = "downloadFilmstrip();" title = "9 frames of this swimbot's gait, 3 steps apart (step +0 … step +24)" >filmstrip 3×3</button>
                         </div>
                     </div>
@@ -291,8 +313,10 @@
             </footer>
         </div>  <!--masterPanel-->
 
-        <input type = "file" id = "loadSwimbotFile" accept = ".json" style = "display:none;">
+        <input type = "file" id = "loadSwimbotFile" accept = ".dna,.json,.txt" style = "display:none;">
         <input type = "file" id = "loadWorldFile" accept = ".gpworld" style = "display:none;">
+        <input type = "file" id = "loadPoolFileInput" accept = ".gnp,.json" style = "display:none;">
+        <input type = "file" id = "loadCreatureFolder" webkitdirectory directory multiple accept = ".dna,.json,.txt" style = "display:none;">
 
         <div id = "popUpPanel"  style="display:none;" >
             <div id = "PopupText" >

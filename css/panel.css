@@ -51,6 +51,7 @@
     align-items:    baseline;
     gap:            12px;
     flex:           0 0 auto;
+    padding-left:   28px;   /* the floating ">" toggle no longer covers the G in Gene Pool */
 }
 
 #mainTitle
@@ -97,6 +98,36 @@
 .gpGrid2 { grid-template-columns: repeat( 2, 1fr ); }
 .gpGrid3 { grid-template-columns: repeat( 3, 1fr ); }
 .gpGrid4 { grid-template-columns: repeat( 4, 1fr ); }
+
+/* the pool tab: three separate cards, each with its own heading */
+.gpCards3 { display: grid; gap: 6px; }
+.gpCard
+{
+    border:             1px solid var(--panel-edge);
+    border-radius:      4px;
+    background:         rgba( 255, 255, 255, 0.25 );
+    padding:            5px 6px 7px 6px;
+}
+.gpCard .gpHeading:first-child { margin-top: 0; }
+.gpParamRow, .gpNameRow
+{
+    display:        flex;
+    align-items:    center;
+    gap:            8px;
+    margin:         3px 0;
+    font-size:      11px;
+}
+.gpParamRow span, .gpNameRow span { flex: 0 0 84px; }
+.gpParamRow input, .gpNameRow input
+{
+    flex:           1 1 auto;
+    min-width:      0;
+    padding:        2px 4px;
+    border:         1px solid #9a9a90;
+    border-radius:  3px;
+    font-family:    Arial, sans-serif;
+    font-size:      11px;
+}
 
 .gpHeading
 {
@@ -513,8 +544,8 @@ body.panelHidden #noRenderPanel { left: 50% !important; }
 {
     grid-template-columns:  34px 34px 40px 48px 1fr;
 }
-#viewGoalButton { grid-column: 1 / span 3; }
-#currentsButton { grid-column: 4 / span 2; }
+/* one clean row: mouth/genital, currents and the soil toggle */
+#viewTogglePanel { grid-column: 1 / -1; }
 #masterPanel .iconButton  { font-size: 13px; }
 #masterPanel .speedButton { font-size: 9px; letter-spacing: -2px; }
 #viewOptionsPanel.paused .speedButton.activeButton { border-color: var(--button-edge); background-color: var(--button); }
@@ -694,6 +725,86 @@ body.panelFloating #panelToggleButton { display: none; }
 .dbgRow.changed .dbgName { color: #1b5fa0; font-weight: bold; }
 .dbgRow.edited input     { background: #fff6c8; }
 .dbgRow input.bad        { border-color: #c03030; background: #ffd8d0; }
+
+/* -------------------------------------------- creature gallery window ----- */
+#creatureGalleryPanel
+{
+    display:        none;
+    position:       fixed;
+    left:           60px;
+    top:            40px;
+    width:          720px;
+    height:         520px;
+    min-width:      360px;
+    min-height:     260px;
+    max-width:      100vw;
+    max-height:     100vh;
+    z-index:        25;
+    flex-direction: column;
+    gap:            8px;
+    padding:        8px;
+    overflow:       hidden;
+    resize:         both;
+    box-sizing:     border-box;
+    background:     #caccc2;
+    border:         1px solid #666659;
+    border-radius:  6px;
+    box-shadow:     0 4px 18px rgba( 0, 0, 0, 0.5 );
+    font-family:    Arial, sans-serif;
+    font-size:      12px;
+    color:          #404040;
+}
+#creatureGalleryPanel.open { display: flex; }
+#cgTitle { display: flex; align-items: center; gap: 10px; font-size: 14px; color: #112211; }
+#cgInfo  { flex: 1; font-size: 11px; color: #666659; }
+#cgClose { background: #dcdcd0; border: 1px solid #7f7f77; border-radius: 3px; font-size: 16px; line-height: 1; padding: 0 7px; cursor: pointer; }
+#cgTools { display: flex; gap: 6px; align-items: center; }
+#cgDrop
+{
+    flex:           1 1 auto;
+    min-height:     0;
+    overflow:       auto;
+    display:        grid;
+    grid-template-columns: repeat( auto-fill, minmax( 190px, 1fr ));
+    gap:            8px;
+    padding:        4px;
+    background:     #3a3f36;
+    border-radius:  4px;
+}
+#cgDrop.dragging { outline: 2px dashed #ffffaa; outline-offset: -4px; }
+.cgCard
+{
+    background:     #e4e6da;
+    border:         1px solid #7f7f77;
+    border-radius:  5px;
+    padding:        6px;
+    display:        flex;
+    flex-direction: column;
+    gap:            4px;
+}
+.cgCard canvas
+{
+    width:          96px;
+    height:         96px;
+    align-self:     center;
+    background:     #2f332d;
+    border:         1px solid #666659;
+    border-radius:  4px;
+}
+.cgName { font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cgMeta { font-size: 10px; color: #666659; }
+.cgActions { display: grid; gap: 3px; }
+.cgActions button
+{
+    padding:        3px 4px;
+    border:         1px solid #7f7f77;
+    border-radius:  3px;
+    background:     #dadad0;
+    font-size:      10px;
+    cursor:         pointer;
+}
+.cgActions button:hover { background: #eeeedd; }
+#cgHint { font-size: 11px; color: #666659; }
 
 /* ------------------------------------------------- species window --------- */
 #speciesPanel

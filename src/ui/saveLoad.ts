@@ -10,7 +10,9 @@
 //    This software is intended for education, game design, and research. 
 //                                                                        
 // -------------------------------------------------------------------------- 
+import { previewFromGenes } from "../simulation/Embryology";
 import { SimulationStartMode } from "../simulation/Globals";
+import { setParameter } from "../simulation/ParamStore";
 import { closePopupPanel, switchToChosenPresetPool, syncPetriPanel } from "./ui";
 import { tr, translateHTML } from "./lang";
 
@@ -46,6 +48,53 @@ export let _username        = "anonymous";
 
 // other modules cannot assign to an imported variable, so they call this
 export function setChosenPoolToLoad( pool ) { _chosenPoolToLoad = pool; }
+
+// The two startup numbers in the pool card. They are live parameters in
+// Parameters.ts, so the running world and the simulation thread both get them.
+const STARTUP_KEY = "genepool.startupParams";
+export function applyPoolStartupParams(): void
+{
+    const bots  = document.getElementById( "poolInitialBots" ) as HTMLInputElement | null;
+    const energy = document.getElementById( "poolWorldEnergy" ) as HTMLInputElement | null;
+    const botCount = Math.max( 0, Math.min( 20000, Math.floor( Number( bots?.value ) || 0 )));
+    const worldEnergy = Math.max( 0.1, Math.min( 10, Number( energy?.value ) || 1.5 ));
+    if ( bots ) { bots.value = String( botCount ); }
+    if ( energy ) { energy.value = String( worldEnergy ); }
+    const values = { INITIAL_NUM_SWIMBOTS: botCount, START_ENERGY_FACTOR: worldEnergy };
+    try { localStorage.setItem( STARTUP_KEY, JSON.stringify( values )); } catch ( e ) { /* no storage */ }
+    const setter = ( window as any ).setSimulationParameters;
+    if ( typeof setter === "function" ) { setter( values ); }
+    else { for ( const name in values ) { setParameter( name, ( values as any )[ name ] ); } }
+}
+
+let _lastNameBot = -1;
+let _lastNameAuto = "swimbot";
+
+// A fresh selection gets a meaningful default name. Typing in the field keeps
+// the custom name until another swimbot is selected.
+export function syncSwimbotNameInput(): void
+{
+    const field = document.getElementById( "swimbotNameInput" ) as HTMLInputElement | null;
+    if ( !field || typeof genePool === "undefined" ) return;
+    const id = genePool.getSelectedSwimbotID();
+    if ( id === -1 ) return;
+    if ( id === _lastNameBot ) return;
+    _lastNameBot = id;
+    const genes = genePool.getSwimbotGenes( id );
+    _lastNameAuto = ( genes && genes.length ) ? previewFromGenes( genes ).name : "swimbot";
+    field.value = _lastNameAuto;
+    field.placeholder = _lastNameAuto;
+}
+
+export function syncPoolStartupInputs(): void
+{
+    let values: any = {};
+    try { values = JSON.parse( localStorage.getItem( STARTUP_KEY ) || "{}" ); } catch ( e ) { /* no storage */ }
+    const bots  = document.getElementById( "poolInitialBots" ) as HTMLInputElement | null;
+    const energy = document.getElementById( "poolWorldEnergy" ) as HTMLInputElement | null;
+    if ( bots && Number.isFinite( values.INITIAL_NUM_SWIMBOTS )) { bots.value = String( Math.max( 0, Math.floor( values.INITIAL_NUM_SWIMBOTS ))); }
+    if ( energy && Number.isFinite( values.START_ENERGY_FACTOR )) { energy.value = String( values.START_ENERGY_FACTOR ); }
+}
 
 
 
@@ -546,18 +595,30 @@ export function showSwimbotGenes(s)
         + json;
     }
 }
+// The name typed in the swimbot panel becomes both the file name and a field
+// inside the file, so the gallery can show it again when the file is loaded.
+export function sanitizeBotName( raw: string ): string
+{
+    const cleaned = String( raw || "" ).trim().replace( /[^\w\u0400-\u04ff\-]+/g, "_" ).replace( /^_+|_+$/g, "" );
+    return cleaned.slice( 0, 48 ) || "swimbot";
+}
+
 export function downloadSwimbotGenes(s)
 {
     if (s == -1) return;
 
     let genes = genePool.getSwimbotGenes(s);
-    let json = JSON.stringify({ genes }, null, 2);
+    const field = document.getElementById( "swimbotNameInput" ) as HTMLInputElement | null;
+    const name = sanitizeBotName( field && field.value.trim() ? field.value : previewFromGenes( genes ).name );
+    if ( field && !field.value.trim() ) { field.value = name; }
+
+    let json = JSON.stringify({ name, genes }, null, 2);
     let blob = new Blob([json], { type: "application/json" });
     let url = URL.createObjectURL(blob);
 
     let a = document.createElement("a");
     a.href = url;
-    a.download = "swimbot_" + s + "_genes.json";
+    a.download = name + ".json";
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

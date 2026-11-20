@@ -8,7 +8,7 @@
 //------------------------------------------------------------------------------
 import { lang } from "./lang";
 
-const DB_NAME = "genepool-world", STORE = "pending", KEY = "file";
+const DB_NAME = "genepool-world", DB_VERSION = 2, STORE = "pending", SLOTS = "slots", KEY = "file";
 const t = ( en: string, ru: string ) => lang() === "ru" ? ru : en;
 
 //------------------------------------------------------------
@@ -38,8 +38,12 @@ function openDb(): Promise<IDBDatabase>
 {
     return new Promise( ( resolve, reject ) =>
     {
-        const r = indexedDB.open( DB_NAME, 1 );
-        r.onupgradeneeded = () => r.result.createObjectStore( STORE );
+        const r = indexedDB.open( DB_NAME, DB_VERSION );
+        r.onupgradeneeded = () =>
+        {
+            if ( !r.result.objectStoreNames.contains( STORE )) { r.result.createObjectStore( STORE ); }
+            if ( !r.result.objectStoreNames.contains( SLOTS )) { r.result.createObjectStore( SLOTS ); }
+        };
         r.onsuccess = () => resolve( r.result );
         r.onerror   = () => reject( r.error );
     });
@@ -50,6 +54,17 @@ async function keep( mode: IDBTransactionMode, work: ( s: IDBObjectStore ) => ID
     return new Promise( ( resolve, reject ) =>
     {
         const request = work( db.transaction( STORE, mode ).objectStore( STORE ));
+        request.onsuccess = () => resolve( request.result );
+        request.onerror   = () => reject( request.error );
+    });
+}
+
+async function keepSlot( mode: IDBTransactionMode, work: ( s: IDBObjectStore ) => IDBRequest ): Promise<any>
+{
+    const db = await openDb();
+    return new Promise( ( resolve, reject ) =>
+    {
+        const request = work( db.transaction( SLOTS, mode ).objectStore( SLOTS ));
         request.onsuccess = () => resolve( request.result );
         request.onerror   = () => reject( request.error );
     });
@@ -91,6 +106,135 @@ export async function saveWorldToFile(): Promise<void>
     link.remove();
     setTimeout( () => URL.revokeObjectURL( link.href ), 10000 );
     toast( t( "World saved: ", "Мир сохранён: " ) + name + " (" + ( bytes.length / 1048576 ).toFixed( 1 ) + " MB)" );
+}
+
+//------------------------------------------------------------
+// .gnp / .json pool files and browser autosave slots
+// A .gnp file is the gzip world picture itself; a .json file is the same
+// picture in base64 with a small header, so it can be read as text.
+//------------------------------------------------------------
+function toBase64( bytes: Uint8Array ): string
+{
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) { binary += String.fromCharCode( ...bytes.subarray( i, i + 0x8000 )); }
+    return btoa( binary );
+}
+
+function fromBase64( text: string ): Uint8Array
+{
+    const binary = atob( text );
+    const bytes = new Uint8Array( binary.length );
+    for (let i = 0; i < binary.length; i++) { bytes[i] = binary.charCodeAt( i ); }
+    return bytes;
+}
+
+function stamp(): string
+{
+    const d = new Date(), two = ( n: number ) => String( n ).padStart( 2, "0" );
+    return String( d.getFullYear() ) + two( d.getMonth() + 1 ) + two( d.getDate() ) + "_" + two( d.getHours() ) + two( d.getMinutes() );
+}
+
+async function poolSnapshot(): Promise<{ bytes: Uint8Array, clock: number }>
+{
+    const withTree = ( document.getElementById( "worldWithTree" ) as HTMLInputElement | null )?.checked !== false;
+    if ( genePool.saveWorldFile )
+    {
+        const r = await genePool.saveWorldFile( withTree );
+        if ( r.error ) { throw new Error( r.error ); }
+        return { bytes: r.bytes, clock: r.clock };
+    }
+    return { bytes: await pipe( genePool.saveWorld( withTree ), new ( window as any ).CompressionStream( "gzip" )), clock: genePool.getTimeStep() };
+}
+
+function downloadBytes( bytes: Uint8Array, name: string, type: string ): void
+{
+    const link = document.createElement( "a" );
+    link.href = URL.createObjectURL( new Blob([ bytes ], { type }));
+    link.download = name;
+    document.body.appendChild( link );
+    link.click();
+    link.remove();
+    setTimeout( () => URL.revokeObjectURL( link.href ), 10000 );
+}
+
+export async function savePoolFile( ext: string ): Promise<void>
+{
+    toast( t( "Saving the pool…", "Сохраняю бассейн…" ), 60000 );
+    try
+    {
+        const snap = await poolSnapshot();
+        const base = "genepool_" + stamp() + "_step" + snap.clock;
+        if ( ext === "json" )
+        {
+            const text = JSON.stringify({ format: "genepool-pool", version: 1, clock: snap.clock, bytes: toBase64( snap.bytes )});
+            downloadBytes( new TextEncoder().encode( text ), base + ".json", "application/json" );
+            toast( t( "Pool saved: ", "Бассейн сохранён: " ) + base + ".json" );
+        }
+        else
+        {
+            downloadBytes( snap.bytes, base + ".gnp", "application/octet-stream" );
+            toast( t( "Pool saved: ", "Бассейн сохранён: " ) + base + ".gnp" );
+        }
+    }
+    catch ( error ) { toast( t( "Could not save the pool: ", "Не удалось сохранить бассейн: " ) + error ); }
+}
+
+export function choosePoolFile(): void
+{
+    document.getElementById( "loadPoolFileInput" )!.click();
+}
+
+async function bytesFromPoolFile( file: File ): Promise<Uint8Array | null>
+{
+    const raw = new Uint8Array( await file.arrayBuffer());
+    if ( raw[0] === 0x1f && raw[1] === 0x8b ) { return raw; }
+    try
+    {
+        const data = JSON.parse( new TextDecoder().decode( raw ));
+        if ( data && typeof data.bytes === "string" ) { return fromBase64( data.bytes ); }
+    }
+    catch ( e ) { /* not a JSON wrapper */ }
+    return null;
+}
+
+async function updateAutosaveInfo(): Promise<void>
+{
+    const info = document.getElementById( "autosaveInfo" );
+    if ( !info ) return;
+    const parts: string[] = [];
+    for ( const slot of [ "A", "B", "C" ])
+    {
+        try
+        {
+            const record = await keepSlot( "readonly", ( s ) => s.get( slot ));
+            parts.push( slot + ": " + ( record ? ( new Date( record.savedAt )).toLocaleString() + " · " + t( "step ", "шаг " ) + record.clock : "—" ));
+        }
+        catch ( e ) { parts.push( slot + ": —" ); }
+    }
+    info.textContent = parts.join( "   " );
+}
+
+export async function saveAutosaveSlot( slot: string ): Promise<void>
+{
+    try
+    {
+        const snap = await poolSnapshot();
+        await keepSlot( "readwrite", ( s ) => s.put({ bytes: snap.bytes, clock: snap.clock, savedAt: Date.now() }, slot ));
+        toast( t( "Autosaved to slot ", "Автосохранение в слот " ) + slot );
+        await updateAutosaveInfo();
+    }
+    catch ( error ) { toast( t( "Could not autosave: ", "Не удалось автосохранить: " ) + error ); }
+}
+
+export async function loadAutosaveSlot( slot: string ): Promise<void>
+{
+    try
+    {
+        const record = await keepSlot( "readonly", ( s ) => s.get( slot ));
+        if ( !record ) { toast( t( "Slot is empty: ", "Слот пуст: " ) + slot ); return; }
+        await loadWorldBytes( new Uint8Array( record.bytes ));
+    }
+    catch ( error ) { toast( t( "Could not load the slot: ", "Не удалось загрузить слот: " ) + error ); }
 }
 
 //------------------------------------------------------------
@@ -145,6 +289,20 @@ export function setupWorldFile(): void
         input.value = "";
         if ( file ) { await loadWorldBytes( new Uint8Array( await file.arrayBuffer() )); }
     });
+    const poolInput = document.getElementById( "loadPoolFileInput" ) as HTMLInputElement | null;
+    if ( poolInput )
+    {
+        poolInput.addEventListener( "change", async () =>
+        {
+            const file = poolInput.files && poolInput.files[0];
+            poolInput.value = "";
+            if ( !file ) return;
+            const bytes = await bytesFromPoolFile( file );
+            if ( bytes ) { await loadWorldBytes( bytes ); }
+            else { toast( t( "Could not read this pool file.", "Не удалось прочитать этот файл бассейна." )); }
+        });
+    }
+    updateAutosaveInfo();
     resumeKeptWorld();
 }
 

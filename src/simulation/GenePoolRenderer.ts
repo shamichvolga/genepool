@@ -282,7 +282,7 @@ export function createGenePoolRenderer( ctx: any )
         const radius = FOOD_BIT_SIZE + _camera.getScale() * FOOD_BIT_SIZE_VIEW_SCALE * FOOD_BIT_SIZE_VIEW_SCALE;
         const pixel = viewW / Math.max( 1, ctx.canvasWidth );
         const stride = _capsuleRenderer.floatsPerCapsule;
-        const capacity = n * 10; // до одного ядра, восьми лучей кроны и стебля
+        const capacity = n * 14; // до одного ядра, двенадцати лучей кроны и стебля
         let i = _capsuleRenderer.reserve( capacity );
         const d = _capsuleRenderer.reserved();
         let used = 0;
