@@ -2355,7 +2355,11 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
             {
                 if ( foodWood >= WOOD_PER_FRUIT_TIER )
                 {
-                    if ( _phenotype.numParts >= 9 ) energyFromFoodBit *= 1.25;
+                    // Only real giants can digest timber well; the middle-sized
+                    // herbivores get a smaller bonus so they cannot overrun the
+                    // groves and crowd out the other morphologies.
+                    if ( _phenotype.numParts >= 13 ) energyFromFoodBit *= 1.25;
+                    else if ( _phenotype.numParts >= 9 ) energyFromFoodBit *= 1.10;
                     else if ( _phenotype.numParts <= 5 ) energyFromFoodBit *= 0.65;
                 }
                 else if (( foodWood < 1 ) && ( _phenotype.numParts <= 5 ))
@@ -2374,6 +2378,11 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
             else
             {
                 energyFromFoodBit *= Math.max( 0.65, Math.min( 1.25, 0.65 + 0.75 * predatorLevel ));
+                // Scavenging is its own niche: the omnivores in the middle of
+                // the predatory range turn the surplus carrion into energy,
+                // while the true hunters are only slightly helped by a corpse.
+                if ( predatorLevel >= 0.25 && predatorLevel <= 0.65 ) energyFromFoodBit *= 1.30;
+                else if ( predatorLevel > 0.65 ) energyFromFoodBit *= 1.20;
             }
 
             // (meat: only part of it is kept - the food pyramid)

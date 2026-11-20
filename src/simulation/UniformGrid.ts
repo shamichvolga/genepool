@@ -130,8 +130,10 @@ export class UniformGrid
     // collect: writes into `out` every item whose cell overlaps the square
     // around (x, y). With xs/ys it also applies the caller's strict circle test.
     // Extras come last; an item moved to the extras is not listed twice.
+    // maxCollect > 0 asks for a thinned sample of overcrowded cells: a dense
+    // school has far more neighbours than a brain can look at anyway.
     //--------------------------------------------------------------------
-    collect( x: number, y: number, radius: number, out: Int32Array, xs?: Float64Array, ys?: Float64Array ): number
+    collect( x: number, y: number, radius: number, out: Int32Array, xs?: Float64Array, ys?: Float64Array, maxCollect = 0 ): number
     {
         const c0 = this.column( x - radius ), c1 = this.column( x + radius );
         const r0 = this.row   ( y - radius ), r1 = this.row   ( y + radius );
@@ -147,7 +149,9 @@ export class UniformGrid
                 if (( this.occupiedMask[ cell >>> 5 ] & ( 1 << ( cell & 31 ))) === 0 ) continue;
                 const start = cellStart[ cell ], end = cellStart[ cell + 1 ];
                 if ( start === end ) continue;
-                for ( let k = start; k < end; k++ )
+                const count = end - start;
+                const cellStep = ( maxCollect > 0 && count > 24 ) ? ( count > 64 ? 3 : 2 ) : 1;
+                for ( let k = start; k < end; k += cellStep )
                 {
                     const item = sorted[k];
                     if ( this.isExtra[ item ] !== 0 ) continue;

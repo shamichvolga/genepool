@@ -354,6 +354,24 @@ function fastTanh( x: number ): number
     return x * ( 27 + x2 ) / ( 27 + 9 * x2 );
 }
 
+// Accumulate a weight row times an activation vector. Four terms at a time
+// lets V8 keep the loop branch-free and use packed floating-point operations;
+// the tail handles row lengths that are not a multiple of four.
+function dotUnrolled( w: Float32Array, offset: number, values: Float64Array, len: number ): number
+{
+    let sum = 0;
+    let j = 0;
+    for ( ; j <= len - 4; j += 4 )
+    {
+        sum += w[ offset + j     ] * values[j]
+             + w[ offset + j + 1 ] * values[j + 1]
+             + w[ offset + j + 2 ] * values[j + 2]
+             + w[ offset + j + 3 ] * values[j + 3];
+    }
+    for ( ; j < len; j++ ) { sum += w[ offset + j ] * values[j]; }
+    return sum;
+}
+
 //------------------------------------------------------------
 // one thought: inputs -> outputs (hidden keeps its state)
 //------------------------------------------------------------
@@ -361,23 +379,19 @@ export function think( w: Float32Array, inputs: Float64Array, hidden: Float64Arr
 {
     for ( let h = 0; h < NUM_HIDDEN; h++ )
     {
-        let sum = 0;
         const ih = W_IH + h * NUM_INPUTS;
-        for ( let i = 0; i < NUM_INPUTS; i++ ) { sum += w[ ih + i ] * inputs[i]; }
         const hh = W_HH + h * NUM_HIDDEN;
-        for ( let j = 0; j < NUM_HIDDEN; j++ ) { sum += w[ hh + j ] * hidden[j]; }
-        newHidden[h] = fastTanh( sum );
+        newHidden[h] = fastTanh( dotUnrolled( w, ih, inputs, NUM_INPUTS )
+                               + dotUnrolled( w, hh, hidden, NUM_HIDDEN ));
     }
     for ( let h = 0; h < NUM_HIDDEN; h++ ) { hidden[h] = newHidden[h]; }
 
     for ( let o = 0; o < NUM_OUTPUTS; o++ )
     {
-        let sum = 0;
         const io = ( o < CORE_NUM_OUTPUTS ) ? W_IO + o * NUM_INPUTS : extraOutputInputIndex( o );
-        for ( let i = 0; i < NUM_INPUTS; i++ ) { sum += w[ io + i ] * inputs[i]; }
         const ho = ( o < CORE_NUM_OUTPUTS ) ? W_HO + o * NUM_HIDDEN : extraOutputHiddenIndex( o );
-        for ( let h = 0; h < NUM_HIDDEN; h++ ) { sum += w[ ho + h ] * hidden[h]; }
-        outputs[o] = sum;
+        outputs[o] = dotUnrolled( w, io, inputs, NUM_INPUTS )
+                   + dotUnrolled( w, ho, hidden, NUM_HIDDEN );
     }
 }
 

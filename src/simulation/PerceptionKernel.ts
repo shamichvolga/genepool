@@ -279,7 +279,9 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
     const searchRadius = Math.min( 380, iAmPredator ? preyViewRadius : viewRadius );
     const nearby = sc.nearbyIndices;
     let numNearby = 0;
-    const numInCells = st.swimbotGrid.collect( myX, myY, searchRadius, nearby, botX, botY );
+    // A dense cell can hold hundreds of bots while the brain keeps only
+    // MAX_SEEN of them: sample it instead of copying every index.
+    const numInCells = st.swimbotGrid.collect( myX, myY, searchRadius, nearby, botX, botY, 96 );
 
     // Keep the grid's order while removing this swimbot itself.
     for (let k = 0; k < numInCells; k++)

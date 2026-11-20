@@ -244,8 +244,10 @@ export function physicsPartA( s: number, st: SharedState ): void
         let partLength = length[ k + p ];
         if ( growth < ONE ) { partLength *= NEWBORN_SIZE_SCALE + ( ONE - NEWBORN_SIZE_SCALE ) * growth; }
 
-        const x = partLength * fastSin( radian );
-        const y = partLength * fastCos( radian );
+        const sinR = fastSin( radian );
+        const cosR = fastCos( radian );
+        const x = partLength * sinR;
+        const y = partLength * cosR;
         pd[ i + Q_X ] = pd[ i + M_X ];
         pd[ i + Q_Y ] = pd[ i + M_Y ];
         pd[ i + M_X ] = pd[ i + P_X ];
@@ -257,8 +259,10 @@ export function physicsPartA( s: number, st: SharedState ): void
 
         pd[ i + A_X ] = pd[ i + P_X ] - pd[ j + P_X ];
         pd[ i + A_Y ] = pd[ i + P_Y ] - pd[ j + P_Y ];
-        pd[ i + N_X ] =  pd[ i + A_Y ] / partLength;
-        pd[ i + N_Y ] = -pd[ i + A_X ] / partLength;
+        // the segment direction is already a unit vector: (sin, cos) rotated
+        // by 90 degrees. Reusing it avoids two divisions for every segment.
+        pd[ i + N_X ] =  cosR;
+        pd[ i + N_Y ] = -sinR;
     }
 
     // center of mass, shift the body so it stays in place, center of mass again
@@ -326,11 +330,12 @@ export function physicsPartA( s: number, st: SharedState ): void
     if ( PROFILER_ENABLED ) { profExit( PROF_PHYS_KINEMATICS, profKinT0 ); }
     const profFluidT0 = PROFILER_ENABLED ? profEnter( PROF_PHYS_FLUID ) : 0;
     let accelerationX = ZERO, accelerationY = ZERO, torque = ZERO;
+    const invSumLengths = sumLengths > ZERO ? ( ONE / sumLengths ) : ZERO;
 
     for (let p = 1; p < numParts; p++)
     {
         const i = o + p * PS;
-        const fractionOfWhole = length[ k + p ] / sumLengths;
+        const fractionOfWhole = length[ k + p ] * invSumLengths;
 
         // (the body was just shifted onto its center of mass, so the part
         //  velocities are computed here, after the shift)
@@ -367,7 +372,7 @@ export function physicsPartA( s: number, st: SharedState ): void
 
             const partPerpendicularX =  partVectorFromCenterY;
             const partPerpendicularY = -partVectorFromCenterX;
-            const perpDot = ( strokeForceX * partPerpendicularX + strokeForceY * partPerpendicularY ) / sumLengths;
+            const perpDot = ( strokeForceX * partPerpendicularX + strokeForceY * partPerpendicularY ) * invSumLengths;
             torque -= perpDot;
         }
     }
