@@ -25,7 +25,7 @@ const RU: Record<string, string> =
     // view
     "whole pool": "весь бассейн", "autotracking": "автослежение", "selected": "выбранный", "mutual love": "взаимная любовь",
     "most prolific": "самый плодовитый", "most efficient": "самый ловкий", "oldest virgin": "старейший девственник", "glutton": "обжора",
-    "mouth/genital": "рот / гениталии", "currents": "течения", "rendering OFF": "рисование ВЫКЛ",
+    "mouth/genital": "рот / гениталии", "currents": "течения", "soil": "почва", "rendering OFF": "рисование ВЫКЛ",
     // tabs
     "pool": "бассейн", "swimbot": "свимбот", "tweak": "настройка", "graph": "график", "info": "инфо",
     // pool tab
@@ -70,6 +70,7 @@ const RU: Record<string, string> =
     "Keys": "Клавиши", "move the view": "двигать вид", "zoom": "приблизить / отдалить", "freeze / go on": "пауза / дальше",
     "speed: normal, fast, as fast as possible": "скорость: обычная, быстрая, максимальная", "drawing on / off (faster when off)": "рисование вкл / выкл (без него быстрее)",
     "show mouths and genitals": "показать рты и гениталии", "water currents on / off (shown as faint arrows)": "течения вкл / выкл (видны как бледные стрелки)",
+    "soil oases on / off": "почвенные оазисы вкл / выкл",
     "up close: bodies on the graphics card too (faster, a little plainer)": "вблизи: тела тоже рисует видеокарта (быстрее, чуть проще)",
     "hide / show the panel": "спрятать / показать панель", "next panel tab": "следующая вкладка", "this help (click to close)": "эта справка (щелчок закрывает)",
     // swimbot card

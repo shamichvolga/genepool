@@ -113,7 +113,8 @@ export const PARAM_WALL_MIN_Y   = 118;
 export const PARAM_WALL_MAX_Y   = 119;
 export const PARAM_MATURE_TREE_COUNT = 120;   // how many adult trees are in matureTrees
 export const PARAM_SDF_READY    = 121;   // 1 = wallSdf has been filled for the current walls
-export const NUM_PARAMS         = 122;
+export const PARAM_SHOW_SOIL    = 122;   // 1 = draw the living soil overlay and its roots
+export const NUM_PARAMS         = 123;
 
 // signed distance to the nearest wall segment, on a 128x128 grid over the pool.
 // centers of the cells hold the distance; a conservative half-diagonal margin
@@ -123,6 +124,10 @@ export const SDF_SIZE = 128;
 // 64x64 diffusion fields: plant energy, herbivore biomass, predator traces.
 // GenePool fills them every other step; perception reads an O(1) gradient.
 export const SCENT_GRID_N = 64;
+
+// The energy-bearing soil has its own, much finer grid: 256 x 256 cells,
+// 62.5 world units on a side. It stays independent of the scent resolution.
+export const SOIL_GRID_N = 256;
 
 export * from "./MindLayout";
 import { MAX_THREADS, MIND_STRIDE, NUM_COUNTERS } from "./MindLayout";
@@ -171,7 +176,7 @@ export class SharedState
     readonly foodField    : Float32Array;   // SCENT_GRID_N² plant energy density
     readonly preyField    : Float32Array;   // herbivore biomass density
     readonly predField    : Float32Array;   // predator traces
-    readonly soilField    : Float32Array;   // living soil: energy in SCENT_GRID_N² cells
+    readonly soilField    : Float32Array;   // living soil: energy in SOIL_GRID_N² cells
 
     //--------------------------------------------------------
     // what perception reads (one number per swimbot slot)
@@ -325,12 +330,13 @@ export class SharedState
         this.partMoment    = f64( "partMoment",    partCount );
         this.partParent    = new Int32Array( make( "partParent", partCount * 4 ));
         this.params        = f64( "params",        NUM_PARAMS );
+        this.params[ PARAM_SHOW_SOIL ] = 1;   // soil overlay starts visible
         this.wallSdf       = new Float32Array( make( "wallSdf", SDF_SIZE * SDF_SIZE * 4 ));
         const scentCells = SCENT_GRID_N * SCENT_GRID_N;
         this.foodField     = new Float32Array( make( "foodField", scentCells * 4 ));
         this.preyField     = new Float32Array( make( "preyField", scentCells * 4 ));
         this.predField     = new Float32Array( make( "predField", scentCells * 4 ));
-        this.soilField     = new Float32Array( make( "soilField", scentCells * 4 ));
+        this.soilField     = new Float32Array( make( "soilField", SOIL_GRID_N * SOIL_GRID_N * 4 ));
 
         const u8  = ( name: string, count: number ) => new Uint8Array( make( name, count ));
         const n = maxSwimbots;

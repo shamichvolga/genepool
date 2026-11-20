@@ -1,4 +1,5 @@
 import { ONE, ONE_HALF, PI2, ZERO } from "./MathConstants";
+import { SOIL_GRID_N } from "./SharedState";
 import { WORLD_SCALE } from "./World";
 import { Touch } from "./Touch";
 import { Vector2D } from "./Vector2D";
@@ -138,13 +139,14 @@ const POOL_BOUNDARY_MARGIN      = 1200.0;
     let _shoreIceCanvas: HTMLCanvasElement | null = null;
 
     //------------------------------------------------
-    // living soil: a 128x128 overlay painted from the energy field
+    // living soil: a 256x256 watercolor overlay painted from the energy field
     //------------------------------------------------
-    const SOIL_TEX = 128;
+    const SOIL_TEX = SOIL_GRID_N;
     let _soilCanvas: any = null;
     let _soilCtx: any = null;
     let _soilImage: ImageData | null = null;
     let _soilClock = -1;
+    let _soilVisible = true;
 
     function ensureSoilCanvas(): void
     {
@@ -161,13 +163,15 @@ const POOL_BOUNDARY_MARGIN      = 1200.0;
         if ( _soilCtx !== null ) { _soilImage = _soilCtx.createImageData( SOIL_TEX, SOIL_TEX ); }
     }
 
-    this.setSoilView = function( field: Float32Array, clock: number ): void
+    this.setSoilView = function( field: Float32Array, clock: number, visible: boolean ): void
     {
+        _soilVisible = visible !== false;
+        if ( !_soilVisible ) return;
         ensureSoilCanvas();
         if ( _soilCanvas === null || _soilCtx === null || _soilImage === null ) return;
-        if ( _soilClock >= 0 && ( clock - _soilClock ) < 8 ) return;
+        if ( _soilClock >= 0 && ( clock - _soilClock ) < 16 ) return;
         _soilClock = clock;
-        const n = Math.max( 1, Math.round( Math.sqrt( field.length )));
+        const n = SOIL_GRID_N;
         const data = _soilImage.data;
         for ( let py = 0; py < SOIL_TEX; py++ )
         {
@@ -177,12 +181,15 @@ const POOL_BOUNDARY_MARGIN      = 1200.0;
             {
                 const sx = Math.min( n - 1, Math.floor( px * n / SOIL_TEX ));
                 const soil = field[ row + sx ];
-                const t = Math.max( 0, Math.min( 1, soil / 40 ));
+                // Watercolor: bare ground is fully transparent; the fertile
+                // oases fade in smoothly from green to olive, never opaque.
+                const t = Math.max( 0, Math.min( 1, ( soil - 12 ) / 148 ));
+                const fade = t * t * ( 3 - 2 * t );
                 const i = ( py * SOIL_TEX + px ) * 4;
-                data[ i     ] = 78  + ( 138 - 78 )  * t;
-                data[ i + 1 ] = 126 + ( 164 - 126 ) * t;
-                data[ i + 2 ] = 68  + ( 62  - 68 )  * t;
-                data[ i + 3 ] = soil < 1.5 ? 0 : Math.round( 115 * ( 1 - Math.exp( -soil / 32 )));
+                data[ i     ] = 88  + ( 146 - 88  ) * t;
+                data[ i + 1 ] = 134 + ( 164 - 134 ) * t;
+                data[ i + 2 ] = 72  + ( 58  - 72  ) * t;
+                data[ i + 3 ] = soil < 12 ? 0 : Math.round( 92 * fade );
             }
         }
         _soilCtx.putImageData( _soilImage, 0, 0 );
@@ -281,12 +288,12 @@ const POOL_BOUNDARY_MARGIN      = 1200.0;
         }
 
         // The living soil oases, stretched over the whole pool. Refreshed from
-        // the energy field every eighth simulation step, never regenerated.
-        if ( _soilCanvas !== null )
+        // the energy field every sixteenth simulation step. Bilinear smoothing
+        // turns the fine 256² cells into soft watercolor patches.
+        if ( _soilCanvas !== null && _soilVisible )
         {
-            canvas.imageSmoothingEnabled = false;
-            canvas.drawImage( _soilCanvas, POOL_LEFT, POOL_TOP, POOL_WIDTH, POOL_HEIGHT );
             canvas.imageSmoothingEnabled = true;
+            canvas.drawImage( _soilCanvas, POOL_LEFT, POOL_TOP, POOL_WIDTH, POOL_HEIGHT );
         }
 
         // Baked shore ice: one drawImage, only in winter, always below the

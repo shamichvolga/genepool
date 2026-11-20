@@ -1,5 +1,5 @@
 //------------------------------------------------------------------------------
-// Living soil: the energy-bearing 64x64 field under the pool.
+// Living soil: the energy-bearing 256x256 field under the pool.
 //
 // The old Environment.soilNutrient grid is a slow mineral index. This field is
 // different: it holds real energy. Every joule in it was taken out of the
@@ -10,20 +10,23 @@
 import { drawFromAtmosphere } from "./EnergyBudget";
 import { gpRandom } from "./Globals";
 import { POOL_BOTTOM, POOL_HEIGHT, POOL_LEFT, POOL_TOP, POOL_WIDTH } from "./Pool";
-import { SCENT_GRID_N, SharedState } from "./SharedState";
+import { SharedState, SOIL_GRID_N } from "./SharedState";
 
-export const SOIL_N = SCENT_GRID_N;
+export const SOIL_N = SOIL_GRID_N;
 const CELLS = SOIL_N * SOIL_N;
 const INV_W = SOIL_N / POOL_WIDTH;
 const INV_H = SOIL_N / POOL_HEIGHT;
 
-const BASE_SOIL = 0.25;             // a weak fertile background everywhere
-const PATCH_COUNT = 22;             // 20-24 oases
-const PATCH_ENERGY = 900;           // energy per oasis, drawn from the atmosphere
-const PATCH_SIGMA_MIN = 2.2;
-const PATCH_SIGMA_SPAN = 3.4;
+const BASE_SOIL = 3.0;              // a thin fertile background everywhere
+const PATCH_COUNT = 22;             // compact oases scattered over the 256² field
+// 22 x 42,500 + 65,536 x 3.0 = 1,131,608: the intended starting soil endowment.
+// With a sigma of 7.8-8.0 cells the discrete peak of one patch is ~101-113,
+// i.e. rich enough for full trees but no artificial energy multiplier.
+const PATCH_ENERGY = 42500;         // energy per oasis, drawn from the atmosphere
+const PATCH_SIGMA_MIN = 7.8;        // radius of an oasis, in soil cells
+const PATCH_SIGMA_SPAN = 0.2;
 const DIFFUSION = 0.04;
-const DIFFUSION_INTERVAL = 8;
+const DIFFUSION_INTERVAL = 16;
 
 let _tmp: Float32Array | null = null;
 
@@ -103,9 +106,28 @@ export function seedSoilField( st: SharedState ): void
     const sigma = new Float32Array( PATCH_COUNT ), norm = new Float32Array( PATCH_COUNT );
     for ( let p = 0; p < PATCH_COUNT; p++ )
     {
-        cx[p] = gpRandom() * ( SOIL_N - 1 );
-        cy[p] = gpRandom() * ( SOIL_N - 1 );
         sigma[p] = PATCH_SIGMA_MIN + gpRandom() * PATCH_SIGMA_SPAN;
+        // Keep the oases apart: two overlapping Gaussians would double the
+        // local peak and break the intended 75-115 cells of a fertile crown.
+        const minDist = 3.2 * sigma[p];
+        const margin = 3 * sigma[p];
+        let x = 0, y = 0;
+        for ( let tryCount = 0; tryCount < 40; tryCount++ )
+        {
+            // Keep all three sigma inside the field: a clipped patch would be
+            // renormalised and its peak would shoot far above the 75-115 range.
+            x = margin + gpRandom() * ( SOIL_N - 1 - 2 * margin );
+            y = margin + gpRandom() * ( SOIL_N - 1 - 2 * margin );
+            let clear = true;
+            for ( let q = 0; q < p; q++ )
+            {
+                const dx = x - cx[q], dy = y - cy[q];
+                if ( dx * dx + dy * dy < minDist * minDist ) { clear = false; break; }
+            }
+            if ( clear ) break;
+        }
+        cx[p] = x;
+        cy[p] = y;
     }
     // Normalise each patch over the discrete grid: its sum is then exactly the
     // energy we took from the atmosphere, not an approximation.
@@ -147,13 +169,13 @@ export function seedSoilField( st: SharedState ): void
     }
 }
 
-// Every 8 steps: give back 3% of the ambient reservoir, spread evenly over the
+// Every 16 steps: give back 3% of the ambient reservoir, spread evenly over the
 // field, then diffuse with mirrored boundaries. Mirroring a missing neighbour
 // with the cell's own value makes the update exactly conservative (no flux out
 // of the field and no flux in from outside). Returns what left the reservoir.
 export function stepSoilField( st: SharedState, clock: number, ambient: number ): number
 {
-    if (( clock % DIFFUSION_INTERVAL ) !== 0 ) return 0;
+    if (( clock & ( DIFFUSION_INTERVAL - 1 )) !== 0 ) return 0;
     let drawn = 0;
     if ( ambient > 0 )
     {
@@ -215,14 +237,13 @@ export function soilPlantGrowth( st: SharedState, x: number, y: number, currentE
     }
     if ( pool <= 0 || weightSum <= 0 ) return 0;
     const local = weighted / weightSum;
-    // The tier caps follow the world's own plant scale (PLANT_SPROUT_ENERGY
-    // .. PLANT_TREE_ENERGY): a poor patch grows sprouts, a rich one can carry
-    // a full tree. The old, much smaller caps kept every crown at sprout size
-    // and starved the food web even though the soil held plenty of energy.
-    const maxPlantE = local < 6 ? 12
-                    : local < 16 ? 45
-                    : local < 34 ? 95
-                    : Math.min( 150, 95 + ( local - 34 ) * 1.4 );
+    // Four soil niches on the 256x256 grid: bare ground carries sprouts only,
+    // the oases can carry full trees. The caps stay finite and local, so a
+    // crown can never pull more energy than the soil under it really holds.
+    const maxPlantE = local < 14 ? 5.5
+                    : local < 32 ? 16
+                    : local < 58 ? 34
+                    : Math.min( 85, 34 + ( local - 58 ) * 0.85 );
     const wanted = maxPlantE - currentEnergy;
     if ( wanted <= 0 ) return 0;
     const suck = Math.min( 0.28, wanted * 0.02, pool * 0.015 );

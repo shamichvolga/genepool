@@ -56,6 +56,7 @@ export function initializeUI()
     _graph.initialize();     
     setupUserSwimbots();
     setupHints();
+    setupSoilButton();
     translatePage();
     // a new language: the parts the code fills are filled again
     window.addEventListener( "genepool:language", () =>
@@ -526,6 +527,36 @@ export function toggleCurrents()
     genePool.toggleCurrents();
     // (the thread answers with the next snapshot: the button follows a little later)
     setTimeout( () => { document.getElementById( "currentsButton" ).classList.toggle( "activeButton", genePool.getCurrentsOn() ); }, 300 );
+}
+
+// The soil toggle lives in code (next to the currents button), so it stays with
+// the UI module and needs no change to index.html.
+function setupSoilButton()
+{
+    const currents = document.getElementById( "currentsButton" );
+    if ( !currents || document.getElementById( "soilButton" )) return;
+    const button = document.createElement( "button" );
+    button.id = "soilButton";
+    button.className = "basicButton";
+    button.textContent = "soil";
+    button.title = "soil oases on / off";
+    button.onclick = () => toggleSoil();
+    currents.parentNode!.insertBefore( button, currents.nextSibling );
+    setTimeout( syncSoilButton, 300 );
+}
+
+function syncSoilButton()
+{
+    const button = document.getElementById( "soilButton" );
+    if ( button ) { button.classList.toggle( "activeButton", genePool.getShowSoil() === true ); }
+}
+
+//---------------------------
+export function toggleSoil()
+{
+    genePool.toggleSoil();
+    // (in worker mode the snapshot follows a moment later)
+    setTimeout( syncSoilButton, 300 );
 }
 
 export function toggleGoalOverlay()

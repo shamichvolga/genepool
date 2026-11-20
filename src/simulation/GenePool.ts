@@ -55,11 +55,12 @@ import * as Serializer from "./GenePoolSerializer";
 import { depositSoilEnergy, seedSoilField, soilPlantGrowth, stepSoilField, totalSoilEnergy } from "./SoilField";
 
 // The living soil has its own ambient reservoir. Energy that a swimmer spends
-// is split 70/30 between the soil under it and this reservoir; every eighth
+// is split 70/30 between the soil under it and this reservoir; every sixteenth
 // step 3% of the reservoir trickles back into the soil. Both buffers are part
 // of the world total, so the split never creates or destroys energy.
 let _ambientEnergy = 0;
 let _totalWorldEnergy = 0;
+let _showSoil = true;             // the soil overlay is on by default
 
 //------------------
 export function GenePool()
@@ -1786,6 +1787,7 @@ if ( mode === SimulationStartMode.SPECIES )
 	    P[ SS.PARAM_ENV_ACTIVE   ] = environment.active ? 1 : 0;
 	    P[ SS.PARAM_ENV_FIELDS   ] = ( environment.active && !FLAT_ENVIRONMENT ) ? 1 : 0;
 	    P[ SS.PARAM_FOOD_TYPES   ] = globalTweakers.numFoodTypes;
+	    P[ SS.PARAM_SHOW_SOIL    ] = _showSoil ? 1 : 0;
 	    P[ SS.PARAM_OBSTACLE_X1  ] = _obstacle.getEnd1Position().x;
 	    P[ SS.PARAM_OBSTACLE_Y1  ] = _obstacle.getEnd1Position().y;
 	    P[ SS.PARAM_OBSTACLE_X2  ] = _obstacle.getEnd2Position().x;
@@ -2442,10 +2444,10 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
         //----------------------
         this.updateSwimbots();
 
-        // Every eighth step the ambient reservoir feeds the soil and the
+        // Every sixteenth step the ambient reservoir feeds the soil and the
         // field diffuses. The amount drawn is removed from the reservoir here,
         // so the world total is unchanged.
-        _ambientEnergy -= stepSoilField( _st, _clock, _ambientEnergy );
+        if (( _clock & 15 ) === 0 ) { _ambientEnergy -= stepSoilField( _st, _clock, _ambientEnergy ); }
 
         //------------------
         // update food
@@ -2646,6 +2648,10 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	let _currentSpeed = CURRENTS_ENABLED ? CURRENT_SPEED : 0;
 	this.toggleCurrents  = function() { _currentSpeed = ( _currentSpeed > 0 ) ? 0 : CURRENT_SPEED; this.writePerceptionParams(); }
 	this.getCurrentsOn   = function() { return _currentSpeed > 0; }
+
+	// the living soil overlay (and its root tendrils) can be hidden at any time
+	this.toggleSoil      = function() { _showSoil = !_showSoil; this.writePerceptionParams(); }
+	this.getShowSoil     = function() { return _showSoil; }
 
 	// drawing time by part (milliseconds, smoothed): kept by GenePoolRenderer.ts
 	this.getRenderPhaseMs = function() { return _renderer.getRenderPhaseMs(); }
@@ -3583,7 +3589,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
                 // carrion rots a little every step; the rot is real energy in
                 // the soil, not an invisible disappearance into the atmosphere
                 let e = _st.foodEnergy[f];
-                const rot = Math.min( e, Math.max( 0.008, e * 0.004 ));
+                const rot = Math.min( e, Math.max( 0.02, e * 0.012 ));
                 if ( rot > 0 )
                 {
                     depositSoilEnergy( _st, foodX[f], foodY[f], rot );

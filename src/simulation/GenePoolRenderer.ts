@@ -18,7 +18,8 @@ import { plantSize } from "./PlantSize";
 import { setPlantSeason } from "./PlantVisuals";
 import { currentAt, currentDriftX, currentDriftY, currentStrength, randomPointInCurrent } from "./Currents";
 import { SEASON_PERIOD } from "./Environment";
-import { PARAM_ENV_ACTIVE, PARAM_TIME } from "./SharedState";
+import { PARAM_ENV_ACTIVE, PARAM_SHOW_SOIL, PARAM_TIME } from "./SharedState";
+import { POOL_WIDTH } from "./Pool";
 import { TASK_RENDER_DATA } from "../parallel/ParallelWork";
 
 const OUTSIDE_POOL_COLOR = "rgb( 22, 26, 30 )";   // экран за краями бассейна
@@ -149,34 +150,46 @@ export function createGenePoolRenderer( ctx: any )
         }
     }
 
-    // Root filaments: four pulsing threads under a plant that is sucking soil.
+    // Root tendrils: five curved threads that grow out of a plant while it is
+    // sucking soil. Their bend is fixed per plant; a slow sinusoidal impulse
+    // travels along them so the crown looks alive instead of mechanical.
     function renderRootFilaments()
     {
         const _canvas = ctx.canvas, _camera = ctx.camera, _st = ctx.st;
+        if ( _st.params[ PARAM_SHOW_SOIL ] === 0 ) return;
+        const viewW = _camera.getXDimension(), viewH = _camera.getYDimension();
+        if ( viewW / POOL_WIDTH < 0.32 ) return;      // too close in: the roots are off-screen detail
         const sucking = _st.foodSucking;
         if ( sucking === undefined ) return;
         const fx = _st.foodX, fy = _st.foodY, clock = ctx.clock;
-        const viewW = _camera.getXDimension(), viewH = _camera.getYDimension();
         const pad = 160;
         const left = _camera.getPosition().x - viewW / 2 - pad, top = _camera.getPosition().y - viewH / 2 - pad;
         const right = left + viewW + 2 * pad, bottom = top + viewH + 2 * pad;
         _canvas.lineCap = "round";
-        _canvas.lineWidth = Math.max( 1, viewW / 1200 );
-        _canvas.strokeStyle = "rgba( 165, 220, 105, 0.28 )";
+        _canvas.lineWidth = Math.max( 0.7, viewW / 2200 );
         for ( let f = 0; f < sucking.length; f++ )
         {
             const s = sucking[f];
-            if ( s <= 0.08 ) continue;
+            if ( s <= 0.12 ) continue;
             const x = fx[f], y = fy[f];
             if (( x < left ) || ( x > right ) || ( y < top ) || ( y > bottom )) continue;
-            const pulse = ( clock * 0.06 + f * 0.37 ) % 1;
-            const reach = ( 14 + 18 * s ) * ( 0.65 + 0.35 * pulse );
-            for ( let t = 0; t < 4; t++ )
+            // A narrow travelling impulse: sin(pi*t) is zero at both ends.
+            const t = ( clock * 0.022 + f * 0.37 ) % 1;
+            const envelope = Math.sin( Math.PI * t );
+            const reach = ( 12 + 16 * s ) * ( 0.55 + 0.45 * envelope );
+            const bend = (( f % 9 ) - 4 ) * 0.055;     // fixed, plant-specific curvature
+            const spin = ( f % 17 ) * ( PI2 / 17 );
+            _canvas.strokeStyle = "rgba( 165, 220, 105, " + ( 0.10 + 0.20 * envelope ).toFixed( 3 ) + " )";
+            for ( let k = 0; k < 5; k++ )
             {
-                const a = t * ( PI2 / 4 ) + 0.35;
+                const a = spin + k * ( PI2 / 5 );
+                const dx = Math.cos( a ), dy = Math.sin( a );
+                const px = -dy, py = dx;
+                const cx = x + dx * reach * 0.55 + px * bend * reach;
+                const cy = y + dy * reach * 0.55 + py * bend * reach;
                 _canvas.beginPath();
                 _canvas.moveTo( x, y );
-                _canvas.lineTo( x + Math.cos( a ) * reach, y + Math.sin( a ) * reach );
+                _canvas.quadraticCurveTo( cx, cy, x + dx * reach, y + dy * reach );
                 _canvas.stroke();
             }
         }
@@ -500,7 +513,7 @@ export function createGenePoolRenderer( ctx: any )
         const yearPhase = PI2 * ( params[ PARAM_TIME ] / SEASON_PERIOD ) + PI2 / 4;
         ctx.pool.setSeason( yearPhase, envActive );
         setPlantSeason( yearPhase, envActive );
-        ctx.pool.setSoilView( ctx.st.soilField, ctx.clock );
+        ctx.pool.setSoilView( ctx.st.soilField, ctx.clock, params[ PARAM_SHOW_SOIL ] !== 0 );
         ctx.pool.render( ctx.seconds, _camera );
         ctx.obstacle.render( _camera );
         renderCurrents();
@@ -508,7 +521,7 @@ export function createGenePoolRenderer( ctx: any )
 
         phaseStart = renderPhase( 0, phaseStart );
         renderFoodBits( useGraphicsCard );
-        renderRootFilaments();
+        if ( params[ PARAM_SHOW_SOIL ] !== 0 ) { renderRootFilaments(); }
         phaseStart = renderPhase( 1, phaseStart );
 
         renderSwimbotsWithBatching( useGraphicsCard );

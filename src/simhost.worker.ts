@@ -66,6 +66,7 @@ function makeSnapshot()
         renderMs          : pool.getRenderMs(),
         numSick           : pool.getNumSick(),
         currentsOn        : pool.getCurrentsOn(),
+        soilOn            : pool.getShowSoil(),
         numThreads        : pool.getNumThreads(),
         speedLevel        : pool.getSpeedLevel(),
         simulationRunning : pool.getSimulationRunning(),
