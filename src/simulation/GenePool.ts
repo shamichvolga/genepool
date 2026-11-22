@@ -4272,6 +4272,7 @@ const feedRoom = Math.min( 100, swimbot.getMaxEnergy() - swimbot.getEnergy() );
             }
 
             _vectorUtility = this.convertScreenCoordinatesToPoolPosition( x, y );
+        this.handleClickSelection( x, y, _vectorUtility );
     		_pool.endTouch( _vectorUtility, _seconds );
 	    }
     }
@@ -4464,7 +4465,31 @@ const feedRoom = Math.min( 100, swimbot.getMaxEnergy() - swimbot.getEnergy() );
 
 
 	//------------------------------------------------------------
-	this.indexOfClosestFoodBitToScreenPosition = function( x, y )
+	    this.findClosestPlantToPoolPosition = function( x, y )
+    {
+        const v = this.convertScreenCoordinatesToPoolPosition( x, y );
+        let best = -1, bestD = 40 * 40;
+        for ( let i = 0; i < _aliveFoodBitIndices.length; i++ )
+        {
+            const f = _aliveFoodBitIndices[i];
+            if ( _st.liveFood[ f ] !== 1 || _st.foodType[ f ] === 2 ) continue;
+            const dx = _st.foodX[ f ] - v.x, dy = _st.foodY[ f ] - v.y, d2 = dx * dx + dy * dy;
+            if ( d2 < bestD ) { bestD = d2; best = f; }
+        }
+        return best;
+    }
+
+    this.handleClickSelection = function( x, y, v )
+    {
+        const s = this.indexOfClosestSwimbotToScreenPosition( x, y );
+        if ( s !== NULL_INDEX ) { this.setSelectedSwimbot( s ); this.setSelectedPlantIndex( -1 ); return; }
+        const f = this.findClosestPlantToPoolPosition( v.x, v.y );
+        if ( f !== NULL_INDEX ) { this.setSelectedPlantIndex( f ); this.setSelectedSwimbot( NULL_INDEX ); }
+        else { this.setSelectedPlantIndex( -1 ); }
+    }
+    this.setSelectedPlantIndex = function( f ) { _st.selectedPlantIndex = f; this.setSelectedSwimbot( NULL_INDEX ); }
+
+this.indexOfClosestFoodBitToScreenPosition = function( x, y )
 	{
         let indexOfClosest = NULL_INDEX;
         let closestDistance = 1000.0;

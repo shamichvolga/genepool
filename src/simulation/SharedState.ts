@@ -269,6 +269,7 @@ export class SharedState
     readonly plantParent   : Int32Array;   // stolon chain links: -1 = no parent
     readonly plantRootFlow : Float64Array; // signed flow parent->child per step
     readonly plantAge      : Float64Array; // steps since the plant bit was born
+    selectedPlantIndex : number = -1;
     readonly foodBorn     : Float64Array;   // the step it appeared (its age = now - born)
     readonly foodWood     : Float64Array;   // structural biomass: the historical energy maximum
     readonly foodFruit    : Uint8Array;     // 1 = a waiting fruit dropped by a tree

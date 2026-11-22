@@ -22,6 +22,7 @@ function clipView( g: any, x: number, y: number ): boolean
 // stem); animated flow dots along the real parent→child root lines.
 export function drawRoots( ctx: CanvasRenderingContext2D, st: any, g: any ): void
 {
+    const selectedPlant = ( st.selectedPlantIndex >= 0 ) ? st.selectedPlantIndex : -1;
     const fx = st.foodX, fy = st.foodY, sucking = st.foodSucking, plantParent = st.plantParent, rootFlow = st.plantRootFlow;
     const N = st.liveFood.length, t = g.getTimeStep ? g.getTimeStep() : 0;
 
@@ -69,6 +70,12 @@ export function drawRoots( ctx: CanvasRenderingContext2D, st: any, g: any ): voi
             ctx.arc( x, y, 0.9, 0, PI2 );
             ctx.fill();
         }
+    }
+    // highlighted dynasty square + lineage roots for the selected plant
+    if ( selectedPlant >= 0 && st.liveFood[ selectedPlant ] === 1 )
+    {
+        const sq = rootSquareSide( st, selectedPlant );
+        if ( sq > 0 ) highlightRootSquare( ctx, st, selectedPlant, fx[selectedPlant], fy[selectedPlant] );
     }
 }
 
