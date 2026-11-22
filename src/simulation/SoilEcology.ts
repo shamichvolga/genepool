@@ -123,49 +123,118 @@ export function meanSoilAt( st: SharedState, x: number, y: number ): number
               + soilSAT[ y0 * STRIDE + x0 ];
     return sum / (( x1 - x0 + 1 ) * ( y1 - y0 + 1 ));
 }
-// Stage from the root zone: soil under the crown plus the energy already in
+
+//------------------------------------------------------------------------------
+// Block 1: stage-scaled root zones. The roots follow the plant's own growth:
+// radius 1 (3x3) for sprouts, 2 (5x5) for young bushes, 3 (7x7) for grown
+// bushes and 4 (9x9) for 12-ray trees, by food energy tiers.
+//------------------------------------------------------------------------------
+export function rootZoneRadius( foodEnergy: number ): number
+{
+    return foodEnergy < 10 ? 1 : foodEnergy < 22 ? 2 : foodEnergy < 42 ? 3 : 4;
+}
+export function rootSquare( r: number ): number { const s = 2 * r + 1; return s * s; }
+// Sum of the soil square of the root zone, read through the SAT (four reads).
+export function poolRoot( st: SharedState, x: number, y: number, r: number ): number
+{
+    cellAt( x, y, _cell );
+    const ix = _cell.ix, iy = _cell.iy;
+    const x0 = Math.max( 0, ix - r ), x1 = Math.min( N - 1, ix + r );
+    const y0 = Math.max( 0, iy - r ), y1 = Math.min( N - 1, iy + r );
+    return soilSAT[ ( y1 + 1 ) * STRIDE + x1 + 1 ]
+         - soilSAT[ y0 * STRIDE + x1 + 1 ]
+         - soilSAT[ ( y1 + 1 ) * STRIDE + x0 ]
+         + soilSAT[ y0 * STRIDE + x0 ];
+}
+export function meanSoilRoot( st: SharedState, x: number, y: number, r: number ): number
+{
+    const s = rootSquare( r );
+    return s > 0 ? poolRoot( st, x, y, r ) / s : 0;
+}
+export function effectiveFertility( st: SharedState, x: number, y: number, r: number, foodEnergy: number ): number
+{
+    return meanSoilRoot( st, x, y, r ) * 0.75 + foodEnergy * 0.45;
+}
+function stageCapOf( f: number ): number
+{
+    return f < 8 ? 6.5 : f < 14 ? 18 : f < 21 ? 36 : Math.min( 95, 36 + ( f - 21 ) * 1.25 );
+}
+// Stage from the root zone: soil under the roots plus the energy already in
 // the plant. This lets a seed on a rich oasis grow all the way to a tree.
 export function plantStageCap( st: SharedState, x: number, y: number, currentEnergy: number ): number
 {
-    const effectiveFertility = meanSoilAt( st, x, y ) + currentEnergy * 0.45;
-    return effectiveFertility < 9  ? 6.5
-         : effectiveFertility < 15 ? 18
-         : effectiveFertility < 22 ? 36
-         : Math.min( 90, 36 + ( effectiveFertility - 22 ) * 1.2 );
+    return stageCapOf( effectiveFertility( st, x, y, rootZoneRadius( currentEnergy ), currentEnergy ));
 }
-// A plant is a pump, not a printer: the crown grows only by pulling energy out
-// of the 5 x 5 cells under it. The cap comes from the SAT; the withdrawal has
-// to touch the cells themselves, and never takes more than they hold.
+
+// The root pump, conservative: the withdrawal never exceeds what is there.
+// Nine nodes: the central cell (weight 2), four inner diagonals on the root
+// square's half radius (weight 1 each) and four root tips on the axes
+// (weight 1 each). Suck is withdrawn proportionally and lands exactly.
+function withdrawRootZone( st: SharedState, x: number, y: number, r: number, suck: number ): number
+{
+    const f = st.soilField;
+    cellAt( x, y, _cell );
+    const ix0 = _cell.ix, iy0 = _cell.iy;
+    const half = Math.max( 1, r >> 1 );
+    const nodeX: number[] = [], nodeY: number[] = [], nodeW: number[] = [];
+    let totalW = 0;
+    for ( let k = 0; k < 9; k++ )
+    {
+        let dx: number, dy: number, w: number;
+        if ( k === 0 ) { dx = 0; dy = 0; w = 2; }
+        else if ( k <= 4 ) { dx = ( k === 1 ) ? -half : ( k === 2 ) ? half : 0; dy = ( k === 1 ) ? -half : ( k === 2 ) ? half : 0; w = 1; }
+        else { dx = ( k === 5 ) ? -r : ( k === 6 ) ? r : 0; dy = ( k === 7 ) ? -r : ( k === 8 ) ? r : 0; w = 1; }
+        const gx = Math.max( 0, Math.min( N - 1, ix0 + dx )), gy = Math.max( 0, Math.min( N - 1, iy0 + dy ));
+        // merge duplicates (in a 3x3 zone the axis tips can coincide with the centre)
+        let found = false;
+        for ( let q = 0; q < nodeX.length; q++ ) { if (( nodeX[q] === gx ) && ( nodeY[q] === gy )) { nodeW[q] += w; found = true; break; } }
+        if ( !found ) { nodeX.push( gx ); nodeY.push( gy ); nodeW.push( w ); }
+        totalW += w;
+    }
+    if ( totalW <= 0 ) return 0;
+    const taken: number[] = [];
+    let remaining = suck;
+    for ( let k = 0; k < nodeX.length && ( remaining > 0 ); k++ )
+    {
+        const avail = Math.max( 0, f[ nodeY[k] * N + nodeX[k] ]);
+        let take = suck * nodeW[k] / totalW;
+        if ( take > remaining ) { take = remaining; }
+        if ( take > avail ) { take = avail; }
+        f[ nodeY[k] * N + nodeX[k] ] -= take;
+        taken.push( take ); remaining -= take;
+    }
+    // when the zone is poor there is not enough to take; give back the rest to
+    // the biggest-weight node with soil (we never print energy, and this loses
+    // at most the fraction of the expected take)
+    for ( let k = 0; k < nodeX.length && ( remaining > 1e-12 ); k++ )
+    {
+        const avail = Math.max( 0, f[ nodeY[k] * N + nodeX[k] ]);
+        if ( avail <= 0 ) continue;
+        const take = Math.min( avail, remaining );
+        f[ nodeY[k] * N + nodeX[k] ] -= take;
+        if ( k < taken.length ) { taken[ k ] += take; } else { taken.push( take ); }
+        remaining -= take;
+    }
+    let out = 0;
+    for ( const t of taken ) out += t;
+    return out;
+}
+
+// A plant is a pump, not a printer: the stage grows only when the root square
+// has bandwidth; the pump takes the energy from that same square.
 export function soilPlantGrowth( st: SharedState, x: number, y: number, currentEnergy: number, maxOverride?: number ): number
 {
     const maxPlantE = ( maxOverride !== undefined ) ? maxOverride : plantStageCap( st, x, y, currentEnergy );
     const wanted = maxPlantE - currentEnergy;
     if ( wanted <= 0 ) return 0;
-    cellAt( x, y, _cell );
-    const ix = _cell.ix, iy = _cell.iy, f = st.soilField;
-    const x0 = Math.max( 0, ix - 2 ), x1 = Math.min( N - 1, ix + 2 );
-    const y0 = Math.max( 0, iy - 2 ), y1 = Math.min( N - 1, iy + 2 );
-    let pool = 0;
-    for ( let yy = y0; yy <= y1; yy++ )
-    {
-        const row = yy * N;
-        for ( let xx = x0; xx <= x1; xx++ ) { pool += f[ row + xx ]; }
-    }
-    if ( pool <= 0 ) return 0;
-    const suck = Math.min( 0.085, wanted * 0.02, pool * 0.015 );
+    const r = rootZoneRadius( currentEnergy );
+    const pool = poolRoot( st, x, y, r );
+    // capacity scales with the root square: a zone of 256 world units at
+    // scale 2, so the max was ~17 before; now the whole square counts.
+    const maxUptake = Math.min( 0.45, 0.04 + pool * 0.00065 );
+    const suck = Math.min( maxUptake, wanted * 0.045, pool * 0.015 );
     if ( suck <= 0 ) return 0;
-    const share = suck / pool;
-    let taken = 0;
-    for ( let yy = y0; yy <= y1; yy++ )
-    {
-        const row = yy * N;
-        for ( let xx = x0; xx <= x1; xx++ )
-        {
-            const i = row + xx, want = f[i] * share;
-            f[i] -= want; taken += want;
-        }
-    }
-    return taken;
+    return withdrawRootZone( st, x, y, r, suck );
 }
 // Gaussian oases plus the desert background, all paid for out of the
 // atmosphere. The multiplier is worldEnergy / 5 from the pool panel.

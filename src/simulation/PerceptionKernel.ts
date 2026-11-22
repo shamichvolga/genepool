@@ -22,13 +22,14 @@ import { POOL_BOTTOM, POOL_HEIGHT, POOL_LEFT, POOL_RIGHT, POOL_TOP, POOL_WIDTH }
 import { ATTRACTION_SIMILAR_COLOR, STARVING, SWIMBOT_MOUTH_LENGTH, SWIMBOT_VIEW_RADIUS } from "./SwimbotTypes";
 import { FOOD_BIT_GRAB_RADIUS } from "./FoodBit";
 import { PROFILER_ENABLED, profEnter, profExit, PROF_PERCEIVE, PROF_PERC_SWIMBOTS, PROF_PERC_FOOD, PROF_PERC_OBSTRUCTED } from "./Profiler";
-import { PREDATOR_DEFERENCE_ENABLED, KIN_NOT_EATEN_ENABLED, OLD_AGE_DURATION, WEAK_PREY_ENABLED, WEAK_STARVING_SHARE, JUVENILE_PREDATION_ENABLED, CROWD_AWARE_FOOD_CHOICE_ENABLED, FOOD_TARGET_PERSISTENCE_ENABLED, FOOD_SWITCH_RATIO_MIN, FOOD_KEEP_RADIUS_SCALE, SIZE_ASSORTATIVE_MATING_ENABLED } from "./Parameters";
+import { PREDATOR_DEFERENCE_ENABLED, KIN_NOT_EATEN_ENABLED, OLD_AGE_DURATION, WEAK_PREY_ENABLED, WEAK_STARVING_SHARE, JUVENILE_PREDATION_ENABLED, CROWD_AWARE_FOOD_CHOICE_ENABLED, FOOD_TARGET_PERSISTENCE_ENABLED, FOOD_SWITCH_RATIO_MIN, FOOD_KEEP_RADIUS_SCALE, SIZE_ASSORTATIVE_MATING_ENABLED,
+         PREDATOR_HUNGRY_ENERGY_SHARE, PREDATOR_FRONT_DOT, PREDATOR_LATERAL_DOT, PREDATOR_LATERAL_RADIUS_SQ, PREDATOR_LATERAL_BONUS } from "./Parameters";
 import { M_CURRENT_W, M_DISEASE, M_WEAK_PREF, MIND_STRIDE, M_VIEW_RADIUS, M_GRAB_RADIUS, M_DEFERENCE, M_FOOD, M_PERSIST, M_MATE, M_MATURE_AGE, M_SIZE_PICKY, M_MAX_ENERGY } from "./MindLayout";
 import { preyTargetScore } from "./EcologyGenes";
 import {
     BACKGROUND_SIZE, PARAM_MAX_LIFESPAN, B_NUM_PARTS, B_GROWTH, B_VEL_X, B_VEL_Y, BOT_STRIDE, MAX_SEEN, PARAM_ENV_ACTIVE, PARAM_STEP, PARAM_CURRENT, PARAM_ENV_FIELDS, PARAM_FOOD_TYPES,
     PARAM_WALL_COUNT, PARAM_WALL_BASE, PARAM_WALL_MIN_X, PARAM_WALL_MAX_X, PARAM_WALL_MIN_Y, PARAM_WALL_MAX_Y,
-    PARAM_SDF_READY, SDF_SIZE, SCENT_GRID_N, SharedState
+    B_GOAL_X, B_GOAL_Y, PARAM_SDF_READY, SDF_SIZE, SCENT_GRID_N, SharedState
 } from "./SharedState";
 
 export const STARVING_FOOD_CHOICE = 15;   // below this energy a swimbot eats anything
@@ -609,6 +610,12 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
             }
         }
 
+        // Block 3: the predator's heading comes from its own goal vector
+        // (mouth-relative, normalized by DecisionKernel.aim); a hungry one
+        // gets the lateral view.
+        const goalX = st.bots[ botOffset + B_GOAL_X ], goalY = st.bots[ botOffset + B_GOAL_Y ];
+        const hungryPredator = ( st.energy[s] < st.mind[ s * MIND_STRIDE + M_MAX_ENERGY ] * PREDATOR_HUNGRY_ENERGY_SHARE );
+
         for (let i = 0; i < numNearby; i++)
         {
             const o = nearby[i];
@@ -625,7 +632,21 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
             const px = myMouthX - hot[h];
             const py = myMouthY - hot[ h + 1 ];
             const distSq = px * px + py * py;
-            if ( !weak && ( distSq > preyRadiusSq )) continue;   // the common case needs no square root
+            // Block 3: a hungry predator watches the flank, not just the front.
+            // The main far cone only accepts the front hemisphere (dot > -0.15);
+            // a narrow peripheral sweep grabs prey tucked right against the
+            // predator's head side or behind, within 175 world units.
+            let lateral = false;
+            if ( !weak )
+            {
+                if ( hungryPredator )
+                {
+                    const dot = goalX * ( hot[h] - myMouthX ) + goalY * ( hot[h + 1] - myMouthY );
+                    if (( dot > PREDATOR_LATERAL_DOT ) && ( distSq < PREDATOR_LATERAL_RADIUS_SQ )) { lateral = true; }
+                    else if ( distSq > preyRadiusSq && dot < PREDATOR_FRONT_DOT ) { continue; }
+                }
+                else if ( distSq > preyRadiusSq ) { continue; }   // the common case needs no square root
+            }
             const realDistance = fastDist( px, py );             // octagonal, no Math.sqrt
             // (a predator that prefers the weak - its gene - sees them as nearer)
             let distance = weak ? realDistance / ( 1 + 2 * st.mind[ s * MIND_STRIDE + M_WEAK_PREF ] ) : realDistance;
@@ -665,7 +686,7 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
 
             // (the way down the stream is shorter in time: the gene "feel for the current")
             const travel = ( awareness !== 0 ) ? distance * currentTravelFactor( driftX, driftY, hot[h] - myMouthX, hot[ h + 1 ] - myMouthY, ownSpeed, awareness ) : distance;
-            let value = -travel + st.energy[o] * 0.001;
+            let value = -travel + st.energy[o] * 0.001 + ( lateral ? PREDATOR_LATERAL_BONUS : 0 );
             if ( PREDATOR_TARGET_SELECTION_ENABLED )
             {
                 const room = Math.max( 0, st.mind[ s * MIND_STRIDE + M_MAX_ENERGY ] - st.energy[s] );
@@ -674,7 +695,7 @@ export function perceive( s: number, st: SharedState, sc: PerceptionScratch ): v
                 const distanceCost = distance / Math.max( 1, preyViewRadius );
                 const chaseCost = Math.min( 1, travel / swimSpeed / Math.max( 1, PREY_SCAN_COOLDOWN ));
                 value = preyTargetScore( reward * attackChance, chaseCost, st.preyValueWeight[s],
-                                         st.preyTravelWeight[s], st.preyBaitBias[s], false );
+                                         st.preyTravelWeight[s], st.preyBaitBias[s], false ) + ( lateral ? PREDATOR_LATERAL_BONUS : 0 );
                 if ( value > bestPreyValue )
                 {
                     bestPreyReward = reward;

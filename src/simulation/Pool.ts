@@ -181,15 +181,27 @@ const POOL_BOUNDARY_MARGIN      = 1200.0;
             {
                 const sx = Math.min( n - 1, Math.floor( px * n / SOIL_TEX ));
                 const soil = field[ row + sx ];
-                // Crisp cells, no radial blur: poor ground is completely clear,
-                // fertile ground shifts from green to amber and brightens as a
-                // tree draws the nutrient out of the nine cells under its crown.
-                const t = Math.max( 0, Math.min( 1, ( soil - 7.5 ) / 37.5 ));
+                // Crisp cells, no radial blur. Poor ground is completely
+                // transparent (the seasonal water shows through); mid fertile
+                // ground is a muted moss-green, and rich ground a warm amber
+                // that brightens toward the white-hot core of an oasis -
+                // only a few widespread oases make it glow, the rest of the
+                // desert stays the clean season water.
                 const i = ( py * SOIL_TEX + px ) * 4;
-                data[ i     ] = 108 + ( 168 - 108 ) * t;
-                data[ i + 1 ] = 158 + ( 174 - 158 ) * t;
-                data[ i + 2 ] = 62  + (  54 -  62 ) * t;
-                data[ i + 3 ] = soil < 7.5 ? 0 : Math.min( 115, Math.round( 24 + ( soil - 7.5 ) * 1.4 ));
+                let alpha = 0;
+                if ( soil >= 48 )
+                {
+                    // rich: a warm amber glow, alpha 56..120 as it climbs 48..148
+                    data[ i     ] = 192; data[ i + 1 ] = 182; data[ i + 2 ] = 52;
+                    alpha = Math.round( 56 + ( 120 - 56 ) * Math.min( 1, ( soil - 48 ) / 100 ));
+                }
+                else if ( soil >= 22 )
+                {
+                    // medium: a muted moss-green, alpha 18..52 as it climbs 22..48
+                    data[ i     ] = 92; data[ i + 1 ] = 148; data[ i + 2 ] = 64;
+                    alpha = Math.round( 18 + ( 52 - 18 ) * Math.min( 1, ( soil - 22 ) / 26 ));
+                }
+                data[ i + 3 ] = alpha;
             }
         }
         _soilCtx.putImageData( _soilImage, 0, 0 );

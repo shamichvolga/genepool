@@ -81,6 +81,17 @@ export const FOUNDER_ENERGY_FACTOR             = 1;
 // охотится на травоядных, ест красное мясо, не ест растения, рисуется чёрным.
 export const PREDATOR_LEVEL_THRESHOLD      = 0.6;
 
+// Block 3: a hungry predator gets a much wider view of its surroundings:
+// the ordinary search cone requires the prey to be ahead of it (dot > -0.15,
+// ~the front hemisphere), and a narrow peripheral sweep behind the head
+// (dot > -0.65) catches prey tucked right against its flank, up to 175 world
+// units out. The lateral sweep rewards very close prey a bit harder.
+export const PREDATOR_HUNGRY_ENERGY_SHARE = 0.6;
+export const PREDATOR_FRONT_DOT            = -0.15;
+export const PREDATOR_LATERAL_DOT          = -0.65;
+export const PREDATOR_LATERAL_RADIUS_SQ    = 175 * 175;
+export const PREDATOR_LATERAL_BONUS        = 1.5;
+
 // Максимальная энергия бота. Если хищник съел добычу и энергия "не влезает",
 // излишек выпадает из жертвы кусками красного мяса.
 export const SWIMBOT_MAX_ENERGY            = MAX_SWIMBOT_HUNGER_THRESHOLD;
@@ -127,7 +138,7 @@ export const PREDATOR_CAPTURE_RADIUS_SCALE = 1.12;
 export const FAILED_HUNT_COOLDOWN_FRACTION = 0.35;
 
 // Доля хищников в стартовой популяции (у остальных ген хищности низкий).
-export const INITIAL_PREDATOR_FRACTION     = 0.15;
+export const INITIAL_PREDATOR_FRACTION     = 0.18;
 
 // (There is no scheduled "predators appear now" any more: predation is only a
 //  gene. About INITIAL_PREDATOR_FRACTION of the founders are born predators,
@@ -605,11 +616,11 @@ export const KILL_WINNER_SHARE_FULL  = 0.60;
 export const KILL_WINNER_MAX_PENALTY = 0.25;
 // The extra basal cost is proportional to the same pressure, but a body can
 // afford a far larger metabolic bill than a 25% loss of digestive efficiency.
-export const KILL_WINNER_METABOLISM_MULT = 20.0;
+export const KILL_WINNER_METABOLISM_MULT = 30.0;
 // A crowded form also waits longer between births: the same pressure that
 // raises its bill slows its reproduction. This is what keeps one form from
 // filling the pool after it wins a temporary feeding advantage.
-export const KILL_WINNER_REPRO_MULT = 20.0;
+export const KILL_WINNER_REPRO_MULT = 50.0;
 export function killWinnerPressure( share: number ): number
 {
     if ( !( share > KILL_WINNER_SHARE_START )) return 0;

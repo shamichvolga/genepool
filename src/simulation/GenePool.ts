@@ -57,6 +57,7 @@ import { decayMeat, depositSoilEnergy, oasisCentersWorld, plantStageCap, seedSoi
 import * as Telemetry from "./WorldTelemetry";
 import * as FoodEcology from "./FoodEcology";
 import * as Spawner from "./WorldSpawner";
+import * as MapOps from "./MapOps";
 import { rStrategyCooldownFactor, rStrategyReproductionEnergyFactor, killWinnerPressure, KILL_WINNER_REPRO_MULT } from "./Parameters";
 
 // The living soil has its own ambient reservoir. Energy that a swimmer spends
@@ -1125,16 +1126,7 @@ _camera.setScale( POOL_WIDTH );
 
 	this.placeMapMeat = function( zone )
 	{
-	    if ( !randomPointInZone( zone, gpRandom, _vectorUtility )) return true;
-	    const f = this.findLowestDeadFoodBitInArray( true );
-	    if ( f === NULL_INDEX ) return false;
-	    _foodBits[f].initialize( f );
-	    _foodBits[f].setType( 2 );
-	    _foodBits[f].setPosition( _vectorUtility );
-	    const fundedMeat = drawFromAtmosphere( globalTweakers.foodBitEnergy );
-	    if ( fundedMeat <= 0 ) { _foodBits[f].setEnergy( 0 ); _foodBits[f].kill(); return false; }
-	    _foodBits[f].setEnergy( fundedMeat );
-	    return true;
+	    return MapOps.placeMapMeat( this, zone );
 	}
 
 	// meat keeps falling in the red zones as fast as meat rots there
@@ -1174,19 +1166,9 @@ _camera.setScale( POOL_WIDTH );
 	// what the map editor draws first: a newly generated map (as a new world
 	// would get it), its gardens and sizes. Its random numbers do not touch
 	// the running world (the state is put back).
-	this.getMapPreview = function()
+		this.getMapPreview = function()
 	{
-	    const keep = getRandomState();
-	    const preview = new Environment();
-	    preview.active = true;
-	    preview.generate( false );
-	    const gardens = preview.gardenCenters();
-	    setRandomState( keep );
-	    return {
-	        left: POOL_LEFT, top: POOL_TOP, width: POOL_WIDTH, height: POOL_HEIGHT, field: preview.temperatureGrid(),
-	        environment: preview.getState(), gardens: gardens.map( g => ({ x: g.x, y: g.y })), gardenRadius: GARDEN_RADIUS,
-	        numSwimbots: Math.min( MAX_SWIMBOTS, Math.max( 0, Math.floor( INITIAL_NUM_SWIMBOTS ))), maxSwimbots: MAX_SWIMBOTS,
-	    };
+	    return MapOps.getMapPreview( this );
 	}
 
 	function startPlantAge( f )

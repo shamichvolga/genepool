@@ -51,7 +51,7 @@
     align-items:    baseline;
     gap:            12px;
     flex:           0 0 auto;
-    padding-left:   28px;   /* the floating ">" toggle no longer covers the G in Gene Pool */
+    padding-left:   46px;   /* the floating ">" toggle never covers "Gene Pool" / "Генофонд" */
 }
 
 #mainTitle
