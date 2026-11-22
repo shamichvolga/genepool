@@ -58,6 +58,7 @@ import * as Telemetry from "./WorldTelemetry";
 import * as FoodEcology from "./FoodEcology";
 import * as Spawner from "./WorldSpawner";
 import * as MapOps from "./MapOps";
+import * as RootNetwork from "./RootNetwork";
 import { rStrategyCooldownFactor, rStrategyReproductionEnergyFactor, killWinnerPressure, KILL_WINNER_REPRO_MULT } from "./Parameters";
 
 // The living soil has its own ambient reservoir. Energy that a swimmer spends
@@ -3084,6 +3085,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
         // FoodBit.kill() returns the remaining crown energy to the atmosphere,
         // which funds the next sprouts; do not double-count a soil deposit.
         _foodBits[f].kill();
+        RootNetwork.unlinkChildren( _st, f );
     }
 
     let _lastShadeClock = -999;
@@ -4952,6 +4954,7 @@ this.testPredation = function()
     _numFoodBits = INITIAL_NUM_FOODBITS;
     for (let f = 0; f < MAX_FOODBITS; f++) {
         _foodBits[f].kill();
+        RootNetwork.unlinkChildren( _st, f );
     }
 
     // ensure thresholds

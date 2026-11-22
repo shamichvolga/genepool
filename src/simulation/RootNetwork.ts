@@ -151,6 +151,7 @@ export function severRoots( st: any, clock: number, bots: any[] ): void
             const ex = st.foodX[ p ] + t * dx - bx, ey = st.foodY[ p ] + t * dy - by;
             if ( ex * ex + ey * ey <= ( Math.max( 10, 4 ) ) ** 2 )
             {
+                pushSeverSnap( st.foodX[ f ] + t * dx - bx, st.foodY[ f ] + t * dy - by, st.foodX[ p ], st.foodY[ p ], st.foodX[ f ], st.foodY[ f ] );
                 st.plantParent[ f ] = -1;
                 st.plantRootFlow[ f ] = 0;
                 for ( let c = 0; c < st.plantParent.length; c++ )
@@ -185,6 +186,7 @@ export function ageTrees( st: any ): void
 
 export function stepRootNetwork( st: any ): void
 {
+    tickSeverSnaps();
     if ( !st ) return;
     const clock = st.clock;
     // scan once: pick first grown plant and spawn a stolon
@@ -195,3 +197,40 @@ export function stepRootNetwork( st: any ): void
     shareChainEnergy( st, clock );
     ageTrees( st );
 }
+
+//------------------------------------------------------------------------------
+// Death unlinking: when plant f is retired (old age, crowding, eating), every
+// living descendant's link to it breaks too, so a reused slot never grows
+// roots through a dead chain.
+//------------------------------------------------------------------------------
+export function unlinkChildren( st: any, f: number ): void
+{
+    if ( !st || st.liveFood[ f ] === 1 )
+    {
+        for ( let c = 0; c < st.plantParent.length; c++ )
+        {
+            if ( st.plantParent[ c ] === f ) { st.plantParent[ c ] = -1; st.plantRootFlow[ c ] = 0; }
+        }
+    }
+}
+
+//------------------------------------------------------------------------------
+// Sever snaps: a short ring buffer of root-cut events (point of sever + the
+// parent/child ends) used for the exiting animation.
+//------------------------------------------------------------------------------
+const SEVER_SNAP_CAP = 32;
+let severSnaps: any[] = [];
+export function pushSeverSnap( xCut: number, yCut: number, xP: number, yP: number, xC: number, yC: number ): void
+{
+    severSnaps.push({ xCut, yCut, xP, yP, xC, yC, age: 0 });
+    if ( severSnaps.length > SEVER_SNAP_CAP ) { severSnaps = severSnaps.slice( severSnaps.length - SEVER_SNAP_CAP ); }
+}
+export function tickSeverSnaps(): void
+{
+    for ( let i = 0; i < severSnaps.length; i++ )
+    {
+        if ( severSnaps[ i ].age > 0 ) { severSnaps[ i ].age --; }
+    }
+    while ( severSnaps.length > 0 && severSnaps[0].age <= 0 ) { severSnaps.shift(); }
+}
+export function getSeverSnaps(): any[] { return severSnaps; }
