@@ -195,6 +195,7 @@ export class SharedState
     readonly preyField    : Float32Array;   // herbivore biomass density
     readonly predField    : Float32Array;   // predator traces
     readonly soilField    : Float32Array;   // living soil: energy in SOIL_GRID_N² cells
+    readonly soilGridN    : number;          // invariant cells per world side (128 * WORLD_SCALE)
 
     //--------------------------------------------------------
     // what perception reads (one number per swimbot slot)
@@ -361,6 +362,7 @@ export class SharedState
         this.preyField     = new Float32Array( make( "preyField", scentCells * 4 ));
         this.predField     = new Float32Array( make( "predField", scentCells * 4 ));
         this.soilField     = new Float32Array( make( "soilField", SOIL_GRID_N * SOIL_GRID_N * 4 ));
+        this.soilGridN       = SOIL_GRID_N;
 
         const u8  = ( name: string, count: number ) => new Uint8Array( make( name, count ));
         const n = maxSwimbots;

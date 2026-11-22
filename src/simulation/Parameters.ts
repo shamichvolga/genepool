@@ -49,13 +49,13 @@ export const MAX_SWIMBOTS = POPULATION_LIMIT * 4;
 
 // A live startup setting: the exact number of founders in a new random pool.
 // 500 per area unit at the default world scale (2 x 2) gives the usual 2000.
-export const INITIAL_NUM_SWIMBOTS =  2000;
+export const INITIAL_NUM_SWIMBOTS = Math.round( 500 * WORLD_AREA_FACTOR );
 
-export const MAX_FOODBITS           = 4000 * WORLD_AREA_FACTOR;   // (x2 on 17.10: the first generation well fed)
+export const MAX_FOODBITS           = Math.round( 4000 * WORLD_AREA_FACTOR );
 export const MAX_FOODBITS_PER_TYPE  = 1000 * WORLD_AREA_FACTOR;
 // the share of the food places kept for meat (carcasses): plants and meat no longer fight for the same places (a die-off filled them all with meat)
 export const MEAT_SLOT_SHARE        = 0.25;
-export const INITIAL_NUM_FOODBITS   = 1000 * WORLD_AREA_FACTOR;
+export const INITIAL_NUM_FOODBITS   = Math.round( 1000 * WORLD_AREA_FACTOR );
 
 export const NON_REPRODUCING_JUNK_DNA_LIMIT    = 0.1;
 

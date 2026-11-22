@@ -15,7 +15,7 @@ export const SOIL_N = SOIL_GRID_N;
 const N = SOIL_N, CELLS = N * N, STRIDE = N + 1;
 const INV_W = N / POOL_WIDTH, INV_H = N / POOL_HEIGHT;
 const BASE_SOIL = 3.5;              // a thin desert background, per cell
-const PATCH_COUNT = 24;             // dense oases in the new world
+const PATCH_COUNT = Math.max( 4, Math.round( 6 * ( SOIL_GRID_N / 128 ) * ( SOIL_GRID_N / 128 )));   // dense oases, one per ~1/6 of the area
 const PATCH_PEAK = 145;             // fertility at the centre of an oasis
 const PATCH_SIGMA_MIN = 8.0;        // oasis radius, in soil cells (8 .. 12)
 const PATCH_SIGMA_SPAN = 4.0;
@@ -153,7 +153,7 @@ export function meanSoilRoot( st: SharedState, x: number, y: number, r: number )
 }
 export function effectiveFertility( st: SharedState, x: number, y: number, r: number, foodEnergy: number ): number
 {
-    return meanSoilRoot( st, x, y, r ) * 0.75 + foodEnergy * 0.45;
+    return meanSoilRoot( st, x, y, r ) * 0.90 + foodEnergy * 0.50;
 }
 function stageCapOf( f: number ): number
 {

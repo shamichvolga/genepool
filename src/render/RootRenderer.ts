@@ -6,9 +6,10 @@
 import * as RootNetwork from "../simulation/RootNetwork";
 import { PI2 } from "../simulation/MathConstants";
 
-const SUCTION_COLOR = "rgba(135, 225, 95, 0.75)";
-const ROOT_COLOR    = "rgba(155, 195, 78, 0.58)";
-const FLOW_COLOR    = "rgba(215, 250, 120, 0.92)";
+const SUCTION_COLOR = "rgba(135, 225, 95, 0.85)";
+const ROOT_COLOR    = "rgba(210, 245, 110, 0.90)";
+const ROOT_SHADOW   = "rgba(16, 26, 12, 0.72)";
+const FLOW_COLOR    = "rgba(255, 255, 175, 0.98)";
 const SNIP_COLOR    = "rgba(255, 120, 80, 0.55)";
 
 function clipView( g: any, x: number, y: number ): boolean
@@ -28,7 +29,7 @@ export function drawRoots( ctx: CanvasRenderingContext2D, st: any, g: any ): voi
 
     for ( let f = 0; f < N; f++ )
     {
-        if ( sucking[ f ] > 0.06 && clipView( g, fx[f], fy[f] ))
+        if ( sucking[ f ] > 0.015 && clipView( g, fx[f], fy[f] ))
         {
             const rad = Math.max( 4, 7 * sucking[ f ] ), amp = 0.7 + 0.6 * sucking[ f ];
             ctx.lineWidth = Math.max( 0.9, 4 * ( 0.5 + 0.5 * sucking[ f ] ));
@@ -49,25 +50,42 @@ export function drawRoots( ctx: CanvasRenderingContext2D, st: any, g: any ): voi
         }
     }
 
-    ctx.lineWidth = 1.5;
+    // Five short rootlets at the base of every established plant.
+    for ( let f = 0; f < N; f++ )
+    {
+        if ( st.liveFood[ f ] !== 1 || st.foodType[ f ] === 2 ) continue;
+        if ( st.foodEnergy[ f ] < 10 || !clipView( g, fx[f], fy[f] )) continue;
+        const spin = (( f * 2654435761 ) & 0xffff) / 65535 * PI2;
+        ctx.lineWidth = 1.1;
+        ctx.strokeStyle = ROOT_SHADOW;
+        for ( let k = 0; k < 5; k++ )
+        {
+            const a = spin + k * ( PI2 / 5 ), len = 12 + ( f % 9 );
+            ctx.beginPath();
+            ctx.moveTo( fx[f], fy[f] );
+            ctx.lineTo( fx[f] + Math.cos( a ) * len, fy[f] + Math.sin( a ) * len );
+            ctx.stroke();
+        }
+    }
+
     for ( let c = 0; c < N; c++ )
     {
         const p = plantParent[ c ];
         if ( p < 0 || st.liveFood[ c ] !== 1 || !clipView( g, fx[p], fy[p] )) continue;
         const dx = fx[c] - fx[p], dy = fy[c] - fy[p], len = Math.max( 1, Math.sqrt( dx * dx + dy * dy ));
         const bend = (( c * 2654435761 ) & 0xffff) / 65535;
-        ctx.strokeStyle = ROOT_COLOR;
-        ctx.beginPath();
-        ctx.moveTo( fx[p], fy[p] );
-        ctx.quadraticCurveTo( fx[p] + dx * 0.65 + (-dy / len) * 2.5 * bend, fy[p] + dy * 0.65 + (dx / len) * 2.5 * bend, fx[c], fy[c] );
-        ctx.stroke();
+        const cx = fx[p] + dx * 0.65 + (-dy / len) * 2.5 * bend, cy = fy[p] + dy * 0.65 + (dx / len) * 2.5 * bend;
+        ctx.lineWidth = 3.2; ctx.strokeStyle = ROOT_SHADOW;
+        ctx.beginPath(); ctx.moveTo( fx[p], fy[p] ); ctx.quadraticCurveTo( cx, cy, fx[c], fy[c] ); ctx.stroke();
+        ctx.lineWidth = 1.8; ctx.strokeStyle = ROOT_COLOR;
+        ctx.beginPath(); ctx.moveTo( fx[p], fy[p] ); ctx.quadraticCurveTo( cx, cy, fx[c], fy[c] ); ctx.stroke();
         const flow = rootFlow[ c ];
         if ( flow !== 0 )
         {
             const x = fx[p] + dx * ( flow > 0 ? 0.9 : 0.1 ), y = fy[p] + dy * ( flow > 0 ? 0.9 : 0.1 );
             ctx.fillStyle = FLOW_COLOR;
             ctx.beginPath();
-            ctx.arc( x, y, 0.9, 0, PI2 );
+            ctx.arc( x, y, 1.6, 0, PI2 );
             ctx.fill();
         }
     }

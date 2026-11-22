@@ -817,7 +817,7 @@ _camera.setScale( POOL_WIDTH );
         else if ( mode === SimulationStartMode.EMPTY )
         {
             _numSwimbots = 0;
-            //this.randomizeFood();
+            this.randomizeFood();   // empty pool: oases + starter groves, no animals
         }
         else if ( mode === SimulationStartMode.TEST_MINI_POOL )
         {
@@ -4469,7 +4469,9 @@ const feedRoom = Math.min( 100, swimbot.getMaxEnergy() - swimbot.getEnergy() );
 	    this.findClosestPlantToPoolPosition = function( x, y )
     {
         const v = this.convertScreenCoordinatesToPoolPosition( x, y );
-        let best = -1, bestD = 40 * 40;
+        const vs = Math.max( 0.05, this.getCameraView ? this.getCameraView().scale : 1 );
+        let bestD = Math.max( 45, 14 / vs ); bestD = bestD * bestD;
+        let best = -1;
         for ( let i = 0; i < _aliveFoodBitIndices.length; i++ )
         {
             const f = _aliveFoodBitIndices[i];

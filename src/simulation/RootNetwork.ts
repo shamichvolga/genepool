@@ -10,6 +10,7 @@ import { depositSoilEnergy } from "./SoilEcology";
 import * as SS from "./SharedState";
 import { POOL_LEFT, POOL_RIGHT, POOL_TOP, POOL_BOTTOM, POOL_WIDTH, POOL_HEIGHT } from "./Pool";
 import { MAX_SWIMBOTS } from "./Parameters";
+import { gpRandom } from "./Globals";
 
 const STOLON_DIST_MIN = 110, STOLON_DIST_MAX = 185;
 const STOLON_COST      = 4.5;
@@ -20,7 +21,7 @@ function isGrown( st: any, f: number ): boolean
 {
     const p = st.plantParent[ f ];
     return ( p >= 0 ) && ( st.liveFood[ f ] === 1 ) && ( st.foodType[ f ] !== 2 ) &&
-           ( st.foodEnergy[ f ] >= 24 ) && ( st.foodEnergy[ f ] > 0.68 * st.foodEnergy[ f ] * 0 ) && st.foodEnergy[ f ] > 0;
+           ( st.foodEnergy[ f ] >= 22 ) && st.foodEnergy[ f ] > 0;
 }
 
 // One stolon: random angle, distance 110..185 out from the trunk; free point
@@ -35,16 +36,17 @@ function pickStolonSpot( st: any, p: number ): number
         const dist = STOLON_DIST_MIN + Math.random() * ( STOLON_DIST_MAX - STOLON_DIST_MIN );
         const cx = X[ p ] + Math.cos( ang ) * dist, cy = Y[ p ] + Math.sin( ang ) * dist;
         if (( cx < POOL_LEFT + 120 ) || ( cx > POOL_RIGHT - 120 ) || ( cy < POOL_TOP + 120 ) || ( cy > POOL_BOTTOM - 120 )) continue;
-        const ix = Math.max( 0, Math.min( 255, Math.floor( cx / POOL_WIDTH * 255 )));
-        const iy = Math.max( 0, Math.min( 255, Math.floor( cy / POOL_HEIGHT * 255 )));
-        const cell = st.soilField[ iy * 256 + ix ];
+        const gn = st.soilGridN || 256;
+        const ix = Math.max( 0, Math.min( gn - 1, Math.floor( cx / POOL_WIDTH * gn )));
+        const iy = Math.max( 0, Math.min( gn - 1, Math.floor( cy / POOL_HEIGHT * gn )));
+        const cell = st.soilField[ iy * gn + ix ];
         if ( cell < 6.0 ) continue;
         let clear = true;
-        for ( let s = 0; s < MAX_SWIMBOTS && clear; s++ )
+        for ( let q = 0; q < st.liveFood.length && clear; q++ )
         {
-            if ( st.liveSwimbot[ s ] !== 1 ) continue;
-            const d2 = ( st.botX[ s ] - cx ) ** 2 + ( st.botY[ s ] - cy ) ** 2;
-            if ( d2 < ( 80 + 10 ) ** 2 ) clear = false;
+            if ( st.liveFood[ q ] !== 1 || st.foodType[ q ] === 2 ) continue;
+            const qx = st.foodX[ q ], qy = st.foodY[ q ];
+            if (( qx - cx ) ** 2 + ( qy - cy ) ** 2 < 80 * 80 ) clear = false;
         }
         if ( clear ) { return cx; }
     }
@@ -181,6 +183,32 @@ export function ageTrees( st: any ): void
                 if ( st.plantParent[ c ] === f ) { st.plantParent[ c ] = -1; }
             }
         }
+    }
+}
+
+// Starter dynasty: link young bushes that sprouted close to a tree so the
+// root network and the sap flow exist from the very first frame.
+function seedDynasties( st: any ): void
+{
+    const trees: number[] = [];
+    for ( let f = 0; f < st.liveFood.length; f++ )
+    {
+        if ( st.liveFood[ f ] === 1 && st.foodType[ f ] !== 2 && st.foodEnergy[ f ] >= 42 ) trees.push( f );
+    }
+    if ( trees.length === 0 ) return;
+    for ( let c = 0; c < st.liveFood.length; c++ )
+    {
+        if ( st.plantParent[ c ] >= 0 || st.liveFood[ c ] !== 1 || st.foodType[ c ] === 2 ) continue;
+        if ( st.foodEnergy[ c ] < 10 || st.foodEnergy[ c ] >= 42 ) continue;
+        if ( gpRandom() > 0.35 ) continue;
+        let best = -1, bestD = 185 * 185;
+        for ( const p of trees )
+        {
+            if ( p === c ) continue;
+            const d2 = ( st.foodX[ p ] - st.foodX[ c ] ) ** 2 + ( st.foodY[ p ] - st.foodY[ c ] ) ** 2;
+            if ( d2 < bestD ) { bestD = d2; best = p; }
+        }
+        if ( best >= 0 ) { st.plantParent[ c ] = best; st.plantRootFlow[ c ] = 0; }
     }
 }
 
