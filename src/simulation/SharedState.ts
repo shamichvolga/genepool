@@ -266,6 +266,9 @@ export class SharedState
     readonly foodType     : Uint8Array;     // 0, 1 = plants, 2 = meat
     readonly foodAlive    : Uint8Array;
     readonly foodEnergy    : Float64Array;
+    readonly plantParent   : Int32Array;   // stolon chain links: -1 = no parent
+    readonly plantRootFlow : Float64Array; // signed flow parent->child per step
+    readonly plantAge      : Float64Array; // steps since the plant bit was born
     readonly foodBorn     : Float64Array;   // the step it appeared (its age = now - born)
     readonly foodWood     : Float64Array;   // structural biomass: the historical energy maximum
     readonly foodFruit    : Uint8Array;     // 1 = a waiting fruit dropped by a tree
@@ -426,6 +429,9 @@ export class SharedState
         this.foodType   = u8 ( "foodType", MAX_FOODBITS );
         this.foodAlive  = u8 ( "foodAlive", MAX_FOODBITS );
         this.foodEnergy = f64( "foodEnergy", MAX_FOODBITS );
+    this.plantParent   = new Int32Array( make( "plantParent", MAX_FOODBITS * 4 )).fill( -1 );
+    this.plantRootFlow = f64( "plantRootFlow", MAX_FOODBITS );
+    this.plantAge      = f64( "plantAge", MAX_FOODBITS );
         this.foodBorn   = f64( "foodBorn", MAX_FOODBITS );
         this.foodWood   = f64( "foodWood", MAX_FOODBITS );
         this.foodFruit  = u8 ( "foodFruit", MAX_FOODBITS );
