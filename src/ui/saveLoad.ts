@@ -12,6 +12,7 @@
 // -------------------------------------------------------------------------- 
 import { previewFromGenes } from "../simulation/Embryology";
 import { SimulationStartMode } from "../simulation/Globals";
+import { MAX_SWIMBOTS } from "../simulation/Parameters";
 import { setParameter } from "../simulation/ParamStore";
 import { closePopupPanel, switchToChosenPresetPool, syncPetriPanel } from "./ui";
 import { tr, translateHTML } from "./lang";
@@ -56,9 +57,9 @@ export function applyPoolStartupParams(): void
 {
     const bots  = document.getElementById( "poolInitialBots" ) as HTMLInputElement | null;
     const energy = document.getElementById( "poolWorldEnergy" ) as HTMLInputElement | null;
-    const botCount = Math.max( 0, Math.min( 20000, Math.floor( Number( bots?.value ) || 0 )));
-    const worldEnergy = Math.max( 0.1, Math.min( 10, Number( energy?.value ) || 1.5 ));
-    if ( bots ) { bots.value = String( botCount ); }
+    const botCount = Math.max( 0, Math.min( MAX_SWIMBOTS, Math.floor( Number( bots?.value ) || 0 )));
+    const worldEnergy = Math.max( 0.1, Math.min( 10, Number( energy?.value ) || 5 ));
+    if ( bots ) { bots.max = String( MAX_SWIMBOTS ); bots.value = String( botCount ); }
     if ( energy ) { energy.value = String( worldEnergy ); }
     const values = { INITIAL_NUM_SWIMBOTS: botCount, START_ENERGY_FACTOR: worldEnergy };
     try { localStorage.setItem( STARTUP_KEY, JSON.stringify( values )); } catch ( e ) { /* no storage */ }
@@ -92,7 +93,11 @@ export function syncPoolStartupInputs(): void
     try { values = JSON.parse( localStorage.getItem( STARTUP_KEY ) || "{}" ); } catch ( e ) { /* no storage */ }
     const bots  = document.getElementById( "poolInitialBots" ) as HTMLInputElement | null;
     const energy = document.getElementById( "poolWorldEnergy" ) as HTMLInputElement | null;
-    if ( bots && Number.isFinite( values.INITIAL_NUM_SWIMBOTS )) { bots.value = String( Math.max( 0, Math.floor( values.INITIAL_NUM_SWIMBOTS ))); }
+    if ( bots )
+    {
+        bots.max = String( MAX_SWIMBOTS );
+        if ( Number.isFinite( values.INITIAL_NUM_SWIMBOTS )) { bots.value = String( Math.min( MAX_SWIMBOTS, Math.max( 0, Math.floor( values.INITIAL_NUM_SWIMBOTS )))); }
+    }
     if ( energy && Number.isFinite( values.START_ENERGY_FACTOR )) { energy.value = String( values.START_ENERGY_FACTOR ); }
 }
 

@@ -149,17 +149,25 @@ async function poolSnapshot(): Promise<{ bytes: Uint8Array, clock: number }>
 function downloadBytes( bytes: Uint8Array, name: string, type: string ): void
 {
     const link = document.createElement( "a" );
-    link.href = URL.createObjectURL( new Blob([ bytes ], { type }));
-    link.download = name;
-    document.body.appendChild( link );
-    link.click();
-    link.remove();
-    setTimeout( () => URL.revokeObjectURL( link.href ), 10000 );
+    const url = URL.createObjectURL( new Blob([ bytes ], { type }));
+    try
+    {
+        link.href = url;
+        link.download = name;
+        document.body.appendChild( link );
+        link.click();
+    }
+    finally
+    {
+        link.remove();
+        URL.revokeObjectURL( url );
+    }
 }
 
 export async function savePoolFile( ext: string ): Promise<void>
 {
-    toast( t( "Saving the pool…", "Сохраняю бассейн…" ), 60000 );
+    const savingText = t( "Saving the pool…", "Сохраняю бассейн…" );
+    toast( savingText, 60000 );
     try
     {
         const snap = await poolSnapshot();
@@ -177,6 +185,13 @@ export async function savePoolFile( ext: string ): Promise<void>
         }
     }
     catch ( error ) { toast( t( "Could not save the pool: ", "Не удалось сохранить бассейн: " ) + error ); }
+    finally
+    {
+        // The success/error toast replaces this one; a hidden failure path must
+        // never leave "Saving the pool…" hanging on the screen forever.
+        const box = document.getElementById( "worldToast" );
+        if ( box && box.textContent === savingText ) { box.style.display = "none"; }
+    }
 }
 
 export function choosePoolFile(): void

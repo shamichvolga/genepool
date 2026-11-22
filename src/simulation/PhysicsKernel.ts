@@ -97,7 +97,8 @@ export function physicsPartA( s: number, st: SharedState ): void
     const mass      = st.partMass;
     const angle     = st.partAngle;
     const amp       = st.partAmp;
-    const phase     = st.partPhase;
+    const sinPhase  = st.partSinPhase;
+    const cosPhase  = st.partCosPhase;
     const turnAmp   = st.partTurnAmp;
     const turnPhase = st.partTurnPhase;
     const moment    = st.partMoment;
@@ -189,6 +190,13 @@ export function physicsPartA( s: number, st: SharedState ): void
     // energy bill is lower while they drift.
     const jellyGlide = ( numParts >= 8 && st.cavityP1[s] > 0 && effort < 0.6 ) ? 0.85 : 1;
     const timer = B[ b + B_TIMER ] + timerDelta * effort * glideScale;
+    // One base phasor per swimbot. The static part phase and the small turning
+    // shift are applied with complex multiplication below; the polynomial
+    // sine/cosine is then evaluated only once per body, not once per segment.
+    const baseRadian = timer * frequency;
+    const sinBase = fastSin( baseRadian );
+    const cosBase = fastCos( baseRadian );
+    let lastTurnPhase = NaN, dSin = 0, dCos = 1;
 
     // modulators: the dot between the heading's perpendicular and the focus direction
     const radian0 = angleNow * PI_OVER_180;
@@ -255,9 +263,23 @@ export function physicsPartA( s: number, st: SharedState ): void
         if ( p > 1 ) // part 1 has nothing to bend off of
         {
             const ampModulator   = turnAmp  [ k + p ] * smoothDot;
-            const phaseModulator = turnPhase[ k + p ] * smoothDot * 0.35;
-            const radian = timer * frequency + ( phase[ k + p ] + phaseModulator );
-            pd[ i + B_A ] = ( amp[ k + p ] + ampModulator ) * fastSin( radian );
+            // turnPhase is constant inside one limb category: refresh the small
+            // turn phasor only when the category changes, not for every part.
+            const tp = turnPhase[ k + p ];
+            if ( tp !== lastTurnPhase )
+            {
+                const shift = tp * smoothDot * 0.35;
+                dSin = fastSin( shift );
+                dCos = fastCos( shift );
+                lastTurnPhase = tp;
+            }
+            // (sinPhase, cosPhase) * (dCos, dSin) -> phase + turn shift
+            const sp = sinPhase[ k + p ], cp = cosPhase[ k + p ];
+            const sinShift = sp * dCos + cp * dSin;
+            const cosShift = cp * dCos - sp * dSin;
+            // (sinBase, cosBase) * (cosShift, sinShift) -> sin of the sum
+            const sinTotal = sinBase * cosShift + cosBase * sinShift;
+            pd[ i + B_A ] = ( amp[ k + p ] + ampModulator ) * sinTotal;
             pd[ i + C_A ] += pd[ i + B_A ];
         }
 

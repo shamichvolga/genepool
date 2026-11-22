@@ -23,7 +23,7 @@ import { assert } from "../simulation/Utility";
 import { ViewTrackingMode } from "../simulation/ViewTracking";
 import { Graph } from "./graph";
 import { getInfoText } from "./info";
-import { _chosenPoolToLoad, _username, setChosenPoolToLoad, syncPoolStartupInputs, syncSwimbotNameInput } from "./saveLoad";
+import { _chosenPoolToLoad, _username, applyPoolStartupParams, setChosenPoolToLoad, syncPoolStartupInputs, syncSwimbotNameInput } from "./saveLoad";
 import { decorateSwimbotCard, setupHints, tr, translateHTML, translatePage } from "./lang";
 import { USER_SWIMBOTS } from "./userSwimbots";
 
@@ -48,16 +48,54 @@ export let _lastSwimbotPanelHTML       = "";
 export let _lastGraphDataHTML          = "";
 let _lastHudRawHTML                    = "";
 
+// The pool card's "apply startup params" button: one short confirmation and,
+// while the world has barely started, an immediate rebuild with the new energy.
+function showStartupParamsNotice(): void
+{
+    let box = document.getElementById( "startupParamsToast" );
+    if ( !box )
+    {
+        box = document.createElement( "div" );
+        box.id = "startupParamsToast";
+        box.style.cssText = "position:fixed; top:10px; left:50%; transform:translateX(-50%); z-index:1001; "
+            + "max-width:90vw; padding:8px 14px; background:rgba(30,40,50,0.94); color:#eef; "
+            + "font:13px/1.4 Arial,sans-serif; border-radius:8px; box-shadow:0 2px 10px rgba(0,0,0,0.4);";
+        document.body.appendChild( box );
+    }
+    box.textContent = "Параметры сохранены — запустите пресет для создания мира";
+    box.style.display = "block";
+    clearTimeout(( box as any ).hideTimer );
+    ( box as any ).hideTimer = setTimeout( () => { box!.style.display = "none"; }, 7000 );
+}
+
+export function applyStartupParamsFromUI(): void
+{
+    applyPoolStartupParams();
+    showStartupParamsNotice();
+    if ( typeof genePool !== "undefined" && genePool.getTimeStep() < 5 ) { switchToChosenPresetPool(); }
+}
+
 //----------------------------
 export function initializeUI()
 {
-    initializeEcosystemUI();    
+    initializeEcosystemUI();
     
     _graph.initialize();     
     setupUserSwimbots();
     setupHints();
     setupSoilButton();
     syncPoolStartupInputs();
+    // The HTML button also has an inline call; capturing here lets the UI own
+    // the single application, the notice and the fresh-world shortcut.
+    const applyParamsButton = document.getElementById( "applyPoolParamsButton" );
+    if ( applyParamsButton )
+    {
+        applyParamsButton.addEventListener( "click", ( e: Event ) =>
+        {
+            e.stopImmediatePropagation();
+            applyStartupParamsFromUI();
+        }, true );
+    }
     translatePage();
     // a new language: the parts the code fills are filled again
     window.addEventListener( "genepool:language", () =>
@@ -849,7 +887,11 @@ export function updateUI()
         {
             const environment = genePool.getEnvironment();
             const history = genePool.getPopulationHistory();
-            const predators = history.step.length > 0 ? history.predators[ history.step.length - 1 ] : 0;
+            const last = history.step.length > 0 ? history.step.length - 1 : -1;
+            // One source of truth for the status bar and the graph: the same
+            // history samples, counted from the shared live/dead arrays.
+            const predators = last >= 0 ? history.predators[ last ] : 0;
+            const herbivores = last >= 0 ? history.herbivores[ last ] : 0;
             let graphDataHTML =
                 tr("time step:") + " " + genePool.getTimeStep()
                 + ( environment.active ? " (" + environment.seasonName() + ")" : "" )
@@ -859,7 +901,8 @@ export function updateUI()
                 
                 + phaseTimesText()
                 + "<br>"
-                + "swimbots: " + genePool.getNumSwimbots() + " (predators: " + predators + ")"
+                + "swimbots: " + ( herbivores + predators )
+                + " (herbivores: " + herbivores + ", predators: " + predators + ")"
                 + "<br>"
                 + genePool.getGeneticClustersText()
                 + "<br>"
@@ -1322,8 +1365,13 @@ export function showWorldSize()
 //----------------------------------------------------------
 function readPetriSettings()
 {
-    const zones    = parseInt( ( document.getElementById( "petriZones" ) as HTMLInputElement ).value, 10 );
-    const softness = parseFloat( ( document.getElementById( "petriSoftness" ) as HTMLInputElement ).value );
+    // The Petri card was removed from the pool tab. Keep the old API alive for
+    // saved worlds and worker messages, but never touch a missing DOM node.
+    const zonesInput = document.getElementById( "petriZones" ) as HTMLInputElement | null;
+    const softInput  = document.getElementById( "petriSoftness" ) as HTMLInputElement | null;
+    if ( !zonesInput || !softInput ) return;
+    const zones    = parseInt( zonesInput.value, 10 );
+    const softness = parseFloat( softInput.value );
     petriSettings.zones    = Math.min( 12, Math.max( 2, isFinite( zones ) ? zones : 7 ));
     petriSettings.softness = Math.min( 1, Math.max( 0, isFinite( softness ) ? softness : 0.1 ));
 }

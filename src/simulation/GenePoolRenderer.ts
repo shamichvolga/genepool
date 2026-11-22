@@ -10,11 +10,12 @@
 import { NULL_INDEX, ONE_HALF, PI2 } from "./MathConstants";
 import { ViewTrackingMode } from "./ViewTracking";
 import {
-    MAX_SWIMBOTS, MEAT_PIECE_ENERGY, PLANT_EVOLUTION_ENABLED, PLANT_STAGES_ENABLED, PLANT_STAGES_SHOWN,
+    LOD_MOUTH_MIN_SCALE, LOD_SEGMENT_DETAIL_MIN_SCALE, MAX_SWIMBOTS, MEAT_PIECE_ENERGY, PLANT_EVOLUTION_ENABLED, PLANT_STAGES_ENABLED, PLANT_STAGES_SHOWN,
     SWIMBOT_LEVEL_OF_DETAIL_DOT, SWIMBOT_LEVEL_OF_DETAIL_HIGH, WOOD_PER_FRUIT_TIER
 } from "./Parameters";
 import { FOOD_BIT_GRAB_RADIUS, FOOD_BIT_SIZE, FOOD_BIT_SIZE_VIEW_SCALE, FOOD_OPACITY_INCREMENT } from "./FoodBit";
 import { plantSize } from "./PlantSize";
+import { setSwimbotViewScale } from "./SwimbotRenderer";
 import { setPlantSeason } from "./PlantVisuals";
 import { currentAt, currentDriftX, currentDriftY, currentStrength, randomPointInCurrent } from "./Currents";
 import { SEASON_PERIOD } from "./Environment";
@@ -199,7 +200,7 @@ export function createGenePoolRenderer( ctx: any )
     function renderTargetLine( line: any )
     {
         if ( line === null ) return;
-        canvas.lineWidth = 1.2 + 0.004 * ctx.camera.getScale();
+        canvas.lineWidth = Math.max( 1.2, 1.35 / ctx.viewScale );
         canvas.strokeStyle = "rgba( 200, 200, 200, 0.35 )";
         canvas.beginPath();
         canvas.moveTo( line.fromX, line.fromY );
@@ -210,7 +211,7 @@ export function createGenePoolRenderer( ctx: any )
 
     function renderSelectCircle( x: number, y: number, r: number, m: boolean )
     {
-        const lineWidth = 1.6 + 0.005 * ctx.camera.getScale();
+        const lineWidth = Math.max( 1.2, 1.35 / ctx.viewScale );
         const alpha = m ? 0.03 : 0.07;
 
         canvas.lineWidth = lineWidth;
@@ -457,7 +458,10 @@ export function createGenePoolRenderer( ctx: any )
     // круги выбора, линия к цели выбранного свимбота
     function renderSwimbotOverlays( useGraphicsCard: boolean )
     {
-        const details = useGraphicsCard && ( ctx.levelOfDetail === SWIMBOT_LEVEL_OF_DETAIL_HIGH );
+        // Mouths and the white mating arrows are drawn down to LOD_MOUTH_MIN_SCALE
+        // and not a pixel lower. Their pixel widths come from
+        // setSwimbotViewScale(), so they stay legible all the way to that gate.
+        const details = useGraphicsCard && ( ctx.viewScale >= LOD_MOUTH_MIN_SCALE );
         for (let i = 0; i < _renderBatch.length; i++)
         {
             const item = _renderBatch[i], swimbot = item.swimbot;
@@ -483,6 +487,7 @@ export function createGenePoolRenderer( ctx: any )
         const _canvas = ctx.canvas, _camera = ctx.camera, _swimbots = ctx.swimbots, _viewTracking = ctx.viewTracking;
         const _capsuleRenderer = ctx.capsuleRenderer;
         const _canvasWidth = ctx.canvasWidth, _canvasHeight = ctx.canvasHeight;
+        setSwimbotViewScale( ctx.viewScale );
 
         // очищаем весь холст: бассейн квадратный, экран нет — при отдалении полосы
         // рядом с бассейном хранили бы куски старых кадров
@@ -529,6 +534,9 @@ export function createGenePoolRenderer( ctx: any )
 
         if ( useGraphicsCard )
         {
+            // Joint gaps and dark rims are a near-camera detail only. Above
+            // LOD_SEGMENT_DETAIL_MIN_SCALE the same bodies are merged capsules.
+            _capsuleRenderer.setSegmentDetail( ctx.viewScale >= LOD_SEGMENT_DETAIL_MIN_SCALE );
             _capsuleRenderer.draw
             (
                 _camera.getPosition().x - _camera.getXDimension() * ONE_HALF,
@@ -556,20 +564,20 @@ export function createGenePoolRenderer( ctx: any )
         renderPhase( 3, phaseStart );
 
         // режим взаимной любви: линия между влюблёнными
-        if ( _viewTracking.getMode() === ViewTrackingMode.MUTUAL )
+        if (( _viewTracking.getMode() === ViewTrackingMode.MUTUAL ) && ( ctx.viewScale >= LOD_MOUTH_MIN_SCALE ))
         {
             const i1 = _viewTracking.getLover1Index(), i2 = _viewTracking.getLover2Index();
             if (( i1 != NULL_INDEX ) && ( i2 != NULL_INDEX ))
             {
                 const g1 = _swimbots[ i1 ].getGenitalPosition(), g2 = _swimbots[ i2 ].getGenitalPosition();
                 _canvas.lineCap = "round";
-                _canvas.lineWidth = 5;
+                _canvas.lineWidth = Math.max( 4.5, 5.5 / ctx.viewScale );
                 _canvas.strokeStyle = "rgba( 200, 200, 200, 0.06 )";
                 _canvas.moveTo( g1.x, g1.y );
                 _canvas.lineTo( g2.x, g2.y );
                 _canvas.stroke();
 
-                _canvas.lineWidth = 2;
+                _canvas.lineWidth = Math.max( 1.2, 1.35 / ctx.viewScale );
                 _canvas.strokeStyle = "rgba( 255, 255, 200, 0.06 )";
                 _canvas.moveTo( g1.x, g1.y );
                 _canvas.lineTo( g2.x, g2.y );

@@ -21,6 +21,7 @@ in vec4  color;
 uniform vec2  viewOrigin;   // pool coordinates of the top-left corner of the view
 uniform vec2  viewSize;     // size of the view in pool units
 uniform float pixelSize;    // pool units per screen pixel
+uniform float segmentDetail;// 1 = joint gaps, 0 = one merged capsule
 
 out vec2  vLocal;           // position along / across the capsule
 out float vLength;
@@ -32,8 +33,9 @@ out float vPixel;
 void main()
 {
     vec2  d   = endB - endA;
-    float len = length( d );
-    vec2  dir = ( len > 1e-6 ) ? d / len : vec2( 1.0, 0.0 );
+    float fullLen = length( d );
+    float len = fullLen * mix( 1.0, 0.90, segmentDetail );  // near: a visible joint
+    vec2  dir = ( fullLen > 1e-6 ) ? d / fullLen : vec2( 1.0, 0.0 );
     vec2  nrm = vec2( -dir.y, dir.x );
 
     float rA  = max( radiusA, pixelSize * 0.6 );   // never thinner than ~1 pixel
@@ -112,9 +114,10 @@ export class CapsuleRenderer
     private instanceBuffer: WebGLBuffer;
     private data          = new Float32Array( 4096 * FLOATS_PER_CAPSULE );
     private count         = 0;
-    private uniforms      : { viewOrigin: WebGLUniformLocation, viewSize: WebGLUniformLocation, pixelSize: WebGLUniformLocation, outline: WebGLUniformLocation };
+    private uniforms      : { viewOrigin: WebGLUniformLocation, viewSize: WebGLUniformLocation, pixelSize: WebGLUniformLocation, outline: WebGLUniformLocation, segmentDetail: WebGLUniformLocation };
     private hasContent    = false;
     private gpuCapacity   = 0;      // floats already allocated in the GPU buffer
+    private detail        = true;   // set by the camera-height LOD gate
 
     //--------------------------------------------------------------------
     // returns null if the browser has no WebGL2
@@ -145,6 +148,7 @@ export class CapsuleRenderer
             viewSize   : gl.getUniformLocation( this.program, "viewSize"   ),
             pixelSize  : gl.getUniformLocation( this.program, "pixelSize"  ),
             outline    : gl.getUniformLocation( this.program, "outline"    ),
+            segmentDetail: gl.getUniformLocation( this.program, "segmentDetail" ),
         };
 
         this.vao = gl.createVertexArray();
@@ -204,6 +208,10 @@ export class CapsuleRenderer
     {
         this.count = 0;
     }
+
+    // The camera-height LOD: below the threshold the bodies are drawn as fast
+    // merged capsules, with neither the joint gaps nor the dark segment rims.
+    setSegmentDetail( enabled: boolean ): void { this.detail = enabled; }
 
     add( ax: number, ay: number, bx: number, by: number, radius: number,
          red: number, green: number, blue: number, alpha: number ): void
@@ -270,7 +278,8 @@ export class CapsuleRenderer
         gl.uniform2f( this.uniforms.viewSize, viewWidth, viewHeight );
         const pixelSize = viewWidth / Math.max( 1, gl.drawingBufferWidth );
         gl.uniform1f( this.uniforms.pixelSize, pixelSize );
-        gl.uniform1f( this.uniforms.outline, pixelSize < 0.9 ? 1 : 0 );   // (only up close, where the 2D drawing has rims)
+        gl.uniform1f( this.uniforms.segmentDetail, this.detail ? 1 : 0 );
+        gl.uniform1f( this.uniforms.outline, this.detail ? 1 : 0 );       // dark rims only where the 2D drawing has them
 
         gl.enable( gl.BLEND );
         gl.blendFunc( gl.ONE, gl.ONE_MINUS_SRC_ALPHA );

@@ -21,6 +21,14 @@ export const SWIMBOT_LEVEL_OF_DETAIL_DOT  = 0;
 export const SWIMBOT_LEVEL_OF_DETAIL_LOW  = 1;
 export const SWIMBOT_LEVEL_OF_DETAIL_HIGH = 2;
 
+// Camera-height (canvas pixels per pool unit) gates for the two drawing tiers.
+// viewScale = canvasHeight / camera.getYDimension(): the higher the camera, the
+// smaller the number. Below 0.36 the green mouths and the white mating arrows
+// are not drawn at all; below 0.28 the joint gaps and the dark segment rims go
+// away and the bodies are plain merged capsules.
+export const LOD_MOUTH_MIN_SCALE = 0.36;
+export const LOD_SEGMENT_DETAIL_MIN_SCALE = 0.28;
+
 export const DEFAULT_GARDEN_OF_EDEN_RADIUS = 2000;
 export const GARDEN_OF_EDEN_RADIUS = DEFAULT_GARDEN_OF_EDEN_RADIUS;
 
@@ -59,6 +67,11 @@ export const CROSSOVER_RATE = 0.1;
 
 export const MAX_SWIMBOT_HUNGER_THRESHOLD      = 200;
 export const DEFAULT_SWIMBOT_HUNGER_THRESHOLD	=  50;
+
+// Founders are full-grown adults: one complete energy store each. The
+// world-energy field in the pool panel pays for the soil and the ambient
+// reservoir (see START_ENERGY_FACTOR), not for a bigger or smaller body.
+export const FOUNDER_ENERGY_FACTOR             = 1;
 
 
 //---------------------------------------------------------------------------
@@ -123,10 +136,11 @@ export const INITIAL_PREDATOR_FRACTION     = 0.1;
 export const GARDEN_RADIUS                 = 600 * WORLD_SCALE;   // (1200 in the normal world: same crowding in every size)
 
 // Now and then a newborn switches diet (herbivore <-> predator): a big
-// mutation of the predator genes, inherited by its children. In the old pool
-// this happened by accident (the predator gene was a body gene with big
-// mutation jumps, ~0.4% of births). It never changes a grown-up swimbot.
-export const DIET_SWITCH_RATE              = 0.004;
+// mutation of the predator genes, inherited by its children. Hunters are
+// short-lived; without this supply a world that starts with a tenth of
+// predators loses the last one long before 100k steps. It never changes a
+// grown-up swimbot.
+export const DIET_SWITCH_RATE              = 0.12;
 
 // stage 7 test switch: compare the perception kernel with the old code
 export const PERCEPTION_CHECK              = false;
@@ -451,8 +465,10 @@ export const DESPERATE_CANNIBALISM_ENABLED  = true;
 export const DESPERATE_ENERGY_SHARE         = 0.1;    // "near death": energy below this share of its full store
 export const LIMBS_CATCH_YOUNG_ENABLED      = false;  // (off since 19.10: the young only by the mouth)
 
-// (17.10) the first generation starts with this many times a full energy store
-export const START_ENERGY_FACTOR            = 1.5;
+// World energy: 5 is the reference world, 10 gives about twice as much soil,
+// oases and ambient energy (see energyMult in GenePool). Also the default of
+// the "world energy" field in the pool panel.
+export const START_ENERGY_FACTOR            = 5;
 
 //------------------------------------------------------------------------------
 // Event-driven looking (18.10): a swimbot looks around every

@@ -120,6 +120,16 @@ export function clearDisease( st: SharedState, s: number ): void
 
 export function isSick( st: SharedState, s: number ): boolean { return st.mind[ s * MIND_STRIDE + M_DISEASE ] > 0; }
 
+// An outbreak after a long silent spell: when an epidemic has died out and the
+// crowd is big enough, one body catches a fresh strain. This keeps a single
+// resistant form from becoming unstoppable for the rest of the run.
+export function seedDisease( st: SharedState, s: number ): void
+{
+    if ( isSick( st, s )) return;
+    infect( st, s, newStrain( profileOf( st, s, profileBuffer ), 0.05 ));
+    simCounters.diseaseOutbreaks ++;
+}
+
 //------------------------------------------------------------------------------
 // one step: maybe a new disease; the sick pay, spread it, get well
 // (alive: the living swimbots; returns how many are sick)

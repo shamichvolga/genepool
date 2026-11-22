@@ -164,6 +164,10 @@ export function Genotype()
     //-----------------------------------
 	this.setGeneValue = function( g, v )
 	{
+        // Manual gene editing in the UI can deliver a float, an empty field
+        // (NaN) or a value outside the byte range. Normalise it first so the
+        // integer assertions below can never throw on an ordinary edit.
+        v = Number.isFinite( v ) ? Math.max( 0, Math.min( BYTE_SIZE - 1, Math.round( v ))) : 0;
         assert( v < BYTE_SIZE, "Genotype:setGeneValue: v < BYTE_SIZE");
         assertInteger( v, "Genotype:setGeneValue; assertInteger, v" );
 

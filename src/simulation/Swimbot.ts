@@ -29,7 +29,7 @@ import { sizeSignature, SEARCH_IMAGE_LEARNING, SEARCH_IMAGE_GAIN, SEARCH_IMAGE_F
 // --------------------------------------------------------------------------
 import { SWIMBOT_DOT_RENDER_RADIUS } from "./Parameters";
 import { drawFromAtmosphere, settleEnergyTransfer, transferToAtmosphere } from "./EnergyBudget";
-import { depositSoilEnergy, withdrawSoilEnergy } from "./SoilField";
+import { depositSoilEnergy, withdrawSoilEnergy } from "./SoilEcology";
 import { BRAIN_FOCUS_TARGET_SHIFT_STRENGTH, BRAIN_FOCUS_TARGET_SHIFT_THRESHOLD, BRAIN_SENSORY_UPDATE_PERIOD, BRAIN_STATE_FLEEING_PREDATOR, BRAIN_STATE_LOOKING_FOR_FOOD, BRAIN_STATE_LOOKING_FOR_MATE, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_FOOD, BRAIN_STATE_PURSUING_MATE, BRAIN_STATE_PURSUING_PREY, BRAIN_STATE_SELF_FEED, BRAIN_STATE_RESTING, BRAIN_WANDER_AMOUNT, Brain } from "./Brain";
 import { GREATEST_POSSIBLE_SWIMBOT_LENGTH, GREATEST_POSSIBLE_SWIMBOT_MASS } from "./Embryology";
 import { DEFAULT_FOOD_BIT_ENERGY, FOOD_BIT_GRAB_RADIUS, FoodBit } from "./FoodBit";
@@ -203,6 +203,8 @@ var    flopperYV = 0;
 	let _pAngle      = new Float64Array( MAX_PARTS );
 	let _pAmp        = new Float64Array( MAX_PARTS );
 	let _pPhase      = new Float64Array( MAX_PARTS );
+	let _pSinPhase   = new Float64Array( MAX_PARTS );
+	let _pCosPhase   = new Float64Array( MAX_PARTS );
 	let _pTurnAmp    = new Float64Array( MAX_PARTS );
 	let _pTurnPhase  = new Float64Array( MAX_PARTS );
 	let _pMoment     = new Float64Array( MAX_PARTS );
@@ -273,6 +275,8 @@ this.setParent = function( parent )
 	    _pAngle     = st.partAngle    .subarray( from, to );
 	    _pAmp       = st.partAmp      .subarray( from, to );
 	    _pPhase     = st.partPhase    .subarray( from, to );
+	    _pSinPhase  = st.partSinPhase .subarray( from, to );
+	    _pCosPhase  = st.partCosPhase .subarray( from, to );
 	    _pTurnAmp   = st.partTurnAmp  .subarray( from, to );
 	    _pTurnPhase = st.partTurnPhase.subarray( from, to );
 	    _pMoment    = st.partMoment   .subarray( from, to );
@@ -983,6 +987,13 @@ this.setParent = function( parent )
 			_pAngle    [p] = part.angle;
 			_pAmp      [p] = part.amp;
 			_pPhase    [p] = part.phase;
+			_pSinPhase [p] = Math.sin( part.phase );
+			_pCosPhase [p] = Math.cos( part.phase );
+			if ( _shared !== null && _slot >= 0 )
+			{
+				_shared.partSinPhase[ _slot * MAX_PARTS + p ] = _pSinPhase[p];
+				_shared.partCosPhase[ _slot * MAX_PARTS + p ] = _pCosPhase[p];
+			}
 			_pTurnAmp  [p] = part.turnAmp;
 			_pTurnPhase[p] = part.turnPhase;
 			_pMoment   [p] = part.momentFactor;

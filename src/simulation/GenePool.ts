@@ -1,6 +1,6 @@
 import { WORLD_AREA_FACTOR } from "./World";
-import { CARCASS_ENABLED, DISEASE_ENABLED, CANNIBAL_GENE_FOUNDER_MAX, PLANT_REGROW_CHANCE, PLANT_REGROW_DELAY } from "./Parameters";
-import { exportStrains, importStrains, updateDiseases } from "./Disease";
+import { CARCASS_ENABLED, DISEASE_ENABLED, CANNIBAL_GENE_FOUNDER_MAX, FOUNDER_ENERGY_FACTOR, LOD_MOUTH_MIN_SCALE, PLANT_REGROW_CHANCE, PLANT_REGROW_DELAY } from "./Parameters";
+import { exportStrains, importStrains, seedDisease, updateDiseases } from "./Disease";
 import { PILE_PARTS, PreparedZone, barrierFlat, insideAny, prepareZones, randomPointInZone } from "./MapZones";
 import { plantCrown, plantLifespan, plantSize } from "./PlantSize";
 import { PLANT_SIZE_ENABLED, PLANT_SEEDS_BY_SIZE, PLANT_LEAF_REGROWTH, PLANT_LIFESPAN, PLANT_SPROUT_ENERGY, PLANT_TREE_ENERGY,
@@ -53,7 +53,7 @@ import { ViewTracking, ViewTrackingMode } from "./ViewTracking";
 import { GenePoolState } from "./core/GenePoolState";
 import { createGenePoolRenderer } from "./GenePoolRenderer";
 import * as Serializer from "./GenePoolSerializer";
-import { depositSoilEnergy, seedSoilField, soilPlantGrowth, SOIL_START_ENERGY, stepSoilField, totalSoilEnergy } from "./SoilField";
+import { decayMeat, depositSoilEnergy, oasisCentersWorld, plantStageCap, seedSoilField, soilPlantGrowth, SOIL_START_ENERGY, stepSoilEcology, totalSoilEnergy } from "./SoilEcology";
 
 // The living soil has its own ambient reservoir. Energy that a swimmer spends
 // is split 70/30 between the soil under it and this reservoir; every sixteenth
@@ -127,10 +127,13 @@ export function GenePool()
 	//---------------------------------------------
     const DEFAULT_MILLISECONDS_PER_UPDATE = 20;
 
-//const LEVEL_OF_DETAIL_THRESHOLD         = 1000.0;
-    // Dividing the viewScale threshold by 3 keeps detailed segments three times
-    // higher (further away from the pool) before the low-detail drawing takes over.
-    const LEVEL_OF_DETAIL_THRESHOLD         = 1200.0 / 3;
+// viewScale is screen pixels per world unit. It is the same number the
+    // renderers use for screen-space line widths, so the LOD switch and the
+    // overlays stay in step when the camera is raised 3-4 times.
+    const FOUNDER_SPAWN_MARGIN              = 200;   // keep founders away from the walls
+    const COLONY_COUNT                      = 14;    // the 14 richest oases
+    const COLONY_RADIUS                     = 550;   // world units around a centre
+    const COLONY_MIN_DISTANCE               = 45;    // founders keep this apart
 
     const INITIAL_VIEW_SCALE                = POOL_WIDTH * 0.1;
     const RACE_VIEW_SCALE                   = POOL_WIDTH * 0.3;
@@ -194,6 +197,8 @@ export function GenePool()
     const _matingChoosinessMean = new Float64Array( MATING_RECORD_SIZE );
     let _matingCount         = 0;
     let _gardens             = [];
+    let _colonyCenters: { x: number, y: number, energy: number }[] = [];
+    let _colonySites: { x: number, y: number }[][] = [];
     let _map: any            = null;    // a drawn map (map editor): its zones keep working while the world runs
     let _pendingMap: any     = null;
     let _mapPlantZones: PreparedZone[] = [], _mapMeatZones: PreparedZone[] = [];
@@ -207,6 +212,7 @@ export function GenePool()
     let _environmentImage    = null;    // picture of the temperature map (drawn behind the pool)
     const STARVING_FOOD_CHOICE = 15;   // below this energy a swimbot eats anything
 	let _levelOfDetail	        = SWIMBOT_LEVEL_OF_DETAIL_LOW;
+	let _viewScale		        = 1;   // screen pixels per pool unit
 	let _previousTime           = ZERO;
 	let _frameRate              = ZERO;
 	let _debugTrail 		    = new Array( TRAIL_LENGTH );
@@ -316,6 +322,7 @@ export function GenePool()
         get selectedFoodBit() { return _selectedFoodBit; },
         get mousedOverFoodBit() { return _mousedOverFoodBit; },
         get levelOfDetail() { return _levelOfDetail; },
+        get viewScale() { return _viewScale; },
         get renderingGoals() { return _renderingGoals; },
         get showViewTrackingMode() { return _showViewTrackingMode; },
         get gpuUpClose() { return _gpuUpClose; },
@@ -618,21 +625,26 @@ export function GenePool()
         this.setPopulationLimitEnabled( true );
         this.setMaximumSwimbotParts ( 16 );
 
-        // Closed energy cycle, calibrated for the 256x256 soil grid. Founders
-        // keep their starting energy outside the atmosphere (as before); the
+        // Closed energy cycle, driven by the "world energy" field in the UI.
+        // worldEnergy = 5 is the reference world; 10 doubles the whole endowment.
+        // Founders keep their starting energy outside the atmosphere; the
         // atmosphere funds only the soil, the first plants and a small reserve.
-        // Together with _ambientEnergy = 110,000 this puts E_total at ~1.8M:
-        // enough soil for oasis trees, far from the old 2.8M energy bath.
+        // Clamping keeps a typo in the input from ruining the world.
+        const worldEnergy = START_ENERGY_FACTOR;
+        const energyMult = Math.max( 0.4, Math.min( 10, worldEnergy / 5 ));
         const START_FOOD_ENERGY        = INITIAL_NUM_FOODBITS * PLANT_SPROUT_ENERGY;
         const START_ATMOSPHERE_RESERVE = 25000;
-        resetAtmosphere( SOIL_START_ENERGY + START_FOOD_ENERGY + START_ATMOSPHERE_RESERVE );
+        resetAtmosphere( SOIL_START_ENERGY * energyMult + START_FOOD_ENERGY + START_ATMOSPHERE_RESERVE );
 
-        // the living soil starts each run with a few fertile oases, paid for
-        // out of the same endowment (nothing is created from nothing)
-        _ambientEnergy = 110000;
+        // the living soil starts each run with 24 dense oases, paid for out of
+        // the same endowment (nothing is created from nothing)
+        _ambientEnergy = 260000 * energyMult;
         _st.soilField.fill( 0 );
         _st.foodSucking.fill( 0 );
-        seedSoilField( _st );
+        seedSoilField( _st, energyMult );
+        _colonyCenters = oasisCentersWorld().slice( 0, COLONY_COUNT );
+        _colonySites = [];
+        for ( let c = 0; c < COLONY_COUNT; c++ ) { _colonySites.push([]); }
 
         //-------------------------------------------------------------------
         // The "random" pool lives in the new environment (temperature map,
@@ -661,7 +673,8 @@ export function GenePool()
             this.setGardenOfEdenRadius( GARDEN_RADIUS );
             _camera.setScale( POOL_WIDTH );   // show the whole world with all its gardens
 
-            _numSwimbots = Math.max( 0, Math.floor( INITIAL_NUM_SWIMBOTS ));
+            // Never create more founders than the simulation has slots for.
+            _numSwimbots = Math.min( MAX_SWIMBOTS, Math.max( 0, Math.floor( INITIAL_NUM_SWIMBOTS )));
             _numFoodBits = INITIAL_NUM_FOODBITS;
             globalTweakers.numFoodTypes = TWO_PLANT_TYPES ? 2 : 1;
             if ( _map && (( _map.base === "blank" ) || ( _mapPlantZones.length > 0 ))) { environment.clearPlantCounts(); _numFoodBits = 0; }
@@ -817,7 +830,9 @@ else if ( mode === SimulationStartMode.TEST_MINI_POOL )
             assert( ( initialAge <= globalTweakers.maximumLifeSpan ), "Genepool.js: startSimulation: ( initialAge <= globalTweakers.maximumLifeSpan )" );
 
             let initialAngle    = getRandomAngleInDegrees(); //-180.0 + gpRandom() * 360.0;
-            let initialEnergy   = SWIMBOT_MAX_ENERGY * START_ENERGY_FACTOR;   // (17.10: the first generation starts overfed)
+            // A founder's own store is deliberately small and independent of
+            // the world-energy slider: that slider pays for the environment.
+            let initialEnergy   = SWIMBOT_MAX_ENERGY * FOUNDER_ENERGY_FACTOR;
 
             //--------------------------------------------------
             // set values according to sim type
@@ -835,11 +850,9 @@ else if ( mode === SimulationStartMode.TEST_MINI_POOL )
                 let xFraction = xMod / sqrt;
                 let yFraction = yMod / sqrt;
 
-                const spawnRadius = _gardenOfEdenRadius * START_SPAWN_SPREAD;
-                let x = _poolCenter.x - spawnRadius + xFraction * spawnRadius * 2;
-                let y = _poolCenter.y - spawnRadius + yFraction * spawnRadius * 2;
-
-                initialPosition.setXY( x, y );
+                // Genes still vary smoothly across the founders, but the bodies
+                // themselves now start in the 14 richest oases, like Random pools.
+                this.randomFounderPoint( initialPosition, i );
 
                 for (let g=0; g<NUM_GENES; g++)
                 {
@@ -989,12 +1002,9 @@ else if ( mode === SimulationStartMode.TEST_MINI_POOL )
                 }
                 else
                 {
-                    // one pile (garden) for each size of body: small, medium, and the
-                    // biggest (13 to 16 parts, the root counted); the body is already
-                    // known from the genes, the place only adapts the temperature genes
-                    const parts = _embryology.generatePhenotypeFromGenotype( _myGenotype ).numParts;
-                    const garden = _gardens[ ( parts >= 13 ? 2 : parts >= 9 ? 1 : 0 ) % _gardens.length ];
-                    initialPosition.setToRandomLocationInDisk( garden, _gardenOfEdenRadius );
+                    // Random pools are sown in 14 oasis colonies. Each centre is
+                    // one of the richest soil patches, with room for long bodies.
+                    this.randomFounderPoint( initialPosition, i );
                     this.setEcologyGenesForPlace( _myGenotype, initialPosition.x, initialPosition.y );
                 }
                 let bornPredator = gpRandom() < INITIAL_PREDATOR_FRACTION;
@@ -1136,6 +1146,8 @@ else if ( mode === SimulationStartMode.TEST_MINI_POOL )
 		_clock = 0;
 		_lastFoodGridCount = -1;
 		simClock.step = 0;
+	    _numSick = 0;
+	    _stepsWithoutSick = 0;
 	    resetSimulationCounters();
 	    resetHistory();
 
@@ -1402,7 +1414,7 @@ else if ( mode === SimulationStartMode.TEST_MINI_POOL )
 	    return {
 	        left: POOL_LEFT, top: POOL_TOP, width: POOL_WIDTH, height: POOL_HEIGHT, field: preview.temperatureGrid(),
 	        environment: preview.getState(), gardens: gardens.map( g => ({ x: g.x, y: g.y })), gardenRadius: GARDEN_RADIUS,
-	        numSwimbots: Math.max( 0, Math.floor( INITIAL_NUM_SWIMBOTS )), maxSwimbots: MAX_SWIMBOTS,
+	        numSwimbots: Math.min( MAX_SWIMBOTS, Math.max( 0, Math.floor( INITIAL_NUM_SWIMBOTS ))), maxSwimbots: MAX_SWIMBOTS,
 	    };
 	}
 
@@ -1436,6 +1448,33 @@ else if ( mode === SimulationStartMode.TEST_MINI_POOL )
 	{
 	    v.x = POOL_LEFT + FOOD_BIT_BOUNDARY_MARGIN + gpRandom() * ( POOL_WIDTH  - FOOD_BIT_BOUNDARY_MARGIN * 2 );
 	    v.y = POOL_TOP  + FOOD_BIT_BOUNDARY_MARGIN + gpRandom() * ( POOL_HEIGHT - FOOD_BIT_BOUNDARY_MARGIN * 2 );
+	}
+
+	// Fresh founders of Random and Neighborhood pools start in 14 colonies on
+	// the richest oases: radius 550, never closer than 45 to a nestmate.
+	this.randomFounderPoint = function( v, founderIndex: number )
+	{
+	    if ( _colonyCenters.length === 0 )
+	    {
+	        v.x = POOL_LEFT + FOUNDER_SPAWN_MARGIN + gpRandom() * Math.max( 1, POOL_WIDTH  - FOUNDER_SPAWN_MARGIN * 2 );
+	        v.y = POOL_TOP  + FOUNDER_SPAWN_MARGIN + gpRandom() * Math.max( 1, POOL_HEIGHT - FOUNDER_SPAWN_MARGIN * 2 );
+	        return;
+	    }
+	    const colony = Math.min( COLONY_COUNT - 1, Math.floor( founderIndex * COLONY_COUNT / Math.max( 1, _numSwimbots )));
+	    const center = _colonyCenters[ colony ], sites = _colonySites[ colony ], minSq = COLONY_MIN_DISTANCE * COLONY_MIN_DISTANCE;
+	    let x = center.x, y = center.y;
+	    for ( let attempt = 0; attempt < 200; attempt++ )
+	    {
+	        const angle = gpRandom() * PI2, radius = COLONY_RADIUS * Math.sqrt( gpRandom() );
+	        x = center.x + Math.cos( angle ) * radius;
+	        y = center.y + Math.sin( angle ) * radius;
+	        let clear = true;
+	        for ( let k = 0; k < sites.length; k++ ) { const dx = x - sites[k].x, dy = y - sites[k].y; if ( dx * dx + dy * dy < minSq ) { clear = false; break; } }
+	        if ( clear ) break;
+	    }
+	    v.x = Math.max( POOL_LEFT + FOUNDER_SPAWN_MARGIN, Math.min( POOL_RIGHT  - FOUNDER_SPAWN_MARGIN, x ));
+	    v.y = Math.max( POOL_TOP  + FOUNDER_SPAWN_MARGIN, Math.min( POOL_BOTTOM - FOUNDER_SPAWN_MARGIN, y ));
+	    sites.push({ x: v.x, y: v.y });
 	}
 
 	// the plant type that suits a place better is chosen more often
@@ -2399,14 +2438,14 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	    let herbivores = 0, predators = 0;
 	    for (let s = 0; s < MAX_SWIMBOTS; s++)
 	    {
-	        if ( !_swimbots[s].getAlive() ) continue;
+	        if ( _st.liveSwimbot[s] !== 1 ) continue;
 	        if ( _swimbots[s].getPredatorLevel() > PREDATOR_LEVEL_THRESHOLD ) { predators ++; } else { herbivores ++; }
 	    }
 	    let plants = 0, meat = 0;
 	    for (let f = 0; f < MAX_FOODBITS; f++)
 	    {
-	        if ( !_foodBits[f].getAlive() ) continue;
-	        if ( _foodBits[f].getType() === 2 ) { meat ++; } else { plants ++; }
+	        if ( _st.liveFood[f] !== 1 ) continue;
+	        if ( _st.foodType[f] === 2 ) { meat ++; } else { plants ++; }
 	    }
 
 	    _history.step.push( _clock );
@@ -2523,10 +2562,10 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
         //----------------------
         this.updateSwimbots();
 
-        // Every sixteenth step the ambient reservoir feeds the soil and the
-        // field diffuses. The amount drawn is removed from the reservoir here,
-        // so the world total is unchanged.
-        if (( _clock & 15 ) === 0 ) { _ambientEnergy -= stepSoilField( _st, _clock, _ambientEnergy ); }
+        // Every fourth step the SAT is rebuilt; every sixteenth the ambient
+        // reservoir feeds the soil and only the rich cells diffuse. The amount
+        // drawn is removed from the reservoir here, so the world total is unchanged.
+        _ambientEnergy -= stepSoilEcology( _st, _clock, _ambientEnergy );
 
         //------------------
         // update food
@@ -2587,20 +2626,20 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
             //---------------------------
             _camera.update( _seconds );
 
+            const viewHeight = _camera.getYDimension();
+            _viewScale = ( viewHeight > 0 && _canvasHeight > 0 ) ? _canvasHeight / viewHeight : 1;
+
             if ( RENDER_SWIMBOT_AS_DOT )
             {
                 _levelOfDetail = SWIMBOT_LEVEL_OF_DETAIL_DOT;
             }
             else
             {
-                if ( _camera.getScale() > LEVEL_OF_DETAIL_THRESHOLD )
-                {
-                    _levelOfDetail = SWIMBOT_LEVEL_OF_DETAIL_LOW;
-                }
-                else
-                {
-                    _levelOfDetail = SWIMBOT_LEVEL_OF_DETAIL_HIGH;
-                }
+                // The camera-height LOD gates live in Parameters.ts: mouths and
+                // arrows stop at LOD_MOUTH_MIN_SCALE, segments a little closer.
+                _levelOfDetail = ( _viewScale >= LOD_MOUTH_MIN_SCALE )
+                               ? SWIMBOT_LEVEL_OF_DETAIL_HIGH
+                               : SWIMBOT_LEVEL_OF_DETAIL_LOW;
             }
 
             //---------------------------
@@ -2719,6 +2758,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	    }
 	}
 	let _numSick = 0;
+	let _stepsWithoutSick = 0;   // 4000 silent steps re-seed a fresh strain in a crowd
 	this.getNumSick        = function() { return _numSick; }
 
 	//------------------------------------------------------------------------
@@ -2835,8 +2875,8 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
                                 && M[ mb + SS.M_REPRO_CD ] === 0
                                 && ( myState === BRAIN_STATE_LOOKING_FOR_MATE || myState === BRAIN_STATE_PURSUING_MATE )
                                 && ( mateState === BRAIN_STATE_LOOKING_FOR_MATE || mateState === BRAIN_STATE_PURSUING_MATE )
-                                && ( _swimbots[s].getEnergy() > _swimbots[s].getHungerThreshold() * 1.15 )
-                                && ( _potentialMate.getEnergy() > _potentialMate.getHungerThreshold() * 1.15 );
+                                && ( _swimbots[s].getEnergy() > _swimbots[s].getHungerThreshold() )
+                                && ( _potentialMate.getEnergy() > _potentialMate.getHungerThreshold() );
                             if ( !readyToMate )
                             {
                                 // They are not a real pair: separate them now so
@@ -3258,8 +3298,23 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	    }
 	    // PLANT_REGROW_CHANCE: grazed plants sprout again from their roots
 	    if ( PLANT_REGROW_CHANCE > 0 ) { this.sproutRoots(); }
-	    // DISEASE_ENABLED: the sick pay, pass it on, get well
-	    if ( DISEASE_ENABLED ) { _numSick = updateDiseases( _st, _aliveSwimbotIndices, _aliveSwimbotIndices.length, _clock ); }
+	    // DISEASE_ENABLED: the sick pay, pass it on, get well. If the whole
+	    // world has been healthy for 4000 steps, a crowd gets a fresh strain.
+	    if ( DISEASE_ENABLED )
+	    {
+	        _numSick = updateDiseases( _st, _aliveSwimbotIndices, _aliveSwimbotIndices.length, _clock );
+	        if (( _numSick === 0 ) && ( _aliveSwimbotIndices.length > 150 ))
+	        {
+	            if ( ++ _stepsWithoutSick >= 4000 )
+	            {
+	                const s = _aliveSwimbotIndices[ Math.floor( gpRandom() * _aliveSwimbotIndices.length )];
+	                seedDisease( _st, s );
+	                _numSick = 1;
+	                _stepsWithoutSick = 0;
+	            }
+	        }
+	        else { _stepsWithoutSick = 0; }
+	    }
 	    phaseTime( 4, t );
 	}
 
@@ -3611,7 +3666,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
             environment.returnMeatDetritusAt( _st.foodX[f], _st.foodY[f], _st.foodEnergy[f] );
         }
         // FoodBit.kill() returns the remaining crown energy to the atmosphere,
-        // so no extra soil deposit is needed here (that would double-count).
+        // which funds the next sprouts; do not double-count a soil deposit.
         _foodBits[f].kill();
     }
 
@@ -3706,24 +3761,20 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
             {
                 const cell = environment.plantCellIndex( foodX[f], foodY[f] );
                 const shade = ( _st.foodWood[f] < WOOD_PER_FRUIT_TIER ) ? _plantShade[cell] : 0;
-                // Soil niches: bare ground keeps sprouts, richer oases make bushes,
-                // and only the deepest soil can feed a twelve-ray tree. The cap is
-                // passed to the pump so the crown cannot outgrow what its cell holds.
-                const localSoil = environment.getSoilNutrientAtCell( cell );
-                const full = localSoil < 8 ? 6.0
-                           : localSoil < 13 ? 16
-                           : localSoil < 21 ? 34
-                           : Math.min( 85, 34 + ( localSoil - 21 ) * 1.1 );
+                // A plant's stage follows the 5x5 crown soil (O(1) SAT) and the
+                // energy it has already stored. A sprout on an oasis can grow
+                // into a tree; bare ground carries sprouts and young plants only.
+                let e = _st.foodEnergy[f];
+                const full = plantStageCap( _st, foodX[f], foodY[f], e );
                 const age = ( _clock - born[f] ) / ( 1 + ( SHADED_PLANT_AGING_FACTOR - 1 ) * shade );
                 if (( PLANT_LIFESPAN > 0 ) && ( age > plantLifespan( f, born[f] ))) { killPlant( f ); continue; }
 
                 // A plant is a pump, not a printer: the crown can only grow by
-                // sucking energy out of the nine soil cells under it. The tier
-                // cap and the three small caps live in SoilField.stepPlantGrowth.
-                let e = _st.foodEnergy[f];
+                // sucking energy out of the 5x5 cells under it. The tier cap is
+                // chosen above; SoilEcology keeps each suck small and local.
                 const grown = soilPlantGrowth( _st, foodX[f], foodY[f], e, full );
                 if ( grown > 0 ) { e += grown; _st.foodEnergy[f] = e; }
-                _st.foodSucking[f] = grown > 0 ? Math.min( 1, grown / 0.28 ) : 0;
+                _st.foodSucking[f] = grown > 0 ? Math.min( 1, grown / 0.085 ) : 0;
                 _st.foodWood[f] = Math.max( _st.foodWood[f], e );
 
                 const crownStarved = e < _st.foodWood[f] * 0.05
@@ -3763,24 +3814,16 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
             else if ( type === 1 ) { numType1FoodBits ++; }
             else
             {
-                // carrion rots a little every step; the rot is real energy in
-                // the soil, not an invisible disappearance into the atmosphere
-                let e = _st.foodEnergy[f];
-                const rot = Math.min( e, Math.max( 0.008, e * 0.004 ));
-                if ( rot > 0 )
+                // carrion rots a little every step; SoilEcology puts the rot
+                // into the ground under it, never into an invisible sink
+                const decay = decayMeat( _st, foodX[f], foodY[f], _st.foodEnergy[f] );
+                _st.foodEnergy[f] = decay.e;
+                if ( decay.dead )
                 {
-                    depositSoilEnergy( _st, foodX[f], foodY[f], rot );
-                    e -= rot;
-                    _st.foodEnergy[f] = e;
-                }
-                if ( e <= 0.02 )
-                {
-                    if ( e > 0 ) { depositSoilEnergy( _st, foodX[f], foodY[f], e ); }
-                    _st.foodEnergy[f] = 0;
                     simCounters.meatDecayEvents ++;
                     if ( counting && NUTRIENT_CYCLE_ENABLED )
                     {
-                        simCounters.nutrientsFromMeatDecay += environment.returnMeatDetritusAt( foodX[f], foodY[f], e );
+                        simCounters.nutrientsFromMeatDecay += environment.returnMeatDetritusAt( foodX[f], foodY[f], decay.remains );
                     }
                     _foodBits[f].kill();
                 }

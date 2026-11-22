@@ -1,14 +1,33 @@
 import { PREDATOR_LEVEL_THRESHOLD } from "./Parameters";
 import { BRAIN_STATE_LOOKING_FOR_FOOD, BRAIN_STATE_LOOKING_FOR_MATE, BRAIN_STATE_LOOKING_FOR_PREY, BRAIN_STATE_PURSUING_FOOD, BRAIN_STATE_PURSUING_MATE, BRAIN_STATE_PURSUING_PREY } from "./Brain";
 import { NULL_INDEX, ONE, PI2, PI_OVER_180, ZERO } from "./MathConstants";
-import { OLD_AGE_DURATION, SWIMBOT_DOT_RENDER_RADIUS, SWIMBOT_LEVEL_OF_DETAIL_DOT, SWIMBOT_LEVEL_OF_DETAIL_HIGH, SWIMBOT_LEVEL_OF_DETAIL_LOW, YOUNG_AGE_DURATION } from "./Parameters";
-import { GENITAL_INDEX, MOUTH_INDEX, NULL_PART, ROOT_PART, STARVING, SWIMBOT_GENITAL_LENGTH, SWIMBOT_MIN_MOUTH_LENGTH, SWIMBOT_MIN_MOUTH_WIDTH, SWIMBOT_MOUTH_WIDTH } from "./SwimbotTypes";
+import { LOD_MOUTH_MIN_SCALE, LOD_SEGMENT_DETAIL_MIN_SCALE, OLD_AGE_DURATION, SWIMBOT_DOT_RENDER_RADIUS, SWIMBOT_LEVEL_OF_DETAIL_DOT, SWIMBOT_LEVEL_OF_DETAIL_HIGH, SWIMBOT_LEVEL_OF_DETAIL_LOW, YOUNG_AGE_DURATION } from "./Parameters";
+import { GENITAL_INDEX, MOUTH_INDEX, NULL_PART, ROOT_PART, STARVING, SWIMBOT_GENITAL_LENGTH, SWIMBOT_MIN_MOUTH_LENGTH, SWIMBOT_MIN_MOUTH_WIDTH } from "./SwimbotTypes";
 import { Color, assert } from "./Utility";
 import { Vector2D } from "./Vector2D";
 
 // predator beaks: red, with light teeth
 const PREDATOR_MOUTH_COLOR = "rgb( 190, 38, 30 )";
 const PREDATOR_TEETH_COLOR = "rgba( 255, 244, 228, 0.95 )";
+
+// Screen-space sizes. viewScale is canvas pixels per pool unit; dividing by it
+// turns a pixel width into the world-space width the 2D canvas expects. Updated
+// once per frame so mouths, arrows and outlines stay readable when the camera
+// is three or four times higher than usual.
+const DETAIL_SEGMENT_VIEW_SCALE = LOD_SEGMENT_DETAIL_MIN_SCALE;
+
+let _viewScale       = 1;
+let _detailLineWidth = 1.35;
+let _arrowSize       = 5.5;
+let _outlineWidth    = 1.0;
+
+export function setSwimbotViewScale( viewScale: number ): void
+{
+    _viewScale = ( viewScale > 0 ) ? viewScale : 1;
+    _detailLineWidth = Math.max( 1.2, 1.35 / _viewScale );
+    _arrowSize       = Math.max( 4.5, 5.5 / _viewScale );
+    _outlineWidth    = Math.max( 0.8, 1.0 / _viewScale );
+}
 
 export function SwimbotRenderer()
 {
@@ -27,7 +46,7 @@ var    flopperYV = 0;
     const DEAD_COLOR_BLUE   = 0.3;
     const ROLLOVER_COLOR    = "rgba( 180, 190, 200, 0.7 )";
     const SELECT_COLOR      = "rgba( 255, 255, 255, 0.8 )";
-    const OUTLINE_COLOR     = "rgba( 0, 0, 0, 0.4 )";
+    const OUTLINE_COLOR     = "rgba(15, 22, 30, 0.45)";
 
     //---------------------------------
     //  spline
@@ -153,29 +172,47 @@ var    flopperYV = 0;
 				if ( _phenotype.parts[p].length > ZERO )
 				{
                     //--------------------------------------------
-                    // render the part
+                    // render the part: the chitin segments are only worth
+                    // drawing while the camera is below LOD_SEGMENT_DETAIL_MIN_SCALE;
+                    // above that the same flat stroke is used as far away
+                    // (mouths and genitals have their own, higher gate).
                     //--------------------------------------------
-
-                    _splineFactor = DEFAULT_SPLINE_FACTOR;
-
-                    if ( _phenotype.parts[p].splined )
+                    if ( _viewScale >= DETAIL_SEGMENT_VIEW_SCALE )
                     {
-                        this.renderPartSplined(p);
+                        _splineFactor = DEFAULT_SPLINE_FACTOR;
+
+                        if ( _phenotype.parts[p].splined )
+                        {
+                            this.renderPartSplined(p);
+                        }
+                        else
+                        {
+                            this.renderPartNormal(p);
+                        }
                     }
                     else
                     {
-                        this.renderPartNormal(p);
+                        const parentPosition = this.getPartParentPosition(p);
+                        _colorUtility = this.calculatePartColor(p);
+                        const red   = Math.floor( _colorUtility.red   * 255 );
+                        const green = Math.floor( _colorUtility.green * 255 );
+                        const blue  = Math.floor( _colorUtility.blue  * 255 );
+
+                        canvas.strokeStyle = "rgb( " + red + ", " + green + ", " + blue + " )";
+                        canvas.lineWidth = _phenotype.parts[p].width * 2.0;
+                        canvas.beginPath();
+                        canvas.moveTo( parentPosition.x, parentPosition.y );
+                        canvas.lineTo( _phenotype.parts[p].position.x, _phenotype.parts[p].position.y );
+                        canvas.stroke();
+                        canvas.closePath();
                     }
 
-
-
-                    //--------------------------------------------
                     //--------------------------------------------
                     // if p is mouth part, render mouth!
                     //--------------------------------------------
                     if ( p === 1 )
                     {
-                        if ( _renderingGenitalsAndMouths )
+                        if ( _renderingGenitalsAndMouths && ( _viewScale >= LOD_MOUTH_MIN_SCALE ))
                         {
                             if (
                                 ( _brain.getState() == BRAIN_STATE_LOOKING_FOR_FOOD	)
@@ -299,8 +336,8 @@ var    flopperYV = 0;
         //--------------------------------
         // outline
         //--------------------------------
-        canvas.lineWidth = 1.0;
-        canvas.strokeStyle = OUTLINE_COLOR
+        canvas.lineWidth = _outlineWidth;
+        canvas.strokeStyle = OUTLINE_COLOR;
 
         let radian = _phenotype.parts[p].currentAngle * PI_OVER_180;
 
@@ -530,7 +567,7 @@ var    flopperYV = 0;
         //---------------------------------------
         // draw outline
         //---------------------------------------
-        canvas.lineWidth = 1.0;
+        canvas.lineWidth = _outlineWidth;
         canvas.beginPath();
         canvas.moveTo( startLeftX, startLeftY );
         canvas.bezierCurveTo( control1LeftX, control1LeftY, control2LeftX, control2LeftY, endLeftX, endLeftY );
@@ -669,7 +706,7 @@ var    flopperYV = 0;
         let x = _phenotype.parts[ GENITAL_INDEX ].position.x + _focusDirection.x * genitalLength;
         let y = _phenotype.parts[ GENITAL_INDEX ].position.y + _focusDirection.y * genitalLength;
 
-		canvas.lineWidth = 1.0;
+		canvas.lineWidth = _detailLineWidth;
         canvas.strokeStyle = "rgba( 255, 255, 255, 0.7 )";
         canvas.beginPath();
         canvas.moveTo( _phenotype.parts[ GENITAL_INDEX ].position.x, _phenotype.parts[ GENITAL_INDEX ].position.y );
@@ -682,8 +719,10 @@ var    flopperYV = 0;
         //--------------------------------------------------------
         if ( _brain.getState() === BRAIN_STATE_PURSUING_MATE )
         {
-            let arrowLength = genitalLength * 0.4;
-            let arrowWidth  = genitalLength * 0.25;
+            // A constant on-screen head: the body may be only a few pixels at
+            // this camera height, but the mating arrow must still be visible.
+            let arrowLength = Math.max( _arrowSize, genitalLength * 0.4 );
+            let arrowWidth  = Math.max( _arrowSize * 0.55, genitalLength * 0.25 );
             let xLeft  = x - _focusDirection.y * arrowWidth - _focusDirection.x * arrowLength;
             let yLeft  = y + _focusDirection.x * arrowWidth - _focusDirection.y * arrowLength;
 
@@ -763,7 +802,7 @@ var    flopperYV = 0;
             rightEndY += endPerpY;
         }
 
-		canvas.lineWidth = SWIMBOT_MOUTH_WIDTH;
+		canvas.lineWidth = _detailLineWidth;
 
         //--------------------------------------------------------------
         // color: herbivores like their first body part (as in the
@@ -824,7 +863,7 @@ var    flopperYV = 0;
                 canvas.strokeStyle = PREDATOR_TEETH_COLOR;
                 canvas.stroke();
                 canvas.closePath();
-                canvas.lineWidth   = SWIMBOT_MOUTH_WIDTH;
+                canvas.lineWidth   = _detailLineWidth;
             }
         }
         else

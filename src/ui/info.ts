@@ -34,7 +34,16 @@ export function getInfoText( page )
         + "Watch the emergence of a dominant race of swimmers in about 30 minutes. Keep it running for longer and swimming skills will improve, where swimming 'skill' is determined entirely by natural selection."
         + "<br>"          
         + "<br>"          
-        + "Every time you start a new pool, the outcome will be different."   
+        + "Every time you start a new pool, the outcome will be different."
+        + "<br><br>"
+        + "<b>Legend</b> (the docked status bar): "
+        + "<span style='color:#8fd18a'>green — herbivores</span> · "
+        + "<span style='color:#e08a7a'>red — predators</span> · "
+        + "<span style='color:#a8d28a'>plants: sprouts → young → grown → trees</span> · "
+        + "<span style='color:#d8a0a0'>meat</span> · "
+        + "<span style='color:#c9b98a'>soil fertilizer</span> · "
+        + "E_total is the whole conserved energy of the world (bodies + plants + meat + soil + water + air). "
+        + "The white line on a body is a genital; the green line is a mouth. A dark rim keeps them visible when the camera is high."
     }
     
     //--------------------------------
@@ -71,13 +80,13 @@ export function getInfoText( page )
         = "<big><b>3. Background</b></big>"
         + "<br>"
         + "<br>"
-        + "This simulation is derived from an artificial life game called Darwin Pond (www.darwinpond.com). It was created by Jeffrey Ventrella at around 1996 for Rocket Science Games. Brian Dodd implemented it in Windows and also helped create some features. He has since helped develop several other games for <a href = 'http://www.wiggleplanet.com/' target = '_blank' style = 'text-decoration:none'>Wiggle Planet</a>."
+        + "This simulation is derived from an artificial life game called Darwin Pond. It was created by Jeffrey Ventrella at around 1996 for Rocket Science Games. Brian Dodd implemented it in Windows and also helped create some features. The current source and notes live in <a href = 'https://github.com/shamichvolga/genepool' target = '_blank' rel = 'noopener' style = 'text-decoration:none'>the Gene Pool repository</a>."
         + "<br>"
         + "<br>"
         + "More detail can be found in a paper called 'Attractiveness vs. Efficiency, (How Mate Preference Affects Locomotion in the Evolution of Artificial Swimming Organisms)', MIT Press (Artificial Life VI Proceedings)."
         + "<br>"
         + "<br> "                   
-        + "More background on this simulation can be found at www.Ventrella.com, as well as other biologically-inspired computer animations."   
+        + "More background and the current source code are in <a href = 'https://github.com/shamichvolga/genepool' target = '_blank' rel = 'noopener' style = 'text-decoration:none'>the Gene Pool repository</a>."
     }
     
     //--------------------------------
@@ -443,7 +452,7 @@ export function getInfoText( page )
         = "<big><b>27. Who made this thing?</b></big>"
         + "<br>"
         + "<br>"
-        + "Gene Pool was created by <a href = 'http://www.ventrella.com/' target = '_blank' style = 'text-decoration:none'>Jeffrey Ventrella</a>."
+        + "Gene Pool was created by Jeffrey Ventrella. This version is kept in <a href = 'https://github.com/shamichvolga/genepool' target = '_blank' rel = 'noopener' style = 'text-decoration:none'>the Gene Pool repository</a>."
         + "<br>"
         + "<br>"
         + "The following people have contributed ideas and technical help in the evolution of Gene Pool:"

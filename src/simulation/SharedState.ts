@@ -174,6 +174,8 @@ export class SharedState
     readonly partAngle    : Float64Array;
     readonly partAmp      : Float64Array;
     readonly partPhase    : Float64Array;
+    readonly partSinPhase : Float64Array;   // phasor of the static part phase
+    readonly partCosPhase : Float64Array;
     readonly partTurnAmp  : Float64Array;
     readonly partTurnPhase: Float64Array;
     readonly partMoment   : Float64Array;
@@ -332,6 +334,8 @@ export class SharedState
         this.partAngle     = f64( "partAngle",     partCount );
         this.partAmp       = f64( "partAmp",       partCount );
         this.partPhase     = f64( "partPhase",     partCount );
+        this.partSinPhase  = f64( "partSinPhase",  partCount );
+        this.partCosPhase  = f64( "partCosPhase",  partCount );
         this.partTurnAmp   = f64( "partTurnAmp",   partCount );
         this.partTurnPhase = f64( "partTurnPhase", partCount );
         this.partMoment    = f64( "partMoment",    partCount );

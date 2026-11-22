@@ -3,7 +3,8 @@ const INFO_RU = [
     `<big><b>1. Это Gene Pool</b></big><br><br>
 Наблюдайте за дарвиновской эволюцией: сотни виртуальных организмов соревнуются за партнёров и еду. Исследуйте этот виртуальный аквариум примитивных плавающих роботов («свимботов») и посмотрите, как предпочтения при выборе партнёра меняют ход эволюции.<br><br>
 Примерно через 30 минут может появиться доминирующая группа пловцов. Если оставить симуляцию работать дольше, навыки плавания будут улучшаться — исключительно под действием естественного отбора.<br><br>
-Каждый новый бассейн даёт другой результат.`,
+Каждый новый бассейн даёт другой результат.<br><br>
+<b>Легенда</b> (нижняя строка состояния): <span style='color:#8fd18a'>зелёный — травоядные</span> · <span style='color:#e08a7a'>красный — хищники</span> · <span style='color:#a8d28a'>растения: ростки → молодые → кусты → деревья</span> · <span style='color:#d8a0a0'>мясо</span> · <span style='color:#c9b98a'>удобрения в почве</span> · E_total — вся сохранённая энергия мира (тела + растения + мясо + почва + вода + воздух). Белая линия на теле — гениталии, зелёная — рот; тёмная обводка помогает видеть их при высоком обзоре.`,
 
     `<big><b>2. Как пользоваться Gene Pool</b></big><br><br>
 1. Откройте меню «бассейн» и запустите случайный бассейн.<br><br>
@@ -13,9 +14,9 @@ const INFO_RU = [
 5. Чтобы сохранить свимбота или состояние всего бассейна, нужно создать учётную запись. После этого можно сохранять и загружать свимботов (меню «свимбот») и бассейны (меню «бассейн»).`,
 
     `<big><b>3. Предыстория</b></big><br><br>
-Эта симуляция основана на игре об искусственной жизни Darwin Pond (www.darwinpond.com). Её создал Джеффри Вентрелла примерно в 1996 году для Rocket Science Games. Брайан Додд реализовал её для Windows и помог создать некоторые функции. Позднее он участвовал в разработке нескольких других игр для <a href='http://www.wiggleplanet.com/' target='_blank' style='text-decoration:none'>Wiggle Planet</a>.<br><br>
+Эта симуляция основана на игре об искусственной жизни Darwin Pond. Её создал Джеффри Вентрелла примерно в 1996 году для Rocket Science Games. Брайан Додд реализовал её для Windows и помог создать некоторые функции.<br><br>
 Подробности можно найти в статье «Attractiveness vs. Efficiency (How Mate Preference Affects Locomotion in the Evolution of Artificial Swimming Organisms)», MIT Press (Artificial Life VI Proceedings).<br><br>
-Дополнительные сведения об этой симуляции и другие компьютерные анимации, вдохновлённые биологией, доступны на www.Ventrella.com.`,
+Текущие исходники и заметки проекта находятся в <a href='https://github.com/shamichvolga/genepool' target='_blank' rel='noopener' style='text-decoration:none'>репозитории Gene Pool</a>.`,
 
     `<big><b>4. Привлекательность и эффективность</b></big><br><br>
 Насколько важно быть красивым? Самцу павлина приходится тратить силы на свой дорогостоящий хвост, но он помогает привлекать партнёров, а значит, важен для размножения.<br><br>
@@ -128,7 +129,7 @@ const INFO_RU = [
 стрелки: &nbsp;&nbsp;&nbsp; (сдвинуть вид микроскопа)`,
 
     `<big><b>27. Кто это создал?</b></big><br><br>
-Gene Pool создал <a href='http://www.ventrella.com/' target='_blank' style='text-decoration:none'>Джеффри Вентрелла</a>.<br><br>
+Gene Pool создал Джеффри Вентрелла. Эта версия хранится в <a href='https://github.com/shamichvolga/genepool' target='_blank' rel='noopener' style='text-decoration:none'>репозитории Gene Pool</a>.<br><br>
 В развитие Gene Pool идеями и технической помощью внесли вклад следующие люди:<br><br>
 В алфавитном порядке:<br><br>
 Brian Dodd, Bryan Galdrikian, Will Harvey, Jeremy Hussell, Mike Kaplan, Art Medlar, Luka Negoita, Ken Pearce, Scott Schafer, Julia Smith, Qarl Stiefvater, Barry Stump, TechnoZeus, Philip Ventrella, Frey Waid, Gary Walker`,

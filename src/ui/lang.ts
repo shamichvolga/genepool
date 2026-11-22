@@ -57,6 +57,13 @@ const RU: Record<string, string> =
     "startup params": "параметры старта", "initial bots": "начальные свимботы", "world energy": "энергия мира",
     "apply startup params": "применить параметры", "Then choose a preset. The settings are also saved with the panel.": "Затем выберите пресет. Настройки также сохраняются с панелью.",
     "Applied before the next pool starts. The number of bots is exact; bigger worlds simply have more room.": "Применяется до запуска нового бассейна. Число свимботов точное; в больших мирах просто больше места.",
+    "Applied before the next pool starts. The number of bots is exact, up to the slot limit; bigger worlds simply have more room.":
+        "Применяется до запуска нового бассейна. Число свимботов точное, но не больше лимита слотов; в больших мирах просто больше места.",
+    "Founders in the next random pool. Values above the simulation slot limit (MAX_SWIMBOTS) are clamped.":
+        "Основатели следующего случайного бассейна. Значения выше лимита слотов (MAX_SWIMBOTS) уменьшаются до лимита.",
+    "Scales the soil, the oases and the ambient reservoir: 5 is the reference world, 10 gives about twice the total energy.":
+        "Масштабирует почву, оазисы и запас среды: 5 — опорный мир, 10 даёт примерно вдвое больше полной энергии.",
+    "source on GitHub": "исходники на GitHub",
     "pool files": "файлы бассейна", "save .gnp": "сохранить .gnp", "save .json": "сохранить .json", "load pool…": "загрузить бассейн…",
     "download the whole pool as a .gnp file": "скачать весь бассейн файлом .gnp", "download the whole pool as a .json file": "скачать весь бассейн файлом .json", "load a .gnp or .json pool file": "загрузить файл бассейна .gnp или .json",
     "autosave slots": "слоты автосохранения", "save A": "сохранить A", "save B": "сохранить B", "save C": "сохранить C",
@@ -110,7 +117,8 @@ const RU: Record<string, string> =
     "suits": "подходит", "picky": "разборчивость", "no (gene": "нет (ген", "yes (gene": "да (ген",
     // status line and graph text
     "FROZEN (space)": "ПАУЗА (пробел)", "steps/s": "шагов/с", "steps/sec": "шагов/с", "time step": "шаг времени", "speed": "скорость", "threads": "потоков",
-    "swimbots": "свимботов", "green plants": "зелёные растения", "blue plants": "синие растения",
+    "swimbots": "свимботов", "swimbots:": "свимботов:", "herbivores:": "травоядные:", "predators:": "хищники:",
+    "green plants": "зелёные растения", "blue plants": "синие растения",
     "genetic clusters (used genes)": "генетические кластеры (по используемым генам)", "largest": "крупнейший",
     "spring": "весна", "summer": "лето", "autumn": "осень", "winter": "зима", "move": "движение", "look": "взгляд", "act": "действия",
     // footer
