@@ -131,7 +131,7 @@ export function GenePool()
 // viewScale is screen pixels per world unit. It is the same number the
     // renderers use for screen-space line widths, so the LOD switch and the
     // overlays stay in step when the camera is raised 3-4 times.
-    const COLONY_COUNT = 14;    // the 14 richest oases, shared with WorldSpawner
+    const COLONY_COUNT = Math.max( 1, Math.min( 14, oasisCentersWorld().length || 14 ));   // one colony per richest oasis actually present
 
     const INITIAL_VIEW_SCALE                = POOL_WIDTH * 0.1;
     const RACE_VIEW_SCALE                   = POOL_WIDTH * 0.3;

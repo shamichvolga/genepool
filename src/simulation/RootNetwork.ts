@@ -186,6 +186,17 @@ export function ageTrees( st: any ): void
     }
 }
 
+function isAncestor( st: any, maybeAncestor: number, node: number ): boolean
+{
+    let cur = st.plantParent[ node ], depth = 0;
+    while ( cur >= 0 && depth < 32 )
+    {
+        if ( cur === maybeAncestor ) return true;
+        cur = st.plantParent[ cur ]; depth ++;
+    }
+    return false;
+}
+
 // Starter dynasty: link young bushes that sprouted close to a tree so the
 // root network and the sap flow exist from the very first frame.
 function seedDynasties( st: any ): void
@@ -208,7 +219,7 @@ function seedDynasties( st: any ): void
             const d2 = ( st.foodX[ p ] - st.foodX[ c ] ) ** 2 + ( st.foodY[ p ] - st.foodY[ c ] ) ** 2;
             if ( d2 < bestD ) { bestD = d2; best = p; }
         }
-        if ( best >= 0 ) { st.plantParent[ c ] = best; st.plantRootFlow[ c ] = 0; }
+        if ( best >= 0 && best !== c && !isAncestor( st, best, c )) { st.plantParent[ c ] = best; st.plantRootFlow[ c ] = 0; }
     }
 }
 

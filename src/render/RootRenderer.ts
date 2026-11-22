@@ -140,7 +140,7 @@ export function lineageSize( st: any, f: number ): number
 {
     const seen = new Set<number>([ f ]);
     let p = st.plantParent[ f ], steps = 0;
-    while ( p >= 0 && steps < 256 && !seen.has( p )) { seen.add( p ); p = st.plantParent[ p ]; steps ++; }
+    while ( p >= 0 && steps < 32 && !seen.has( p )) { seen.add( p ); p = st.plantParent[ p ]; steps ++; }
     let down = 0;
     for ( let c = 0; c < st.plantParent.length; c++ ) { if ( st.plantParent[ c ] === f ) down ++; }
     let grand = 0;
