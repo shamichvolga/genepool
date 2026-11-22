@@ -64,7 +64,6 @@ import { rStrategyCooldownFactor, rStrategyReproductionEnergyFactor, killWinnerP
 // is split 70/30 between the soil under it and this reservoir; every sixteenth
 // step 3% of the reservoir trickles back into the soil. Both buffers are part
 // of the world total, so the split never creates or destroys energy.
-let _ambientEnergy = 0;
 let _totalWorldEnergy = 0;
 let _showSoil = true;             // the soil overlay is on by default
 
@@ -560,7 +559,7 @@ export function GenePool()
 	    get seedSource()             { return _seedSource; },
 	    get obstacle()               { return _obstacle; },
 	    get environment()            { return environment; },
-	    get ambientEnergy()          { return _ambientEnergy; },  set ambientEnergy(v) { _ambientEnergy = v; },
+	    get ambientEnergy()          { return 0; },
 	    get mapMeatRate()            { return _mapMeatRate; },
 	    get clock()                  { return _clock; },
 	    get currentSpeed()           { return _currentSpeed; },
@@ -683,7 +682,6 @@ export function GenePool()
 
         // the living soil starts each run with 24 dense oases, paid for out of
         // the same endowment (nothing is created from nothing)
-        _ambientEnergy = 260000 * energyMult;
         _st.soilField.fill( 0 );
         _st.foodSucking.fill( 0 );
         seedSoilField( _st, energyMult );
@@ -2067,7 +2065,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
         // Every fourth step the SAT is rebuilt; every sixteenth the ambient
         // reservoir feeds the soil and only the rich cells diffuse. The amount
         // drawn is removed from the reservoir here, so the world total is unchanged.
-        _ambientEnergy -= stepSoilEcology( _st, _clock, _ambientEnergy );
+        stepSoilEcology( _st, _clock );
 
         //------------------
         // update food
@@ -2762,7 +2760,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
                 // the other 30% goes to the ambient reservoir, which trickles
                 // 3% back into the soil every eighth step.
                 depositSoilEnergy( _st, B[ b + SS.B_POS_X ], B[ b + SS.B_POS_Y ], spent * 0.70 );
-                _ambientEnergy += spent * 0.30;
+                depositSoilEnergy( _st, B[ b + SS.B_POS_X ], B[ b + SS.B_POS_Y ], spent * 0.30 );
                 energyCycleCounters.nutrientsFromSwimming += environment.returnSwimmingEnergyAt( B[ b + SS.B_POS_X ], B[ b + SS.B_POS_Y ], spent );
             }
         }
@@ -2883,7 +2881,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	    get swimbots()           { return _swimbots; },
 	    get foodBits()           { return _foodBits; },
 	    get maxSwimbotSlot()     { return _maxSwimbotSlot; },
-	    get ambientEnergy()      { return _ambientEnergy; },
+	    get ambientEnergy()      { return 0; },
 	    get initialEnergy()      { return _totalWorldEnergy; },
 	    get phyloTree()          { return _phyloTree; },
 	    get environment()        { return environment; },
@@ -2891,7 +2889,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	};
 	this.getTotalWorldEnergy = function() { return Telemetry.totalWorldEnergy( _telemetryContext ); }
 	this.getInitialWorldEnergy = function() { return _totalWorldEnergy; }
-	this.getAmbientEnergy = function() { return _ambientEnergy; }
+	this.getAmbientEnergy = function() { return 0; }
 	this.getEcologyStats = function() { return Telemetry.ecologyStats( _telemetryContext ); }
 	const _telemetry =
 	{

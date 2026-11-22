@@ -22,7 +22,7 @@ export interface TelemetryContext
     swimbots: any[];
     foodBits: any[];
     maxSwimbotSlot: number;
-    ambientEnergy: number;
+
     initialEnergy: number;
     phyloTree: any;
     environment: any;
@@ -62,7 +62,7 @@ export function updateMorphShares( st: any ): void
 export function totalWorldEnergy( ctx: TelemetryContext ): number
 {
     const st = ctx.st;
-    let total = getAtmosphereEnergy() + ctx.ambientEnergy + totalSoilEnergy( st );
+    let total = getAtmosphereEnergy() + totalSoilEnergy( st );
     for ( let f = 0; f < MAX_FOODBITS; f++ ) { if ( st.liveFood[f] === 1 ) total += st.foodEnergy[f]; }
     for ( let s = 0; s < MAX_SWIMBOTS; s++ ) { if ( st.liveSwimbot[s] === 1 ) total += st.bots[ s * SS.BOT_STRIDE + SS.B_ENERGY ]; }
     return total;
@@ -93,7 +93,7 @@ export function ecologyStats( ctx: TelemetryContext ): any
         if ( asym > 0.05 ) asymStrong ++;
     }
     return { plants, trees, fruits, carriedSeeds, soil: ctx.soilNutrient(),
-             soilEnergy: totalSoilEnergy( st ), ambientEnergy: ctx.ambientEnergy,
+             soilEnergy: totalSoilEnergy( st ),
              atmosphere: getAtmosphereEnergy(), totalEnergy: totalWorldEnergy( ctx ),
              initialEnergy: ctx.initialEnergy,
              asymmetryMean: alive > 0 ? asymAbs / alive : 0,
@@ -132,9 +132,8 @@ export function fillTelemetry( out: any, ctx: TelemetryContext ): any
     }
     out.eBots = eBots;   out.ePlants = ePlants; out.eMeat = eMeat;
     out.eSoil = totalSoilEnergy( st );
-    out.eAmbient = ctx.ambientEnergy;
     out.eAtmosphere = getAtmosphereEnergy();
-    out.eTotal = eBots + ePlants + eMeat + out.eSoil + ctx.ambientEnergy + out.eAtmosphere;
+    out.eTotal = eBots + ePlants + eMeat + out.eSoil + out.eAtmosphere;
     out.eInitial = ctx.initialEnergy;
     out.eDelta = out.eTotal - ctx.initialEnergy;
     out.sprouts = sprouts; out.young = young; out.grown = grown; out.trees = trees;

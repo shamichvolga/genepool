@@ -318,20 +318,10 @@ export function oasisCentersWorld(): { x: number, y: number, energy: number }[]
 // ambient reservoir returns 3% evenly, and only the rich cells diffuse.
 // Mirroring a missing/desert neighbour with the cell's own value keeps the
 // update exactly conservative: no flux out of the field, none into the desert.
-export function stepSoilEcology( st: SharedState, clock: number, ambient: number ): number
+export function stepSoilEcology( st: SharedState, clock: number ): number
 {
     if (( clock & 3 ) === 0 ) rebuildSoilSAT( st );
     if (( clock & ( DIFFUSION_INTERVAL - 1 )) !== 0 ) return 0;
-    let drawn = 0;
-    if ( ambient > 0 )
-    {
-        drawn = Math.min( ambient * 0.03, ambient );
-        if ( drawn > 0 )
-        {
-            const per = drawn / CELLS, f = st.soilField;
-            for ( let i = 0; i < CELLS; i++ ) { f[i] += per; }
-        }
-    }
     if ( _tmp === null ) { _tmp = new Float32Array( CELLS ); }
     const tmp = _tmp, f = st.soilField;
     for ( let y = 0; y < N; y++ )
@@ -351,7 +341,7 @@ export function stepSoilEcology( st: SharedState, clock: number, ambient: number
         }
     }
     f.set( tmp );
-    return drawn;
+    return 0;
 }
 // Carcasses rot in place: the rot is real energy returned to the ground under
 // them, never an invisible disappearance into the atmosphere.

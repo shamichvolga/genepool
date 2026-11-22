@@ -177,26 +177,6 @@ export function updateFood( ctx: FoodContext ): void
     }
     st.params[ SS.PARAM_MATURE_TREE_COUNT ] = treeCount;
 
-    if ( numType0FoodBits + numType1FoodBits < 350 && ctx.ambientEnergy > 20 )
-    {
-        const child = api.findLowestDeadFoodBitInArray();
-        if ( child !== NULL_INDEX )
-        {
-            api.randomPointInPool( ctx.vectorUtility );
-            const type = env.active ? api.choosePlantTypeAt( ctx.vectorUtility.x, ctx.vectorUtility.y ) : 0;
-            if ( !env.active || api.plantCanGrowAt( ctx.vectorUtility.x, ctx.vectorUtility.y, type ))
-            {
-                ctx.ambientEnergy -= 3.0;
-                ctx.foodBits[child].initialize( child );
-                ctx.foodBits[child].setType( type );
-                ctx.foodBits[child].setEnergy( 3.0 );
-                ctx.foodBits[child].setPosition( ctx.vectorUtility );
-                ctx.foodBitGrid.addExtra( child );
-                if ( type === PLANT_TYPE_WARM ) { numType0FoodBits ++; } else { numType1FoodBits ++; }
-            }
-        }
-    }
-
     if ( env.active )
     {
         if ( ORIGINAL_FOOD_ENABLED ) { api.regrowFoodOriginal( numType0FoodBits + numType1FoodBits ); return; }
