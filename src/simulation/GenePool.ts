@@ -3086,6 +3086,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
         // which funds the next sprouts; do not double-count a soil deposit.
         _foodBits[f].kill();
         RootNetwork.unlinkChildren( _st, f );
+        if ( _st.selectedPlantIndex === f ) { _st.selectedPlantIndex = -1; }
     }
 
     let _lastShadeClock = -999;
@@ -4980,6 +4981,7 @@ this.testPredation = function()
     for (let f = 0; f < MAX_FOODBITS; f++) {
         _foodBits[f].kill();
         RootNetwork.unlinkChildren( _st, f );
+        if ( _st.selectedPlantIndex === f ) { _st.selectedPlantIndex = -1; }
     }
 
     // ensure thresholds

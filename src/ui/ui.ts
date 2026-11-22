@@ -1,3 +1,4 @@
+import { renderPlantInspector } from "./PlantInspectorUI";
 import { TWO_PLANT_TYPES } from "../simulation/Ecology";
 import { WORLD_SCALE } from "../simulation/World";
 import { drawPetriPreview, petriSettings, PETRI_LAYOUTS } from "../simulation/Petri";
