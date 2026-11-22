@@ -36,7 +36,7 @@ import { DEFAULT_FOOD_BIT_ENERGY, FOOD_BIT_GRAB_RADIUS, FoodBit } from "./FoodBi
 import { Genotype } from "./Genotype";
 import { globalTweakers, gpRandom, simClock, simCounters } from "./Globals";
 import { NULL_INDEX, ONE, ONE_HALF, ONE_THIRD, PI_OVER_180, ZERO } from "./MathConstants";
-import { BIG_BODY_STOMACH_ENABLED, STOMACH_REFERENCE_MASS } from "./Parameters";
+import { BIG_BODY_STOMACH_ENABLED, STOMACH_REFERENCE_MASS, killWinnerPressure, morphBandOfParts, rStrategyMaturityFactor } from "./Parameters";
 import { AUTOTOMY_REGROW_DELAY, AUTOTOMY_DECOY_SPAN, PREY_BODY_ENERGY, ATTACK_COOLDOWN, ATTACK_SUCCESS_CHANCE, ENVIRONMENT_ATTACK_SUCCESS_CHANCE, BASAL_METABOLISM, DEFAULT_SWIMBOT_HUNGER_THRESHOLD, FAILED_HUNT_COOLDOWN_FRACTION, FOOD_TYPE_OFFSET, NEWBORN_SIZE_SCALE, OLD_AGE_DURATION, PREDATION_ENERGY_TRANSFER, PREDATOR_FLEE_RADIUS, PREDATOR_LEVEL_THRESHOLD, PREY_SCAN_COOLDOWN, PREY_SCAN_RADIUS_GROWTH, PREY_SCAN_RADIUS_MAX_SCALE, RANDOM_MATING_CONTROL, SWIMBOT_MAX_ENERGY, SWIMBOT_SELECT_RADIUS_SCALAR, YOUNG_AGE_DURATION } from "./Parameters";
 import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
 import { SwimbotRenderer } from "./SwimbotRenderer";
@@ -1531,9 +1531,9 @@ _position.copyFrom( position );
         _M[ _m + SS.M_CURRENT_W ]       = 2 * geneAverage( _genotype, GENES_CURRENT ) - 1;   // -1 .. +1: up the stream counts as nearer .. down the stream does
         for (let k = 0; k < 4; k++) { _M[ _m + SS.M_IMMUNE_0 + k ] = _genotype.getGeneValue( GENES_IMMUNE[k] ) / 255; }
         _B[ _b + SS.B_RUDDER ]          = RUDDER_MAX_TURN * geneAverage( _genotype, GENES_RUDDER );
-        _M[ _m + SS.M_MATURE_AGE ]      = SIZE_MATURITY_ENABLED
+        _M[ _m + SS.M_MATURE_AGE ]      = ( SIZE_MATURITY_ENABLED
             ? YOUNG_AGE_DURATION * Math.min( 4, Math.max( 0.5, _phenotype.mass / 410 ))
-            : YOUNG_AGE_DURATION;
+            : YOUNG_AGE_DURATION ) * rStrategyMaturityFactor( _phenotype.numParts );
         const antennaBonus = 1 + 0.12 * Math.min( 2, _numAntennae );
         _M[ _m + SS.M_VIEW_RADIUS ]     = ( SIZE_SCALED_VISION_ENABLED ? SWIMBOT_VIEW_RADIUS * Math.pow( Math.max( 1, _phenotype.mass ) / 410, 0.35 ) : SWIMBOT_VIEW_RADIUS ) * antennaBonus;
         _M[ _m + SS.M_GRAB_RADIUS ]     = SIZE_SCALED_GRAB_ENABLED ? FOOD_BIT_GRAB_RADIUS * Math.pow( Math.max( 1, _phenotype.mass ) / 410, 0.25 ) : FOOD_BIT_GRAB_RADIUS;
@@ -2496,6 +2496,23 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
                     : parts <= 8 ? 0.68
                     : parts <= 12 ? 0.86
                     : 0.92;
+            }
+            // Tender sprouts are their own niche: a compact grazer thrives on
+            // them; a 13-16 part body is too bulky to live on young leaves.
+            if ( foodType !== 2 && foodWood < WOOD_PER_FRUIT_TIER )
+            {
+                const parts = _phenotype.numParts;
+                if ( parts >= 3 && parts <= 8 ) { eta = 0.88; }
+                else if ( parts <= 12 ) { eta = 0.55; }
+                else { eta = 0.42; }
+            }
+            // Kill-the-Winner: when one size form dominates the herbivore
+            // guild, digestion fades smoothly as its share passes 22%.
+            if (( _shared !== null ) && ( foodType !== 2 ))
+            {
+                const parts = _phenotype.numParts;
+                const share = _shared.params[ SS.PARAM_PART_SHARE_BASE + Math.max( 0, Math.min( 15, parts - 1 )) ];
+                eta *= 1 - killWinnerPressure( share );
             }
             const gutGain = removedEnergy * eta;
             const undigested = removedEnergy - gutGain;

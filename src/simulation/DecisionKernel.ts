@@ -36,7 +36,7 @@ import { BRAIN_SIZE, NUM_HIDDEN, NUM_INPUTS, NUM_OUTPUTS, DRIVE_OUTPUTS, THINK_P
 import { biteEnergy } from "./PlantSize";
 import { currentAt, currentDriftX, currentDriftY, currentStrength } from "./Currents";
 import { CURRENT_AWARENESS_ENABLED, CURRENT_SPEED, CURRENT_TRIGGER_CHANGE_MIN, CURRENT_TRIGGER_CHANGE_MAX } from "./Parameters";
-import { PLANT_SIZE_ENABLED } from "./Parameters";
+import { PLANT_SIZE_ENABLED, escapeTurnBonus } from "./Parameters";
 import { CANNIBAL_GENE_THRESHOLD, KIN_NOT_EATEN_ENABLED, ONLY_GROWN_EAT_YOUNG_ENABLED, EVENT_DRIVEN_LOOK_ENABLED, EVENT_CALM_LOOK_PERIOD, EVENT_CALM_MIN_DISTANCE, DESPERATE_CANNIBALISM_ENABLED, DESPERATE_ENERGY_SHARE, CANNIBAL_PREY_MASS_SHARE, DESPERATE_PREY_MASS_SHARE, LIMBS_CATCH_YOUNG_ENABLED, YOUNG_CANNIBALISM_ENABLED, BITE_AT_CONTACT_ENABLED, CONTACT_EATING_ENABLED, AUTOTOMY_DECOY_SPAN, CLIMATE_PROBE_DISTANCE, CLIMATE_STEERING, SOCIAL_STEERING, BODY_TEMPERATURE_INERTIA_ENABLED, SELF_CANNIBALISM_ENABLED,
          PREDATOR_TARGET_SELECTION_ENABLED, PREDATOR_FLEE_RADIUS, PREDATOR_LEVEL_THRESHOLD, PREY_SCAN_COOLDOWN, PREY_SCAN_RADIUS_GROWTH,
          PREY_SCAN_RADIUS_MAX_SCALE, PREDATOR_VISION_SCALE, SWIMBOT_MAX_ENERGY, BITE_ALONG_PARTS_ENABLED } from "./Parameters";
@@ -782,13 +782,16 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
     //-------------------------------------------------
     const previousX = B[ b + SS.B_FOCUS_X ], previousY = B[ b + SS.B_FOCUS_Y ];
     const goalX = B[ b + SS.B_GOAL_X ], goalY = B[ b + SS.B_GOAL_Y ];
-    let fx = previousX + goalX * BRAIN_FOCUS_TARGET_SHIFT_STRENGTH;
-    let fy = previousY + goalY * BRAIN_FOCUS_TARGET_SHIFT_STRENGTH;
+    // A 3-5 part body is quick enough to snap away from a predator.
+    const shift = BRAIN_FOCUS_TARGET_SHIFT_STRENGTH
+        * ( state === BRAIN_STATE_FLEEING_PREDATOR ? escapeTurnBonus( B[ b + SS.B_NUM_PARTS ] ) : 1 );
+    let fx = previousX + goalX * shift;
+    let fy = previousY + goalY * shift;
     if ( previousX * goalX + previousY * goalY < 0 )
     {
         // a near-reversal: turn by a small fixed step along the shortest arc
         // instead of letting the additive shift swing the heading across the circle
-        const turn = Math.min( 0.06, BRAIN_FOCUS_TARGET_SHIFT_STRENGTH );
+        const turn = Math.min( 0.06, shift );
         const sign = ( previousX * goalY - previousY * goalX ) >= 0 ? 1 : -1;
         const sn = sign * turn, cs = 1 - 0.5 * turn * turn;
         fx = previousX * cs - previousY * sn;

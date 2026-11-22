@@ -13,7 +13,7 @@
 //------------------------------------------------------------------------------
 import { currentAt, currentDriftX, currentDriftY } from "./Currents";
 import { ONE, ONE_HALF, PI_OVER_180, ZERO } from "./MathConstants";
-import { BODY_HYDRODYNAMICS_ENABLED, GROWTH_COSTS_ENERGY_ENABLED, GROWTH_ENERGY_PER_MASS, MAX_SWIMBOTS, NEWBORN_SIZE_SCALE, OLD_AGE_DURATION, RUDDER_COST_PER_DEGREE, RUDDER_ENABLED, STEER_BY_SWIM_DIRECTION_ENABLED, SWIM_DIRECTION_SMOOTHING, SWIMBOT_SELECT_RADIUS_SCALAR, YOUNG_AGE_DURATION } from "./Parameters";
+import { BODY_HYDRODYNAMICS_ENABLED, GROWTH_COSTS_ENERGY_ENABLED, GROWTH_ENERGY_PER_MASS, KILL_WINNER_METABOLISM_MULT, MAX_SWIMBOTS, NEWBORN_SIZE_SCALE, OLD_AGE_DURATION, PREDATOR_LEVEL_THRESHOLD, RUDDER_COST_PER_DEGREE, RUDDER_ENABLED, STEER_BY_SWIM_DIRECTION_ENABLED, SWIM_DIRECTION_SMOOTHING, SWIMBOT_SELECT_RADIUS_SCALAR, YOUNG_AGE_DURATION, killWinnerPressure } from "./Parameters";
 import { applyWaterDrag, bodyMotionFactors, BodyMotionFactors } from "./BodyPhysics";
 import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
 import { CONTINUAL_ENERGY_DRAIN, ENERGY_EFFICIENCY_MEASUREMENT_PERIOD, ENERGY_USED_UP_SWIMMING, GENITAL_INDEX, MAX_PARTS, MOUTH_INDEX, ROOT_PART, STARVING, STARVING_TIMER_DELTA, TIMER_DELTA_INCREASE_RATE, WALL_BOUNCE } from "./SwimbotTypes";
@@ -75,7 +75,8 @@ import {
     B_LAST_ENERGY, B_LAST_X, B_LAST_Y, B_MOUTH_X, B_MOUTH_Y, B_NUM_PARTS, B_POS_X, B_POS_Y, B_SELECT_RADIUS,
     B_SPIN, B_SUM_LENGTHS, B_TIMER, B_TIMER_DELTA, B_VEL_X, B_VEL_Y, BOT_STRIDE, C_A, M_X, M_Y, N_X, N_Y, P_X,
     P_Y, PARAM_MAX_LIFESPAN, PARAM_STEP, PART_STRIDE, PS, Q_X, Q_Y, SharedState, V_X, V_Y,
-    PARAM_WALL_COUNT, PARAM_WALL_BASE, PARAM_MATURE_TREE_COUNT
+    PARAM_WALL_COUNT, PARAM_WALL_BASE, PARAM_MATURE_TREE_COUNT,
+    PARAM_PART_SHARE_BASE
 } from "./SharedState";
 import { PROFILER_ENABLED, profEnter, profExit, PROF_PHYSICS_A, PROF_PHYS_KINEMATICS, PROF_PHYS_FLUID, PROF_PHYS_CAVITY_JET, PROF_PHYS_TREES, PROF_PHYS_COLLISIONS } from "./Profiler";
 
@@ -666,7 +667,17 @@ export function physicsPartA( s: number, st: SharedState ): void
         B[ b + B_LAST_ENERGY ] = energy;
     }
 
-    energy -= CONTINUAL_ENERGY_DRAIN + B[ b + B_BASAL ];
+    // A dominant herbivore size form pays a slightly higher basal cost; the
+    // extra energy goes to the atmosphere like ordinary metabolism, so the
+    // closed cycle is unaffected.
+    let kwBasal = 0;
+    if ( st.predator[s] <= PREDATOR_LEVEL_THRESHOLD )
+    {
+        const parts = B[ b + B_NUM_PARTS ];
+        const share = st.params[ PARAM_PART_SHARE_BASE + Math.max( 0, Math.min( 15, parts - 1 )) ];
+        kwBasal = B[ b + B_BASAL ] * killWinnerPressure( share ) * KILL_WINNER_METABOLISM_MULT;
+    }
+    energy -= CONTINUAL_ENERGY_DRAIN + B[ b + B_BASAL ] + kwBasal;
 
     B[ b + B_GROWTH      ] = growth;
     B[ b + B_TIMER_DELTA ] = timerDelta;

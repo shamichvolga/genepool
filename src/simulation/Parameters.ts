@@ -127,7 +127,7 @@ export const PREDATOR_CAPTURE_RADIUS_SCALE = 1.12;
 export const FAILED_HUNT_COOLDOWN_FRACTION = 0.35;
 
 // Доля хищников в стартовой популяции (у остальных ген хищности низкий).
-export const INITIAL_PREDATOR_FRACTION     = 0.1;
+export const INITIAL_PREDATOR_FRACTION     = 0.15;
 
 // (There is no scheduled "predators appear now" any more: predation is only a
 //  gene. About INITIAL_PREDATOR_FRACTION of the founders are born predators,
@@ -578,3 +578,49 @@ export const WAKE_IMPULSE_SHARE             = 0.15;
 export const QUADRATIC_WATER_ENABLED        = false;
 export const JOINT_MIN_ANGLE                = -75;
 export const JOINT_MAX_ANGLE                = 75;
+
+//------------------------------------------------------------------------------
+// Size niches. Small bodies are r-strategists: they mature sooner, need less
+// food to breed and recover faster. Large ones are K-strategists and breed
+// more slowly. No multipliers are printed - only timing and appetite change.
+//------------------------------------------------------------------------------
+export function rStrategyCooldownFactor( parts: number ): number
+{
+    return parts <= 5 ? 0.75 : parts <= 10 ? 1.0 : 1.25;
+}
+export function rStrategyMaturityFactor( parts: number ): number
+{
+    return parts <= 8 ? 0.50 : parts <= 12 ? 1.0 : 1.2;
+}
+export function rStrategyReproductionEnergyFactor( parts: number ): number
+{
+    return parts <= 8 ? 0.70 : 1.0;
+}
+
+// Kill-the-Winner: a size form that dominates the herbivores becomes a little
+// less efficient and pays a slightly higher basal cost. The pressure starts
+// at 22% and reaches its 25% cap at 60%; it is smooth in between.
+export const KILL_WINNER_SHARE_START = 0.22;
+export const KILL_WINNER_SHARE_FULL  = 0.60;
+export const KILL_WINNER_MAX_PENALTY = 0.25;
+// The extra basal cost is proportional to the same pressure, but a body can
+// afford a far larger metabolic bill than a 25% loss of digestive efficiency.
+export const KILL_WINNER_METABOLISM_MULT = 20.0;
+// A crowded form also waits longer between births: the same pressure that
+// raises its bill slows its reproduction. This is what keeps one form from
+// filling the pool after it wins a temporary feeding advantage.
+export const KILL_WINNER_REPRO_MULT = 20.0;
+export function killWinnerPressure( share: number ): number
+{
+    if ( !( share > KILL_WINNER_SHARE_START )) return 0;
+    const t = ( share - KILL_WINNER_SHARE_START ) / ( KILL_WINNER_SHARE_FULL - KILL_WINNER_SHARE_START );
+    return KILL_WINNER_MAX_PENALTY * Math.min( 1, t );
+}
+export function morphBandOfParts( parts: number ): number
+{
+    return parts <= 5 ? 0 : parts <= 8 ? 1 : parts <= 12 ? 2 : 3;
+}
+export function escapeTurnBonus( parts: number ): number
+{
+    return ( parts >= 3 && parts <= 5 ) ? 1.18 : 1.0;
+}

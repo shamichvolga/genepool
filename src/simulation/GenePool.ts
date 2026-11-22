@@ -53,7 +53,11 @@ import { ViewTracking, ViewTrackingMode } from "./ViewTracking";
 import { GenePoolState } from "./core/GenePoolState";
 import { createGenePoolRenderer } from "./GenePoolRenderer";
 import * as Serializer from "./GenePoolSerializer";
-import { decayMeat, depositSoilEnergy, oasisCentersWorld, plantStageCap, seedSoilField, soilPlantGrowth, SOIL_START_ENERGY, stepSoilEcology, totalSoilEnergy } from "./SoilEcology";
+import { decayMeat, depositSoilEnergy, oasisCentersWorld, plantStageCap, seedSoilField, soilPlantGrowth, SOIL_START_ENERGY, stepSoilEcology } from "./SoilEcology";
+import * as Telemetry from "./WorldTelemetry";
+import * as FoodEcology from "./FoodEcology";
+import * as Spawner from "./WorldSpawner";
+import { rStrategyCooldownFactor, rStrategyReproductionEnergyFactor, killWinnerPressure, KILL_WINNER_REPRO_MULT } from "./Parameters";
 
 // The living soil has its own ambient reservoir. Energy that a swimmer spends
 // is split 70/30 between the soil under it and this reservoir; every sixteenth
@@ -62,10 +66,6 @@ import { decayMeat, depositSoilEnergy, oasisCentersWorld, plantStageCap, seedSoi
 let _ambientEnergy = 0;
 let _totalWorldEnergy = 0;
 let _showSoil = true;             // the soil overlay is on by default
-
-// Founders start across a wide disk instead of a tight knot: 2.5 x the old
-// Garden of Eden radius gives every newcomer room and access to plants.
-const START_SPAWN_SPREAD = 2.5;
 
 //------------------
 export function GenePool()
@@ -130,10 +130,7 @@ export function GenePool()
 // viewScale is screen pixels per world unit. It is the same number the
     // renderers use for screen-space line widths, so the LOD switch and the
     // overlays stay in step when the camera is raised 3-4 times.
-    const FOUNDER_SPAWN_MARGIN              = 200;   // keep founders away from the walls
-    const COLONY_COUNT                      = 14;    // the 14 richest oases
-    const COLONY_RADIUS                     = 550;   // world units around a centre
-    const COLONY_MIN_DISTANCE               = 45;    // founders keep this apart
+    const COLONY_COUNT = 14;    // the 14 richest oases, shared with WorldSpawner
 
     const INITIAL_VIEW_SCALE                = POOL_WIDTH * 0.1;
     const RACE_VIEW_SCALE                   = POOL_WIDTH * 0.3;
@@ -146,9 +143,6 @@ export function GenePool()
     //const SWIMBOT_DATA_UPDATE_PERIOD        = 30;
     const CAMERA_TRACKING_UPDATE_PERIOD     = 10;
     const CLONE_SEPARATION                  = 10.0;
-    const FOOD_RACE_SIZE                    = 1000;
-    const FOOD_BANG_SIZE                    = 1700;
-
 	//----------------------------------------------------
 	// variables
 	//----------------------------------------------------
@@ -551,6 +545,56 @@ export function GenePool()
 	//------------------------------------------
 	this.onSwimbotDied = null;
 	this.startMode = -1;
+	// Live views for the extracted modules. Getters read the closure variables
+	// on every access, so no state is copied and the worker layout is unchanged.
+	const _foodContext: any =
+	{
+	    get st()                     { return _st; },
+	    get foodBits()               { return _foodBits; },
+	    get aliveFoodBitIndices()    { return _aliveFoodBitIndices; },
+	    get plantShade()             { return _plantShade; },
+	    get foodBitGrid()            { return _foodBitGrid; },
+	    get foodGridResult()         { return _foodGridResult; },
+	    get vectorUtility()          { return _vectorUtility; },
+	    get seedSource()             { return _seedSource; },
+	    get obstacle()               { return _obstacle; },
+	    get environment()            { return environment; },
+	    get ambientEnergy()          { return _ambientEnergy; },  set ambientEnergy(v) { _ambientEnergy = v; },
+	    get mapMeatRate()            { return _mapMeatRate; },
+	    get clock()                  { return _clock; },
+	    get currentSpeed()           { return _currentSpeed; },
+	    get classicSeedDebt()        { return _classicSeedDebt; }, set classicSeedDebt(v) { _classicSeedDebt = v; },
+	    api:
+	    {
+	        buildCanopyShade:        () => buildCanopyShade(),
+	        killPlant:               (f) => killPlant( f ),
+	        findLowestDeadFoodBitInArray: (meat) => this.findLowestDeadFoodBitInArray( meat ),
+	        randomPointInPool:       (v) => this.randomPointInPool( v ),
+	        choosePlantTypeAt:       (x, y) => this.choosePlantTypeAt( x, y ),
+	        plantCanGrowAt:          (x, y, type) => this.plantCanGrowAt( x, y, type ),
+	        findRandomLivingPlant:   () => this.findRandomLivingPlant(),
+	        findRandomLivingFoodBit: (type) => this.findRandomLivingFoodBit( type ),
+	        findSeedParent:          (type) => this.findSeedParent( type ),
+	        placeSeed:               (child, parent, distance) => this.placeSeed( child, parent, distance ),
+	        rainMapMeat:             () => this.rainMapMeat(),
+	        regrowFoodOriginal:      (plants) => this.regrowFoodOriginal( plants ),
+	        regrowFoodEnvironment:   (t0, t1) => this.regrowFoodEnvironment( t0, t1 )
+	    }
+	};
+	const _presetFoodContext: any =
+	{
+	    get numFoodBits() { return _numFoodBits; }, set numFoodBits(v) { _numFoodBits = v; },
+	    get foodBits() { return _foodBits; },
+	    get poolCenter() { return _poolCenter; },
+	    get aliveFoodBitIndices() { return _aliveFoodBitIndices; },
+	    setFoodSpread:            (v) => this.setFoodSpread( v ),
+	    setFoodGrowthDelay:       (v) => this.setFoodGrowthDelay( v )
+	};
+	function fundPlant( f, requested, donor: number = NULL_INDEX )
+	{
+	    return FoodEcology.fundPlant( _foodContext, f, requested, donor );
+	}
+
 	this.startSimulation = function( mode )
 	{
 	    this.startMode = mode;
@@ -632,8 +676,8 @@ export function GenePool()
         // Clamping keeps a typo in the input from ruining the world.
         const worldEnergy = START_ENERGY_FACTOR;
         const energyMult = Math.max( 0.4, Math.min( 10, worldEnergy / 5 ));
-        const START_FOOD_ENERGY        = INITIAL_NUM_FOODBITS * PLANT_SPROUT_ENERGY;
-        const START_ATMOSPHERE_RESERVE = 25000;
+        const START_FOOD_ENERGY        = INITIAL_NUM_FOODBITS * PLANT_SPROUT_ENERGY * energyMult;
+        const START_ATMOSPHERE_RESERVE = 25000 * energyMult;
         resetAtmosphere( SOIL_START_ENERGY * energyMult + START_FOOD_ENERGY + START_ATMOSPHERE_RESERVE );
 
         // the living soil starts each run with 24 dense oases, paid for out of
@@ -783,297 +827,24 @@ _camera.setScale( POOL_WIDTH );
         //----------------------------------
         // initialize swimbots
         //----------------------------------
-        for (let i=0; i<_numSwimbots; i++)
-        {
-            let initialPosition = new Vector2D();
-
-            initialPosition.setToRandomLocationInDisk( _poolCenter, _gardenOfEdenRadius * START_SPAWN_SPREAD );
-
-
-if ( mode === SimulationStartMode.SPECIES )
-{
-    let s = POOL_WIDTH * 0.4;
-
-    let x = gpRandom() * s;
-    let y = POOL_HEIGHT * ONE_HALF - s * ONE_HALF + + gpRandom() * s;
-
-    if ( gpRandom() < ONE_HALF )
-    {
-        x = POOL_WIDTH - x;
-    }
-
-    initialPosition.setXY( x, y )
-}
-else if ( mode === SimulationStartMode.TEST_MINI_POOL )
-{
-    // four corners of a small square around the food in the centre
-    const dx = ( i % 2 === 0 ) ? -800 : 800;
-    const dy = ( i < 2 )      ? -800 : 800;
-    initialPosition.setXY( _poolCenter.x + dx, _poolCenter.y + dy );
-}
-
-
-            //-----------------------------------------
-            // yo, initial age is distributed
-            //-----------------------------------------
-            let weightedRandomNormal = gpRandom();
-
-            //I'm running various tests - to understand why there's a sharp die-off when maximumLifeSpan is 15000.
-            //let weightedRandomNormal = gpRandom() * gpRandom();
-            //let weightedRandomNormal = gpRandom() * gpRandom() * gpRandom();
-            //let weightedRandomNormal = Math.sqrt( gpRandom() );
-
-
-            let initialAge = YOUNG_AGE_DURATION + Math.floor( ( globalTweakers.maximumLifeSpan - YOUNG_AGE_DURATION ) * weightedRandomNormal );
-
-            assert( ( initialAge >= YOUNG_AGE_DURATION ), "Genepool.js: startSimulation: ( initialAge >= YOUNG_AGE_DURATION )" );
-            assert( ( initialAge <= globalTweakers.maximumLifeSpan ), "Genepool.js: startSimulation: ( initialAge <= globalTweakers.maximumLifeSpan )" );
-
-            let initialAngle    = getRandomAngleInDegrees(); //-180.0 + gpRandom() * 360.0;
-            // A founder's own store is deliberately small and independent of
-            // the world-energy slider: that slider pays for the environment.
-            let initialEnergy   = SWIMBOT_MAX_ENERGY * FOUNDER_ENERGY_FACTOR;
-
-            //--------------------------------------------------
-            // set values according to sim type
-            //--------------------------------------------------
-
-            //---------------------------------
-            // neighborhood
-            //---------------------------------
-            if ( mode === SimulationStartMode.NEIGHBORHOOD )
-            {
-                let sqrt = Math.floor( Math.sqrt( _numSwimbots ) );
-                let xMod = i % sqrt;
-                let yMod = Math.floor( ( i / _numSwimbots ) * sqrt );
-
-                let xFraction = xMod / sqrt;
-                let yFraction = yMod / sqrt;
-
-                // Genes still vary smoothly across the founders, but the bodies
-                // themselves now start in the 14 richest oases, like Random pools.
-                this.randomFounderPoint( initialPosition, i );
-
-                for (let g=0; g<NUM_GENES; g++)
-                {
-                    let value = ZERO;
-
-                    if ( _neighborhoodAxis[g] )
-                    {
-                        value = ONE_HALF + ONE_HALF * Math.sin( ( _neighborhoodX[g] + ( - ONE_HALF + xFraction ) ) * NEIGHBORHOOD_FREQ  );
-                    }
-                    else
-                    {
-                        value = ONE_HALF + ONE_HALF * Math.sin( ( _neighborhoodY[g] + ( - ONE_HALF + yFraction ) ) * NEIGHBORHOOD_FREQ  );
-                    }
-
-                    if ( value < ZERO ) { value = ZERO; }
-                    if ( value > ONE  ) { value = ONE;  }
-
-                    let geneValue = Math.floor( ( BYTE_SIZE - 1 ) * value );
-
-                    _myGenotype.setGeneValue( g, geneValue );
-                }
+        // The founding rules live in WorldSpawner; GenePool keeps only the
+        // clock, the map state and the pool-wide reset performed above.
+        Spawner.spawnFounders({
+            mode, numSwimbots: _numSwimbots, poolCenter: _poolCenter,
+            gardenOfEdenRadius: _gardenOfEdenRadius, swimbots: _swimbots,
+            genotype: _myGenotype, embryology: _embryology, familyTree: _familyTree,
+            clock: _clock, map: _map, environment, petri, energyMult,
+            colonyCenters: _colonyCenters, colonySites: _colonySites,
+            neighborhoodAxis: _neighborhoodAxis, neighborhoodX: _neighborhoodX, neighborhoodY: _neighborhoodY,
+            api: {
+                randomPointInZone:        (v, zone) => this.randomPointInZone( v, zone ),
+                setEcologyGenesForPlace:  (g, x, y) => this.setEcologyGenesForPlace( g, x, y ),
+                growFounderForSeed:       (seed) => this.growFounderForSeed( seed ),
+                narrowFounderTolerance:   (g, x, y) => this.narrowFounderTolerance( g, x, y ),
+                getSwimbotGenes:          (i) => this.getSwimbotGenes( i ),
+                getSwimbotEvolutionTraits:(i) => this.getSwimbotEvolutionTraits( i )
             }
-            //---------------------------------
-            // froggies
-            //---------------------------------
-            else if ( mode === SimulationStartMode.FROGGIES )
-            {
-                _myGenotype.setToFroggy();
-            }
-            //---------------------------------
-            // tango
-            //---------------------------------
-            else if ( mode === SimulationStartMode.TANGO )
-            {
-                if ( i === 0 ) { _myGenotype.setToPreset( PRESET_GENOTYPE_DARWIN ); }
-                if ( i === 1 ) { _myGenotype.setToPreset( PRESET_GENOTYPE_MENDEL ); }
-
-                if ( i === 0 ) { initialPosition.setXY( _poolCenter.x - 100 * ONE_HALF, _poolCenter.y ); }
-                if ( i === 1 ) { initialPosition.setXY( _poolCenter.x + 100 * ONE_HALF, _poolCenter.y ); }
-            }
-            //---------------------------------
-            // race
-            //---------------------------------
-            else if ( mode === SimulationStartMode.RACE )
-            {
-                /*
-                if ( i === 0 ) { _myGenotype.setToPreset( PRESET_GENOTYPE_MARGULIS   ); }
-                if ( i === 1 ) { _myGenotype.setToPreset( PRESET_GENOTYPE_MARGULIS   ); }
-                if ( i === 2 ) { _myGenotype.setToPreset( PRESET_GENOTYPE_DAWKINS  ); }
-                if ( i === 3 ) { _myGenotype.setToPreset( PRESET_GENOTYPE_DAWKINS  ); }
-                */
-
-                if ( i === 0 ) { _myGenotype.setToPreset( PRESET_GENOTYPE_WILSON   ); }
-                if ( i === 1 ) { _myGenotype.setToPreset( PRESET_GENOTYPE_WILSON   ); }
-                if ( i === 2 ) { _myGenotype.setToPreset( PRESET_GENOTYPE_DENNETT  ); }
-                if ( i === 3 ) { _myGenotype.setToPreset( PRESET_GENOTYPE_DENNETT  ); }
-
-                if ( i === 0 ) { initialPosition.setXY( _poolCenter.x - FOOD_RACE_SIZE, _poolCenter.y + FOOD_RACE_SIZE      ); }
-                if ( i === 1 ) { initialPosition.setXY( _poolCenter.x - FOOD_RACE_SIZE, _poolCenter.y + FOOD_RACE_SIZE - 60 ); }
-                if ( i === 2 ) { initialPosition.setXY( _poolCenter.x + FOOD_RACE_SIZE, _poolCenter.y + FOOD_RACE_SIZE      ); }
-                if ( i === 3 ) { initialPosition.setXY( _poolCenter.x + FOOD_RACE_SIZE, _poolCenter.y + FOOD_RACE_SIZE - 60 ); }
-            }
-            //-------------------------------------------------
-            // big bang
-            //-------------------------------------------------
-            else if ( mode === SimulationStartMode.BIG_BANG )
-            {
-                initialPosition.setXY( _poolCenter.x, _poolCenter.y );
-                _myGenotype.randomize();
-            }
-            //-------------------------------------------------
-            // bad parents
-            //-------------------------------------------------
-            else if ( mode === SimulationStartMode.BAD_PARENTS )
-            {
-                if ( i === 0 ) { _myGenotype.setToPreset( PRESET_GENOTYPE_TURING ); }
-                if ( i === 1 ) { _myGenotype.setToPreset( PRESET_GENOTYPE_TURING ); }
-
-                if ( i === 0 ) { initialPosition.setXY( _poolCenter.x - 200 * ONE_HALF, _poolCenter.y ); }
-                if ( i === 1 ) { initialPosition.setXY( _poolCenter.x + 200 * ONE_HALF, _poolCenter.y ); }
-            }
-
-            /*
-            //-------------------------------------------------
-            // barrier
-            //-------------------------------------------------
-            else if ( mode === SimulationStartMode.BARRIER )
-            {
-                if ( i === 0 ) { _myGenotype.setToPreset( PRESET_GENOTYPE_DAWKINS   ); }
-                if ( i === 1 ) { _myGenotype.setToPreset( PRESET_GENOTYPE_WALLACE   ); }
-                if ( i === 2 ) { _myGenotype.setToPreset( PRESET_GENOTYPE_MENDEL    ); }
-                if ( i === 3 ) { _myGenotype.setToPreset( PRESET_GENOTYPE_WILSON    ); }
-                if ( i === 4 ) { _myGenotype.setToPreset( PRESET_GENOTYPE_TURING    ); }
-                if ( i === 5 ) { _myGenotype.setToPreset( PRESET_GENOTYPE_MARGULIS  ); }
-
-                let s = 150;
-
-                if ( i === 0 ) { initialPosition.setXY( _poolCenter.x + s * -1,  _poolCenter.y + s * -1 ); }
-                if ( i === 1 ) { initialPosition.setXY( _poolCenter.x + s *  0,  _poolCenter.y + s * -1 ); }
-                if ( i === 2 ) { initialPosition.setXY( _poolCenter.x + s *  1,  _poolCenter.y + s * -1 ); }
-                if ( i === 3 ) { initialPosition.setXY( _poolCenter.x + s * -1,  _poolCenter.y + s *  1 ); }
-                if ( i === 4 ) { initialPosition.setXY( _poolCenter.x + s *  0,  _poolCenter.y + s *  1 ); }
-                if ( i === 5 ) { initialPosition.setXY( _poolCenter.x + s *  1,  _poolCenter.y + s *  1 ); }
-            }
-            */
-            //---------------------------------
-            // normal
-            //---------------------------------
-            else
-            {
-                _myGenotype.randomize();
-            }
-
-            //--------------------------------------------------
-            // This sets all junk DNA to a value of 0!!!
-            //--------------------------------------------------
-            for (let g=NUM_GENES_USED; g<NUM_GENES; g++)
-            {
-                if ( !isExperimentalEmbryologyGene( g )) { _myGenotype.setGeneValue( g, 0 ); }
-            }
-            // founders must differ at the asymmetry locus even when they come
-            // from a preset genome (where the junk tail is all zeroes)
-            _myGenotype.setGeneValue( GENES_ASYMMETRY[0], Math.floor( gpRandom() * BYTE_SIZE ));
-
-            //-------------------------------------------------------------------
-            // environment: each swimbot starts in one of the gardens (one per
-            // biome type), roughly adapted to the local temperature and plants.
-            // Predation is in the genes: about 10% of the founders are born
-            // predators, the rest herbivores (as in the original random pool)
-            //-------------------------------------------------------------------
-            if ( _map ) { this.growFounderForSeed( _map.seeds[ i * 3 + 2 ] ); }
-
-            if ( environment.active )
-            {
-                if ( _map )
-                {
-                    // the place the map editor sowed it
-                    initialPosition.setXY( _map.seeds[ i * 3 ], _map.seeds[ i * 3 + 1 ] );
-                    this.setEcologyGenesForPlace( _myGenotype, initialPosition.x, initialPosition.y );
-                }
-                else if ( petri )
-                {
-                    // everybody starts in the middle (mildest) zone, adapted to it only
-                    this.randomPointInZone( initialPosition, petriStartZone( environment.petri.zones ));
-                    this.setEcologyGenesForPlace( _myGenotype, initialPosition.x, initialPosition.y );
-                    this.narrowFounderTolerance( _myGenotype, initialPosition.x, initialPosition.y );
-                }
-                else
-                {
-                    // Random pools are sown in 14 oasis colonies. Each centre is
-                    // one of the richest soil patches, with room for long bodies.
-                    this.randomFounderPoint( initialPosition, i );
-                    this.setEcologyGenesForPlace( _myGenotype, initialPosition.x, initialPosition.y );
-                }
-                let bornPredator = gpRandom() < INITIAL_PREDATOR_FRACTION;
-                // the map editor's seeder may sow only herbivores (1) or only predators (2)
-                const diet = ( _map && _map.diets ) ? ( _map.diets[i] || 0 ) : 0;
-                if ( diet === 1 ) { bornPredator = false; } else if ( diet === 2 ) { bornPredator = true; }
-                setTrait( _myGenotype, GENES_PREDATOR, bornPredator ? 0.7 + 0.3 * gpRandom() : gpRandom() * PREDATOR_LEVEL_THRESHOLD * 0.8 );
-            }
-            //-------------------------------------------------------------------
-            // start with mostly herbivores: predators are a small minority
-            //-------------------------------------------------------------------
-            else if ( mode === SimulationStartMode.RANDOM )
-            {
-                let thresholdGeneValue = PREDATOR_LEVEL_THRESHOLD * 255;
-                let predatorGeneValue = ( gpRandom() < INITIAL_PREDATOR_FRACTION )
-                    ? thresholdGeneValue + 1 + gpRandom() * ( 254 - thresholdGeneValue )
-                    : gpRandom() * thresholdGeneValue;
-                setTrait( _myGenotype, GENES_PREDATOR, Math.floor( predatorGeneValue ) / 255 );
-            }
-            else if ( mode === SimulationStartMode.TEST_MINI_POOL )
-            {
-                // the first two are herbivores, the last two are predators
-                setTrait( _myGenotype, GENES_PREDATOR, i < 2 ? 0.1 * gpRandom() : 0.8 + 0.2 * gpRandom() );
-            }
-
-            //-------------------------------------------------------------------------------
-            // This is not the most elegant way to do this, but just to get it working.....
-            // For any simulation mode (pool preset) other than Species, the swimbot genes
-            // for food type preferrence and food type digestion are set to 0 (green).
-            //-------------------------------------------------------------------------------
-            if ( mode != SimulationStartMode.SPECIES )
-            {
-                //-------------------------------------------------------------------------------------------------
-                // This sets the food type gene to be the same as the preferredFoodColor gene
-                //-------------------------------------------------------------------------------------------------
-                //let foodColorGene = _embryology.getFoodColorGene();
-                //let foodTypeGene  = _embryology.getFoodNutritionGene();
-
-                //console.log( "foodColorGene     = " + foodColorGene     );
-                //console.log( "foodNutritionGene = " + foodNutritionGene );
-                //let geneValue = _myGenotype.getGeneValue( foodColorGene );
-                //console.log( "geneValue = " + geneValue );
-                //_myGenotype.setGeneValue( foodNutritionGene, 0 );
-                //_myGenotype.setGeneValue( foodNutritionGene, 0 );
-            }
-
-            // C12 founders span the available prey-value/travel-cost strategies;
-            // selection and small inherited mutations shape them after startup.
-            if ( PREDATOR_TARGET_SELECTION_ENABLED )
-            {
-                // Reuse the already-seeded founder state rather than draw from
-                // the world RNG, so BASE and C12 start from identical worlds.
-                const founderKey = ( Math.floor( initialPosition.x * 16 )
-                    ^ Math.imul( Math.floor( initialPosition.y * 16 ), 0x45d9f3b )
-                    ^ Math.imul( i + 1, 0x27d4eb2d )
-                    ^ Math.floor(( initialAngle + 180 ) * 1000 )) >>> 0;
-                seedPredatorChoiceBrain( _myGenotype.getBrain(), founderKey );
-            }
-
-            //--------------------------------------------------
-            // create the swimbot
-            //--------------------------------------------------
-            _swimbots[i].create( i, initialAge, initialPosition, initialAngle, initialEnergy, _myGenotype, _embryology );
-
-            //------------------------------------------------------------------------------------
-            // add the new swimbot to the family tree
-            //------------------------------------------------------------------------------------
-            _familyTree.addNode( i, NULL_INDEX, NULL_INDEX, _clock, this.getSwimbotGenes(i), this.getSwimbotEvolutionTraits(i) );
-        }
+        });
 
         //--------------------------------------
         // initilize obstacle
@@ -1450,31 +1221,10 @@ else if ( mode === SimulationStartMode.TEST_MINI_POOL )
 	    v.y = POOL_TOP  + FOOD_BIT_BOUNDARY_MARGIN + gpRandom() * ( POOL_HEIGHT - FOOD_BIT_BOUNDARY_MARGIN * 2 );
 	}
 
-	// Fresh founders of Random and Neighborhood pools start in 14 colonies on
-	// the richest oases: radius 550, never closer than 45 to a nestmate.
+	// Kept as a public method for older callers; the rule now lives in WorldSpawner.
 	this.randomFounderPoint = function( v, founderIndex: number )
 	{
-	    if ( _colonyCenters.length === 0 )
-	    {
-	        v.x = POOL_LEFT + FOUNDER_SPAWN_MARGIN + gpRandom() * Math.max( 1, POOL_WIDTH  - FOUNDER_SPAWN_MARGIN * 2 );
-	        v.y = POOL_TOP  + FOUNDER_SPAWN_MARGIN + gpRandom() * Math.max( 1, POOL_HEIGHT - FOUNDER_SPAWN_MARGIN * 2 );
-	        return;
-	    }
-	    const colony = Math.min( COLONY_COUNT - 1, Math.floor( founderIndex * COLONY_COUNT / Math.max( 1, _numSwimbots )));
-	    const center = _colonyCenters[ colony ], sites = _colonySites[ colony ], minSq = COLONY_MIN_DISTANCE * COLONY_MIN_DISTANCE;
-	    let x = center.x, y = center.y;
-	    for ( let attempt = 0; attempt < 200; attempt++ )
-	    {
-	        const angle = gpRandom() * PI2, radius = COLONY_RADIUS * Math.sqrt( gpRandom() );
-	        x = center.x + Math.cos( angle ) * radius;
-	        y = center.y + Math.sin( angle ) * radius;
-	        let clear = true;
-	        for ( let k = 0; k < sites.length; k++ ) { const dx = x - sites[k].x, dy = y - sites[k].y; if ( dx * dx + dy * dy < minSq ) { clear = false; break; } }
-	        if ( clear ) break;
-	    }
-	    v.x = Math.max( POOL_LEFT + FOUNDER_SPAWN_MARGIN, Math.min( POOL_RIGHT  - FOUNDER_SPAWN_MARGIN, x ));
-	    v.y = Math.max( POOL_TOP  + FOUNDER_SPAWN_MARGIN, Math.min( POOL_BOTTOM - FOUNDER_SPAWN_MARGIN, y ));
-	    sites.push({ x: v.x, y: v.y });
+	    Spawner.randomFounderPoint( { numSwimbots: _numSwimbots, colonyCenters: _colonyCenters, colonySites: _colonySites } as any, v, founderIndex );
 	}
 
 	// the plant type that suits a place better is chosen more often
@@ -1817,36 +1567,7 @@ else if ( mode === SimulationStartMode.TEST_MINI_POOL )
 	//------------------------------------------------------------------------
 	this.estimateGeneticClusters = function( sampleSize = 400 )
 	{
-	    const alive = [];
-	    for (let s = 0; s < MAX_SWIMBOTS; s++) { if ( _swimbots[s].getAlive() ) alive.push(s); }
-	    const n = alive.length;
-	    if ( n === 0 ) return { geneticClusters: 0, largestClusterShare: 0, sampled: 0 };
-
-	    const stride = Math.max( 1, n / sampleSize );
-	    const groups = [];   // { genes, count }
-	    let sampled = 0;
-	    for (let i = 0; i < n; i += stride)
-	    {
-	        const genotype = _swimbots[ alive[ Math.floor(i) ]].getGenotype();
-	        const genes = genotype.getGenes();
-	        const limit = 0.12 * NUM_GENES_USED * 255;
-	        let found = null;
-	        for ( const group of groups )
-	        {
-	            let sum = 0;
-	            for (let g = 0; g < NUM_GENES_USED && sum < limit; g++) { sum += Math.abs( group.genes[g] - genes[g] ); }
-	            if ( sum < limit ) { found = group; break; }
-	        }
-	        if ( found ) { found.count ++; }
-	        else
-	        {
-	            groups.push({ genes: genes.slice( 0, NUM_GENES_USED ), count: 1 });
-	        }
-	        sampled ++;
-	    }
-	    const largeClusters = groups.filter( g => g.count >= sampled * 0.03 );
-	    const largest = groups.reduce( ( m, g ) => Math.max( m, g.count ), 0 );
-	    return { geneticClusters: largeClusters.length, largestClusterShare: largest / sampled, sampled };
+	    return Telemetry.estimateGeneticClusters( _swimbots, sampleSize );
 	}
 
 	//------------------------------------------------------------------------
@@ -2087,215 +1808,13 @@ if ( mode === SimulationStartMode.SPECIES )
 
 
 
-	//--------------------------------------------------
-	this.setFoodToBarrierConfiguration = function()
-	{
-        _numFoodBits = 40;
-        let spread = 500;
-        let p = new Vector2D();
-
-        for (let f=0; f<_numFoodBits; f++)
-        {
-            _foodBits[f].initialize(f);
-            p.setXY
-            (
-                _poolCenter.x + ( -spread * ONE_HALF + gpRandom() * spread ),
-                _poolCenter.y + ( -spread * ONE_HALF + gpRandom() * spread )
-            );
-
-            _foodBits[f].setPosition(p);
-        }
-
-        this.setFoodSpread( MIN_FOOD_BIT_MAX_SPAWN_RADIUS + ( MAX_FOOD_BIT_MAX_SPAWN_RADIUS - MIN_FOOD_BIT_MAX_SPAWN_RADIUS ) * 0.2 );
-	}
-
-
-
-	//-------------------------------------------
-	this.setFoodToBadParentsConfiguration = function()
-	{
-        _numFoodBits = 5;
-
-        let spread = 100;
-        let p = new Vector2D();
-        let f = -1;
-
-        f++; _foodBits[f].initialize(f); p.setXY( _poolCenter.x, _poolCenter.y + spread * -1.0 ); _foodBits[f].setPosition(p);
-        f++; _foodBits[f].initialize(f); p.setXY( _poolCenter.x, _poolCenter.y + spread * -0.5 ); _foodBits[f].setPosition(p);
-        f++; _foodBits[f].initialize(f); p.setXY( _poolCenter.x, _poolCenter.y + spread *  0.0 ); _foodBits[f].setPosition(p);
-        f++; _foodBits[f].initialize(f); p.setXY( _poolCenter.x, _poolCenter.y + spread *  0.5 ); _foodBits[f].setPosition(p);
-        f++; _foodBits[f].initialize(f); p.setXY( _poolCenter.x, _poolCenter.y + spread *  1.0 ); _foodBits[f].setPosition(p);
-
-
-        /*
-        let range = 100;
-        let spread = 40.0;
-
-        for (let f=0; f<_numFoodBits; f++)
-        {
-            let side = -range;
-
-            if ( gpRandom() > ONE_HALF ) { side = range; }
-            let x = _poolCenter.x + side + gpRandom() * spread;
-            let y = _poolCenter.y + gpRandom() * spread;
-            foodBitPosition.setXY( x, y );
-
-            _foodBits[f].initialize(f);
-            _foodBits[f].setPosition( foodBitPosition );
-    	}
-    	*/
-
-
-        this.setFoodSpread( MIN_FOOD_BIT_MAX_SPAWN_RADIUS );
-	}
-
-
-	//-------------------------------------------
-	this.setFoodToBangConfiguration = function()
-	{
-        _numFoodBits = 500;
-        let radius   = ONE;
-        let fraction = ZERO;
-        let thirdNum = _numFoodBits / 3.0;
-
-        let foodBitPosition = new Vector2D();
-
-        for (let f=0; f<_numFoodBits; f++)
-        {
-            if ( f > _numFoodBits * 0.66666 )
-            {
-                fraction = ( f - ( _numFoodBits * 0.66666 ) ) / thirdNum;
-                radius = 600;
-            }
-            else if ( f > _numFoodBits * 0.333333 )
-            {
-                fraction = ( f - ( _numFoodBits * 0.333333 ) ) / thirdNum;
-                radius = 900;
-            }
-            else
-            {
-                fraction = f / thirdNum;
-                radius = 300;
-            }
-
-            let radian = fraction * Math.PI * 2.0;
-
-
-            // spiral
-            /*
-            radius *= 1.016;
-            let radian = f * 0.2;
-            */
-
-
-            let x = _poolCenter.x + radius * Math.sin( radian );
-            let y = _poolCenter.y + radius * Math.cos( radian );
-
-            foodBitPosition.setXY( x, y );
-
-            _foodBits[f].initialize(f);
-            _foodBits[f].setPosition( foodBitPosition );
-        }
-
-        this.setFoodGrowthDelay( DEFAULT_FOOD_REGENERATION_PERIOD );
-        this.setFoodSpread( 20 );
-	}
-
-
-	//-------------------------------------------
-	this.setFoodToSpeciesConfiguration = function()
-	{
-    	let p = new Vector2D();
-
-        for (let f=0; f<_numFoodBits; f++)
-        {
-            let s = POOL_WIDTH * 0.4;
-            p.x = gpRandom() * s;
-            p.y = POOL_HEIGHT * ONE_HALF - s * ONE_HALF + + gpRandom() * s;
-
-            _foodBits[f].setType( Math.floor( gpRandom() * 2 ) );
-
-            if ( gpRandom() < ONE_HALF )
-            {
-                p.x = POOL_WIDTH - p.x;
-            }
-
-            _foodBits[f].setPosition(p);
-    	}
-	}
-
-	//-------------------------------------------
-	this.setFoodToRaceConfiguration = function()
-	{
-       	_numFoodBits = 0;
-
-    	let p = new Vector2D();
-    	let num = 200;
-    	let xx = _poolCenter.x;
-    	let yy = _poolCenter.y + FOOD_RACE_SIZE * 0.9;
-
-    	for (let f=0; f<num; f++)
-    	{
-            let fraction = f / num;
-
-            p.x = xx + FOOD_RACE_SIZE * Math.cos( fraction * Math.PI );
-            p.y = yy - FOOD_RACE_SIZE * Math.sin( fraction * Math.PI );
-
-            _foodBits[ _numFoodBits ].initialize(f);
-            _foodBits[ _numFoodBits ].setPosition(p);
-            _numFoodBits ++;
-        }
-
-        num = 140;
-        let r = 0;
-    	xx = _poolCenter.x;
-    	yy = _poolCenter.y - FOOD_RACE_SIZE * 0.4;
-
-    	for (let f=0; f<num; f++)
-    	{
-            let ff = f * 0.1;
-
-            r += 2;
-
-            p.x = xx + r * Math.cos( ff );
-            p.y = yy + r * Math.sin( ff );
-
-            _foodBits[ _numFoodBits ].initialize(f);
-            _foodBits[ _numFoodBits ].setPosition(p);
-            _numFoodBits ++;
-        }
-
-    	//set the delay of food growth
-        this.setFoodGrowthDelay( MAX_FOOD_REGENERATION_PERIOD );
-        this.setFoodSpread( MIN_FOOD_BIT_MAX_SPAWN_RADIUS );
-	}
-
-	//-------------------------------------------
-	// 25 plants in a ring at the centre of the test world
-	//-------------------------------------------
-	this.setFoodToTestMiniPool = function()
-	{
-        // randomizeFood() has already sown the standard number of plants;
-        // retire the extras so the test world really has only 25 of them
-        const oldCount = _numFoodBits;
-        _numFoodBits = 0;
-        const p = new Vector2D();
-        const num = 25;
-        for (let f=0; f<num; f++)
-        {
-            const angle = ( f / num ) * PI2;
-            p.x = _poolCenter.x + 520 * Math.cos( angle );
-            p.y = _poolCenter.y + 520 * Math.sin( angle );
-            _foodBits[ _numFoodBits ].initialize( f );
-            _foodBits[ _numFoodBits ].setPosition( p );
-            _numFoodBits ++;
-        }
-        for (let f=num; f<oldCount; f++) { _foodBits[f].kill(); }
-        _aliveFoodBitIndices.length = 0;
-        for (let f=0; f<num; f++) { _aliveFoodBitIndices.push( f ); }
-        this.setFoodGrowthDelay( MAX_FOOD_REGENERATION_PERIOD );
-        this.setFoodSpread( MIN_FOOD_BIT_MAX_SPAWN_RADIUS );
-	}
+	// The classic food layouts are defined next to their founders in WorldSpawner.
+	this.setFoodToBarrierConfiguration = function() { Spawner.setFoodToBarrierConfiguration( _presetFoodContext ); }
+	this.setFoodToBadParentsConfiguration = function() { Spawner.setFoodToBadParentsConfiguration( _presetFoodContext ); }
+	this.setFoodToBangConfiguration = function() { Spawner.setFoodToBangConfiguration( _presetFoodContext ); }
+	this.setFoodToSpeciesConfiguration = function() { Spawner.setFoodToSpeciesConfiguration( _presetFoodContext ); }
+	this.setFoodToRaceConfiguration = function() { Spawner.setFoodToRaceConfiguration( _presetFoodContext ); }
+	this.setFoodToTestMiniPool = function() { Spawner.setFoodToTestMiniPool( _presetFoodContext ); }
 
 
 	//--------------------------------
@@ -2550,6 +2069,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
         _clock ++;
         simClock.step = _clock;
         stepMatingCooldowns();
+        Telemetry.updateMorphShares( _st );
         const stepStart = now();
 
         if ( environment.active )
@@ -2875,8 +2395,8 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
                                 && M[ mb + SS.M_REPRO_CD ] === 0
                                 && ( myState === BRAIN_STATE_LOOKING_FOR_MATE || myState === BRAIN_STATE_PURSUING_MATE )
                                 && ( mateState === BRAIN_STATE_LOOKING_FOR_MATE || mateState === BRAIN_STATE_PURSUING_MATE )
-                                && ( _swimbots[s].getEnergy() > _swimbots[s].getHungerThreshold() )
-                                && ( _potentialMate.getEnergy() > _potentialMate.getHungerThreshold() );
+                                && ( _swimbots[s].getEnergy() > _swimbots[s].getHungerThreshold() * rStrategyReproductionEnergyFactor( _swimbots[s].getNumParts() ) )
+                                && ( _potentialMate.getEnergy() > _potentialMate.getHungerThreshold() * rStrategyReproductionEnergyFactor( _potentialMate.getNumParts() ) );
                             if ( !readyToMate )
                             {
                                 // They are not a real pair: separate them now so
@@ -3003,9 +2523,14 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
                                 // The child and both parents sit out the next
                                 // mating season; neither parent keeps courting
                                 // the partner that just produced the child.
-                                _swimbots[ newBornSwimbotIndex ].setMatingCooldown( MATING_COOLDOWN_STEPS );
-                                _swimbots[s].setMatingCooldown( MATING_COOLDOWN_STEPS );
-                                _potentialMate.setMatingCooldown( MATING_COOLDOWN_STEPS );
+                                const parts = _swimbots[s].getNumParts(), mateParts = _potentialMate.getNumParts();
+                                const crownPressure = killWinnerPressure( _st.params[ SS.PARAM_PART_SHARE_BASE + Math.max( 0, Math.min( 15, parts - 1 )) ]);
+                                const matePressure = killWinnerPressure( _st.params[ SS.PARAM_PART_SHARE_BASE + Math.max( 0, Math.min( 15, mateParts - 1 )) ]);
+                                const cooldownFactor = rStrategyCooldownFactor( parts ) * ( 1 + KILL_WINNER_REPRO_MULT * crownPressure );
+                                const mateCooldownFactor = rStrategyCooldownFactor( mateParts ) * ( 1 + KILL_WINNER_REPRO_MULT * matePressure );
+                                _swimbots[ newBornSwimbotIndex ].setMatingCooldown( Math.round( MATING_COOLDOWN_STEPS * cooldownFactor ));
+                                _swimbots[s].setMatingCooldown( Math.round( MATING_COOLDOWN_STEPS * cooldownFactor ));
+                                _potentialMate.setMatingCooldown( Math.round( MATING_COOLDOWN_STEPS * mateCooldownFactor ));
                                 _swimbots[s].abortMating();
                                 _potentialMate.abortMating();
                                 // (who its family is: KIN_NOT_EATEN_ENABLED; a founder gets its number now)
@@ -3368,49 +2893,24 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	const _phaseTimes = new Float64Array( 8 );
 	function now() { return ( typeof performance !== "undefined" ) ? performance.now() : 0; }
 	function phaseTime( phase, since ) { const t = now(); _phaseTimes[ phase ] += t - since; return t; }
-	// closed energy cycle: atmosphere + all food (plants and meat) +
-	// all living swimbots. Must stay constant over a whole run.
-	this.getTotalWorldEnergy = function()
+	// Everything the read-only telemetry module needs is passed through one
+	// small live view, the same pattern the world serializer uses.
+	const _telemetryContext: any =
 	{
-	    let total = getAtmosphereEnergy() + _ambientEnergy + totalSoilEnergy( _st );
-	    for (let f = 0; f < MAX_FOODBITS; f++) { if ( _st.liveFood[f] === 1 ) total += _st.foodEnergy[f]; }
-	    for (let s = 0; s < MAX_SWIMBOTS; s++) { if ( _st.liveSwimbot[s] === 1 ) total += _st.bots[ s * SS.BOT_STRIDE + SS.B_ENERGY ]; }
-	    return total;
-	}
+	    get st()                 { return _st; },
+	    get swimbots()           { return _swimbots; },
+	    get foodBits()           { return _foodBits; },
+	    get maxSwimbotSlot()     { return _maxSwimbotSlot; },
+	    get ambientEnergy()      { return _ambientEnergy; },
+	    get initialEnergy()      { return _totalWorldEnergy; },
+	    get phyloTree()          { return _phyloTree; },
+	    get environment()        { return environment; },
+	    soilNutrient:            () => environment.getTotalSoilNutrient()
+	};
+	this.getTotalWorldEnergy = function() { return Telemetry.totalWorldEnergy( _telemetryContext ); }
 	this.getInitialWorldEnergy = function() { return _totalWorldEnergy; }
 	this.getAmbientEnergy = function() { return _ambientEnergy; }
-	this.getEcologyStats = function()
-	{
-	    let plants = 0, trees = 0, fruits = 0, carriedSeeds = 0;
-	    for ( let f = 0; f < MAX_FOODBITS; f++ )
-	    {
-	        if ( _st.liveFood[f] !== 1 ) continue;
-	        if ( _st.foodType[f] === 2 ) continue;
-	        plants ++;
-	        if ( _st.foodWood[f] >= WOOD_PER_FRUIT_TIER ) trees ++;
-	        if ( _st.foodFruit[f] === 1 ) fruits ++;
-	    }
-	    let alive = 0, asymAbs = 0, asymStrong = 0;
-	    for ( let s = 0; s < MAX_SWIMBOTS; s++ )
-	    {
-	        if ( _st.liveSwimbot[s] !== 1 ) continue;
-	        alive ++;
-	        if ( _swimbots[s].hasCarriedSeed() ) carriedSeeds ++;
-	        const gene = _swimbots[s].getGenotype().getGeneValue( GENES_ASYMMETRY[0] ) / BYTE_SIZE;
-	        const asym = Math.abs( asymmetryFromGene( gene ));
-	        asymAbs += asym;
-	        if ( asym > 0.05 ) asymStrong ++;
-	    }
-	    return { plants, trees, fruits, carriedSeeds, soil: environment.getTotalSoilNutrient(),
-	             soilEnergy: totalSoilEnergy( _st ), ambientEnergy: _ambientEnergy,
-	             atmosphere: getAtmosphereEnergy(), totalEnergy: this.getTotalWorldEnergy(),
-	             initialEnergy: _totalWorldEnergy,
-	             asymmetryMean: alive > 0 ? asymAbs / alive : 0,
-	             asymmetryShare: alive > 0 ? asymStrong / alive : 0 };
-	}
-	// Bottom status bar: every reservoir and every life stage in one pass.
-	// The same object is filled again every 8 steps, so the UI can read it on
-	// every animation frame without allocating or walking the world again.
+	this.getEcologyStats = function() { return Telemetry.ecologyStats( _telemetryContext ); }
 	const _telemetry =
 	{
 	    eTotal: 0, eInitial: 0, eDelta: 0,
@@ -3423,51 +2923,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	{
 	    if ( _telemetryAt >= 0 && ( _clock - _telemetryAt ) < 8 ) return _telemetry;
 	    _telemetryAt = _clock;
-	    let eBots = 0, ePlants = 0, eMeat = 0;
-	    let sprouts = 0, young = 0, grown = 0, trees = 0;
-	    for ( let f = 0; f < MAX_FOODBITS; f++ )
-	    {
-	        if ( _st.liveFood[f] !== 1 ) continue;
-	        const e = _st.foodEnergy[f];
-	        if ( _st.foodType[f] === 2 ) { eMeat += e; continue; }
-	        ePlants += e;
-	        if ( e < 9 ) sprouts ++;
-	        else if ( e < 20 ) young ++;
-	        else if ( e < 42 ) grown ++;
-	        else trees ++;
-	    }
-	    let herbSmall = 0, herbMed = 0, herbLarge = 0, predators = 0;
-	    for ( let s = 0; s < MAX_SWIMBOTS; s++ )
-	    {
-	        if ( _st.liveSwimbot[s] !== 1 ) continue;
-	        const base = s * SS.BOT_STRIDE;
-	        eBots += _st.bots[ base + SS.B_ENERGY ];
-	        if ( _swimbots[s].getPredatorLevel() > PREDATOR_LEVEL_THRESHOLD ) { predators ++; continue; }
-	        const parts = _st.bots[ base + SS.B_NUM_PARTS ];
-	        if ( parts <= 5 ) herbSmall ++;
-	        else if ( parts <= 8 ) herbMed ++;
-	        else herbLarge ++;
-	    }
-	    _telemetry.eBots       = eBots;
-	    _telemetry.ePlants     = ePlants;
-	    _telemetry.eMeat       = eMeat;
-	    _telemetry.eSoil       = totalSoilEnergy( _st );
-	    _telemetry.eAmbient    = _ambientEnergy;
-	    _telemetry.eAtmosphere = getAtmosphereEnergy();
-	    _telemetry.eTotal      = eBots + ePlants + eMeat + _telemetry.eSoil
-	                           + _ambientEnergy + _telemetry.eAtmosphere;
-	    _telemetry.eInitial    = _totalWorldEnergy;
-	    _telemetry.eDelta      = _telemetry.eTotal - _totalWorldEnergy;
-	    _telemetry.sprouts     = sprouts;
-	    _telemetry.young       = young;
-	    _telemetry.grown       = grown;
-	    _telemetry.trees       = trees;
-	    _telemetry.herbSmall   = herbSmall;
-	    _telemetry.herbMed     = herbMed;
-	    _telemetry.herbLarge   = herbLarge;
-	    _telemetry.predators   = predators;
-	    _telemetry.soilTotal   = _telemetry.eSoil;
-	    return _telemetry;
+	    return Telemetry.fillTelemetry( _telemetry, _telemetryContext );
 	}
 	this.getPhaseTimes = function() { return _phaseTimes; }
 
@@ -3594,36 +3050,14 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
     //--------------------------------------------------------
 	this.getJunkDnaSimilarity = function( genotype1, genotype2 )
 	{
-	    let diff = ZERO;
-	    let num = 0;
-        for (let g=NUM_GENES_USED; g<NUM_GENES; g++)
-        {
-            if ( isExperimentalEmbryologyGene( g )) { continue; }
-            diff += Math.abs( genotype1.getGeneValue(g) - genotype2.getGeneValue(g) ) / BYTE_SIZE;
-            num ++;
-        }
-
-        let similarity = ONE - ( diff / num );
-
-        //console.log( similarity );
-
-	    return similarity;
+	    return Telemetry.junkDnaSimilarity( genotype1, genotype2 );
 	}
 
 
     //-----------------------------------
 	this.generatePhyloTree = function()
 	{
-	    let numJunkGenes = NUM_GENES - NUM_GENES_USED;
-	    _phyloTree.initialize( numJunkGenes );
-
-        for (let s=0; s<MAX_SWIMBOTS; s++)
-        {
-            if ( _swimbots[s].getAlive() )
-            {
-        	    _phyloTree.addJunkDNA( _swimbots[s].getGenotype() );
-	        }
-        }
+	    Telemetry.generatePhyloTree( _swimbots, _phyloTree );
     }
 
 
@@ -3704,391 +3138,21 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
         }
     }
 
-    function spawnFruit( parent: number ): boolean
-    {
-        const child = _this.findLowestDeadFoodBitInArray();
-        if ( child === NULL_INDEX ) return false;
-        const energy = Math.min( PLANT_FRUIT_ENERGY, Math.max( 0, _st.foodEnergy[parent] - PLANT_SPROUT_ENERGY ));
-        if ( energy <= 0 ) return false;
-        const crown = plantCrown( _st.foodEnergy[parent] );
-        const radius = PLANT_CANOPY_RADIUS * ( 0.25 + 0.75 * crown ) * Math.sqrt( gpRandom() );
-        const angle = gpRandom() * PI2;
-        _foodBits[child].initialize( child );
-        _foodBits[child].setType( _st.foodType[parent] );
-        if ( PLANT_EVOLUTION_ENABLED ) inheritPlantGenes( child, parent );
-        _foodBits[child].setFruit( true );
-        _foodBits[child].setEnergy( energy );
-        _vectorUtility.setXY( _st.foodX[parent] + Math.cos( angle ) * radius, _st.foodY[parent] + Math.sin( angle ) * radius );
-        _foodBits[child].setPosition( _vectorUtility );
-        _st.foodEnergy[parent] -= energy;
-        _foodBitGrid.addExtra( child );
-        return true;
-    }
-
-	//----------------------------
-	this.updateFood = function()
+	// Plant growth, fruiting, seeding and carrion decay all live in FoodEcology
+	// now. GenePool keeps the step clock and the grid caches they operate on.
+	this.updateFood = function() { FoodEcology.updateFood( _foodContext ); }
+	this.spawnPlant = function( position, type, numType0, numType1, scatter, donor: number = NULL_INDEX )
 	{
-	    const profT0 = PROFILER_ENABLED ? profEnter( PROF_UPDATE_FOOD ) : 0;
-	    try
-	    {
-	    _st.foodSucking.fill( 0 );
-	    if ( _mapMeatRate > 0 ) { this.rainMapMeat(); }
-        let numType0FoodBits = 0;
-        let numType1FoodBits = 0;
-        let treeCount = 0;                       // adult trees, for the collisions
-        const counting = environment.active;
-        if ( counting )
-        {
-            environment.clearPlantCounts();
-            if ( NUTRIENT_CYCLE_ENABLED && ( _clock % SOIL_DIFFUSION_INTERVAL === 0 )) environment.diffuseSoilNutrients();
-        }
-        buildCanopyShade();
-
-        const live = _st.liveFood, foodType = _st.foodType, foodX = _st.foodX, foodY = _st.foodY, born = _st.foodBorn;
-        for (let i = 0; i < _aliveFoodBitIndices.length; i++)
-        {
-            const f = _aliveFoodBitIndices[i];
-            if ( live[f] !== 1 ) continue;
-            const type = foodType[f];
-
-            if ( PLANT_EVOLUTION_ENABLED && ( _clock === 1 ) && ( type !== 2 )) { born[f] = 1 - gpRandom() * plantOldAge( f ); }
-            if ( PLANT_STAGES_ENABLED && PLANT_ROT_ENABLED && ( type !== 2 ) && ( _clock - born[f] > plantRotAge( f ))) { _foodBits[f].kill(); continue; }
-
-            // Плод — это еда, а не новое растение: он не должен расти, набирать
-            // ствол и плодоносить. Иначе со временем он превращается в дерево
-            // и на отдалении рисуется многолучевой звездой.
-            if ( PLANT_SIZE_ENABLED && environment.active && ( type !== 2 ) && ( _st.foodFruit[f] !== 1 ))
-            {
-                const cell = environment.plantCellIndex( foodX[f], foodY[f] );
-                const shade = ( _st.foodWood[f] < WOOD_PER_FRUIT_TIER ) ? _plantShade[cell] : 0;
-                // A plant's stage follows the 5x5 crown soil (O(1) SAT) and the
-                // energy it has already stored. A sprout on an oasis can grow
-                // into a tree; bare ground carries sprouts and young plants only.
-                let e = _st.foodEnergy[f];
-                const full = plantStageCap( _st, foodX[f], foodY[f], e );
-                const age = ( _clock - born[f] ) / ( 1 + ( SHADED_PLANT_AGING_FACTOR - 1 ) * shade );
-                if (( PLANT_LIFESPAN > 0 ) && ( age > plantLifespan( f, born[f] ))) { killPlant( f ); continue; }
-
-                // A plant is a pump, not a printer: the crown can only grow by
-                // sucking energy out of the 5x5 cells under it. The tier cap is
-                // chosen above; SoilEcology keeps each suck small and local.
-                const grown = soilPlantGrowth( _st, foodX[f], foodY[f], e, full );
-                if ( grown > 0 ) { e += grown; _st.foodEnergy[f] = e; }
-                _st.foodSucking[f] = grown > 0 ? Math.min( 1, grown / 0.085 ) : 0;
-                _st.foodWood[f] = Math.max( _st.foodWood[f], e );
-
-                const crownStarved = e < _st.foodWood[f] * 0.05
-                    || (( _st.foodWood[f] > PLANT_SPROUT_ENERGY ) && ( full <= PLANT_SPROUT_ENERGY ) && ( e <= PLANT_SPROUT_ENERGY + 1e-6 ));
-                if ( crownStarved && ( _st.foodWood[f] > 0 ))
-                {
-                    _st.foodWood[f] = Math.max( 0, _st.foodWood[f] - PLANT_TREE_ENERGY / WOOD_DECAY_STEPS );
-                    if ( _st.foodWood[f] <= PLANT_SPROUT_ENERGY ) { killPlant( f ); continue; }
-                }
-
-                const maxFruits = Math.min( 3, Math.floor( _st.foodWood[f] / WOOD_PER_FRUIT_TIER ));
-                if (( maxFruits > 0 ) && ( _clock >= _st.foodFruitAt[f] ) && ( e > PLANT_SPROUT_ENERGY + PLANT_FRUIT_ENERGY ))
-                {
-                    _st.foodFruitAt[f] = _clock + PLANT_FRUIT_PERIOD * ( 0.8 + 0.4 * gpRandom() );
-                    const crown = plantCrown( e );
-                    const radius = PLANT_CANOPY_RADIUS * ( 0.25 + 0.75 * crown );
-                    const nearby = _foodBitGrid.collect( foodX[f], foodY[f], radius, _foodGridResult );
-                    let fruits = 0;
-                    for ( let k = 0; k < nearby; k++ )
-                    {
-                        const other = _foodGridResult[k];
-                        if (( live[other] === 1 ) && ( _st.foodFruit[other] === 1 )) fruits ++;
-                    }
-                    if ( fruits < maxFruits ) spawnFruit( f );
-                }
-            }
-
-            // an adult tree: its trunk pushes bodies away (PhysicsKernel)
-            if (( type !== 2 ) && ( _st.foodFruit[f] !== 1 )
-            &&  ( _st.foodWood[f] >= WOOD_PER_FRUIT_TIER )
-            &&  ( treeCount < _st.matureTrees.length ))
-            {
-                _st.matureTrees[ treeCount ++ ] = f;
-            }
-
-                 if ( type === 0 ) { numType0FoodBits ++; }
-            else if ( type === 1 ) { numType1FoodBits ++; }
-            else
-            {
-                // carrion rots a little every step; SoilEcology puts the rot
-                // into the ground under it, never into an invisible sink
-                const decay = decayMeat( _st, foodX[f], foodY[f], _st.foodEnergy[f] );
-                _st.foodEnergy[f] = decay.e;
-                if ( decay.dead )
-                {
-                    simCounters.meatDecayEvents ++;
-                    if ( counting && NUTRIENT_CYCLE_ENABLED )
-                    {
-                        simCounters.nutrientsFromMeatDecay += environment.returnMeatDetritusAt( foodX[f], foodY[f], decay.remains );
-                    }
-                    _foodBits[f].kill();
-                }
-                else if ( _currentSpeed > 0 )
-                {
-                    currentAt( foodX[f], foodY[f] );
-                    foodX[f] = Math.max( POOL_LEFT + 1, Math.min( POOL_RIGHT  - 1, foodX[f] + _currentSpeed * currentDriftX() ));
-                    foodY[f] = Math.max( POOL_TOP  + 1, Math.min( POOL_BOTTOM - 1, foodY[f] + _currentSpeed * currentDriftY() ));
-                }
-            }
-
-            if ( counting && ( type !== 2 ) && ( live[f] === 1 ))
-            {
-                environment.plantCount[ type ][ environment.plantCellIndex( foodX[f], foodY[f] ) ] ++;
-            }
-        }
-        _st.params[ SS.PARAM_MATURE_TREE_COUNT ] = treeCount;
-
-        // Last-resort seedbank: when the plants are nearly gone, the ambient
-        // reservoir pays for one small sprout. The 3.0 leaves the reservoir
-        // and becomes the plant's energy, so the world total stays the same.
-        const livingPlants = numType0FoodBits + numType1FoodBits;
-        if ( livingPlants < 350 && _ambientEnergy > 20 )
-        {
-            const child = this.findLowestDeadFoodBitInArray();
-            if ( child !== NULL_INDEX )
-            {
-                this.randomPointInPool( _vectorUtility );
-                const type = environment.active ? this.choosePlantTypeAt( _vectorUtility.x, _vectorUtility.y ) : 0;
-                if ( !environment.active || this.plantCanGrowAt( _vectorUtility.x, _vectorUtility.y, type ))
-                {
-                    _ambientEnergy -= 3.0;
-                    _foodBits[child].initialize( child );
-                    _foodBits[child].setType( type );
-                    _foodBits[child].setEnergy( 3.0 );
-                    _foodBits[child].setPosition( _vectorUtility );
-                    _foodBitGrid.addExtra( child );
-                    if ( type === PLANT_TYPE_WARM ) { numType0FoodBits ++; } else { numType1FoodBits ++; }
-                }
-            }
-        }
-
-        if ( environment.active )
-        {
-            if ( ORIGINAL_FOOD_ENABLED ) { this.regrowFoodOriginal( numType0FoodBits + numType1FoodBits ); return; }
-            this.regrowFoodEnvironment( numType0FoodBits, numType1FoodBits );
-            return;
-        }
-
-        if ( !LOCAL_PLANT_GROWTH )
-        {
-            this.regrowFoodClassic( numType0FoodBits, numType1FoodBits );
-            return;
-        }
-
-        //------------------------------------------------------------------
-        // plants reproduce: each living plant may drop a seed nearby.
-        // The number of seeds is proportional to the number of plants,
-        // and seeds only take root where it is not crowded (see spawnPlant),
-        // so plants grow in patches, logistically.
-        //------------------------------------------------------------------
-        assert( globalTweakers.foodRegenerationPeriod > 0, "GenePool:updateFood:globalTweakers.foodRegenerationPeriod > 0"  );
-
-        let numPlants = numType0FoodBits + numType1FoodBits;
-        let expectedSeeds = numPlants * FOOD_SPROUT_RATE / globalTweakers.foodRegenerationPeriod;
-        let numSeeds = Math.floor( expectedSeeds );
-        if ( gpRandom() < expectedSeeds - numSeeds ) { numSeeds ++; }
-
-        for (let n = 0; n < numSeeds; n++)
-        {
-            let parent = this.findRandomLivingPlant();
-            if ( parent === null ) break;
-
-            this.spawnPlant( parent.getPosition(), parent.getType(), numType0FoodBits, numType1FoodBits, true, parent.getIndex() );
-        }
-
-        //------------------------------------------------------------------
-        // now and then a seed drifts in from outside, so that plants
-        // can never die out completely
-        //------------------------------------------------------------------
-        if ( gpRandom() < FOOD_RANDOM_SEED_CHANCE )
-        {
-            _vectorUtility.x = POOL_LEFT + FOOD_BIT_BOUNDARY_MARGIN + gpRandom() * ( POOL_WIDTH  - FOOD_BIT_BOUNDARY_MARGIN * 2 );
-            _vectorUtility.y = POOL_TOP  + FOOD_BIT_BOUNDARY_MARGIN + gpRandom() * ( POOL_HEIGHT - FOOD_BIT_BOUNDARY_MARGIN * 2 );
-
-            let type = ( globalTweakers.numFoodTypes === 2 ) ? Math.floor( gpRandom() * 2 ) : 0;
-            this.spawnPlant( _vectorUtility, type, numType0FoodBits, numType1FoodBits, false );
-        }
-    }
-    finally { if ( PROFILER_ENABLED ) { profExit( PROF_UPDATE_FOOD, profT0 ); } }
-    }
-
-
-    //------------------------------------------------------------------------------
-    // spawnPlant: puts a new plant of the given type near (or exactly at) a
-    // position, unless the place is crowded, the type is maxed out, or the
-    // pool is full. Returns true if a plant was created.
-    //------------------------------------------------------------------------------
-    // closed energy cycle: a new plant is photosynthesis - its energy comes
-    // from the pool, never from nowhere. An empty pool means no sprout
-    // (auto-throttling); a nearly empty one means a smaller sprout.
-    function fundPlant( f, requested, donor: number = NULL_INDEX )
-    {
-        const needed = ( PLANT_SIZE_ENABLED && environment.active && ( _st.foodType[f] !== 2 )) ? PLANT_SPROUT_ENERGY : requested;
-        let funded: number;
-        if ( donor !== NULL_INDEX )
-        {
-            // A seed is paid for by its parent, not printed by the atmosphere.
-            const available = _foodBits[donor].getEnergy();
-            if ( available < needed ) { _foodBits[f].setEnergy( 0 ); _foodBits[f].kill(); return false; }
-            _foodBits[donor].setEnergy( available - needed );
-            funded = needed;
-        }
-        else
-        {
-            funded = drawFromAtmosphere( needed );
-        }
-        if ( funded <= 0 ) { _foodBits[f].setEnergy( 0 ); _foodBits[f].kill(); return false; }
-        _foodBits[f].setEnergy( funded );
-        return true;
-    }
-
-    this.spawnPlant = function( position, type, numType0, numType1, scatter, donor: number = NULL_INDEX )
-    {
-        if ( globalTweakers.numFoodTypes === 2 )
-        {
-            if (( type === 0 ) && ( numType0 >= MAX_FOODBITS_PER_TYPE )) return false;
-            if (( type === 1 ) && ( numType1 >= MAX_FOODBITS_PER_TYPE )) return false;
-        }
-
-        let child = this.findLowestDeadFoodBitInArray();
-        if ( child === NULL_INDEX ) return false;
-
-        _foodBits[ child ].initialize( child );
-        _foodBits[ child ].setType( type );
-        _foodBits[ child ].setMaxSpawnRadius( LOCAL_PLANT_SEED_RADIUS );
-        if ( !fundPlant( child, globalTweakers.foodBitEnergy, donor )) return false;
-
-        _seedSource.getPosition().set( position );
-
-        if ( scatter )
-        {
-            // seeds land near the parent; avoid landing behind the obstacle
-            for (let attempt = 0; attempt < 10; attempt++)
-            {
-                _foodBits[ child ].randomizeSpawnPosition( _seedSource );
-                if ( !_obstacle.getObstruction( position, _foodBits[ child ].getPosition() ) ) break;
-            }
-        }
-        else
-        {
-            _foodBits[ child ].setPosition( position );
-        }
-
-        //---------------------------------------------
-        // crowded? then the seed does not take root
-        //---------------------------------------------
-        const childPosition = _foodBits[ child ].getPosition();
-        _foodX[ child ] = childPosition.x;
-        _foodY[ child ] = childPosition.y;
-        _foodType[ child ] = type;
-        const numInCells = _foodBitGrid.collect( childPosition.x, childPosition.y, FOOD_LOCAL_RADIUS, _foodGridResult );
-        let numPlantNeighbors = 0;
-        for (let k = 0; k < numInCells; k++)
-        {
-            const f = _foodGridResult[k];
-            if ( f === child ) continue;
-            const neighbor = _foodBits[f];
-            const p = neighbor.getPosition();
-            const dx = p.x - childPosition.x;
-            const dy = p.y - childPosition.y;
-            if (( dx * dx + dy * dy < FOOD_LOCAL_RADIUS * FOOD_LOCAL_RADIUS ) && neighbor.getAlive() && ( neighbor.getType() !== 2 )) { numPlantNeighbors ++; }
-        }
-
-        if ( numPlantNeighbors >= FOOD_LOCAL_CAPACITY )
-        {
-            _foodBits[ child ].kill();
-            return false;
-        }
-
-        // put it in the grid right away so the next seed this step sees it
-        _foodBitGrid.addExtra( child );
-
-        return true;
-    }
-
-
-    //------------------------------------------------------------------------------
-    // the original Gene Pool food regrowth: every "food growth delay" steps one
-    // new plant appears near a random living plant of the same type
-    //------------------------------------------------------------------------------
-    this.regrowFoodClassic = function( numType0FoodBits, numType1FoodBits )
-    {
-        // as much food per area in every world size: the "food growth delay"
-        // is for the original pool's area; a bigger world gets as many more
-        // seeds as it is bigger (WORLD_AREA_FACTOR)
-        _classicSeedDebt += WORLD_AREA_FACTOR / globalTweakers.foodRegenerationPeriod;
-        while ( _classicSeedDebt >= 1 )
-        {
-            _classicSeedDebt -= 1;
-            this.regrowOneClassic( numType0FoodBits, numType1FoodBits );
-        }
-    }
-
-    this.regrowOneClassic = function( numType0FoodBits, numType1FoodBits )
-    {
-
-        let childFoodBitIndex = this.findLowestDeadFoodBitInArray();
-        if ( childFoodBitIndex == NULL_INDEX ) return;
-
-        let newFoodType = 0;
-        let parentFoodBitIndex;
-
-        if ( globalTweakers.numFoodTypes === 2 )
-        {
-            // both types get the same chance to grow, within their limits
-            newFoodType = Math.floor( gpRandom() * 2 );
-            if      ( numType0FoodBits >= MAX_FOODBITS_PER_TYPE ) { newFoodType = 1; }
-            else if ( numType1FoodBits >= MAX_FOODBITS_PER_TYPE ) { newFoodType = 0; }
-
-            parentFoodBitIndex = this.findRandomLivingFoodBit( newFoodType );
-
-            // a type that died out is re-seeded from the other type
-            if ( numType0FoodBits === 0 ) { newFoodType = 0; parentFoodBitIndex = this.findRandomLivingFoodBit(1); }
-            if ( numType1FoodBits === 0 ) { newFoodType = 1; parentFoodBitIndex = this.findRandomLivingFoodBit(0); }
-        }
-        else
-        {
-            parentFoodBitIndex = PLANT_EVOLUTION_ENABLED ? this.findSeedParent( newFoodType ) : this.findRandomLivingFoodBit( newFoodType );
-        }
-
-        //------------------------------------------------------------------
-        // now and then a seed comes from anywhere: otherwise a part of the
-        // pool walled off by the obstacle (or barrier) and eaten bare would
-        // never grow food again
-        //------------------------------------------------------------------
-        if (( parentFoodBitIndex == NULL_INDEX ) || ( gpRandom() < CLASSIC_SEED_RAIN_FRACTION ))
-        {
-            _foodBits[ childFoodBitIndex ].initialize( childFoodBitIndex );     // (a random place in the pool)
-            // (a seed carried far: it still comes from some plant)
-            if ( PLANT_EVOLUTION_ENABLED && ( parentFoodBitIndex != NULL_INDEX )) { inheritPlantGenes( childFoodBitIndex, parentFoodBitIndex ); }
-            _foodBits[ childFoodBitIndex ].setType( newFoodType );
-if ( !fundPlant( childFoodBitIndex, globalTweakers.foodBitEnergy )) return;
-            return;
-        }
-
-        _foodBits[ childFoodBitIndex ].spawnFromParent( _foodBits[ parentFoodBitIndex ], childFoodBitIndex, newFoodType );
-        if ( !fundPlant( childFoodBitIndex, _foodBits[ parentFoodBitIndex ].getEnergy(), parentFoodBitIndex )) return;
-
-        if ( PLANT_EVOLUTION_ENABLED )
-        {
-            // the seed falls as far as the parent's gene says
-            inheritPlantGenes( childFoodBitIndex, parentFoodBitIndex );
-            _foodBits[ childFoodBitIndex ].tintByGenes();
-            this.placeSeed( _foodBits[ childFoodBitIndex ], _foodBits[ parentFoodBitIndex ], plantSeedDistance( parentFoodBitIndex ));
-            return;
-        }
-
-        // keep the new plant out from behind the obstacle
-        for (let attempt = 0; attempt < 10; attempt++)
-        {
-            _foodBits[ childFoodBitIndex ].randomizeSpawnPosition( _foodBits[ parentFoodBitIndex ] );
-            if ( !_obstacle.getObstruction( _foodBits[ parentFoodBitIndex ].getPosition(), _foodBits[ childFoodBitIndex ].getPosition() ) ) break;
-        }
-    }
+	    return FoodEcology.spawnPlant( _foodContext, position, type, numType0, numType1, scatter, donor );
+	}
+	this.regrowFoodClassic = function( numType0FoodBits, numType1FoodBits )
+	{
+	    FoodEcology.regrowFoodClassic( _foodContext, numType0FoodBits, numType1FoodBits );
+	}
+	this.regrowOneClassic = function( numType0FoodBits, numType1FoodBits )
+	{
+	    FoodEcology.regrowOneClassic( _foodContext, numType0FoodBits, numType1FoodBits );
+	}
 
     //------------------------------------------------------------------------------
     // PLANT_EVOLUTION_ENABLED: a grown-up plant to make the next seed (a few
@@ -5510,64 +4574,12 @@ const feedRoom = Math.min( 100, swimbot.getMaxEnergy() - swimbot.getEnergy() );
 	//--------------------------------------------------------------
 	this.getNumFoodBitsOfType = function( type )
 	{
-	    let num = 0;
-	    const live = _st.liveFood, foodType = _st.foodType;
-	    for (let f=0; f<MAX_FOODBITS; f++)
-	    {
-	        if (( live[f] === 1 ) && ( foodType[f] === type )) { num ++; }
-	    }
-	    return num;
+	    return Telemetry.countFoodBitsOfType( _st, type );
 	}
 
 	this.getNumFoodBits = function()
 	{
-        let num = 0;
-
-        for (let f=0; f<MAX_FOODBITS; f++)
-        {
-            if ( _foodBits[f].getAlive() )
-            {
-                if ( globalTweakers.numFoodTypes === 2  )
-                {
-                    if ( _foodBits[f].getType() === 0 )
-                    {
-                        num ++;
-                    }
-                }
-                else
-                {
-                    num ++;
-                }
-            }
-        }
-
-        /*
-        if ( globalTweakers.numFoodTypes === 2  )
-        {
-            for (let f=0; f<MAX_FOODBITS; f++)
-            {
-                if ( _foodBits[f].getAlive() )
-                {
-                    if ( _foodBits[f].getType() === 0 )
-                    {
-                        num ++;
-                    }
-                }
-            }
-        }
-        else
-        {
-            for (let f=0; f<MAX_FOODBITS; f++)
-            {
-                if ( _foodBits[f].getAlive() )
-                {
-                    num ++;
-                }
-            }
-        }
-        */
-
-	    return num;
+	    return Telemetry.countFoodBits( _foodBits, globalTweakers.numFoodTypes );
 	}
 
     /*
@@ -5594,37 +4606,13 @@ const feedRoom = Math.min( 100, swimbot.getMaxEnergy() - swimbot.getEnergy() );
 	//------------------------------
 	this.getNumFoodBits1 = function()
 	{
-        let num = 0;
-
-        for (let f=0; f<MAX_FOODBITS; f++)
-        {
-            if ( _foodBits[f].getAlive() )
-            {
-                if ( _foodBits[f].getType() === 1 )
-                {
-                    num ++;
-                }
-            }
-        }
-
-	    return num;
+	    return Telemetry.countFoodBitsOfType( _st, 1 );
 	}
 
 	//------------------------------
 	this.getNumSwimbots = function()
 	{
-        let num = 0;
-        const live = _st.liveSwimbot;
-
-        for (let s=0; s<_maxSwimbotSlot; s++)
-        {
-            if ( live[s] === 1 )
-            {
-                num ++;
-            }
-        }
-
-	    return num;
+	    return Telemetry.countSwimbots( _st, _maxSwimbotSlot );
 	}
 
 

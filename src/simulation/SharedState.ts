@@ -114,7 +114,16 @@ export const PARAM_WALL_MAX_Y   = 119;
 export const PARAM_MATURE_TREE_COUNT = 120;   // how many adult trees are in matureTrees
 export const PARAM_SDF_READY    = 121;   // 1 = wallSdf has been filled for the current walls
 export const PARAM_SHOW_SOIL    = 122;   // 1 = draw the living soil overlay and its roots
-export const NUM_PARAMS         = 123;
+// Kill-the-Winner: share of living herbivores in each size band (3-5, 6-8,
+// 9-12, 13-16). Refreshed once per step; the gut and the metabolism read them.
+export const PARAM_MORPH_SHARE_0 = 123;
+export const PARAM_MORPH_SHARE_1 = 124;
+export const PARAM_MORPH_SHARE_2 = 125;
+export const PARAM_MORPH_SHARE_3 = 126;
+// Exact part-count shares (index = parts - 1): Kill-the-Winner acts on a form,
+// not on a broad band that can contain several healthy forms at once.
+export const PARAM_PART_SHARE_BASE = 127;
+export const NUM_PARAMS            = 143;
 
 // signed distance to the nearest wall segment, on a 128x128 grid over the pool.
 // centers of the cells hold the distance; a conservative half-diagonal margin
