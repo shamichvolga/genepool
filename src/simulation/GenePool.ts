@@ -677,8 +677,10 @@ export function GenePool()
         const worldEnergy = START_ENERGY_FACTOR;
         const energyMult = Math.max( 0.4, Math.min( 10, worldEnergy / 5 ));
         const START_FOOD_ENERGY        = INITIAL_NUM_FOODBITS * PLANT_SPROUT_ENERGY * energyMult;
-        const START_ATMOSPHERE_RESERVE = 25000 * energyMult;
-        resetAtmosphere( SOIL_START_ENERGY * energyMult + START_FOOD_ENERGY + START_ATMOSPHERE_RESERVE );
+        // The world runs without a water reservoir: all energy is in soilField
+        // and bot/plant/meat bodies from the start (see ℙ62-bis). Atmosphere
+        // stays at 0; it is only a transient between debits and credits.
+        resetAtmosphere( SOIL_START_ENERGY * energyMult + START_FOOD_ENERGY );
 
         // the living soil starts each run with 24 dense oases, paid for out of
         // the same endowment (nothing is created from nothing)
