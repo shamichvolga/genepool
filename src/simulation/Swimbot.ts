@@ -721,6 +721,153 @@ this.setParent = function( parent )
 
 
 
+	//-----------------------------------------
+	// update body parts (used at spawn / processPhenotype & standalone tests)
+	//-----------------------------------------
+	this.updateBodyParts = function()
+	{
+        let oldAgeThreshold = this.getOldAgeThreshold();
+
+        if (( _B[ _b + SS.B_AGE ] < oldAgeThreshold ) || ( _B[ _b + SS.B_ETERNAL ] === 1 ) )
+        {
+            if ( _B[ _b + SS.B_AGE ] < YOUNG_AGE_DURATION )
+            {
+                _B[ _b + SS.B_GROWTH ] = _B[ _b + SS.B_AGE ] / YOUNG_AGE_DURATION;
+            }
+            else
+            {
+                _B[ _b + SS.B_GROWTH ] = ONE;
+            }
+
+            if ( _B[ _b + SS.B_ENERGY ] < STARVING )
+            {
+                _B[ _b + SS.B_TIMER_DELTA ] = _B[ _b + SS.B_ENERGY ] / STARVING;
+                if ( _B[ _b + SS.B_TIMER_DELTA ] < STARVING_TIMER_DELTA )
+                {
+                    _B[ _b + SS.B_TIMER_DELTA ] = STARVING_TIMER_DELTA;
+                }
+            }
+            else
+            {
+                _B[ _b + SS.B_TIMER_DELTA ] += TIMER_DELTA_INCREASE_RATE;
+                if ( _B[ _b + SS.B_TIMER_DELTA ] > ONE )
+                {
+                    _B[ _b + SS.B_TIMER_DELTA ] = ONE;
+                }
+            }
+        }
+        else
+        {
+            if ( _B[ _b + SS.B_AGE ] > globalTweakers.maximumLifeSpan )
+            {
+                this.die( "old_age" );
+            }
+            else
+            {
+                _B[ _b + SS.B_TIMER_DELTA ] = ONE - ( _B[ _b + SS.B_AGE ] - oldAgeThreshold ) / OLD_AGE_DURATION;
+            }
+        }
+
+        _B[ _b + SS.B_TIMER ] += _B[ _b + SS.B_TIMER_DELTA ] * _B[ _b + SS.B_EFFORT ];
+
+		let radian = _B[ _b + SS.B_ANGLE ] * PI_OVER_180;
+		const hx = Math.sin( radian );
+		const hy = Math.cos( radian );
+		let perpX =  hy;
+		let perpY = -hx;
+
+        let directionDot = _focusDirection.x * perpX + _focusDirection.y * perpY;
+
+		const pd = _pd;
+		pd[ ROOT_PART * PS + P_X ] = _position.x;
+		pd[ ROOT_PART * PS + P_Y ] = _position.y;
+		pd[ ROOT_PART * PS + C_A ] = _B[ _b + SS.B_ANGLE ] - this.getMomentAdjustment();
+
+		for (let p=1; p<_B[ _b + SS.B_NUM_PARTS ]; p++)
+		{
+			const i      = p * PS;
+			const parent = _pParent[p];
+			const j      = parent * PS;
+
+			if ( parent == NULL_PART )
+			{
+				pd[ i + P_X ] = _position.x;
+				pd[ i + P_Y ] = _position.y;
+			}
+			else
+			{
+				pd[ i + P_X ] = pd[ j + P_X ];
+				pd[ i + P_Y ] = pd[ j + P_Y ];
+			}
+
+			pd[ i + C_A ] = pd[ j + C_A ] + _pAngle[p];
+
+			if ( p > 1 )
+			{
+				let ampModulator   = _pTurnAmp  [p] * directionDot;
+				let phaseModulator = _pTurnPhase[p] * directionDot;
+
+				let partRadian = _B[ _b + SS.B_TIMER ] * _B[ _b + SS.B_FREQUENCY ] + ( _pPhase[p] + phaseModulator );
+				pd[ i + B_A ] = ( _pAmp[p] + ampModulator ) * Math.sin( partRadian );
+
+				pd[ i + C_A ] += pd[ i + B_A ];
+			}
+
+			let partAngleRad = pd[ i + C_A ] * PI_OVER_180;
+			let length = _pLength[p];
+
+			if ( _B[ _b + SS.B_AGE ] < YOUNG_AGE_DURATION )
+			{
+                const sizeScale = NEWBORN_SIZE_SCALE + ( 1 - NEWBORN_SIZE_SCALE ) * _B[ _b + SS.B_GROWTH ];
+                length *= sizeScale;
+			}
+
+			let x = length * Math.sin( partAngleRad );
+			let y = length * Math.cos( partAngleRad );
+			pd[ i + Q_X ] = pd[ i + M_X ];
+			pd[ i + Q_Y ] = pd[ i + M_Y ];
+			pd[ i + M_X ] = pd[ i + P_X ];
+			pd[ i + M_Y ] = pd[ i + P_Y ];
+			pd[ i + P_X ] += x;
+			pd[ i + P_Y ] += y;
+			pd[ i + M_X ] += x * ONE_HALF;
+			pd[ i + M_Y ] += y * ONE_HALF;
+
+            pd[ i + A_X ] = pd[ i + P_X ] - pd[ j + P_X ];
+            pd[ i + A_Y ] = pd[ i + P_Y ] - pd[ j + P_Y ];
+            pd[ i + N_X ] =  pd[ i + A_Y ] / length;
+            pd[ i + N_Y ] = -pd[ i + A_X ] / length;
+
+            pd[ i + V_X ] = pd[ i + M_X ] - pd[ i + Q_X ];
+            pd[ i + V_Y ] = pd[ i + M_Y ] - pd[ i + Q_Y ];
+		}
+
+		this.calculateCenterOfMass();
+        this.adjustToCenterOfMass();
+		this.calculateCenterOfMass();
+
+		if ( _B[ _b + SS.B_AGE ] % 20 === 0 )
+		{
+            for (let p=1; p<_B[ _b + SS.B_NUM_PARTS ]; p++)
+            {
+                for (let o=1; o<_B[ _b + SS.B_NUM_PARTS ]; o++)
+                {
+                    if ( o != p )
+                    {
+                        let xx = pd[ p * PS + P_X ] - pd[ o * PS + P_X ];
+                        let yy = pd[ p * PS + P_Y ] - pd[ o * PS + P_Y ];
+                        let distance = Math.sqrt( xx * xx + yy * yy );
+                        distance = SWIMBOT_SELECT_RADIUS_SCALAR * Math.sqrt( distance );
+                        if ( distance > _B[ _b + SS.B_SELECT_RADIUS ] )
+                        {
+                            _B[ _b + SS.B_SELECT_RADIUS ] = distance;
+                        }
+                    }
+                }
+            }
+		}
+	}
+
 	//------------------------------------------------------------------
 	// copy the Part objects (fresh from embryology) into the arrays
 	//------------------------------------------------------------------

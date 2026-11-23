@@ -793,7 +793,7 @@ export function updateUI()
             + "border-radius:8px;padding:10px 12px;font:12px/1.45 Arial,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,0.45);";
         document.body.appendChild( plantPanel );
     }
-    renderPlantInspector( plantPanel, genePool );
+    if ( genePoolIsDefined ) { renderPlantInspector( plantPanel, genePool ); }
     updateHud();
     setTimeout( updateUI, UI_UPDATE_PERIOD );
 }
