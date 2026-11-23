@@ -42,20 +42,14 @@ export const SOIL_GRID_N_WORLD_4 = 192;   // Large world: 192x192 (saves 36% mem
 export const SOIL_GRID_N_WORLD_8 = 128;   // Huge world: 128x128 (saves 75% memory)
 
 export const POPULATION_LIMIT = 1500 * WORLD_AREA_FACTOR;
-export const MAX_SWIMBOTS = WORLD_SCALE <= 1 ? MAX_SWIMBOTS_WORLD_1 :
-                           WORLD_SCALE <= 2 ? MAX_SWIMBOTS_WORLD_2 :
-                           WORLD_SCALE <= 4 ? MAX_SWIMBOTS_WORLD_4 :
-                           MAX_SWIMBOTS_WORLD_8;
+export const MAX_SWIMBOTS = Math.min( 4500, 1500 * WORLD_AREA_FACTOR );  // Cap at 4500 to prevent OOM
 
 export const INITIAL_NUM_SWIMBOTS = Math.min( 500 * WORLD_AREA_FACTOR, WORLD_SCALE <= 1 ? MAX_SWIMBOTS_WORLD_1 : 
                                                               WORLD_SCALE <= 2 ? MAX_SWIMBOTS_WORLD_2 : 
                                                               WORLD_SCALE <= 4 ? MAX_SWIMBOTS_WORLD_4 : 
                                                               MAX_SWIMBOTS_WORLD_8 );
 
-export const MAX_FOODBITS = WORLD_SCALE <= 1 ? MAX_FOODBITS_WORLD_1 :
-                           WORLD_SCALE <= 2 ? MAX_FOODBITS_WORLD_2 :
-                           WORLD_SCALE <= 4 ? MAX_FOODBITS_WORLD_4 :
-                           MAX_FOODBITS_WORLD_8;
+export const MAX_FOODBITS = Math.max( 4000 * WORLD_AREA_FACTOR, 64000 );  // Scale with world area, minimum 64000 for large worlds
 
 export const MAX_FOODBITS_PER_TYPE  = 1000 * WORLD_AREA_FACTOR;
 export const MEAT_SLOT_SHARE        = 0.25;
@@ -436,8 +430,5 @@ export const MEAT_ASSIMILATION              = 0.55;
 export const PLANT_REGROW_CHANCE            = 0;
 export const PLANT_REGROW_DELAY             = 1500;
 
-// Memory optimization: Add SOIL_GRID_N export
-export const SOIL_GRID_N = WORLD_SCALE <= 1 ? 256 :
-                           WORLD_SCALE <= 2 ? 256 :
-                           WORLD_SCALE <= 4 ? 192 :
-                           128;
+// Soil grid scales with world scale for invariant physical cell size
+export const SOIL_GRID_N = 128 * WORLD_SCALE;

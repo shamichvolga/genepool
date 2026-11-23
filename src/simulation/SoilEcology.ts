@@ -15,7 +15,7 @@ export const SOIL_N = SOIL_GRID_N;
 const N = SOIL_N, CELLS = N * N, STRIDE = N + 1;
 const INV_W = N / POOL_WIDTH, INV_H = N / POOL_HEIGHT;
 const BASE_SOIL = 3.5;              // a thin desert background, per cell
-const PATCH_COUNT = Math.max( 4, Math.min( 20, Math.round( 6 * ( N / 128 ) * ( N / 128 ))));   // dense oases, one per ~1/6 of the area (capped for small worlds)
+const PATCH_COUNT = Math.max( 4, Math.round( 6 * ( N / 128 ) * ( N / 128 )));   // dense oases, one per ~1/6 of the area, scales with world area
 const PATCH_PEAK = 145;             // fertility at the centre of an oasis
 const PATCH_SIGMA_MIN = 8.0;        // oasis radius, in soil cells (8 .. 12)
 const PATCH_SIGMA_SPAN = 4.0;
