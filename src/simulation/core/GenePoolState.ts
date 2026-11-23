@@ -99,16 +99,16 @@ export class GenePoolState {
     public readonly perceptionScratch: PerceptionScratch;
     public readonly gridResult = new Int32Array(MAX_SWIMBOTS * 2);
     public readonly foodGridResult = new Int32Array(MAX_FOODBITS * 2);
-    public readonly plantShade = new Float32Array(environment.plantCount[0].length);
+    public readonly plantShade = new Float32Array(Math.min(environment.plantCount[0].length, MAX_FOODBITS));
     public readonly nearbyIndices = new Int32Array(MAX_SWIMBOTS);
     public readonly nearbySwimbotsArray = new Array(BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS);
     
     // Кэши для рендеринга
     public aliveSwimbotIndices: number[] = [];
     public aliveFoodBitIndices: number[] = [];
-    public distanceCache = new Array(MAX_SWIMBOTS);
-    public lastSwimbotPositions = new Array(MAX_SWIMBOTS);
-    public swimbotWasAlive = new Array(MAX_SWIMBOTS);
+    public distanceCache = new Array(Math.min(MAX_SWIMBOTS, 4500));
+    public lastSwimbotPositions = new Array(Math.min(MAX_SWIMBOTS, 4500));
+    public swimbotWasAlive = new Array(Math.min(MAX_SWIMBOTS, 4500));
     public lastCameraPosition: any;
     
     // Параллельный раннер
