@@ -1376,14 +1376,14 @@ _camera.setScale( POOL_WIDTH );
 	//------------------------------------------------------------------------
 	this.regrowFoodOriginal = function( numPlants )
 	{
-	    const lowDensity = numPlants < Math.max( 40, INITIAL_NUM_FOODBITS * 0.35 );
-	    const period = lowDensity ? Math.max( 2, Math.floor( globalTweakers.foodRegenerationPeriod * 0.25 )) : globalTweakers.foodRegenerationPeriod;
+	    const lowDensity = numPlants < Math.max( 200, INITIAL_NUM_FOODBITS * 0.45 );
+	    const period = lowDensity ? Math.max( 2, Math.floor( globalTweakers.foodRegenerationPeriod * 0.20 )) : globalTweakers.foodRegenerationPeriod;
 	    if ( _clock % period !== 0 ) return;
 	    const spread = globalTweakers.foodSpread * WORLD_SCALE;
 	    const left = POOL_LEFT + FOOD_BIT_BOUNDARY_MARGIN, right  = POOL_RIGHT  - FOOD_BIT_BOUNDARY_MARGIN;
 	    const top  = POOL_TOP  + FOOD_BIT_BOUNDARY_MARGIN, bottom = POOL_BOTTOM - FOOD_BIT_BOUNDARY_MARGIN;
 	    const oases = _colonyCenters.length > 0 ? _colonyCenters : oasisCentersWorld();
-	    const spawnsPerTick = Math.max( 2, Math.round( ( lowDensity ? 4 : 2 ) * WORLD_AREA_FACTOR ));
+	    const spawnsPerTick = Math.max( 10, Math.round( ( lowDensity ? 20 : 10 ) * WORLD_AREA_FACTOR ));
 	    for (let n = 0; n < spawnsPerTick; n++)
 	    {
 	        if ( numPlants >= 2 * MAX_FOODBITS_PER_TYPE ) return;
@@ -2794,8 +2794,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
                 // 70% of what a swimmer burns feeds the living soil under it;
                 // the other 30% goes to the ambient reservoir, which trickles
                 // 3% back into the soil every eighth step.
-                depositSoilEnergy( _st, B[ b + SS.B_POS_X ], B[ b + SS.B_POS_Y ], spent * 0.70 );
-                depositSoilEnergy( _st, B[ b + SS.B_POS_X ], B[ b + SS.B_POS_Y ], spent * 0.30 );
+                depositSoilEnergy( _st, B[ b + SS.B_POS_X ], B[ b + SS.B_POS_Y ], spent );
                 energyCycleCounters.nutrientsFromSwimming += environment.returnSwimmingEnergyAt( B[ b + SS.B_POS_X ], B[ b + SS.B_POS_Y ], spent );
             }
         }
@@ -4472,16 +4471,18 @@ const feedRoom = Math.min( 100, swimbot.getMaxEnergy() - swimbot.getEnergy() );
 	this.indexOfClosestSwimbotToScreenPosition = function( x, y )
 	{
         let indexOfClosest = NULL_INDEX;
-        let closestDistance = 1000.0;
+        const vs = Math.max( 0.01, _viewScale || 0.1 );
+        const zoomPad = Math.max( 0, 14 / vs );
+        let closestDistance = Infinity;
+        _vectorUtility = this.convertScreenCoordinatesToPoolPosition( x, y );
 
         for (let s=0; s<MAX_SWIMBOTS; s++)
         {
             if ( _swimbots[s].getAlive() )
             {
-                _vectorUtility = this.convertScreenCoordinatesToPoolPosition( x, y );
-
+                const r = _swimbots[s].getSelectRadius() + zoomPad;
                 let distanceSquared = _swimbots[s].getPosition().getDistanceSquaredTo( _vectorUtility );
-                if ( distanceSquared < _swimbots[s].getSelectRadius() * _swimbots[s].getSelectRadius() )
+                if ( distanceSquared < r * r )
                 {
                     if ( distanceSquared < closestDistance )
                     {
@@ -4548,22 +4549,21 @@ const feedRoom = Math.min( 100, swimbot.getMaxEnergy() - swimbot.getEnergy() );
 this.indexOfClosestFoodBitToScreenPosition = function( x, y )
 	{
         let indexOfClosest = NULL_INDEX;
-        let closestDistance = 1000.0;
+        const vs = Math.max( 0.01, _viewScale || 0.1 );
+        const grabR = Math.max( FOOD_BIT_GRAB_RADIUS, 16 / vs );
+        const grabR2 = grabR * grabR;
+        let closestDistance = grabR2;
+        _vectorUtility = this.convertScreenCoordinatesToPoolPosition( x, y );
 
         for (let f=0; f<MAX_FOODBITS; f++)
         {
             if ( _foodBits[f].getAlive() )
             {
-                _vectorUtility = this.convertScreenCoordinatesToPoolPosition( x, y );
-
                 let distanceSquared = _foodBits[f].getPosition().getDistanceSquaredTo( _vectorUtility );
-                if ( distanceSquared < FOOD_BIT_GRAB_RADIUS * FOOD_BIT_GRAB_RADIUS )
+                if ( distanceSquared < closestDistance )
                 {
-                    if ( distanceSquared < closestDistance )
-                    {
-                        indexOfClosest = f;
-                        closestDistance = distanceSquared;
-                    }
+                    indexOfClosest = f;
+                    closestDistance = distanceSquared;
                 }
              }
         }

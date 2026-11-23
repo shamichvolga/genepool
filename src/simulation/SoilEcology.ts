@@ -14,9 +14,9 @@ import { SharedState } from "./SharedState";
 export const SOIL_N = SOIL_GRID_N;
 const N = SOIL_N, CELLS = N * N, STRIDE = N + 1;
 const INV_W = N / POOL_WIDTH, INV_H = N / POOL_HEIGHT;
-const BASE_SOIL = 3.5;              // a thin desert background, per cell
+const BASE_SOIL = 6.5;              // a thin desert background, per cell
 const PATCH_COUNT = Math.max( 4, Math.round( 6 * ( N / 128 ) * ( N / 128 )));   // dense oases, one per ~1/6 of the area, scales with world area
-const PATCH_PEAK = 145;             // fertility at the centre of an oasis
+const PATCH_PEAK = 260;             // fertility at the centre of an oasis
 const PATCH_SIGMA_MIN = 8.0;        // oasis radius, in soil cells (8 .. 12)
 const PATCH_SIGMA_SPAN = 4.0;
 const MEAN_SIGMA_SQUARED = 101.3333333333;   // mean of sigma^2, sigma uniform in [8,12]
@@ -231,8 +231,8 @@ export function soilPlantGrowth( st: SharedState, x: number, y: number, currentE
     const pool = poolRoot( st, x, y, r );
     // capacity scales with the root square: a zone of 256 world units at
     // scale 2, so the max was ~17 before; now the whole square counts.
-    const maxUptake = Math.min( 0.45, 0.04 + pool * 0.00065 );
-    const suck = Math.min( maxUptake, wanted * 0.045, pool * 0.015 );
+    const maxUptake = Math.min( 0.90, 0.08 + pool * 0.0012 );
+    const suck = Math.min( maxUptake, wanted * 0.08, pool * 0.025 );
     if ( suck <= 0 ) return 0;
     return withdrawRootZone( st, x, y, r, suck );
 }

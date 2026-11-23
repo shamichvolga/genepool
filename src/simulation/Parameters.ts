@@ -31,10 +31,10 @@ export const BASE_WORLD_TEMPLATE = {
     soilGridN: 128,
     patchCount: 6,
     worldEnergy: 1.5,
-    initialPlants: 600,
+    initialPlants: 3000,
     initialBots: 375,
     maxSwimbotsBase: 750,
-    maxFoodBitsBase: 4000,
+    maxFoodBitsBase: 20000,
 };
 
 export function createWorldConfig(scale: number)
@@ -42,7 +42,7 @@ export function createWorldConfig(scale: number)
     const s = Math.max(1, scale || 1);
     const areaFactor = s * s;
     const maxSwimbots = Math.min(4500, Math.max(1000, Math.round(BASE_WORLD_TEMPLATE.maxSwimbotsBase * areaFactor)));
-    const maxFoodBits = Math.min(32000, Math.max(4000, Math.round(BASE_WORLD_TEMPLATE.maxFoodBitsBase * areaFactor)));
+    const maxFoodBits = Math.min(120000, Math.max(20000, Math.round(BASE_WORLD_TEMPLATE.maxFoodBitsBase * areaFactor)));
     return {
         scale: s,
         areaFactor,
@@ -51,7 +51,7 @@ export function createWorldConfig(scale: number)
         soilGridN: BASE_WORLD_TEMPLATE.soilGridN * s,
         patchCount: Math.max(4, Math.round(BASE_WORLD_TEMPLATE.patchCount * areaFactor)),
         worldEnergy: BASE_WORLD_TEMPLATE.worldEnergy * areaFactor,
-        initialPlants: Math.min(16000, Math.max(600, Math.round(BASE_WORLD_TEMPLATE.initialPlants * areaFactor))),
+        initialPlants: Math.min(80000, Math.max(3000, Math.round(BASE_WORLD_TEMPLATE.initialPlants * areaFactor))),
         initialBots: Math.min(3500, Math.max(150, Math.round(BASE_WORLD_TEMPLATE.initialBots * areaFactor))),
         maxSwimbots,
         maxFoodBits,
@@ -126,10 +126,10 @@ export const CLIMATE_PROBE_DISTANCE        = 150;
 export const CLASSIC_NUM_SWIMBOTS          = 1000;
 export const CLASSIC_NUM_FOODBITS          = 1000;
 
-export const ENVIRONMENT_SEEDS_PER_PERIOD  = WORLD_AREA_FACTOR;
-export const PLANT_CELL_CAPACITY           = 6;
+export const ENVIRONMENT_SEEDS_PER_PERIOD  = 5 * WORLD_AREA_FACTOR;
+export const PLANT_CELL_CAPACITY           = 30;
 export const PLANT_PARENT_SEED_FRACTION    = 0.7;
-export const ENVIRONMENT_PLANT_SPREAD_RATE = 0.0007;
+export const ENVIRONMENT_PLANT_SPREAD_RATE = 0.0035;
 export const LOCAL_ENVIRONMENT_PLANT_GROWTH = true;
 export const PLANT_SEED_MIN_DISTANCE       = 300;
 export const PLANT_SEED_MAX_DISTANCE       = 600;
@@ -141,12 +141,12 @@ export const PREDATOR_FLEE_RADIUS          = 250.0;
 //---------------------------------------------------------------------------
 export const LOCAL_PLANT_GROWTH            = false;
 
-export const FOOD_SPROUT_RATE              = 0.006;
+export const FOOD_SPROUT_RATE              = 0.03;
 export const FOOD_LOCAL_RADIUS             = 250.0;
-export const FOOD_LOCAL_CAPACITY           = 8;
+export const FOOD_LOCAL_CAPACITY           = 40;
 export const LOCAL_PLANT_SEED_RADIUS       = 1200.0;
 
-export const FOOD_RANDOM_SEED_CHANCE       = 0.02;
+export const FOOD_RANDOM_SEED_CHANCE       = 0.10;
 
 export const MEAT_DECAY_TIME               = 6000;
 

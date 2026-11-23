@@ -243,7 +243,7 @@ export function stepRootNetwork( st: any, bots?: any[] ): void
     if ( !st ) return;
     const clock = st.clock || 0;
     const N = st.liveFood.length;
-    const maxSpawns = Math.max( 2, Math.round( N / 2500 ));
+    const maxSpawns = Math.max( 5, Math.round( N / 1200 ));
     let spawned = 0;
     const offset = N > 0 ? (( clock * 31 ) % N ) : 0;
     for ( let i = 0; i < N && spawned < maxSpawns; i++ )

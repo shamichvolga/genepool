@@ -100,7 +100,16 @@ function makeSnapshot()
                                 eternal : pool.getSwimbotEternalStatus( selected ),
                             } : null,
         // Root dynasty data for worker bridge
-        plantParent       : Array.from( sharedState().plantParent ),
+        rootLinks         : (() => {
+            const st = sharedState();
+            const pp = st.plantParent, lf = st.liveFood, rf = st.plantRootFlow;
+            const links: number[] = [];
+            for ( let c = 0; c < pp.length; c++ )
+            {
+                if ( lf[ c ] === 1 && pp[ c ] >= 0 ) { links.push( pp[ c ], c, rf[ c ] || 0 ); }
+            }
+            return links;
+        })(),
         selectedFoodBit   : sharedState().selectedPlantIndex,
         selectedPlant     : (() => {
             const st = sharedState();

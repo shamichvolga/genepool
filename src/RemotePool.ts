@@ -36,7 +36,22 @@ export function createRemotePool( worker: Worker, onPetriLoaded: () => void )
     worker.addEventListener( "message", ( e: MessageEvent ) =>
     {
         const m = e.data;
-        if      ( m.type === "snapshot" ) { S = m.data; if ( m.data.plantParent ) { ( S as any ).plantParent = m.data.plantParent; } }
+        if      ( m.type === "snapshot" ) {
+            S = m.data;
+            if ( Array.isArray( m.data.rootLinks )) {
+                const links = m.data.rootLinks;
+                let maxIdx = 0;
+                for ( let i = 0; i < links.length; i += 3 ) {
+                    if ( links[ i ] > maxIdx ) maxIdx = links[ i ];
+                    if ( links[ i + 1 ] > maxIdx ) maxIdx = links[ i + 1 ];
+                }
+                const arr = new Int32Array( maxIdx + 1 ).fill( -1 );
+                for ( let i = 0; i < links.length; i += 3 ) { arr[ links[ i + 1 ] ] = links[ i ]; }
+                ( S as any ).plantParent = arr;
+            } else if ( m.data.plantParent ) {
+                ( S as any ).plantParent = m.data.plantParent;
+            }
+        }
         else if ( m.type === "ready"    ) { fixed = m.data; }
         else if ( m.type === "reply"    )
         {
