@@ -36,7 +36,7 @@ export function createRemotePool( worker: Worker, onPetriLoaded: () => void )
     worker.addEventListener( "message", ( e: MessageEvent ) =>
     {
         const m = e.data;
-        if      ( m.type === "snapshot" ) { S = m.data; }
+        if      ( m.type === "snapshot" ) { S = m.data; if ( m.data.plantParent ) { ( S as any ).plantParent = m.data.plantParent; } }
         else if ( m.type === "ready"    ) { fixed = m.data; }
         else if ( m.type === "reply"    )
         {
@@ -63,6 +63,7 @@ export function createRemotePool( worker: Worker, onPetriLoaded: () => void )
 
     const local: any =
     {
+        getPlantParent: () => S.plantParent || [],
         request,
 
         saveWorldFile: ( withFamilyTree = true ) => ask({ type: "saveWorld", withFamilyTree }),
