@@ -24,6 +24,25 @@ export function renderPlantInspector( panel: any, pool: any, st: any ): boolean
     const maxE = 95;
     let kids = 0;
     for ( let c = 0; c < st.plantParent.length; c++ ) { if ( st.plantParent[ c ] === f ) kids ++; }
+    // Count grandchildren and deeper descendants (2+ generations)
+    let grandkids = 0;
+    const visited = new Set<number>([ f ]);
+    const queue: number[] = [ f ];
+    let depth = 0;
+    while ( queue.length > 0 && depth < 32 )
+    {
+        const current = queue.shift()!;
+        for ( let c = 0; c < st.plantParent.length; c++ )
+        {
+            if ( st.plantParent[ c ] === current && !visited.has( c ) )
+            {
+                visited.add( c );
+                if ( depth >= 1 ) grandkids++;  // Only count 2+ generations
+                queue.push( c );
+            }
+        }
+        depth++;
+    }
     const suck = st.foodSucking[ f ] || 0;
     const flow = st.plantRootFlow[ f ] || 0;
 
@@ -35,6 +54,7 @@ export function renderPlantInspector( panel: any, pool: any, st: any ): boolean
                 <div class="plant-card-row">Wood <span>${pad( w, 1 )}</span></div>
                 <div class="plant-card-row">Age <span>${Math.round( age )}</span> steps</div>
                 <div class="plant-card-row">Children <span>${kids}</span></div>
+                <div class="plant-card-row">Grandchildren+ <span>${grandkids}</span></div>
                 <div class="plant-card-row">Suction <span>${pad( suck, 3 )}</span>/step</div>
                 <div class="plant-card-row">Root flow <span>${pad( flow, 3 )}</span></div>
             </div>

@@ -98,6 +98,10 @@ function makeSnapshot()
                                 energy  : pool.getSwimbotEnergy( selected ),
                                 eternal : pool.getSwimbotEternalStatus( selected ),
                             } : null,
+        // Root dynasty data for worker bridge
+        plantParent       : Array.from( sharedState().plantParent ),
+        selectedFoodBit   : pool.getSelectedFoodBit ? pool.getSelectedFoodBit() : -1,
+         selectedPlant     : ( pool.getSelectedFoodBit ? pool.getSelectedFoodBit() : -1 ) >= 0 ? { childrenCount: 0, grandchildrenCount: 0, sapFlow: 0 } : null,
     };
     phaseTimes.fill( 0 );   // (the times are per snapshot)
     return snapshot;
