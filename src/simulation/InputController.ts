@@ -32,7 +32,6 @@ export interface InputContext {
     mousedOverSwimbot: number;
     mousedOverFoodBit: number;
     setSelectedSwimbot( index: number ): void;
-    setSelectedPlantIndex( f: number ): void;
     initializeDebugTrail( s: number ): void;
     moveFoodBitsFromObstacle(): void;
     clearViewMode(): void;
@@ -129,9 +128,7 @@ export function createInputController( ctx: InputContext )
         const s = indexOfClosestSwimbot( x, y );
         if ( s !== NULL_INDEX ) { ctx.setSelectedSwimbot( s ); ctx.st.selectedPlantIndex = -1; return; }
         const f = findClosestPlant( v.x, v.y );
-        if ( f >= 0 ) { ctx.setSelectedPlantIndex( f ); }
-        else { ctx.st.selectedPlantIndex = -1; }
-    }
+}
 
     function handleNonUITouchDown( x: number, y: number ): void
     {
@@ -152,7 +149,6 @@ export function createInputController( ctx: InputContext )
             const pickedFood = indexOfClosestFoodBit( x, y );
             if ( pickedFood != NULL_INDEX )
             {
-                if ( ctx.st.foodType[ pickedFood ] !== 2 ) { ctx.setSelectedPlantIndex( pickedFood ); }
                 _foodBitBeingDragged = true;
                 const v = convertScreenToPool( x, y );
                 ctx.foodBits[ pickedFood ].setPosition( v );

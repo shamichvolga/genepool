@@ -2573,6 +2573,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 
 	// Plant growth, fruiting, seeding and carrion decay all live in FoodEcology
 	// now. GenePool keeps the step clock and the grid caches they operate on.
+	this.updateFood = function() { FoodEcology.updateFood( _foodContext ); }
 	this.spawnPlant = function( position, type, numType0, numType1, scatter, donor: number = NULL_INDEX )
 	{
 	    return FoodEcology.spawnPlant( _foodContext, position, type, numType0, numType1, scatter, donor );
@@ -3091,7 +3092,6 @@ const feedRoom = Math.min( 100, swimbot.getMaxEnergy() - swimbot.getEnergy() );
 	    get mousedOverSwimbot()   { return _mousedOverSwimbot; },   set mousedOverSwimbot(v) { _mousedOverSwimbot = v; },
 	    get mousedOverFoodBit()   { return _mousedOverFoodBit; },   set mousedOverFoodBit(v) { _mousedOverFoodBit = v; },
 	    setSelectedSwimbot:       ( i ) => setSelectedSwimbot( i ),
-	    setSelectedPlantIndex:    ( f ) => _this.setSelectedPlantIndex( f ),
 	    initializeDebugTrail:     ( s ) => _this.initializeDebugTrail( s ),
 	    moveFoodBitsFromObstacle: () => moveFoodBitsFromObstacle(),
 	    clearViewMode:            () => _this.clearViewMode(),
