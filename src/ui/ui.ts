@@ -18,7 +18,7 @@ import { BRAIN_STATE_FLEEING_PREDATOR, BRAIN_STATE_LOOKING_FOR_FOOD, BRAIN_STATE
 import { DEFAULT_FOOD_BIT_ENERGY, DEFAULT_FOOD_BIT_MAX_SPAWN_RADIUS, MAX_FOOD_BIT_ENERGY, MAX_FOOD_BIT_MAX_SPAWN_RADIUS, MIN_FOOD_BIT_ENERGY, MIN_FOOD_BIT_MAX_SPAWN_RADIUS } from "../simulation/FoodBit";
 import { CameraNavigationAction, SimulationStartMode } from "../simulation/Globals";
 import { NULL_INDEX } from "../simulation/MathConstants";
-import { DEFAULT_CHILD_ENERGY_RATIO, DEFAULT_FOOD_REGENERATION_PERIOD, DEFAULT_MAXIMUM_AGE, DEFAULT_SWIMBOT_HUNGER_THRESHOLD, MAX_CHILD_ENERGY_RATIO, MAX_FOOD_REGENERATION_PERIOD, MAX_MAXIMUM_AGE, MAX_SWIMBOT_HUNGER_THRESHOLD, MIN_CHILD_ENERGY_RATIO, MIN_FOOD_REGENERATION_PERIOD, MIN_MAXIMUM_AGE, MIN_SWIMBOT_HUNGER_THRESHOLD, PREDATOR_LEVEL_THRESHOLD } from "../simulation/Parameters";
+import { createWorldConfig, DEFAULT_CHILD_ENERGY_RATIO, DEFAULT_FOOD_REGENERATION_PERIOD, DEFAULT_MAXIMUM_AGE, DEFAULT_SWIMBOT_HUNGER_THRESHOLD, MAX_CHILD_ENERGY_RATIO, MAX_FOOD_REGENERATION_PERIOD, MAX_MAXIMUM_AGE, MAX_SWIMBOT_HUNGER_THRESHOLD, MIN_CHILD_ENERGY_RATIO, MIN_FOOD_REGENERATION_PERIOD, MIN_MAXIMUM_AGE, MIN_SWIMBOT_HUNGER_THRESHOLD, PREDATOR_LEVEL_THRESHOLD } from "../simulation/Parameters";
 import { ATTRACTION_BIG, ATTRACTION_CLOSEST, ATTRACTION_COLORFUL, ATTRACTION_CROOKED, ATTRACTION_HYPER, ATTRACTION_LONG, ATTRACTION_NO_COLOR, ATTRACTION_RANDOM, ATTRACTION_SHORT, ATTRACTION_SIMILAR_COLOR, ATTRACTION_SIMILAR_HYPER, ATTRACTION_SIMILAR_LENGTH, ATTRACTION_SIMILAR_SIZE, ATTRACTION_SIMILAR_STRAIGHT, ATTRACTION_SMALL, ATTRACTION_STILL, ATTRACTION_STRAIGHT, MAX_PARTS, MIN_PARTS, NUM_ATTRACTIONS } from "../simulation/SwimbotTypes";
 import { assert } from "../simulation/Utility";
 import { ViewTrackingMode } from "../simulation/ViewTracking";
@@ -86,6 +86,17 @@ export function initializeUI()
     setupHints();
     setupSoilButton();
     syncPoolStartupInputs();
+    const botsInput = document.getElementById( "initialSwimbotsInput" ) as HTMLInputElement | null;
+    if ( botsInput )
+    {
+        const cfg = createWorldConfig( WORLD_SCALE );
+        const cur = Number( botsInput.value );
+        if ( !cur || cur === 375 || cur === 500 || cur === 1500 || cur === 3500 )
+        {
+            botsInput.value = String( cfg.initialBots );
+            applyPoolStartupParams();
+        }
+    }
     // The HTML button also has an inline call; capturing here lets the UI own
     // the single application, the notice and the fresh-world shortcut.
     const applyParamsButton = document.getElementById( "applyPoolParamsButton" );
@@ -919,6 +930,17 @@ export function updateUI()
             _graph.render();
         }
     }
+    let plantPanel = document.getElementById( "plantInspectorPanel" );
+    if ( !plantPanel )
+    {
+        plantPanel = document.createElement( "div" );
+        plantPanel.id = "plantInspectorPanel";
+        plantPanel.style.cssText = "display:none;position:fixed;left:12px;bottom:56px;z-index:950;width:255px;"
+            + "background:rgba(20,28,22,0.93);color:#e8f4e8;border:1px solid rgba(135,225,95,0.55);"
+            + "border-radius:8px;padding:10px 12px;font:12px/1.45 Arial,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,0.45);";
+        document.body.appendChild( plantPanel );
+    }
+    renderPlantInspector( plantPanel, genePool );
     updateHud();
     setTimeout( updateUI, UI_UPDATE_PERIOD );
 }

@@ -6,7 +6,7 @@
 // in the field is real: it is taken out of the atmosphere at the start and
 // every withdrawal is bounded by what the cells actually hold.
 //------------------------------------------------------------------------------
-import { drawFromAtmosphere } from "./EnergyBudget";
+import { drawFromAtmosphere, getAtmosphereEnergy } from "./EnergyBudget";
 import { gpRandom } from "./Globals";
 import { POOL_BOTTOM, POOL_HEIGHT, POOL_LEFT, POOL_TOP, POOL_WIDTH } from "./Pool";
 import { SOIL_GRID_N } from "./SoilGrid";
@@ -341,6 +341,33 @@ export function stepSoilEcology( st: SharedState, clock: number ): number
         }
     }
     f.set( tmp );
+
+    // Return excess water/atmosphere energy back to oases and soil so biosphere never starves
+    const atm = getAtmosphereEnergy();
+    const maxWaterReserve = SOIL_START_ENERGY * 0.08;
+    if ( atm > maxWaterReserve )
+    {
+        const returned = drawFromAtmosphere(( atm - maxWaterReserve ) * 0.25 );
+        if ( returned > 0 )
+        {
+            const oasisShare = returned * 0.70;
+            const soilShare  = returned - oasisShare;
+            if ( PATCH_COUNT > 0 && oasisShare > 0 )
+            {
+                const perOasis = oasisShare / PATCH_COUNT;
+                for ( let p = 0; p < PATCH_COUNT; p++ )
+                {
+                    depositSoilEnergy( st, _oasisX[p], _oasisY[p], perOasis );
+                }
+            }
+            if ( soilShare > 0 )
+            {
+                const perCell = soilShare / CELLS;
+                for ( let i = 0; i < CELLS; i++ ) { f[i] += perCell; }
+            }
+            rebuildSoilSAT( st );
+        }
+    }
     return 0;
 }
 

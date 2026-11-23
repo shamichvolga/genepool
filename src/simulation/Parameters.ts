@@ -24,36 +24,50 @@ export const MIN_CHILD_ENERGY_RATIO                = ZERO;
 export const MAX_CHILD_ENERGY_RATIO                = ONE;
 export const MIN_SWIMBOT_HUNGER_THRESHOLD          = ZERO;
 
-// Memory optimization: cap maximum array sizes to prevent OOM
-export const MAX_SWIMBOTS_WORLD_1 = 500;  // Small world
-export const MAX_SWIMBOTS_WORLD_2 = 1500; // Normal world  
-export const MAX_SWIMBOTS_WORLD_4 = 2500; // Large world
-export const MAX_SWIMBOTS_WORLD_8 = 4500; // Huge world
+// Unified parent world template (scale = 1 is unit 8000x8000 world, cell size = 62.5)
+export const BASE_WORLD_TEMPLATE = {
+    width: 8000,
+    height: 8000,
+    soilGridN: 128,
+    patchCount: 6,
+    worldEnergy: 1.5,
+    initialPlants: 600,
+    initialBots: 375,
+    maxSwimbotsBase: 750,
+    maxFoodBitsBase: 4000,
+};
 
-export const MAX_FOODBITS_WORLD_1 = 4000;   // Small world
-export const MAX_FOODBITS_WORLD_2 = 8000;   // Normal world
-export const MAX_FOODBITS_WORLD_4 = 12000;  // Large world
-export const MAX_FOODBITS_WORLD_8 = 16000;  // Huge world
+export function createWorldConfig(scale: number)
+{
+    const s = Math.max(1, scale || 1);
+    const areaFactor = s * s;
+    const maxSwimbots = Math.min(4500, Math.max(1000, Math.round(BASE_WORLD_TEMPLATE.maxSwimbotsBase * areaFactor)));
+    const maxFoodBits = Math.min(32000, Math.max(4000, Math.round(BASE_WORLD_TEMPLATE.maxFoodBitsBase * areaFactor)));
+    return {
+        scale: s,
+        areaFactor,
+        width: BASE_WORLD_TEMPLATE.width * s,
+        height: BASE_WORLD_TEMPLATE.height * s,
+        soilGridN: BASE_WORLD_TEMPLATE.soilGridN * s,
+        patchCount: Math.max(4, Math.round(BASE_WORLD_TEMPLATE.patchCount * areaFactor)),
+        worldEnergy: BASE_WORLD_TEMPLATE.worldEnergy * areaFactor,
+        initialPlants: Math.min(16000, Math.max(600, Math.round(BASE_WORLD_TEMPLATE.initialPlants * areaFactor))),
+        initialBots: Math.min(3500, Math.max(150, Math.round(BASE_WORLD_TEMPLATE.initialBots * areaFactor))),
+        maxSwimbots,
+        maxFoodBits,
+    };
+}
 
-// Soil field limits - smaller for large worlds to save memory
-export const SOIL_GRID_N_WORLD_1 = 256;   // Small world: 256x256
-export const SOIL_GRID_N_WORLD_2 = 256;   // Normal world: 256x256
-export const SOIL_GRID_N_WORLD_4 = 192;   // Large world: 192x192 (saves 36% memory)
-export const SOIL_GRID_N_WORLD_8 = 128;   // Huge world: 128x128 (saves 75% memory)
+const _ACTIVE_WORLD_CFG = createWorldConfig(WORLD_SCALE);
 
-export const POPULATION_LIMIT = 1500 * WORLD_AREA_FACTOR;
-export const MAX_SWIMBOTS = Math.min( 4500, 1500 * WORLD_AREA_FACTOR );  // Cap at 4500 to prevent OOM
+export const POPULATION_LIMIT       = _ACTIVE_WORLD_CFG.maxSwimbots;
+export const MAX_SWIMBOTS           = _ACTIVE_WORLD_CFG.maxSwimbots;
+export const INITIAL_NUM_SWIMBOTS   = _ACTIVE_WORLD_CFG.initialBots;
 
-export const INITIAL_NUM_SWIMBOTS = Math.min( 500 * WORLD_AREA_FACTOR, WORLD_SCALE <= 1 ? MAX_SWIMBOTS_WORLD_1 : 
-                                                              WORLD_SCALE <= 2 ? MAX_SWIMBOTS_WORLD_2 : 
-                                                              WORLD_SCALE <= 4 ? MAX_SWIMBOTS_WORLD_4 : 
-                                                              MAX_SWIMBOTS_WORLD_8 );
-
-export const MAX_FOODBITS = Math.max( 4000 * WORLD_AREA_FACTOR, 64000 );  // Scale with world area, minimum 64000 for large worlds
-
-export const MAX_FOODBITS_PER_TYPE  = 1000 * WORLD_AREA_FACTOR;
+export const MAX_FOODBITS           = _ACTIVE_WORLD_CFG.maxFoodBits;
 export const MEAT_SLOT_SHARE        = 0.25;
-export const INITIAL_NUM_FOODBITS   = 1000 * WORLD_AREA_FACTOR;
+export const MAX_FOODBITS_PER_TYPE  = Math.floor(MAX_FOODBITS * (1 - MEAT_SLOT_SHARE) * 0.5);
+export const INITIAL_NUM_FOODBITS   = _ACTIVE_WORLD_CFG.initialPlants;
 
 export const NON_REPRODUCING_JUNK_DNA_LIMIT    = 0.1;
 
@@ -430,23 +444,5 @@ export const MEAT_ASSIMILATION              = 0.55;
 export const PLANT_REGROW_CHANCE            = 0;
 export const PLANT_REGROW_DELAY             = 1500;
 
-// Soil grid scales with world scale for invariant physical cell size
+// Soil grid scales linearly with world scale for invariant physical cell size (62.5)
 export const SOIL_GRID_N = 128 * WORLD_SCALE;
-
-// Unified world template for scale-invariant maps
-export function createWorldConfig(scale: number)
-{
-    const baseScale = 1;
-    const areaFactor = scale * scale;
-    return {
-        scale,
-        width: 8000 * scale,
-        height: 8000 * scale,
-        soilGridN: 128 * scale,
-        patchCount: Math.max(4, Math.round(6 * areaFactor)),
-        worldEnergy: 1.5 * areaFactor,
-        initialPlants: Math.round(1000 * areaFactor),
-        initialBots: Math.min(4500, Math.round(500 * areaFactor)),
-        maxSwimbots: Math.min(4500, 1500 * areaFactor),
-    };
-}

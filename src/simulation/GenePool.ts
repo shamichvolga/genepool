@@ -688,9 +688,11 @@ export function GenePool()
         _st.soilField.fill( 0 );
         _st.foodSucking.fill( 0 );
         seedSoilField( _st, energyMult );
-        _colonyCenters = oasisCentersWorld().slice( 0, COLONY_COUNT );
+        const allOases = oasisCentersWorld();
+        const activeColonies = Math.max( 1, Math.min( 24, allOases.length ));
+        _colonyCenters = allOases.slice( 0, activeColonies );
         _colonySites = [];
-        for ( let c = 0; c < COLONY_COUNT; c++ ) { _colonySites.push([]); }
+        for ( let c = 0; c < activeColonies; c++ ) { _colonySites.push([]); }
 
         //-------------------------------------------------------------------
         // The "random" pool lives in the new environment (temperature map,
@@ -927,6 +929,7 @@ _camera.setScale( POOL_WIDTH );
 	    // the reference total is taken only after the founders and the starting
 	    // plants are in place (and the soil has been seeded), so that the
 	    // conservation check measures the closed loop, not the initialization
+	    RootNetwork.seedDynasties( _st );
 	    _totalWorldEnergy = this.getTotalWorldEnergy();
 	}
 
@@ -989,18 +992,31 @@ _camera.setScale( POOL_WIDTH );
 	{
 	    environment.clearPlantCounts();
 
-	    // ORIGINAL_FOOD_ENABLED: as in the original - the starting plants anywhere in the pool, evenly
+	    // ORIGINAL_FOOD_ENABLED: 75% in fertile oases so groves & root dynasties thrive, 25% across pool
 	    if ( ORIGINAL_FOOD_ENABLED )
 	    {
 	        let placed = 0;
-	        for (let attempt = 0; ( placed < INITIAL_NUM_FOODBITS ) && ( attempt < INITIAL_NUM_FOODBITS * 20 ); attempt++)
+	        const oases = _colonyCenters.length > 0 ? _colonyCenters : oasisCentersWorld();
+	        for (let attempt = 0; ( placed < INITIAL_NUM_FOODBITS ) && ( attempt < INITIAL_NUM_FOODBITS * 25 ); attempt++)
 	        {
-	            this.randomPointInPool( _vectorUtility );
+	            if ( oases.length > 0 && gpRandom() < 0.75 )
+	            {
+	                const o = oases[ Math.floor( gpRandom() * oases.length ) ];
+	                const a = gpRandom() * PI2, r = 680 * Math.sqrt( gpRandom() );
+	                _vectorUtility.x = Math.max( POOL_LEFT + FOOD_BIT_BOUNDARY_MARGIN, Math.min( POOL_RIGHT - FOOD_BIT_BOUNDARY_MARGIN, o.x + Math.cos( a ) * r ));
+	                _vectorUtility.y = Math.max( POOL_TOP + FOOD_BIT_BOUNDARY_MARGIN, Math.min( POOL_BOTTOM - FOOD_BIT_BOUNDARY_MARGIN, o.y + Math.sin( a ) * r ));
+	            }
+	            else
+	            {
+	                this.randomPointInPool( _vectorUtility );
+	            }
 	            if ( _obstacle.getObstruction( _vectorUtility, _vectorUtility ) ) continue;
 	            _foodBits[ placed ].initialize( placed );
 	            _foodBits[ placed ].setType( 0 );
-	            if ( !fundPlant( placed, globalTweakers.foodBitEnergy )) continue;
+	            const startE = ( oases.length > 0 && gpRandom() < 0.25 ) ? globalTweakers.foodBitEnergy * 1.4 : globalTweakers.foodBitEnergy;
+	            if ( !fundPlant( placed, startE )) continue;
 	            _foodBits[ placed ].setPosition( _vectorUtility );
+	            if ( PLANT_SIZE_ENABLED && gpRandom() < 0.35 ) { startPlantAge( placed ); }
 	            environment.plantCount[0][ environment.plantCellIndex( _vectorUtility.x, _vectorUtility.y ) ] ++;
 	            placed ++;
 	        }
@@ -1360,38 +1376,54 @@ _camera.setScale( POOL_WIDTH );
 	//------------------------------------------------------------------------
 	this.regrowFoodOriginal = function( numPlants )
 	{
-	    if ( _clock % globalTweakers.foodRegenerationPeriod !== 0 ) return;
+	    const lowDensity = numPlants < Math.max( 40, INITIAL_NUM_FOODBITS * 0.35 );
+	    const period = lowDensity ? Math.max( 2, Math.floor( globalTweakers.foodRegenerationPeriod * 0.25 )) : globalTweakers.foodRegenerationPeriod;
+	    if ( _clock % period !== 0 ) return;
 	    const spread = globalTweakers.foodSpread * WORLD_SCALE;
 	    const left = POOL_LEFT + FOOD_BIT_BOUNDARY_MARGIN, right  = POOL_RIGHT  - FOOD_BIT_BOUNDARY_MARGIN;
 	    const top  = POOL_TOP  + FOOD_BIT_BOUNDARY_MARGIN, bottom = POOL_BOTTOM - FOOD_BIT_BOUNDARY_MARGIN;
-	    for (let n = 0; n < WORLD_AREA_FACTOR; n++)
+	    const oases = _colonyCenters.length > 0 ? _colonyCenters : oasisCentersWorld();
+	    const spawnsPerTick = Math.max( 2, Math.round( ( lowDensity ? 4 : 2 ) * WORLD_AREA_FACTOR ));
+	    for (let n = 0; n < spawnsPerTick; n++)
 	    {
 	        if ( numPlants >= 2 * MAX_FOODBITS_PER_TYPE ) return;
 	        const child = this.findLowestDeadFoodBitInArray();
 	        if ( child === NULL_INDEX ) return;
-	        const parent = this.findRandomLivingPlant();
-	        if ( parent === null ) return;
-	        const from = parent.getPosition();
-	        for (let attempt = 0; attempt < 10; attempt++)
+	        const parent = ( gpRandom() < 0.70 ) ? this.findRandomLivingPlant() : null;
+	        let plantType = 0;
+	        if ( parent !== null )
 	        {
-	            let xx = gpRandom() * gpRandom(), yy = gpRandom() * gpRandom();
-	            if ( gpRandom() < ONE_HALF ) { xx = -xx; }
-	            if ( gpRandom() < ONE_HALF ) { yy = -yy; }
-	            let x = from.x + xx * spread, y = from.y + yy * spread;
-	            if ( y < top ) { y += ( top - y ) * 2; } else if ( y > bottom ) { y += ( bottom - y ) * 2; }
-	            if ( x > right ) { x += ( right - x ) * 2; } else if ( x < left ) { x += ( left - x ) * 2; }
-	            _vectorUtility.x = Math.min( right, Math.max( left, x ));
-	            _vectorUtility.y = Math.min( bottom, Math.max( top, y ));
-	            if ( !_obstacle.getObstruction( from, _vectorUtility ) ) break;
+	            plantType = parent.getType();
+	            const from = parent.getPosition();
+	            for (let attempt = 0; attempt < 10; attempt++)
+	            {
+	                let xx = gpRandom() * gpRandom(), yy = gpRandom() * gpRandom();
+	                if ( gpRandom() < ONE_HALF ) { xx = -xx; }
+	                if ( gpRandom() < ONE_HALF ) { yy = -yy; }
+	                let x = from.x + xx * spread, y = from.y + yy * spread;
+	                if ( y < top ) { y += ( top - y ) * 2; } else if ( y > bottom ) { y += ( bottom - y ) * 2; }
+	                if ( x > right ) { x += ( right - x ) * 2; } else if ( x < left ) { x += ( left - x ) * 2; }
+	                _vectorUtility.x = Math.min( right, Math.max( left, x ));
+	                _vectorUtility.y = Math.min( bottom, Math.max( top, y ));
+	                if ( !_obstacle.getObstruction( from, _vectorUtility ) ) break;
+	            }
+	        }
+	        else if ( oases.length > 0 && gpRandom() < 0.80 )
+	        {
+	            const o = oases[ Math.floor( gpRandom() * oases.length ) ];
+	            const a = gpRandom() * PI2, r = 680 * Math.sqrt( gpRandom() );
+	            _vectorUtility.x = Math.min( right, Math.max( left, o.x + Math.cos( a ) * r ));
+	            _vectorUtility.y = Math.min( bottom, Math.max( top, o.y + Math.sin( a ) * r ));
+	        }
+	        else
+	        {
+	            this.randomPointInPool( _vectorUtility );
 	        }
 	        _foodBits[ child ].initialize( child );
-	        _foodBits[ child ].setType( parent.getType() );
-	        // Background plankton photosynthesis: this is world regrowth, not a
-	        // biological seed. The parent only supplies a place to scatter, so
-	        // the energy comes from the atmosphere (true seeds pay their parent).
+	        _foodBits[ child ].setType( plantType );
 	        if ( !fundPlant( child, globalTweakers.foodBitEnergy )) return;
 	        _foodBits[ child ].setPosition( _vectorUtility );
-	        environment.plantCount[ parent.getType() ][ environment.plantCellIndex( _vectorUtility.x, _vectorUtility.y ) ] ++;
+	        environment.plantCount[ plantType ][ environment.plantCellIndex( _vectorUtility.x, _vectorUtility.y ) ] ++;
 	        numPlants ++;
 	    }
 	}
@@ -3125,7 +3157,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 
 	// Plant growth, fruiting, seeding and carrion decay all live in FoodEcology
 	// now. GenePool keeps the step clock and the grid caches they operate on.
-	this.updateFood = function() { FoodEcology.updateFood( _foodContext ); }
+	this.updateFood = function() { FoodEcology.updateFood( _foodContext ); RootNetwork.severRoots( _st, _clock, _swimbots ); }
 	this.spawnPlant = function( position, type, numType0, numType1, scatter, donor: number = NULL_INDEX )
 	{
 	    return FoodEcology.spawnPlant( _foodContext, position, type, numType0, numType1, scatter, donor );
@@ -4394,6 +4426,7 @@ const feedRoom = Math.min( 100, swimbot.getMaxEnergy() - swimbot.getEnergy() );
 
                 if ( _selectedFoodBit != NULL_INDEX )
                 {
+                    if ( _st.foodType[ _selectedFoodBit ] !== 2 ) { this.setSelectedPlantIndex( _selectedFoodBit ); }
                     _foodBitBeingDragged = true;
 
                     // the food jumps into the "hand" at once, fully visible
@@ -4466,17 +4499,17 @@ const feedRoom = Math.min( 100, swimbot.getMaxEnergy() - swimbot.getEnergy() );
 
 
 	//------------------------------------------------------------
-	    this.findClosestPlantToPoolPosition = function( x, y )
+	this.findClosestPlantToPoolPosition = function( poolX, poolY )
     {
-        const v = this.convertScreenCoordinatesToPoolPosition( x, y );
-        const vs = Math.max( 0.05, this.getCameraView ? this.getCameraView().scale : 1 );
-        let bestD = Math.max( 45, 14 / vs ); bestD = bestD * bestD;
+        const vs = Math.max( 0.01, _viewScale || 0.1 );
+        let bestD = Math.max( 55, 18 / vs );
+        bestD = bestD * bestD;
         let best = -1;
         for ( let i = 0; i < _aliveFoodBitIndices.length; i++ )
         {
             const f = _aliveFoodBitIndices[i];
             if ( _st.liveFood[ f ] !== 1 || _st.foodType[ f ] === 2 ) continue;
-            const dx = _st.foodX[ f ] - v.x, dy = _st.foodY[ f ] - v.y, d2 = dx * dx + dy * dy;
+            const dx = _st.foodX[ f ] - poolX, dy = _st.foodY[ f ] - poolY, d2 = dx * dx + dy * dy;
             if ( d2 < bestD ) { bestD = d2; best = f; }
         }
         return best;
@@ -4485,12 +4518,32 @@ const feedRoom = Math.min( 100, swimbot.getMaxEnergy() - swimbot.getEnergy() );
     this.handleClickSelection = function( x, y, v )
     {
         const s = this.indexOfClosestSwimbotToScreenPosition( x, y );
-        if ( s !== NULL_INDEX ) { setSelectedSwimbot( s ); this.setSelectedPlantIndex( -1 ); return; }
+        if ( s !== NULL_INDEX ) { setSelectedSwimbot( s ); _st.selectedPlantIndex = -1; return; }
         const f = this.findClosestPlantToPoolPosition( v.x, v.y );
-        if ( f !== NULL_INDEX ) { this.setSelectedPlantIndex( f ); setSelectedSwimbot( NULL_INDEX ); }
-        else { this.setSelectedPlantIndex( -1 ); }
+        if ( f >= 0 ) { this.setSelectedPlantIndex( f ); }
+        else { _st.selectedPlantIndex = -1; }
     }
-    this.setSelectedPlantIndex = function( f ) { _st.selectedPlantIndex = f; setSelectedSwimbot( NULL_INDEX ); }
+    this.setSelectedPlantIndex = function( f ) { _st.selectedPlantIndex = f; if ( f >= 0 ) setSelectedSwimbot( NULL_INDEX ); }
+    this.getSelectedPlantIndex = function() { return _st.selectedPlantIndex; }
+    this.fertilizePlant = function( f )
+    {
+        if ( f < 0 || _st.liveFood[ f ] !== 1 ) return;
+        depositSoilEnergy( _st, _st.foodX[ f ], _st.foodY[ f ], drawFromAtmosphere( 50 ));
+    }
+    this.growPlant = function( f )
+    {
+        if ( f < 0 || _st.liveFood[ f ] !== 1 ) return;
+        const need = Math.max( 0, 52 - _st.foodEnergy[ f ] );
+        const add = drawFromAtmosphere( need );
+        _st.foodEnergy[ f ] += add;
+        _st.foodWood[ f ] = Math.max( _st.foodWood[ f ], _st.foodEnergy[ f ] );
+        RootNetwork.seedDynasties( _st );
+    }
+    this.removePlant = function( f )
+    {
+        if ( f < 0 || _st.liveFood[ f ] !== 1 ) return;
+        killPlant( f );
+    }
 
 this.indexOfClosestFoodBitToScreenPosition = function( x, y )
 	{

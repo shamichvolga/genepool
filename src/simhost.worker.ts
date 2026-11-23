@@ -16,6 +16,7 @@ import { GenePool } from "./simulation/GenePool";
 import { CapsuleRenderer } from "./render/CapsuleRenderer";
 import { ParallelRunner } from "./parallel/ParallelRunner";
 import { sharedState } from "./simulation/SharedState";
+import { computePlantLineage } from "./simulation/RootNetwork";
 import { petriSettings } from "./simulation/Petri";
 import { startRunRecorder } from "./RunRecorder";
 import { SimulationStartMode } from "./simulation/Globals";
@@ -100,8 +101,25 @@ function makeSnapshot()
                             } : null,
         // Root dynasty data for worker bridge
         plantParent       : Array.from( sharedState().plantParent ),
-        selectedFoodBit   : pool.getSelectedFoodBit ? pool.getSelectedFoodBit() : -1,
-         selectedPlant     : ( pool.getSelectedFoodBit ? pool.getSelectedFoodBit() : -1 ) >= 0 ? { childrenCount: 0, grandchildrenCount: 0, sapFlow: 0 } : null,
+        selectedFoodBit   : sharedState().selectedPlantIndex,
+        selectedPlant     : (() => {
+            const st = sharedState();
+            const f = st.selectedPlantIndex;
+            if ( !( f >= 0 ) || st.liveFood[ f ] !== 1 ) return null;
+            const lineage = computePlantLineage( st.plantParent, st.liveFood, f );
+            return {
+                index: f,
+                energy: st.foodEnergy[ f ],
+                wood: st.foodWood[ f ],
+                age: st.plantAge[ f ] || 0,
+                sucking: st.foodSucking[ f ] || 0,
+                sapFlow: st.plantRootFlow[ f ] || 0,
+                parent: lineage.parent,
+                childrenCount: lineage.children.length,
+                grandchildrenCount: lineage.grandchildren.length,
+                maxDepth: lineage.maxDepth,
+            };
+        })(),
     };
     phaseTimes.fill( 0 );   // (the times are per snapshot)
     return snapshot;

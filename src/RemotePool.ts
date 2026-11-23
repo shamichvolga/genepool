@@ -26,7 +26,7 @@ export function createRemotePool( worker: Worker, onPetriLoaded: () => void )
         phaseTimes: [ 0, 0, 0, 0, 0, 0, 0, 0 ], environment: { active: false, season: "" }, foodOfType: [ 0, 0, 0 ],
         telemetry: { eTotal: 0, eInitial: 0, eDelta: 0, eBots: 0, ePlants: 0, eMeat: 0, eSoil: 0, eAmbient: 0, eAtmosphere: 0,
                      sprouts: 0, young: 0, grown: 0, trees: 0, herbSmall: 0, herbMed: 0, herbLarge: 0, predators: 0, soilTotal: 0 },
-        swimbotPanelHTML: "", geneticClustersText: "genetic clusters: …", petri: null, selected: null,
+        swimbotPanelHTML: "", geneticClustersText: "genetic clusters: …", petri: null, selected: null, selectedPlant: null, plantParent: [],
     };
     let fixed: any = { numGeneCategories: 1, numGenesPerCategory: 1, geneNames: [] };
     const pending = new Map<number, ( value: any ) => void>();
@@ -64,6 +64,7 @@ export function createRemotePool( worker: Worker, onPetriLoaded: () => void )
     const local: any =
     {
         getPlantParent: () => S.plantParent || [],
+        getSelectedPlant: () => S.selectedPlant || null,
         request,
 
         saveWorldFile: ( withFamilyTree = true ) => ask({ type: "saveWorld", withFamilyTree }),
