@@ -78,8 +78,6 @@ export function createRemotePool( worker: Worker, onPetriLoaded: () => void )
 
     const local: any =
     {
-        getPlantParent: () => S.plantParent || [],
-        getSelectedPlant: () => S.selectedPlant || null,
         request,
 
         saveWorldFile: ( withFamilyTree = true ) => ask({ type: "saveWorld", withFamilyTree }),

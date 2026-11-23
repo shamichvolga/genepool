@@ -16,7 +16,6 @@ import { GenePool } from "./simulation/GenePool";
 import { CapsuleRenderer } from "./render/CapsuleRenderer";
 import { ParallelRunner } from "./parallel/ParallelRunner";
 import { sharedState } from "./simulation/SharedState";
-import { computePlantLineage } from "./simulation/RootNetwork";
 import { petriSettings } from "./simulation/Petri";
 import { startRunRecorder } from "./RunRecorder";
 import { SimulationStartMode } from "./simulation/Globals";
@@ -100,35 +99,6 @@ function makeSnapshot()
                                 eternal : pool.getSwimbotEternalStatus( selected ),
                             } : null,
         // Root dynasty data for worker bridge
-        rootLinks         : (() => {
-            const st = sharedState();
-            const pp = st.plantParent, lf = st.liveFood, rf = st.plantRootFlow;
-            const links: number[] = [];
-            for ( let c = 0; c < pp.length; c++ )
-            {
-                if ( lf[ c ] === 1 && pp[ c ] >= 0 ) { links.push( pp[ c ], c, rf[ c ] || 0 ); }
-            }
-            return links;
-        })(),
-        selectedFoodBit   : sharedState().selectedPlantIndex,
-        selectedPlant     : (() => {
-            const st = sharedState();
-            const f = st.selectedPlantIndex;
-            if ( !( f >= 0 ) || st.liveFood[ f ] !== 1 ) return null;
-            const lineage = computePlantLineage( st.plantParent, st.liveFood, f );
-            return {
-                index: f,
-                energy: st.foodEnergy[ f ],
-                wood: st.foodWood[ f ],
-                age: st.plantAge[ f ] || 0,
-                sucking: st.foodSucking[ f ] || 0,
-                sapFlow: st.plantRootFlow[ f ] || 0,
-                parent: lineage.parent,
-                childrenCount: lineage.children.length,
-                grandchildrenCount: lineage.grandchildren.length,
-                maxDepth: lineage.maxDepth,
-            };
-        })(),
     };
     phaseTimes.fill( 0 );   // (the times are per snapshot)
     return snapshot;

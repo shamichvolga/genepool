@@ -21,7 +21,6 @@ import { POOL_BOTTOM, POOL_HEIGHT, POOL_LEFT, POOL_RIGHT, POOL_TOP, POOL_WIDTH }
 import { PROFILER_ENABLED, profEnter, profExit, PROF_UPDATE_FOOD } from "./Profiler";
 import * as SS from "./SharedState";
 import { decayMeat, plantStageCap, soilPlantGrowth } from "./SoilEcology";
-import * as RootNetwork from "./RootNetwork";
 import { NULL_INDEX, PI2 } from "./MathConstants";
 import { assert } from "./Utility";
 import { WORLD_AREA_FACTOR } from "./World";
@@ -205,7 +204,6 @@ export function updateFood( ctx: FoodContext ): void
         const type = ( globalTweakers.numFoodTypes === 2 ) ? Math.floor( gpRandom() * 2 ) : 0;
         spawnPlant( ctx, ctx.vectorUtility, type, numType0FoodBits, numType1FoodBits, false );
     }
-    RootNetwork.stepRootNetwork( ctx.st );
     }
     finally { if ( PROFILER_ENABLED ) { profExit( PROF_UPDATE_FOOD, profT0 ); } }
 }

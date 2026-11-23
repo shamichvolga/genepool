@@ -30,7 +30,6 @@ export interface InputContext {
     readonly seconds: number;
     selectedSwimbot: number;
     mousedOverSwimbot: number;
-    selectedFoodBit: number;
     mousedOverFoodBit: number;
     setSelectedSwimbot( index: number ): void;
     setSelectedPlantIndex( f: number ): void;
@@ -151,7 +150,6 @@ export function createInputController( ctx: InputContext )
         if ( pickedBot === NULL_INDEX )
         {
             const pickedFood = indexOfClosestFoodBit( x, y );
-            ctx.selectedFoodBit = pickedFood;
             if ( pickedFood != NULL_INDEX )
             {
                 if ( ctx.st.foodType[ pickedFood ] !== 2 ) { ctx.setSelectedPlantIndex( pickedFood ); }
@@ -166,7 +164,7 @@ export function createInputController( ctx: InputContext )
             ctx.mousedOverFoodBit = NULL_INDEX;
         }
 
-        if (( ctx.selectedSwimbot == NULL_INDEX ) && ( ctx.selectedFoodBit == NULL_INDEX ))
+        if (( ctx.selectedSwimbot == NULL_INDEX ))
         {
             const v = convertScreenToPool( x, y );
             if ( ctx.obstacle.detectHover( v ) ) { ctx.obstacle.startMoving( v ); }
@@ -243,11 +241,7 @@ export function createInputController( ctx: InputContext )
                     pos.setXY( ZERO, ZERO );
                     ctx.swimbots[ ctx.selectedSwimbot ].setVelocity( pos );
                 }
-                else if ( _foodBitBeingDragged && ( ctx.selectedFoodBit != NULL_INDEX ))
-                {
-                    ctx.foodBits[ ctx.selectedFoodBit ].setPosition( convertScreenToPool( x, y ) );
-                }
-                else if ( ctx.obstacle.getBeingMoved() )
+else if ( ctx.obstacle.getBeingMoved() )
                 {
                     ctx.obstacle.setMovePosition( convertScreenToPool( x, y ) );
                     ctx.moveFoodBitsFromObstacle();
@@ -271,7 +265,7 @@ export function createInputController( ctx: InputContext )
             _swimbotBeingDragged = false;
             _foodBitBeingDragged = false;
 
-            if (( ctx.selectedSwimbot === NULL_INDEX ) && ( ctx.selectedFoodBit === NULL_INDEX ))
+            if (( ctx.selectedSwimbot === NULL_INDEX ))
             {
                 if ( ctx.obstacle.getBeingMoved() ) { ctx.obstacle.stopMoving(); }
                 const v = convertScreenToPool( x, y );

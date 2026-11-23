@@ -8,7 +8,6 @@ import { NUM_GENES } from "./Genotype";
 import { globalTweakers, gpRandom, NUM_GENES_USED, resetSimulationCounters, simClock, simCounters } from "./Globals";
 import { BYTE_SIZE, NULL_INDEX } from "./MathConstants";
 import { DEFAULT_GARDEN_OF_EDEN_RADIUS, DEFAULT_SWIMBOT_HUNGER_THRESHOLD, MAX_FOODBITS, MAX_SWIMBOTS, YOUNG_AGE_DURATION } from "./Parameters";
-import * as RootNetwork from "./RootNetwork";
 import { ATTRACTION_SIMILAR_COLOR } from "./SwimbotTypes";
 import { getRandomAngleInDegrees } from "./Utility";
 import { Vector2D } from "./Vector2D";
@@ -27,7 +26,6 @@ export function runPredationSelfTest( ctx: any )
     for ( let f = 0; f < MAX_FOODBITS; f++ )
     {
         ctx.foodBits[f].kill();
-        RootNetwork.unlinkChildren( ctx.st, f );
         if ( ctx.st.selectedPlantIndex === f ) { ctx.st.selectedPlantIndex = -1; }
     }
 

@@ -58,7 +58,6 @@ import * as Telemetry from "./WorldTelemetry";
 import * as FoodEcology from "./FoodEcology";
 import * as Spawner from "./WorldSpawner";
 import * as MapOps from "./MapOps";
-import * as RootNetwork from "./RootNetwork";
 import { createSpeciesTracker } from "./SpeciesTracker";
 import { sortAliveByMorton, sortAliveFoodByMorton, updateMorphBucketShares, updateScentFields } from "./ScentField";
 import { interactSwimbot } from "./MatingSystem";
@@ -288,7 +287,6 @@ export function GenePool()
         get canvasHeight() { return _canvasHeight; },
         get selectedSwimbot() { return _selectedSwimbot; },
         get mousedOverSwimbot() { return _mousedOverSwimbot; },
-        get selectedFoodBit() { return _selectedFoodBit; },
         get mousedOverFoodBit() { return _mousedOverFoodBit; },
         get levelOfDetail() { return _levelOfDetail; },
         get viewScale() { return _viewScale; },
@@ -834,7 +832,6 @@ _camera.setScale( POOL_WIDTH );
 	    // the reference total is taken only after the founders and the starting
 	    // plants are in place (and the soil has been seeded), so that the
 	    // conservation check measures the closed loop, not the initialization
-	    RootNetwork.seedDynasties( _st );
 	    _totalWorldEnergy = this.getTotalWorldEnergy();
 	}
 
@@ -2537,7 +2534,6 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
         // FoodBit.kill() returns the remaining crown energy to the atmosphere,
         // which funds the next sprouts; do not double-count a soil deposit.
         _foodBits[f].kill();
-        RootNetwork.unlinkChildren( _st, f );
         if ( _st.selectedPlantIndex === f ) { _st.selectedPlantIndex = -1; }
     }
 
@@ -2577,7 +2573,6 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 
 	// Plant growth, fruiting, seeding and carrion decay all live in FoodEcology
 	// now. GenePool keeps the step clock and the grid caches they operate on.
-	this.updateFood = function() { FoodEcology.updateFood( _foodContext ); RootNetwork.stepRootNetwork( _st, _clock ); RootNetwork.severRoots( _st, _clock, _swimbots ); }
 	this.spawnPlant = function( position, type, numType0, numType1, scatter, donor: number = NULL_INDEX )
 	{
 	    return FoodEcology.spawnPlant( _foodContext, position, type, numType0, numType1, scatter, donor );
@@ -3094,7 +3089,6 @@ const feedRoom = Math.min( 100, swimbot.getMaxEnergy() - swimbot.getEnergy() );
 	    get seconds()             { return _seconds; },
 	    get selectedSwimbot()     { return _selectedSwimbot; },     set selectedSwimbot(v)   { _selectedSwimbot = v; },
 	    get mousedOverSwimbot()   { return _mousedOverSwimbot; },   set mousedOverSwimbot(v) { _mousedOverSwimbot = v; },
-	    get selectedFoodBit()     { return _selectedFoodBit; },     set selectedFoodBit(v)   { _selectedFoodBit = v; },
 	    get mousedOverFoodBit()   { return _mousedOverFoodBit; },   set mousedOverFoodBit(v) { _mousedOverFoodBit = v; },
 	    setSelectedSwimbot:       ( i ) => setSelectedSwimbot( i ),
 	    setSelectedPlantIndex:    ( f ) => _this.setSelectedPlantIndex( f ),
@@ -3356,26 +3350,6 @@ const feedRoom = Math.min( 100, swimbot.getMaxEnergy() - swimbot.getEnergy() );
 	}
 	this.handleNonUITouchDownActions              = function( x, y )     { _input.handleNonUITouchDownActions( x, y ); }
 	this.indexOfClosestSwimbotToScreenPosition    = function( x, y )     { return _input.indexOfClosestSwimbotToScreenPosition( x, y ); }
-	this.findClosestPlantToPoolPosition           = function( px, py )   { return _input.findClosestPlantToPoolPosition( px, py ); }
-	this.handleClickSelection                     = function( x, y, v )  { _input.handleClickSelection( x, y, v ); }
-	this.indexOfClosestFoodBitToScreenPosition    = function( x, y )     { return _input.indexOfClosestFoodBitToScreenPosition( x, y ); }
-	this.setSelectedPlantIndex                    = function( f )        { _st.selectedPlantIndex = f; if ( f >= 0 ) setSelectedSwimbot( NULL_INDEX ); }
-	this.getSelectedPlantIndex                    = function()           { return _st.selectedPlantIndex; }
-	this.fertilizePlant                           = function( f )        {
-	    if ( f < 0 || _st.liveFood[ f ] !== 1 ) return;
-	    depositSoilEnergy( _st, _st.foodX[ f ], _st.foodY[ f ], drawFromAtmosphere( 50 ));
-	}
-	this.growPlant                                = function( f )        {
-	    if ( f < 0 || _st.liveFood[ f ] !== 1 ) return;
-	    const add = drawFromAtmosphere( Math.max( 0, 52 - _st.foodEnergy[ f ] ));
-	    _st.foodEnergy[ f ] += add;
-	    _st.foodWood[ f ] = Math.max( _st.foodWood[ f ], _st.foodEnergy[ f ] );
-	    RootNetwork.seedDynasties( _st );
-	}
-	this.removePlant                              = function( f )        {
-	    if ( f < 0 || _st.liveFood[ f ] !== 1 ) return;
-	    killPlant( f );
-	}
 
 	//------------------------------------------------------------------------------------
 	// get functions....

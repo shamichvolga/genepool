@@ -21,7 +21,6 @@ import { currentAt, currentDriftX, currentDriftY, currentStrength, randomPointIn
 import { SEASON_PERIOD } from "./Environment";
 import { PARAM_ENV_ACTIVE, PARAM_SHOW_SOIL, PARAM_TIME } from "./SharedState";
 import { POOL_WIDTH } from "./Pool";
-import * as RootRenderer from "../render/RootRenderer";
 import { TASK_RENDER_DATA } from "../parallel/ParallelWork";
 
 const OUTSIDE_POOL_COLOR = "rgb( 22, 26, 30 )";   // экран за краями бассейна
@@ -521,8 +520,6 @@ export function createGenePoolRenderer( ctx: any )
         setPlantSeason( yearPhase, envActive );
         ctx.pool.setSoilView( ctx.st.soilField, ctx.clock, params[ PARAM_SHOW_SOIL ] !== 0 );
         ctx.pool.render( ctx.seconds, _camera );
-        RootRenderer.drawRoots( _canvas, ctx.st, ctx );
-        RootRenderer.drawSnaps( _canvas, ctx.clock );
         ctx.obstacle.render( _camera );
         renderCurrents();
         renderDriftParticles();

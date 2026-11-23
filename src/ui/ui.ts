@@ -1,4 +1,3 @@
-import { renderPlantInspector } from "./PlantInspectorUI";
 import { TWO_PLANT_TYPES } from "../simulation/Ecology";
 import { WORLD_SCALE } from "../simulation/World";
 import { drawPetriPreview, petriSettings, PETRI_LAYOUTS } from "../simulation/Petri";
@@ -783,18 +782,7 @@ export function updateUI()
             _graph.render();
         }
     }
-    let plantPanel = document.getElementById( "plantInspectorPanel" );
-    if ( !plantPanel )
-    {
-        plantPanel = document.createElement( "div" );
-        plantPanel.id = "plantInspectorPanel";
-        plantPanel.style.cssText = "display:none;position:fixed;left:12px;bottom:56px;z-index:950;width:255px;"
-            + "background:rgba(20,28,22,0.93);color:#e8f4e8;border:1px solid rgba(135,225,95,0.55);"
-            + "border-radius:8px;padding:10px 12px;font:12px/1.45 Arial,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,0.45);";
-        document.body.appendChild( plantPanel );
-    }
-    if ( genePoolIsDefined ) { renderPlantInspector( plantPanel, genePool ); }
-    updateHud();
+updateHud();
     setTimeout( updateUI, UI_UPDATE_PERIOD );
 }
 
