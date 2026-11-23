@@ -4485,12 +4485,12 @@ const feedRoom = Math.min( 100, swimbot.getMaxEnergy() - swimbot.getEnergy() );
     this.handleClickSelection = function( x, y, v )
     {
         const s = this.indexOfClosestSwimbotToScreenPosition( x, y );
-        if ( s !== NULL_INDEX ) { this.setSelectedSwimbot( s ); this.setSelectedPlantIndex( -1 ); return; }
+        if ( s !== NULL_INDEX ) { setSelectedSwimbot( s ); this.setSelectedPlantIndex( -1 ); return; }
         const f = this.findClosestPlantToPoolPosition( v.x, v.y );
-        if ( f !== NULL_INDEX ) { this.setSelectedPlantIndex( f ); this.setSelectedSwimbot( NULL_INDEX ); }
+        if ( f !== NULL_INDEX ) { this.setSelectedPlantIndex( f ); setSelectedSwimbot( NULL_INDEX ); }
         else { this.setSelectedPlantIndex( -1 ); }
     }
-    this.setSelectedPlantIndex = function( f ) { _st.selectedPlantIndex = f; this.setSelectedSwimbot( NULL_INDEX ); }
+    this.setSelectedPlantIndex = function( f ) { _st.selectedPlantIndex = f; setSelectedSwimbot( NULL_INDEX ); }
 
 this.indexOfClosestFoodBitToScreenPosition = function( x, y )
 	{

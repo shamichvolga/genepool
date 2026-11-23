@@ -60,7 +60,9 @@ export function randomFounderPoint( ctx: SpawnContext, v: any, founderIndex: num
         return;
     }
     const colony = Math.min( COLONY_COUNT - 1, Math.floor( founderIndex * COLONY_COUNT / Math.max( 1, ctx.numSwimbots )));
-    const center = ctx.colonyCenters[colony], sites = ctx.colonySites[colony], minSq = COLONY_MIN_DISTANCE * COLONY_MIN_DISTANCE;
+    const center = ( ctx.colonyCenters && ctx.colonyCenters[colony] ) ? ctx.colonyCenters[colony] : null;
+    if ( !center ) { v.x = POOL_LEFT + FOUNDER_SPAWN_MARGIN + gpRandom() * Math.max( 1, POOL_WIDTH - FOUNDER_SPAWN_MARGIN * 2 ); v.y = POOL_TOP + FOUNDER_SPAWN_MARGIN + gpRandom() * Math.max( 1, POOL_HEIGHT - FOUNDER_SPAWN_MARGIN * 2 ); return; }
+    const sites = ctx.colonySites[colony], minSq = COLONY_MIN_DISTANCE * COLONY_MIN_DISTANCE;
     let x = center.x, y = center.y;
     for ( let attempt = 0; attempt < 200; attempt++ )
     {
@@ -340,3 +342,5 @@ export function setFoodToTestMiniPool( ctx: PresetFoodContext ): void
     ctx.setFoodGrowthDelay( MAX_FOOD_REGENERATION_PERIOD );
     ctx.setFoodSpread( MIN_FOOD_BIT_MAX_SPAWN_RADIUS );
 }
+
+
