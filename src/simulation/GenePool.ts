@@ -581,7 +581,8 @@ export function GenePool()
         // Clamping keeps a typo in the input from ruining the world.
         const worldEnergy = START_ENERGY_FACTOR;
         const energyMult = Math.max( 0.4, Math.min( 10, worldEnergy / 5 ));
-        const START_FOOD_ENERGY        = INITIAL_NUM_FOODBITS * PLANT_SPROUT_ENERGY * energyMult;
+        const unitPlantEnergy        = Math.max( PLANT_SPROUT_ENERGY, globalTweakers.foodBitEnergy ) * 1.15;
+        const START_FOOD_ENERGY        = INITIAL_NUM_FOODBITS * unitPlantEnergy * Math.max( 1, energyMult );
         // The world runs without a water reservoir: all energy is in soilField
         // and bot/plant/meat bodies from the start (see ℙ62-bis). Atmosphere
         // stays at 0; it is only a transient between debits and credits.
@@ -604,7 +605,8 @@ export function GenePool()
         // The classic presets keep the original rules and numbers.
         //-------------------------------------------------------------------
         const petri = ( mode === SimulationStartMode.PETRI );
-        environment.active = ( mode === SimulationStartMode.RANDOM ) || petri;
+        const empty = ( mode === SimulationStartMode.EMPTY );
+        environment.active = ( mode === SimulationStartMode.RANDOM ) || petri || empty;
         environment.setTime(0);
         _seedDebt = 0;
         _environmentImage = null;
@@ -626,7 +628,7 @@ export function GenePool()
             _camera.setScale( POOL_WIDTH );   // show the whole world with all its gardens
 
             // Never create more founders than the simulation has slots for.
-            _numSwimbots = Math.min( MAX_SWIMBOTS, Math.max( 0, Math.floor( INITIAL_NUM_SWIMBOTS )));
+            _numSwimbots = empty ? 0 : Math.min( MAX_SWIMBOTS, Math.max( 0, Math.floor( INITIAL_NUM_SWIMBOTS )));
             _numFoodBits = INITIAL_NUM_FOODBITS;
             globalTweakers.numFoodTypes = TWO_PLANT_TYPES ? 2 : 1;
             if ( _map && (( _map.base === "blank" ) || ( _mapPlantZones.length > 0 ))) { environment.clearPlantCounts(); _numFoodBits = 0; }
@@ -722,8 +724,7 @@ _camera.setScale( POOL_WIDTH );
         }
         else if ( mode === SimulationStartMode.EMPTY )
         {
-            _numSwimbots = 0;
-            this.randomizeFood();   // empty pool: oases + starter groves, no animals
+            _numSwimbots = 0;   // living oases, groves, trees & root dynasties with no animals
         }
         else if ( mode === SimulationStartMode.TEST_MINI_POOL )
         {
