@@ -254,17 +254,17 @@ export function createGenePoolRenderer( ctx: any )
         for (let i = 0; i < _aliveFoodBitIndices.length; i++)
         {
             const f = _aliveFoodBitIndices[i];
-            if ( !_foodBits[f] || !(_foodBits[f] ? _foodBits[f].getAlive() : undefined) ) continue;
-            const pos = (_foodBits[f] ? _foodBits[f].getPosition() : undefined);
+            if ( f < 0 || f >= _foodBits.length || !_foodBits[f] || !_foodBits[f].getAlive() ) continue;
+            const pos = _foodBits[f].getPosition();
             if (( pos.x < left ) || ( pos.x > right ) || ( pos.y < top ) || ( pos.y > bottom )) continue;
 
             if ( _camera.getWithinView( pos, FOOD_BIT_GRAB_RADIUS ) )
             {
-                if ( useGraphicsCard ) { (_foodBits[f] ? _foodBits[f].writeCapsule( _capsuleRenderer, _camera.getScale() : undefined) ); }
-                else                   { (_foodBits[f] ? _foodBits[f].render( _camera.getScale() : undefined) ); }
+                if ( useGraphicsCard ) { _foodBits[f].writeCapsule( _capsuleRenderer, _camera.getScale() ); }
+                else                   { _foodBits[f].render( _camera.getScale() ); }
 
-                if ( f === ctx.selectedFoodBit )   { (_foodBits[f] ? _foodBits[f].renderSelectOutline( _camera.getScale() : undefined) ); }
-                if ( f === ctx.mousedOverFoodBit ) { (_foodBits[f] ? _foodBits[f].renderMousedOverOutline( _camera.getScale() : undefined) ); }
+                if ( f === ctx.selectedFoodBit )   { _foodBits[f].renderSelectOutline( _camera.getScale() ); }
+                if ( f === ctx.mousedOverFoodBit ) { _foodBits[f].renderMousedOverOutline( _camera.getScale() ); }
             }
         }
     }
@@ -311,7 +311,7 @@ export function createGenePoolRenderer( ctx: any )
             const isFruit = fruit[f] === 1;
             const t = ft[f] * 3;
             let alpha = ( ctx.clock - born[f] ) * FOOD_OPACITY_INCREMENT;
-            if ( alpha < 1 ) { alpha = _foodBits[f] ? ( _foodBits[f] ? ( _foodBits[f] ? (_foodBits[f] ? _foodBits[f].getOpacity() : undefined) : 1 ) : 1 ) : 1; }       // ещё проявляется или в «руке»
+            if ( alpha < 1 ) { alpha = _foodBits[f] ? _foodBits[f].getOpacity() : 1; }       // ещё проявляется или в «руке»
             alpha = alpha > 1 ? 1 : alpha;
             const plant = ft[f] !== 2;
             const size = plant ? plantSize( wood[f] ) : 0;
@@ -355,11 +355,11 @@ export function createGenePoolRenderer( ctx: any )
             }
         }
         _capsuleRenderer.release( capacity - used );
-        for ( const f of parts ) { (_foodBits[f] ? _foodBits[f].writeCapsule( _capsuleRenderer, _camera.getScale() : undefined) ); }
+        for ( const f of parts ) { if ( f >= 0 && f < _foodBits.length && _foodBits[f] ) { _foodBits[f].writeCapsule( _capsuleRenderer, _camera.getScale() ); } }
 
         // выбранная и тронутая еда: контуры в 2D
-        if (( _selectedFoodBit   != NULL_INDEX ) && _foodBits[ _selectedFoodBit   ].getAlive()) { _foodBits[ _selectedFoodBit   ].renderSelectOutline( _camera.getScale() ); }
-        if (( _mousedOverFoodBit != NULL_INDEX ) && _foodBits[ _mousedOverFoodBit ].getAlive()) { _foodBits[ _mousedOverFoodBit ].renderMousedOverOutline( _camera.getScale() ); }
+        if (( _selectedFoodBit   != NULL_INDEX ) && _selectedFoodBit >= 0 && _selectedFoodBit < _foodBits.length && _foodBits[ _selectedFoodBit   ] && _foodBits[ _selectedFoodBit   ].getAlive()) { _foodBits[ _selectedFoodBit   ].renderSelectOutline( _camera.getScale() ); }
+        if (( _mousedOverFoodBit != NULL_INDEX ) && _mousedOverFoodBit >= 0 && _mousedOverFoodBit < _foodBits.length && _foodBits[ _mousedOverFoodBit ] && _foodBits[ _mousedOverFoodBit ].getAlive()) { _foodBits[ _mousedOverFoodBit ].renderMousedOverOutline( _camera.getScale() ); }
     }
 
     //----------------------------------
