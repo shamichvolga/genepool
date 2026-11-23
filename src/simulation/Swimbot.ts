@@ -40,6 +40,7 @@ import { BIG_BODY_STOMACH_ENABLED, STOMACH_REFERENCE_MASS, killWinnerPressure, m
 import { AUTOTOMY_REGROW_DELAY, AUTOTOMY_DECOY_SPAN, PREY_BODY_ENERGY, ATTACK_COOLDOWN, ATTACK_SUCCESS_CHANCE, ENVIRONMENT_ATTACK_SUCCESS_CHANCE, BASAL_METABOLISM, DEFAULT_SWIMBOT_HUNGER_THRESHOLD, FAILED_HUNT_COOLDOWN_FRACTION, FOOD_TYPE_OFFSET, NEWBORN_SIZE_SCALE, OLD_AGE_DURATION, PREDATION_ENERGY_TRANSFER, PREDATOR_FLEE_RADIUS, PREDATOR_LEVEL_THRESHOLD, PREY_SCAN_COOLDOWN, PREY_SCAN_RADIUS_GROWTH, PREY_SCAN_RADIUS_MAX_SCALE, RANDOM_MATING_CONTROL, SWIMBOT_MAX_ENERGY, SWIMBOT_SELECT_RADIUS_SCALAR, YOUNG_AGE_DURATION } from "./Parameters";
 import { POOL_BOTTOM, POOL_LEFT, POOL_RIGHT, POOL_TOP } from "./Pool";
 import { SwimbotRenderer } from "./SwimbotRenderer";
+import { computeAttractiveness, computeBodyBigness, computeBodyHyperness, computeBodyLongness, computeBodyStraightness, computeCloseness, computeColorSaturation, computeColorSimilarity, getAttractionDescriptionForCode, getGoalDescriptionForState } from "./SwimbotQueries";
 import { ATTRACTION_BIG, ATTRACTION_CLOSEST, ATTRACTION_COLORFUL, ATTRACTION_CROOKED, ATTRACTION_HYPER, ATTRACTION_LONG, ATTRACTION_NO_COLOR, ATTRACTION_RANDOM, ATTRACTION_SHORT, ATTRACTION_SIMILAR_COLOR, ATTRACTION_SIMILAR_HYPER, ATTRACTION_SIMILAR_LENGTH, ATTRACTION_SIMILAR_SIZE, ATTRACTION_SIMILAR_STRAIGHT, ATTRACTION_SMALL, ATTRACTION_STILL, ATTRACTION_STRAIGHT, CONTINUAL_ENERGY_DRAIN, ENERGY_EFFICIENCY_MEASUREMENT_PERIOD, ENERGY_USED_UP_SWIMMING, GENITAL_INDEX, MAX_PARTS, MOUTH_INDEX, NULL_PART, Phenotype, ROOT_PART, STARVING, STARVING_TIMER_DELTA, SWIMBOT_GENITAL_LENGTH, SWIMBOT_MOUTH_LENGTH, SWIMBOT_VIEW_RADIUS, TIMER_DELTA_INCREASE_RATE, WALL_BOUNCE } from "./SwimbotTypes";
 import { Color, assert } from "./Utility";
 import { SharedVector2D, Vector2D } from "./Vector2D";
@@ -50,13 +51,11 @@ const INV_SCENT_CELL_W = SS.SCENT_GRID_N / ( POOL_RIGHT - POOL_LEFT );
 const INV_SCENT_CELL_H = SS.SCENT_GRID_N / ( POOL_BOTTOM - POOL_TOP );
 
 
+const _sharedSwimbotRenderer = new SwimbotRenderer();
+const _huntPreyPos = new Vector2D();
+
 export function Swimbot()
 {
-
-var    flopperX = 0;
-var    flopperY = 0;
-var    flopperXV = 0;
-var    flopperYV = 0;
 
 
     //---------------------------------
@@ -124,13 +123,12 @@ var    flopperYV = 0;
 	_brain.bind( _M, _m );
 	const _position = new SharedVector2D( _B, SS.B_POS_X );
 	const _velocity = new SharedVector2D( _B, SS.B_VEL_X );
-	let _acceleration       = new Vector2D();
-	let _heading		    = new Vector2D();
+	
 	const _directionToGoal = new SharedVector2D( _B, SS.B_GOAL_X );
 	const _focusDirection = new SharedVector2D( _B, SS.B_FOCUS_X );
 	const _centerOfMass = new SharedVector2D( _B, SS.B_COM_X );
 	let _vectorUtility      = new Vector2D();
-	let _swimbotRenderer  	= new SwimbotRenderer();
+	let _swimbotRenderer  	= _sharedSwimbotRenderer;
 	let _numOffspring       = 0;
 	let _numFoodBitsEaten   = 0;
 	//let _maximumLifeSpan    = 0;
@@ -140,7 +138,7 @@ var    flopperYV = 0;
 	let _liveAt  = 0;
 	let _torque             = ZERO;
 	let _colorUtility       = new Color();
-	let _previousFocusDirection = new Vector2D(); // scratch, reused every update
+	
 	let _species            = NULL_INDEX;
 
 	const _lastPositionForEfficiencyMeasurement = new SharedVector2D( _B, SS.B_LAST_X );
@@ -209,8 +207,7 @@ var    flopperYV = 0;
 	let _pTurnPhase  = new Float64Array( MAX_PARTS );
 	let _pMoment     = new Float64Array( MAX_PARTS );
 	let _pParent     = new Int32Array  ( MAX_PARTS );
-	let _unitAxisX   = new Float64Array( MAX_PARTS );   // scratch for getCurrentBodyStraightness
-	let _unitAxisY   = new Float64Array( MAX_PARTS );
+	
 	const _mouthPosition = new SharedVector2D( _B, SS.B_MOUTH_X );               // kept up to date from _pd
 	const _genitalPosition = new SharedVector2D( _B, SS.B_GENITAL_X );
 
@@ -719,244 +716,7 @@ this.setParent = function( parent )
 	//-----------------------------------------
 	// update body parts
 	//-----------------------------------------
-	this.updateBodyParts = function()
-	{
-        let oldAgeThreshold = this.getOldAgeThreshold();
 
-        //----------------------------------
-        // swimmer is not old yet
-        // (eternal swimbots never get old)
-        //----------------------------------
-        if (( _B[ _b + SS.B_AGE ] < oldAgeThreshold ) || ( _B[ _b + SS.B_ETERNAL ] === 1 ) )
-        {
-            if ( _B[ _b + SS.B_AGE ] < YOUNG_AGE_DURATION )
-            {
-                //----------------------------------
-                // swimmer is still growing
-                //----------------------------------
-                _B[ _b + SS.B_GROWTH ] = _B[ _b + SS.B_AGE ] / YOUNG_AGE_DURATION;
-            }
-            else
-            {
-                _B[ _b + SS.B_GROWTH ] = ONE;
-            }
-
-            assert( _B[ _b + SS.B_GROWTH ] >= 0.0, "assert swimbot.js:updateBodyParts: _B[ _b + SS.B_GROWTH ] >= 0.0" )
-            assert( _B[ _b + SS.B_GROWTH ] <= 1.0, "assert swimbot.js:updateBodyParts: _B[ _b + SS.B_GROWTH ] <= 1.0" )
-
-            //---------------------------------------
-            // slowing down because starving,
-            // but not slowing down to a full stop.
-            //---------------------------------------
-            if  ( _B[ _b + SS.B_ENERGY ] < STARVING )
-            {
-                _B[ _b + SS.B_TIMER_DELTA ] = _B[ _b + SS.B_ENERGY ] / STARVING;
-
-                if ( _B[ _b + SS.B_TIMER_DELTA ] < STARVING_TIMER_DELTA )
-                {
-                    _B[ _b + SS.B_TIMER_DELTA ] = STARVING_TIMER_DELTA;
-                }
-            }
-            else
-            {
-                _B[ _b + SS.B_TIMER_DELTA ] += TIMER_DELTA_INCREASE_RATE;
-
-                if ( _B[ _b + SS.B_TIMER_DELTA ] > ONE )
-                {
-                    _B[ _b + SS.B_TIMER_DELTA ] = ONE;
-                }
-            }
-        }
-        else
-        //----------------------------------
-        // swimmer is past old age threshold
-        //----------------------------------
-        {
-            //----------------------------------
-            // dying of old age
-            //----------------------------------
-            if ( _B[ _b + SS.B_AGE ] > globalTweakers.maximumLifeSpan )
-            {
-                this.die( "old_age" );
-            }
-            else
-            {
-                //----------------------------------
-                // slowing down because dying
-                //----------------------------------
-                //let earlyDeath = 200;
-                //earlyDeath = 0;
-                //let inc = ( _B[ _b + SS.B_AGE ] - OLD_AGE ) / ( oldAgeDuration - earlyDeath );
-
-                //let inc = ( _B[ _b + SS.B_AGE ] - OLD_AGE ) / oldAgeDuration;
-
-                /*
-                if ( inc > ONE )
-                {
-                    inc = ONE;
-                }
-                */
-
-                _B[ _b + SS.B_TIMER_DELTA ] = ONE - ( _B[ _b + SS.B_AGE ] - oldAgeThreshold ) / OLD_AGE_DURATION;
-
-                assert( _B[ _b + SS.B_TIMER_DELTA ] >= 0.0, "assert swimbot.js:updateBodyParts: _B[ _b + SS.B_TIMER_DELTA ] >= 0.0" )
-                assert( _B[ _b + SS.B_TIMER_DELTA ] <= 1.0, "assert swimbot.js:updateBodyParts: _B[ _b + SS.B_TIMER_DELTA ] <= 1.0" )
-            }
-        }
-
-        _B[ _b + SS.B_TIMER ] += _B[ _b + SS.B_TIMER_DELTA ] * _B[ _b + SS.B_EFFORT ];
-
-		//---------------------------------------------------------------
-		// calculate the modulators as a function of the dot between the
-		// heading and the perpendicular of the direction to the goal
-		//---------------------------------------------------------------
-		let radian = _B[ _b + SS.B_ANGLE ] * PI_OVER_180;
-
-		_heading.x = Math.sin( radian );
-		_heading.y = Math.cos( radian );
-
-		let perpX =  _heading.y;
-		let perpY = -_heading.x;
-
-        let directionDot = _focusDirection.x * perpX + _focusDirection.y * perpY;
-
-//test
-//let perpDot      = _focusDirection.x * _heading.x + _focusDirection.y * _heading.y;
-
-		//-----------------------------------------------------------------
-		// set root position and angle
-		//-----------------------------------------------------------------
-		//-----------------------------------------------------------------
-		// set root position and angle
-		//-----------------------------------------------------------------
-		const pd = _pd;
-		pd[ ROOT_PART * PS + P_X ] = _position.x;
-		pd[ ROOT_PART * PS + P_Y ] = _position.y;
-		pd[ ROOT_PART * PS + C_A ] = _B[ _b + SS.B_ANGLE ] - this.getMomentAdjustment();
-
-		//-----------------------------------------------------------------
-		// loop through parts to determine angle and position
-		//-----------------------------------------------------------------
-		for (let p=1; p<_B[ _b + SS.B_NUM_PARTS ]; p++)
-		{
-			const i      = p * PS;
-			const parent = _pParent[p];
-			const j      = parent * PS;
-
-			// start at the parent's end (or at the body position)
-			if ( parent == NULL_PART )
-			{
-				pd[ i + P_X ] = _position.x;
-				pd[ i + P_Y ] = _position.y;
-			}
-			else
-			{
-				pd[ i + P_X ] = pd[ j + P_X ];
-				pd[ i + P_Y ] = pd[ j + P_Y ];
-			}
-
-			//-----------------------------------
-			// determine current angle
-			//-----------------------------------
-			pd[ i + C_A ] = pd[ j + C_A ] + _pAngle[p];
-
-			//-----------------------------------
-			// add motion
-			//-----------------------------------
-			if ( p > 1 ) // because part 1 has nothing to 'bend' off of
-			{
-				let ampModulator   = _pTurnAmp  [p] * directionDot;
-				let phaseModulator = _pTurnPhase[p] * directionDot;
-
-				let radian = _B[ _b + SS.B_TIMER ] * _B[ _b + SS.B_FREQUENCY ] + ( _pPhase[p] + phaseModulator );
-				pd[ i + B_A ] = ( _pAmp[p] + ampModulator ) * Math.sin( radian );
-
-				pd[ i + C_A ] += pd[ i + B_A ];
-			}
-
-			//-----------------------------------
-			// determine position
-			//-----------------------------------
-			let radian = pd[ i + C_A ] * PI_OVER_180;
-			let length = _pLength[p];
-
-			if ( _B[ _b + SS.B_AGE ] < YOUNG_AGE_DURATION )
-			{
-                const sizeScale = NEWBORN_SIZE_SCALE + ( 1 - NEWBORN_SIZE_SCALE ) * _B[ _b + SS.B_GROWTH ];
-                length *= sizeScale;
-			}
-
-			let x = length * Math.sin( radian );
-			let y = length * Math.cos( radian );
-			pd[ i + Q_X ] = pd[ i + M_X ];
-			pd[ i + Q_Y ] = pd[ i + M_Y ];
-			pd[ i + M_X ] = pd[ i + P_X ];
-			pd[ i + M_Y ] = pd[ i + P_Y ];
-			pd[ i + P_X ] += x;
-			pd[ i + P_Y ] += y;
-			pd[ i + M_X ] += x * ONE_HALF;
-			pd[ i + M_Y ] += y * ONE_HALF;
-
-		    //---------------------------------------------------------
-		    // part axis, and its perpendicular
-		    //---------------------------------------------------------
-            pd[ i + A_X ] = pd[ i + P_X ] - pd[ j + P_X ];
-            pd[ i + A_Y ] = pd[ i + P_Y ] - pd[ j + P_Y ];
-            pd[ i + N_X ] =  pd[ i + A_Y ] / length;
-            pd[ i + N_Y ] = -pd[ i + A_X ] / length;
-
-			//-----------------------------------------------------------
-			// part velocity
-			//-----------------------------------------------------------
-            pd[ i + V_X ] = pd[ i + M_X ] - pd[ i + Q_X ];
-            pd[ i + V_Y ] = pd[ i + M_Y ] - pd[ i + Q_Y ];
-		}
-
-		//-----------------------------
-		// calculate center of mass
-		//-----------------------------
-		this.calculateCenterOfMass();
-
-		//-----------------------------------------
-		// here is where I shift all my body nodes
-		// to keep my center of mass in place...
-		//-----------------------------------------
-        this.adjustToCenterOfMass();
-
-		//------------------------------------
-		// I need to do this again because I
-		// just did an adjustToCenterOfMass
-		//------------------------------------
-		this.calculateCenterOfMass();
-
-		//----------------------------------------
-		// calculate select radius
-		//
-		// (this is a weird hacky solution)
-		//----------------------------------------
-		if ( _B[ _b + SS.B_AGE ] % 20 === 0 )
-		{
-            for (let p=1; p<_B[ _b + SS.B_NUM_PARTS ]; p++)
-            {
-                for (let o=1; o<_B[ _b + SS.B_NUM_PARTS ]; o++)
-                {
-                    if ( o != p )
-                    {
-                        let xx = pd[ p * PS + P_X ] - pd[ o * PS + P_X ];
-                        let yy = pd[ p * PS + P_Y ] - pd[ o * PS + P_Y ];
-                        let distance = Math.sqrt( xx * xx + yy * yy );
-
-                        distance = SWIMBOT_SELECT_RADIUS_SCALAR * Math.sqrt( distance );
-
-                        if ( distance > _B[ _b + SS.B_SELECT_RADIUS ] )
-                        {
-                            _B[ _b + SS.B_SELECT_RADIUS ] = distance;
-                        }
-                    }
-                }
-            }
-		}
-	}
 
 
 
@@ -1193,8 +953,6 @@ this.setParent = function( parent )
         _lastPositionForEfficiencyMeasurement.clear();
         _position.clear();
         _velocity.clear();
-        _acceleration.clear();
-        _heading.clear();
         _directionToGoal.clear();
         _focusDirection.clear();
         _centerOfMass.clear();
@@ -1274,11 +1032,7 @@ _position.copyFrom( position );
 		//_numFoodBitsEaten   = 0;
 		//_torque             = ZERO;
         //_B[ _b + SS.B_SELECT_RADIUS ]       = ZERO;
-		//_acceleration.clear();
-
-
-
-//make sure all variables are initialized!!! (to be safe and stuff)
+		////make sure all variables are initialized!!! (to be safe and stuff)
 
 	/*
 	let _heading		    = new Vector2D();
@@ -1723,172 +1477,7 @@ _position.copyFrom( position );
     //---------------------------------------------------------------------------
     // swimbot creates its own linear and angular forces via moving parts
     //---------------------------------------------------------------------------
-	this.calculateFluidForces = function()
-	{
-        //-----------------------------------------------------
-        // clear these out - they will be filled-in below...
-        //-----------------------------------------------------
-	    _acceleration.clear();
-	    _torque = ZERO;
-	    const motion = bodyMotionFactors( _phenotype.mass, _B[ _b + SS.B_SUM_LENGTHS ] > ZERO ? _phenotype.mass / _B[ _b + SS.B_SUM_LENGTHS ] : ZERO );
 
-        //----------------------------------------
-        // loop through parts...
-        //----------------------------------------
-        assert( _B[ _b + SS.B_NUM_PARTS ] > 0, "_B[ _b + SS.B_NUM_PARTS ] > 0" );
-
-		for (let p=1; p<_B[ _b + SS.B_NUM_PARTS ]; p++)
-		{
-		    //---------------------------------------------------------
-		    // calculate this part's fraction of the total length
-		    //---------------------------------------------------------
-            const i = p * PS;
-            let fractionOfWhole = _pLength[p] / _B[ _b + SS.B_SUM_LENGTHS ];
-
-		    //---------------------------------------------------------
-		    // calculate velocity
-		    //---------------------------------------------------------
-            _pd[ i + V_X ] = _pd[ i + M_X ] - _pd[ i + Q_X ];
-            _pd[ i + V_Y ] = _pd[ i + M_Y ] - _pd[ i + Q_Y ];
-
-            /*
-		    //---------------------------------------------------------
-		    // get part axis
-		    //---------------------------------------------------------
-            _phenotype.parts[p].axis.x = _phenotype.parts[p].position.x - _phenotype.parts[ _phenotype.parts[p].parent ].position.x;
-            _phenotype.parts[p].axis.y = _phenotype.parts[p].position.y - _phenotype.parts[ _phenotype.parts[p].parent ].position.y;
-
-		    //---------------------------------------------------------
-		    // get perpendicular of part axis
-		    //---------------------------------------------------------
-            _phenotype.parts[p].perpendicular.setXY( _phenotype.parts[p].axis.y / _phenotype.parts[p].length, -_phenotype.parts[p].axis.x / _phenotype.parts[p].length );
-            */
-
-		    //---------------------------------------------------------
-		    // get stroke amplitude
-		    //---------------------------------------------------------
-            let strokeAmplitude = ( _pd[ i + V_X ] * _pd[ i + N_X ] + _pd[ i + V_Y ] * _pd[ i + N_Y ] ) * fractionOfWhole;
-
-            let strokeForceX = _pd[ i + N_X ] * strokeAmplitude;
-            let strokeForceY = _pd[ i + N_Y ] * strokeAmplitude;
-
-            //-------------------------------------------------
-            // calcualte energy lost from stroke
-		    //
-		    // hey: this might be more accurate to nature if
-		    // it were something like angle bend times mass.
-            //--------------------------------------------------
-            if ( motion.enabled )
-                _B[ _b + SS.B_ENERGY ] -= Math.abs( strokeAmplitude ) * ENERGY_USED_UP_SWIMMING * motion.strokeCost;
-            else
-                _B[ _b + SS.B_ENERGY ] -= Math.abs( strokeAmplitude ) * ENERGY_USED_UP_SWIMMING;
-
-            if ( _B[ _b + SS.B_ENERGY ] < ZERO )
-            {
-                _B[ _b + SS.B_ENERGY ] = ZERO;
-            }
-
-            //-------------------------------------------------
-            // calculate part vector from center
-            //-------------------------------------------------
-            let partVectorFromCenterX = _pd[ i + M_X ] - _position.x;
-            let partVectorFromCenterY = _pd[ i + M_Y ] - _position.y;
-
-            //-------------------------------------------------
-            // calculate part distance from center
-            //-------------------------------------------------
-            let xx = partVectorFromCenterX * partVectorFromCenterX;
-            let yy = partVectorFromCenterY * partVectorFromCenterY;
-            let distance = Math.sqrt( xx*xx + yy*yy );
-
-            if ( distance > ZERO )
-            {
-                //-------------------------------------------------
-                // calculate part direction from center
-                //-------------------------------------------------
-                let partDirectionFromCenterX = partVectorFromCenterX / distance;
-                let partDirectionFromCenterY = partVectorFromCenterY / distance;
-
-/*
-//---------------------------------------------------------------
-// get dot of strokeForce with partDirectionFromCenter
-//---------------------------------------------------------------
-let dot = strokeForceX * partDirectionFromCenterX + strokeForceY * partDirectionFromCenterY;
-//let dot = ONE - ( strokeForceX * partDirectionFromCenterX + strokeForceY * partDirectionFromCenterY );
-//let dot = -ONE + ( strokeForceX * partDirectionFromCenterX + strokeForceY * partDirectionFromCenterY );
-//let dot = 1.0; //strokeForceX * partDirectionFromCenterX + strokeForceY * partDirectionFromCenterY;
-//let dot = -ONE;
-
-//--------------------------------------------------------
-// set part acceleration
-//--------------------------------------------------------
-let partAccelerationX = partDirectionFromCenterX * dot;
-let partAccelerationY = partDirectionFromCenterY * dot;
-*/
-
-let partAccelerationX = motion.enabled ? -strokeForceX * motion.acceleration : -strokeForceX;
-let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -strokeForceY;
-
-                //-------------------------------
-                // accumulate acceleration
-                //-------------------------------
-                _acceleration.x += partAccelerationX;
-                _acceleration.y += partAccelerationY;
-
-                //------------------------------------------------
-                // calculate perpendicular
-                //------------------------------------------------
-                let partPerpendicularX =  partVectorFromCenterY;
-                let partPerpendicularY = -partVectorFromCenterX;
-
-                //let partPerpendicularX =  partDirectionFromCenterY;
-                //let partPerpendicularY = -partDirectionFromCenterX;
-
-                //---------------------------------------------------------------
-                // get dot of strokeForce with partPerpendicular
-                //---------------------------------------------------------------
-                let perpDot = ( strokeForceX * partPerpendicularX + strokeForceY * partPerpendicularY ) / _B[ _b + SS.B_SUM_LENGTHS ];
-
-                //-------------------------------
-                // accumulate torque
-                //-------------------------------
-                let previousTorque = _torque;
-                _torque -= perpDot;
-
-                /*
-                //------------------------------------------------------------------
-                // contradictory torque (cancelling-out) goes into acceleration...
-                //------------------------------------------------------------------
-                let torqueBecameSmaller = false;
-
-                if ( Math.abs( _torque ) < Math.abs( previousTorque ) )
-                {
-                    partAccelerationX += 0.0;
-                    partAccelerationY += 0.0;
-                }
-                */
-            }
-        }
-
-        //-----------------------------------------------------------------
-        // apply linear and angular forces to velocity and spin
-        //-----------------------------------------------------------------
-        _velocity.add( _acceleration );
-        if ( motion.enabled )
-        {
-            const drag = applyWaterDrag( _velocity.x, _velocity.y, _phenotype.mass, _phenotype.sumPartLengths, motion.drag );
-            _velocity.setXY( drag.velocityX, drag.velocityY );
-            _B[ _b + SS.B_ENERGY ] = Math.max( ZERO, _B[ _b + SS.B_ENERGY ] - drag.energyCost );
-        }
-        _B[ _b + SS.B_SPIN ] += _torque;// * SPIN_SCALAR;
-//_B[ _b + SS.B_SPIN ] *= SPIN_DECAY;
-
-		//--------------------------------------------------
-		// update position by velocity, and angle by spin
-		//--------------------------------------------------
-        _position.add( _velocity );
-        _B[ _b + SS.B_ANGLE ] += _B[ _b + SS.B_SPIN ];
-    }
 
 
 
@@ -1897,131 +1486,13 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	//----------------------------------------
 	// calculate energy efficiency
 	//----------------------------------------
-	this.calculateEnergyEfficiency = function()
-	{
-	    //-----------------------------------------------
-        // measure distance traveled and energy lost
-	    //-----------------------------------------------
-        let distanceTraveled = _position.getDistanceTo( _lastPositionForEfficiencyMeasurement );
-        //console.log( distanceTraveled );
 
-        let averageSpeed = distanceTraveled / ENERGY_EFFICIENCY_MEASUREMENT_PERIOD;
-        let energyLost   = _B[ _b + SS.B_LAST_ENERGY ] - _B[ _b + SS.B_ENERGY ];
-
-        //----------------------------------------------------------
-        //if swimbot ate food, energy went up, so cancel that....
-        //----------------------------------------------------------
-        if ( energyLost < ZERO )
-        {
-            energyLost = ZERO;
-        }
-
-        //------------------------------
-        // calculate efficiency
-        //------------------------------
-        _B[ _b + SS.B_EFFICIENCY ] = averageSpeed / ( ONE + energyLost );
-
-        // reset these values for the next go-round...
-        _lastPositionForEfficiencyMeasurement.set( _position );
-        _B[ _b + SS.B_LAST_ENERGY ] = _B[ _b + SS.B_ENERGY ];
-    }
 
 
 	//----------------------------------------
 	// update wall collisions
 	//----------------------------------------
-	this.updateWallCollisions = function()
-	{
-        //--------------------------------------------------------------------
-        // left wall
-        //--------------------------------------------------------------------
-        if ( _position.x < POOL_LEFT + _B[ _b + SS.B_SUM_LENGTHS ] * ONE_HALF )
-        {
-            //console.log( "left " );
-            for (let p=1; p<_B[ _b + SS.B_NUM_PARTS ]; p++)
-            {
-                let radius = _pLength[p] + _pWidth[p];
-                let limit = POOL_LEFT + radius;
 
-                if ( _pd[ p * PS + P_X ] < limit )
-                {
-                    let penetration = limit - _pd[ p * PS + P_X ];
-
-                    _position.x         += penetration * WALL_BOUNCE;
-                    _velocity.x         += penetration * WALL_BOUNCE;
-                    _directionToGoal.x  += penetration * WALL_BOUNCE;
-                    _directionToGoal.normalize();
-                }
-            }
-        }
-        //-------------------------------------------------------------------------
-        // right wall
-        //-------------------------------------------------------------------------
-        else if ( _position.x > POOL_RIGHT - _B[ _b + SS.B_SUM_LENGTHS ] * ONE_HALF )
-        {
-            //console.log( "right " );
-            for (let p=1; p<_B[ _b + SS.B_NUM_PARTS ]; p++)
-            {
-                let radius = _pLength[p] + _pWidth[p];
-                let limit = POOL_RIGHT - radius;
-
-                if ( _pd[ p * PS + P_X ] > limit )
-                {
-                    let penetration = limit - _pd[ p * PS + P_X ];
-
-                    _position.x         += penetration * WALL_BOUNCE;
-                    _velocity.x         += penetration * WALL_BOUNCE;
-                    _directionToGoal.x  += penetration * WALL_BOUNCE;
-                    _directionToGoal.normalize();
-                }
-            }
-        }
-
-        //------------------------------------------------------------------------------
-        // top wall
-        //------------------------------------------------------------------------------
-        if ( _position.y < POOL_TOP + _B[ _b + SS.B_SUM_LENGTHS ] * ONE_HALF )
-        {
-            //console.log( "top" );
-
-            for (let p=1; p<_B[ _b + SS.B_NUM_PARTS ]; p++)
-            {
-                let radius = _pLength[p] + _pWidth[p];
-                let limit = POOL_TOP + radius;
-
-                if ( _pd[ p * PS + P_Y ] < limit )
-                {
-                    let penetration = limit - _pd[ p * PS + P_Y ];
-
-                    _position.y         += penetration * WALL_BOUNCE;
-                    _velocity.y         += penetration * WALL_BOUNCE;
-                    _directionToGoal.y  += penetration * WALL_BOUNCE;
-                    _directionToGoal.normalize();
-                }
-            }
-        }
-        //------------------------------------------------------------------------------
-        // bottom wall
-        //------------------------------------------------------------------------------
-        else if ( _position.y > POOL_BOTTOM - _B[ _b + SS.B_SUM_LENGTHS ] * ONE_HALF )
-        {
-            for (let p=1; p<_B[ _b + SS.B_NUM_PARTS ]; p++)
-            {
-                let radius = _pLength[p] + _pWidth[p];
-                let limit = POOL_BOTTOM - radius;
-
-                if ( _pd[ p * PS + P_Y ] > limit )
-                {
-                    let penetration = limit - _pd[ p * PS + P_Y ];
-
-                    _position.y         += penetration * WALL_BOUNCE;
-                    _velocity.y         += penetration * WALL_BOUNCE;
-                    _directionToGoal.y  += penetration * WALL_BOUNCE;
-                    _directionToGoal.normalize();
-                }
-            }
-        }
-    }
 
 	//---------------------------
 	// set position
@@ -2273,49 +1744,11 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 
 
 	//---------------------------------------
-    this.getGoalDescription = function()
-    {
-        let brainState = _brain.getState();
-
-             if ( brainState ===  BRAIN_STATE_RESTING            ) { return "resting";              }
-        else if ( brainState ===  BRAIN_STATE_LOOKING_FOR_MATE   ) { return "looking for mate";     }
-        else if ( brainState ===  BRAIN_STATE_PURSUING_MATE      ) { return "pursuing mate";        }
-        else if ( brainState ===  BRAIN_STATE_LOOKING_FOR_FOOD   ) { return "looking for food bit"; }
-        else if ( brainState ===  BRAIN_STATE_PURSUING_FOOD      ) { return "pursuing food bit";    }
-        else if ( brainState ===  BRAIN_STATE_LOOKING_FOR_PREY   ) { return "looking for prey";     }
-        else if ( brainState ===  BRAIN_STATE_PURSUING_PREY      ) { return "pursuing prey";        }
-        else if ( brainState ===  BRAIN_STATE_FLEEING_PREDATOR   ) { return "fleeing predator";     }
-        else if ( brainState ===  BRAIN_STATE_SELF_FEED          ) { return "consuming own tissue";  }
-
-        return "(no goal identified)";
-    }
+    this.getGoalDescription = function() { return getGoalDescriptionForState( _brain.getState() ); }
 
 
 	//---------------------------------------
-    this.getAttractionDescription = function()
-    {
-        let a = _brain.getAttractionCriterion();
-
-             if ( a === ATTRACTION_COLORFUL         ) { return "colorful";          }
-        else if ( a === ATTRACTION_BIG              ) { return "big";               }
-        else if ( a === ATTRACTION_HYPER            ) { return "hyper";             }
-        else if ( a === ATTRACTION_LONG             ) { return "long";              }
-        else if ( a === ATTRACTION_STRAIGHT         ) { return "straight";          }
-        else if ( a === ATTRACTION_NO_COLOR         ) { return "no color";          }
-        else if ( a === ATTRACTION_SMALL            ) { return "small";             }
-        else if ( a === ATTRACTION_STILL            ) { return "still";             }
-        else if ( a === ATTRACTION_SHORT            ) { return "short";             }
-        else if ( a === ATTRACTION_CROOKED          ) { return "crooked";           }
-        else if ( a === ATTRACTION_SIMILAR_COLOR    ) { return "similar color";     }
-        else if ( a === ATTRACTION_SIMILAR_SIZE     ) { return "similar size";      }
-        else if ( a === ATTRACTION_SIMILAR_HYPER    ) { return "similar hyper";     }
-        else if ( a === ATTRACTION_SIMILAR_LENGTH   ) { return "similar length";    }
-        else if ( a === ATTRACTION_SIMILAR_STRAIGHT ) { return "similar straight";  }
-        else if ( a === ATTRACTION_RANDOM           ) { return "random";            }
-        else if ( a === ATTRACTION_CLOSEST          ) { return "closest";           }
-
-        return "(no attraction identified)";
-    }
+    this.getAttractionDescription = function() { return getAttractionDescriptionForCode( _brain.getAttractionCriterion() ); }
 
 
 	//---------------------------
@@ -2454,7 +1887,7 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
                     if ( _phenotype.parts[p].branch ) branchCount ++;
                 }
                 const myBucket = SS.getMorphBucket( numParts, branchCount > 0, numParts ? widthSum / numParts : ZERO );
-                const myShare = SS.sharedState().morphBucketShare[ myBucket ];
+                const myShare = ( _shared ? _shared.morphBucketShare : SS.sharedState().morphBucketShare )[ myBucket ];
                 if ( myShare > 0.16 ) energyFromFoodBit *= Math.max( 0.82, 1 - ( myShare - 0.16 ) * 0.9 );
                 else if ( myShare < 0.06 ) energyFromFoodBit *= 1.12;
             }
@@ -2637,8 +2070,8 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	        _M[ _m + SS.M_HUNT_CD ] += 12;
 	    }
 
-	    let preyPosition = new Vector2D();
-	    preyPosition.set( chosenPrey().getPosition() );
+	    _huntPreyPos.set( chosenPrey().getPosition() );
+	    const preyPosition = _huntPreyPos;
 
 	    // autotomy: the prey may drop a part and get away; I eat the part
 	    const dropped = chosenPrey().tryAutotomyOnBite();
@@ -2702,7 +2135,6 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	{
 	    _M[ _m + SS.M_TRY_MATE ]    = 0;
 	    _M[ _m + SS.M_MATE ] = NULL_INDEX;
-	    _M[ _m + SS.M_MATE ] = NULL_INDEX;
 	    _brain.setFoundSwimbot( false );
 	}
 
@@ -2724,109 +2156,20 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	//-----------------------------------------
 	// get attractiveness
 	//-----------------------------------------
-	this.getAttractiveness = function( judge )
-	{
-        let attractiveness = gpRandom();
-
-        let attractionCriterion = _brain.getAttractionCriterion();
-
-        //console.log( "attractionCriterion = " + attractionCriterion );
-
-        if ( attractionCriterion === ATTRACTION_COLORFUL        ) { attractiveness =        this.getColorSaturation         (); }
-        if ( attractionCriterion === ATTRACTION_BIG             ) { attractiveness =        this.getCurrentBodyBigness      (); }
-        if ( attractionCriterion === ATTRACTION_HYPER           ) { attractiveness =        this.getCurrentBodyHyperness    (); }
-        if ( attractionCriterion === ATTRACTION_LONG            ) { attractiveness =        this.getCurrentBodyLongness     (); }
-        if ( attractionCriterion === ATTRACTION_STRAIGHT        ) { attractiveness =        this.getCurrentBodyStraightness (); }
-
-        if ( attractionCriterion === ATTRACTION_NO_COLOR        ) { attractiveness = ONE -  this.getColorSaturation         (); }
-        if ( attractionCriterion === ATTRACTION_SMALL           ) { attractiveness = ONE -  this.getCurrentBodyBigness      (); }
-        if ( attractionCriterion === ATTRACTION_STILL           ) { attractiveness = ONE -  this.getCurrentBodyHyperness    (); }
-        if ( attractionCriterion === ATTRACTION_SHORT           ) { attractiveness = ONE -  this.getCurrentBodyLongness     (); }
-        if ( attractionCriterion === ATTRACTION_CROOKED         ) { attractiveness = ONE -  this.getCurrentBodyStraightness (); }
-
-        if ( attractionCriterion === ATTRACTION_SIMILAR_COLOR   ) { attractiveness =        this.getColorSimilarity         ( judge ); }
-        if ( attractionCriterion === ATTRACTION_SIMILAR_SIZE    ) { attractiveness =        this.getBignessSimilarity       ( judge ); }
-        if ( attractionCriterion === ATTRACTION_SIMILAR_HYPER   ) { attractiveness =        this.getHypernessSimilarity     ( judge ); }
-        if ( attractionCriterion === ATTRACTION_SIMILAR_LENGTH  ) { attractiveness =        this.getLengthSimilarity        ( judge ); }
-        if ( attractionCriterion === ATTRACTION_SIMILAR_STRAIGHT) { attractiveness =        this.getStraightessSimilarity   ( judge ); }
-
-        if ( attractionCriterion === ATTRACTION_CLOSEST         ) { attractiveness =        this.getCloseness               ( judge ); }
-        if ( attractionCriterion === ATTRACTION_RANDOM          ) { attractiveness =        gpRandom(); }
-
-        return attractiveness;
-    }
+	this.getAttractiveness          = function( judge ) { return computeAttractiveness( this, judge, _brain.getAttractionCriterion() ); }
 
 
 	//-------------------------------------
 	// get color saturation
 	//-------------------------------------
-	this.getColorSaturation = function()
-	{
-        //console.log( "getColorSaturation" );
-
-        let saturation = ZERO;
-
-        let accumulatedMass = ZERO;
-
-        for (let p=1; p<_phenotype.numParts; p++)
-        {
-            //console.log( _phenotype.parts[p].red + ", " + _phenotype.parts[p].green + ", " + _phenotype.parts[p].blue );
-
-            accumulatedMass += _phenotype.parts[p].mass;
-
-            let rgDiff = Math.abs( _phenotype.parts[p].red     - _phenotype.parts[p].green  );
-            let rbDiff = Math.abs( _phenotype.parts[p].red     - _phenotype.parts[p].blue   );
-            let gbDiff = Math.abs( _phenotype.parts[p].green   - _phenotype.parts[p].blue   );
-
-            //console.log( rgDiff + ", " + rbDiff + ", " + gbDiff );
-
-            let thisPartSaturation = ( rgDiff + rbDiff + gbDiff ) / 3;
-
-            assert( thisPartSaturation <= ONE, "thisPartSaturation <= ONE" );
-
-            thisPartSaturation *= _phenotype.parts[p].mass
-
-            saturation += thisPartSaturation;
-        }
-
-        assert( accumulatedMass > ZERO, "getColorSaturation: accumulatedMass > ZERO" );
-
-        saturation /= accumulatedMass;
-
-        assert( saturation <= ONE, "getColorSaturation: saturation <= ONE" );
-
-        return saturation;
-    }
+	this.getColorSaturation         = function()        { return computeColorSaturation( _phenotype ); }
 
 
 
 	//-----------------------------------------
 	// get closeness
 	//-----------------------------------------
-	this.getCloseness = function( judge )
-	{
-	    //console.log( "getCloseness" );
-
-        let closest = SWIMBOT_VIEW_RADIUS; //maximum
-
-        let distance = _position.getDistanceTo( judge.getPosition() );
-
-        /*
-        if ( distance > SWIMBOT_VIEW_RADIUS )
-        {
-            console.log( distance + ", " + SWIMBOT_VIEW_RADIUS );
-        }
-
-        //assert( distance <= SWIMBOT_VIEW_RADIUS, "swimbot.js: getCloseness: distance <= SWIMBOT_VIEW_RADIUS" );
-        */
-
-        if ( distance < closest )
-        {
-            closest = distance;
-        }
-
-        return ONE - ( closest / SWIMBOT_VIEW_RADIUS );
-    }
+	this.getCloseness               = function( judge ) { return computeCloseness( _position, judge.getPosition() ); }
 
 
 
@@ -2834,229 +2177,60 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
 	//-----------------------------------------
 	// get similarity
 	//-----------------------------------------
-	this.getSimilarity = function( judge )
-	{
-	    let amount
-	    = this.getColorSimilarity       ( judge )
-	    + this.getBignessSimilarity     ( judge )
-	    + this.getHypernessSimilarity   ( judge )
-	    + this.getLengthSimilarity      ( judge )
-	    + this.getStraightessSimilarity ( judge );
-
-	    amount /= 5;
-
-	    return amount;
-    }
+	this.getSimilarity              = function( judge ) { return 0.2 * ( this.getColorSimilarity( judge ) + this.getBignessSimilarity( judge ) + this.getHypernessSimilarity( judge ) + this.getLengthSimilarity( judge ) + this.getStraightessSimilarity( judge )); }
 
 
 	//-----------------------------------------
 	// get color similarity
 	//-----------------------------------------
-	this.getColorSimilarity = function( judge )
-	{
-	    let amount = ZERO;
-
-	    let c1 = judge.getAverageColor();
-	    let c2 = this.getAverageColor();
-
-	    //console.log( "judge color = " + c1.red + ", " + c1.green + ", " + c1.blue );
-	    //console.log( "my color    = " + c2.red + ", " + c2.green + ", " + c2.blue );
-
-        let rDiff = Math.abs( c2.red    - c1.red    );
-        let gDiff = Math.abs( c2.green  - c1.green  );
-        let bDiff = Math.abs( c2.blue   - c1.blue   );
-
-        amount = ONE - ( ( rDiff + gDiff + bDiff ) * ONE_THIRD );
-
-	    return amount;
-    }
+	this.getColorSimilarity         = function( judge ) { return computeColorSimilarity( this.getAverageColor(), judge.getAverageColor() ); }
 
 
 	//--------------------------------------------
 	// get bigness similarity
 	//--------------------------------------------
-	this.getBignessSimilarity = function( judge )
-	{
-	    let amount = ZERO;
-
-	    let b1 = judge.getCurrentBodyBigness();
-	    let b2 = this.getCurrentBodyBigness();
-
-        amount = ONE - Math.abs( b1 - b2 );
-
-        //console.log( "bigness similarity = " + amount );
-
-	    return amount;
-    }
+	this.getBignessSimilarity       = function( judge ) { return ONE - Math.abs( this.getCurrentBodyBigness() - judge.getCurrentBodyBigness() ); }
 
 
 	//--------------------------------------------
 	// get hyperness similarity
 	//--------------------------------------------
-	this.getHypernessSimilarity = function( judge )
-	{
-	    let amount = ZERO;
-
-	    let b1 = judge.getCurrentBodyHyperness();
-	    let b2 = this.getCurrentBodyHyperness();
-
-        amount = ONE - Math.abs( b1 - b2 );
-
-	    return amount;
-    }
+	this.getHypernessSimilarity     = function( judge ) { return ONE - Math.abs( this.getCurrentBodyHyperness() - judge.getCurrentBodyHyperness() ); }
 
 
 	//--------------------------------------------
 	// get length similarity
 	//--------------------------------------------
-	this.getLengthSimilarity = function( judge )
-	{
-	    let amount = ZERO;
-
-	    let b1 = judge.getCurrentBodyLongness();
-	    let b2 = this.getCurrentBodyLongness();
-
-        amount = ONE - Math.abs( b1 - b2 );
-
-	    return amount;
-    }
+	this.getLengthSimilarity        = function( judge ) { return ONE - Math.abs( this.getCurrentBodyLongness() - judge.getCurrentBodyLongness() ); }
 
 
 	//--------------------------------------------
 	// get straightness similarity
 	//--------------------------------------------
-	this.getStraightessSimilarity = function( judge )
-	{
-	    let amount = ZERO;
-
-	    let b1 = judge.getCurrentBodyStraightness();
-	    let b2 = this.getCurrentBodyStraightness();
-
-        amount = ONE - Math.abs( b1 - b2 );
-
-	    return amount;
-    }
+	this.getStraightessSimilarity   = function( judge ) { return ONE - Math.abs( this.getCurrentBodyStraightness() - judge.getCurrentBodyStraightness() ); }
 
 
 
 
     //---------------------------------------
-    this.getCurrentBodyBigness = function()
-    {
-        let amount = _phenotype.mass / GREATEST_POSSIBLE_SWIMBOT_MASS;
-
-        return amount;
-    }
+	this.getCurrentBodyBigness      = function()        { return computeBodyBigness( _phenotype ); }
 
 
     //---------------------------------------
-    this.getCurrentBodyLongness = function()
-    {
-        let amount = ZERO;
-
-        for (let p=1; p<_B[ _b + SS.B_NUM_PARTS ]; p++)
-        {
-            for (let pp=1; pp<_B[ _b + SS.B_NUM_PARTS ]; pp++)
-            {
-                if ( pp != p )
-                {
-                    let xx = _pd[ p * PS + M_X ] - _pd[ pp * PS + M_X ];
-                    let yy = _pd[ p * PS + M_Y ] - _pd[ pp * PS + M_Y ];
-                    let d = Math.sqrt( xx * xx + yy * yy );
-
-                    if ( d > amount )
-                    {
-                        amount = d;
-                    }
-                }
-            }
-        }
-
-        amount /= GREATEST_POSSIBLE_SWIMBOT_LENGTH;
-
-        return amount;
-    }
+	this.getCurrentBodyLongness     = function()        { return computeBodyLongness( _B[ _b + SS.B_NUM_PARTS ], _pd ); }
 
 
 
 
 
     //-------------------------------------------
-    this.getCurrentBodyStraightness = function()
-    {
-        let amount = ZERO;
-
-        //-------------------------------------------------------------------
-        // normalized vectors for each part axis
-        //-------------------------------------------------------------------
-        for (let p=1; p<_B[ _b + SS.B_NUM_PARTS ]; p++)
-        {
-            _unitAxisX[p] = _pd[ p * PS + A_X ] / _pLength[p];
-            _unitAxisY[p] = _pd[ p * PS + A_Y ] / _pLength[p];
-
-        }
-
-        //---------------------------------------------------------------------------
-        // finding the dot products between each pair of these vectors...
-        //---------------------------------------------------------------------------
-        if ( _B[ _b + SS.B_NUM_PARTS ] < 3 )
-        {
-            amount = ONE;
-        }
-        else
-        {
-            let numTests = 0;
-            for (let p=1; p<_B[ _b + SS.B_NUM_PARTS ]; p++)
-            {
-                for (let pp=p+1; pp<_B[ _b + SS.B_NUM_PARTS ]; pp++)
-                {
-                    numTests ++;
-                    assert ( p != pp, "Swimbot:getCurrentBodyStraightness: p != pp" );
-                    amount += Math.abs( _unitAxisX[p] * _unitAxisX[pp] + _unitAxisY[p] * _unitAxisY[pp] );
-                }
-            }
-
-            amount /= numTests;
-        }
-
-        //-----------------------------------------------
-        // let's favor swimbots with more parts....
-        //-----------------------------------------------
-        amount *= 0.7;
-        amount += ( _B[ _b + SS.B_NUM_PARTS ] / MAX_PARTS ) * 0.3;
-
-        if ( amount > ONE )
-        {
-            amount = ONE;
-        }
-
-        return amount;
-    }
+	this.getCurrentBodyStraightness = function()        { return computeBodyStraightness( _B[ _b + SS.B_NUM_PARTS ], _pd, _pLength ); }
 
 
 
 
     //-------------------------------------------
-    this.getCurrentBodyHyperness = function()
-    {
-        let amount = ZERO;
-
-        for (let p=1; p<_B[ _b + SS.B_NUM_PARTS ]; p++)
-        {
-            amount += Math.sqrt( _pd[ p * PS + V_X ] * _pd[ p * PS + V_X ] + _pd[ p * PS + V_Y ] * _pd[ p * PS + V_Y ] );
-        }
-
-        let FugdeFactorToScaleHyperAttraction = 0.4;
-
-        amount *= FugdeFactorToScaleHyperAttraction;
-
-        if ( amount > ONE )
-        {
-            amount = ONE;
-        }
-
-        return amount;
-    }
+	this.getCurrentBodyHyperness    = function()        { return computeBodyHyperness( _B[ _b + SS.B_NUM_PARTS ], _pd ); }
 
 
 
@@ -3148,8 +2322,6 @@ let partAccelerationY = motion.enabled ? -strokeForceY * motion.acceleration : -
         _genotype.clear();
         _position.clear();
         _velocity.clear();
-        _acceleration.clear();
-        _heading.clear();
         _directionToGoal.clear();
         _focusDirection.clear();
         _centerOfMass.clear();
@@ -3236,7 +2408,6 @@ console.log( "contributeToOffspring: _childEnergyRatio = " + _childEnergyRatio )
         _B[ _b + SS.B_TIMER_DELTA ]         = ZERO;
         _M[ _m + SS.M_TRY_MATE ]       = 0;
         _M[ _m + SS.M_MATE ] = NULL_INDEX;
-        _M[ _m + SS.M_MATE ]    = NULL_INDEX
         _brain.setFoundSwimbot( false );
 
 	    return energyToContribute;

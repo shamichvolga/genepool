@@ -63,6 +63,8 @@ import { createSpeciesTracker } from "./SpeciesTracker";
 import { sortAliveByMorton, sortAliveFoodByMorton, updateMorphBucketShares, updateScentFields } from "./ScentField";
 import { interactSwimbot } from "./MatingSystem";
 import { createInputController } from "./InputController";
+import { getLegacyPoolData, setLegacyPoolData } from "./LegacyPoolSerializer";
+import { runPredationSelfTest } from "./PredationTest";
 import { rStrategyCooldownFactor, rStrategyReproductionEnergyFactor, killWinnerPressure, KILL_WINNER_REPRO_MULT } from "./Parameters";
 
 // The living soil has its own ambient reservoir. Energy that a swimmer spends
@@ -135,7 +137,6 @@ export function GenePool()
 // viewScale is screen pixels per world unit. It is the same number the
     // renderers use for screen-space line widths, so the LOD switch and the
     // overlays stay in step when the camera is raised 3-4 times.
-    const COLONY_COUNT = Math.max( 1, Math.min( 14, oasisCentersWorld().length || 14 ));   // one colony per richest oasis actually present
 
     const INITIAL_VIEW_SCALE                = POOL_WIDTH * 0.1;
     const RACE_VIEW_SCALE                   = POOL_WIDTH * 0.3;
@@ -155,7 +156,6 @@ export function GenePool()
 	let _touch                  = new Touch();
 	let _swimbots: any[]       = new Array( MAX_SWIMBOTS );
 	let _foodBits		        = new Array( MAX_FOODBITS );
-    let _nearbySwimbotsArray    = new Array( BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS );
 	let _viewTracking		    = new ViewTracking();
     let _potentialMate          = new Swimbot();
 	let _chosenFoodBit          = new FoodBit();
@@ -177,7 +177,6 @@ export function GenePool()
 	let _clock                  = 0;
 	let _lastFoodGridCount      = -1;   // food grid is rebuilt only when it must be
 	let _numSwimbots 	        = 0;
-    let _numNearbySwimbots      = 0;
 	let _numFoodBits 	        = 0;
 	let _canvasWidth            = 0;
 	let _canvasHeight           = 0;
@@ -207,22 +206,16 @@ export function GenePool()
     let _seedDebt            = 0;       // fractional seeds carried to the next step
     const _energyBeforePhysics = ( SWIMMING_ENERGY_RECYCLE_ENABLED || CLOSED_ENERGY_CYCLE_ENABLED ) ? new Float64Array( MAX_SWIMBOTS ) : null;
     let _environmentImage    = null;    // picture of the temperature map (drawn behind the pool)
-    const STARVING_FOOD_CHOICE = 15;   // below this energy a swimbot eats anything
 	let _levelOfDetail	        = SWIMBOT_LEVEL_OF_DETAIL_LOW;
 	let _viewScale		        = 1;   // screen pixels per pool unit
-	let _previousTime           = ZERO;
-	let _frameRate              = ZERO;
 	let _debugTrail 		    = new Array( TRAIL_LENGTH );
 	let _familyTree             = new FamilyTree();
 	let _phyloTree              = new PhyloTree();
     let _renderingGoals         = true;
     let _showViewTrackingMode   = false;
-    let _windowWidth            = 0;
-    let _windowHeight           = 0;
     let _fastMode               = false;
     let _fastRenderInterval     = 6;
     let _fastRenderCounter      = 0;
-    let _savedRenderingGoals    = true;
 
 
     //--------------------------------------------------------------------------
@@ -272,11 +265,9 @@ export function GenePool()
     let _swimbotWasAlive = new Array(MAX_SWIMBOTS);
     let _lastCameraPosition = new Vector2D();
     let _seedSource = new FoodBit(); // scratch: a stand-in parent position for seeding
-    let _genitalPositionUtility = new Vector2D(); // scratch: another swimbot's genital position
     let _capsuleRenderer        = null;           // graphics-card renderer (browser only, may be absent)
     _lastCameraPosition.setXY(0, 0);
 
-    let hhh = 0;
 
     //-------------------------------------
     // Renderer context: геттеры на переменные замыкания для GenePoolRenderer
@@ -380,13 +371,6 @@ export function GenePool()
         _aliveCachesDirty = false;
     }
 
-	//---------------------------------------------------------
-	// create fixed-sized perceived nearby swimbot array
-	//---------------------------------------------------------
-	for (let s=0; s<BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS; s++)
-	{
-		_nearbySwimbotsArray[s] = new Swimbot();
-	}
 
 	//-------------------------------------
 	// create fixed-sized foodbit array
@@ -2879,220 +2863,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 
 
 	//--------------------------------
-    this.setPoolData = function( data )
-    {
-        //------------------------------------------------------------
-        // the environment first (swimbots check the temperature when
-        // they are created); pools saved before stage 5 have none
-        //------------------------------------------------------------
-        environment.setState( data.environment );
-        if ( environment.active ) { environment.copyBackgroundTo( _st.background ); }
-        _clock = ( typeof data.clock === "number" ) ? data.clock : 0;
-        environment.setTime( _clock );
-        _seedDebt = 0;
-        globalTweakers.numFoodTypes = environment.active ? ( TWO_PLANT_TYPES ? 2 : 1 ) : globalTweakers.numFoodTypes;
-        _environmentImage = environment.active ? environment.makeImage() : null;
-        _pool.setBackgroundImage( _environmentImage );
-        this.setPopulationLimitEnabled( data.populationLimitEnabled !== false );
-        this.setMaximumSwimbotParts( typeof data.maximumSwimbotParts === "number" ? data.maximumSwimbotParts : 16 );
-
-        //console.log( "loading pool file:" );
-        //console.log( data );
-
-        //-------------------------------------------
-        // frozen or running?
-        //-------------------------------------------
-        _simulationRunning = data.simulationRunning;
-
-        //-------------------------------
-        // load food
-        //-------------------------------
-        _numFoodBits = data.numFoodBits;
-
-        for (let f=0; f<MAX_FOODBITS; f++)
-        {
-            _foodBits[f].kill();
-        }
-
-        for (let f=0; f<data.numFoodBits; f++)
-        {
-            let id = data.foodBitArray[f].id;
-
-            _foodBits[ id ].initialize( id );
-
-            // its age and plant genes (older save files have none)
-            const saved = data.foodBitArray[f];
-            if ( typeof saved.age    === "number" ) { _st.foodBorn[ id ] = _clock - saved.age; }
-            if ( typeof saved.growth === "number" ) { _st.plantGrowth[ id ] = saved.growth; _st.plantSpread[ id ] = saved.spread; }
-            if ( typeof saved.energy === "number" && Number.isFinite( saved.energy )) { _st.foodEnergy[ id ] = saved.energy; }
-            if ( typeof saved.wood === "number" && Number.isFinite( saved.wood )) { _st.foodWood[ id ] = saved.wood; }
-            else { _st.foodWood[ id ] = Math.max( 0, _st.foodEnergy[ id ] ); }
-            if ( typeof saved.fruit === "number" && Number.isFinite( saved.fruit )) { _st.foodFruit[ id ] = saved.fruit ? 1 : 0; }
-            if ( typeof saved.nextFruitAt === "number" && Number.isFinite( saved.nextFruitAt )) { _st.foodFruitAt[ id ] = saved.nextFruitAt; }
-
-            // older save files have no food type - those are plants
-            let type = data.foodBitArray[f].type;
-            _foodBits[ id ].setType( ( type === 1 || type === 2 ) ? type : 0 );
-
-            let foodBitPosition = new Vector2D();
-            foodBitPosition.setXY( data.foodBitArray[f].x, data.foodBitArray[f].y );
-            _foodBits[ id ].setPosition( foodBitPosition );
-        }
-
-        //---------------------------------
-        // load swimbots
-        //---------------------------------
-        _numSwimbots = data.numSwimbots;
-
-        for (let s=0; s<MAX_SWIMBOTS; s++)
-        {
-            _swimbots[s].die();
-        }
-
-        //----------------------------------------
-        // reset family tree array
-        //----------------------------------------
-        _familyTree.reset();
-
-        //----------------------------------------
-        // create the swimbots
-        //----------------------------------------
-        for (let s=0; s<data.numSwimbots; s++)
-        {
-            let id = data.swimbotArray[s].id;
-
-            let swimbotPosition = new Vector2D();
-            swimbotPosition.setXY( data.swimbotArray[s].x, data.swimbotArray[s].y );
-
-            let loadedGenotype = new Genotype();
-            let genes = data.swimbotArray[s].genes.slice();
-            if ( !data.geneLayout ) { convertOldGenes( genes ); }
-            loadedGenotype.setGenes( genes );
-            loadedGenotype.setBrain( data.swimbotArray[s].brain );   // (older files: the innate brain)
-
-            //this seems to be glitched - I must explore why
-            //console.log( "s = " + s + "; id = " + id );
-            //assert( id === s, "GenePool.js: this.setPoolData: assert: id === s" );
-
-            _swimbots[ id ].create
-            (
-                id,
-                //id, //this seems to be glitched - I must explore why
-                data.swimbotArray[s].age,
-                swimbotPosition,
-                data.swimbotArray[s].angle,
-                data.swimbotArray[s].energy,
-                loadedGenotype,
-                _embryology
-            );
-            if ( Array.isArray( data.swimbotArray[s].privateState ) )
-            {
-                _swimbots[id].setPrivateState( data.swimbotArray[s].privateState, 0 );
-            }
-
-            //------------------------------------------------------------------------------------
-            // add the new swimbot to the family tree
-            //------------------------------------------------------------------------------------
-            _familyTree.addNode( id, NULL_INDEX, NULL_INDEX, _clock, this.getSwimbotGenes( id ) );
-        }
-
-        //----------------------------------------
-        // camera
-        //----------------------------------------
-        let cameraPosition = new Vector2D();
-        cameraPosition.setXY( data.cameraX, data.cameraY );
-        _camera.setPosition( cameraPosition );
-        _camera.setScale( data.cameraScale );
-
-        //------------------------
-        // set view control
-        //------------------------
-        _viewTracking.reset();
-
-        //--------------------------------------------------------------
-        // set tweakers
-        //--------------------------------------------------------------
-        this.setFoodGrowthDelay     ( data.foodRegenerationPeriod   );
-        this.setFoodSpread          ( data.foodSpread               );
-        this.setFoodBitEnergy       ( data.foodBitEnergy            );
-        // setFoodBitEnergy applies the pool default to every loaded slot;
-        // restore per-item values afterwards when present in newer legacy saves.
-        for ( let f = 0; f < data.numFoodBits; f++ )
-        {
-            const saved = data.foodBitArray[f], id = saved.id;
-            if ( typeof saved.energy === "number" && Number.isFinite( saved.energy )) { _st.foodEnergy[id] = saved.energy; }
-            if ( typeof saved.wood === "number" && Number.isFinite( saved.wood )) { _st.foodWood[id] = saved.wood; }
-            else { _st.foodWood[id] = Math.max( 0, _st.foodEnergy[id] ); }
-            _st.foodFruit[id] = ( typeof saved.fruit === "number" && Number.isFinite( saved.fruit ) && saved.fruit !== 0 ) ? 1 : 0;
-            if ( typeof saved.nextFruitAt === "number" && Number.isFinite( saved.nextFruitAt )) { _st.foodFruitAt[id] = saved.nextFruitAt; }
-        }
-        this.setHungerThreshold     ( data.hungerThreshold          );
-        this.setAttraction          ( data.attractionCriterion      );
-        this.setOffspringEnergyRatio( data.childEnergyRatio         );
-
-        _renderingGoals = data.renderingGoals;
-
-
-        //--------------------------------------------------------------
-        // set obstacle
-        //--------------------------------------------------------------
-        //to do
-		let end1 = new Vector2D();
-		let end2 = new Vector2D();
-
-        /*
-		if ( data.obstacleEnd1X === undefined ) { console.log( data.obstacleEnd1X ); }
-		if ( data.obstacleEnd1Y === undefined ) { console.log( data.obstacleEnd1Y ); }
-		if ( data.obstacleEnd2X === undefined ) { console.log( data.obstacleEnd2X ); }
-		if ( data.obstacleEnd2Y === undefined ) { console.log( data.obstacleEnd2Y ); }
-		*/
-
-		if (( data.obstacleEnd1X != undefined )
-		&&  ( data.obstacleEnd1Y != undefined )
-		&&  ( data.obstacleEnd2X != undefined )
-		&&  ( data.obstacleEnd2Y != undefined ))
-		{
-    		end1.setXY( data.obstacleEnd1X, data.obstacleEnd1Y );
-    		end2.setXY( data.obstacleEnd2X, data.obstacleEnd2Y );
-        }
-        else
-        {
-            //console.log( data.obstacleEnd1X + ", " + data.obstacleEnd1Y );
-            //console.log( data.obstacleEnd2X + ", " + data.obstacleEnd2Y );
-
-    		end1.setXY( 100, 100 );
-    		end2.setXY( 200, 100 );
-        }
-
-
-        _obstacle.setEndpointPositions( end1, end2 );
-		if ( data.obstacleSegments && ( data.obstacleSegments.length > 0 ))
-		{
-			_obstacle.setSegments( data.obstacleSegments );
-		}
-
-		//---------------------------------
-		// start time
-		//---------------------------------
-		_startTime = (new Date).getTime();
-
-		//----------------------------------
-		// get seconds
-		//----------------------------------
-		_seconds = ( (new Date).getTime() - _startTime ) / MILLISECONDS_PER_SECOND;
-
-		//----------------------------------
-		// initialize pool
-		//----------------------------------
-	    _pool.initialize( _seconds );
-
-		//---------------------------------
-		// clear this!
-		//---------------------------------
-        setSelectedSwimbot( NULL_INDEX );
-
-		// (the clock was restored at the top: the seasons go on where they were)
-    }
+	this.setPoolData = function( data ) { setLegacyPoolData( _serializerContext, data ); }
 
     //--------------------------------------
     // set selected swimbot
@@ -3710,6 +3481,10 @@ const feedRoom = Math.min( 100, swimbot.getMaxEnergy() - swimbot.getEnergy() );
 	    setAttraction:           ( v: number ) => _this.setAttraction( v ),
 	    setOffspringEnergyRatio: ( v: number ) => _this.setOffspringEnergyRatio( v ),
 	    setMaximumSwimbotAge:    ( v: number ) => _this.setMaximumSwimbotAge( v ),
+	    setPopulationLimitEnabled:( v: boolean ) => _this.setPopulationLimitEnabled( v ),
+	    setMaximumSwimbotParts:  ( v: number ) => _this.setMaximumSwimbotParts( v ),
+	    getSwimbotGenes:         ( id: number ) => _this.getSwimbotGenes( id ),
+	    get renderingGoals()     { return _renderingGoals; }, set renderingGoals( v ) { _renderingGoals = v; },
 	    writePerceptionParams:   () => _this.writePerceptionParams(),
 	    prepareMapZones:         () => prepareMapZones(),
 	    rebuildAliveIndexCaches: () => rebuildAliveIndexCaches(),
@@ -3727,152 +3502,7 @@ const feedRoom = Math.min( 100, swimbot.getMaxEnergy() - swimbot.getEnergy() );
 
 	this.loadWorld   = function( bytes ) { return Serializer.loadWorld( _serializerContext, bytes ); }
 
-	this.getPoolData = function()
-	{
-	    //-----------------------------
-	    // create foodbit array
-	    //-----------------------------
-        function FoodBitData()
-        {
-            this.id     = NULL_INDEX;
-            this.x      = ZERO;
-            this.y      = ZERO;
-            this.type   = 0;    // 0, 1 = plants, 2 = meat
-        }
-
-	    let foodBitDataArray = new Array();
-
-        let numFoodbits = 0;
-        for (let f=0; f<MAX_FOODBITS; f++)
-        {
-            if ( _foodBits[f].getAlive() )
-            {
-                foodBitDataArray[ numFoodbits ] = new FoodBitData();
-                foodBitDataArray[ numFoodbits ].id = f;
-                foodBitDataArray[ numFoodbits ].x = _foodBits[f].getPosition().x;
-                foodBitDataArray[ numFoodbits ].y = _foodBits[f].getPosition().y;
-                foodBitDataArray[ numFoodbits ].type = _foodBits[f].getType();
-                foodBitDataArray[ numFoodbits ].age    = _foodBits[f].getAge();
-                foodBitDataArray[ numFoodbits ].growth = _st.plantGrowth[f];
-                foodBitDataArray[ numFoodbits ].spread = _st.plantSpread[f];
-                foodBitDataArray[ numFoodbits ].energy = _st.foodEnergy[f];
-                foodBitDataArray[ numFoodbits ].wood = _st.foodWood[f];
-                foodBitDataArray[ numFoodbits ].fruit = _st.foodFruit[f];
-                foodBitDataArray[ numFoodbits ].nextFruitAt = _st.foodFruitAt[f];
-
-                numFoodbits ++;
-            }
-        }
-
-	    //-------------------------
-	    // create swimbot array
-	    //-------------------------
-        function SwimbotData()
-        {
-            this.x      = ZERO;
-            this.y      = ZERO;
-            this.angle  = ZERO;
-            this.energy = ZERO;
-            this.age    = 0;
-            this.id     = 0;
-            this.genes  = new Array();
-        }
-
-	    let swimbotDataArray = new Array();
-
-        let numSwimbots = 0;
-        for (let s=0; s<MAX_SWIMBOTS; s++)
-        {
-            if ( _swimbots[s].getAlive() )
-            {
-                swimbotDataArray[ numSwimbots ] = new SwimbotData();
-                swimbotDataArray[ numSwimbots ].id      = s;
-                swimbotDataArray[ numSwimbots ].x       = _swimbots[s].getPosition().x;
-                swimbotDataArray[ numSwimbots ].y       = _swimbots[s].getPosition().y;
-                swimbotDataArray[ numSwimbots ].angle   = _swimbots[s].getAngle();
-                swimbotDataArray[ numSwimbots ].age     = _swimbots[s].getAge();
-                swimbotDataArray[ numSwimbots ].energy  = _swimbots[s].getEnergy();
-                swimbotDataArray[ numSwimbots ].genes   = this.getSwimbotGenes(s);
-                swimbotDataArray[ numSwimbots ].brain   = Array.from( _swimbots[s].getGenotype().getBrain() );
-                const privateState = new Float64Array( _swimbots[s].PRIVATE_STATE_SIZE );
-                _swimbots[s].getPrivateState( privateState, 0 );
-                swimbotDataArray[ numSwimbots ].privateState = Array.from( privateState );
-
-
-
-//_myGenotype.randomize();
-//swimbotDataArray[ numSwimbots ].genes = _myGenotype;
-
-/*
-for (let g=0; g<NUM_GENES; g++)
-{
-    swimbotDataArray[ numSwimbots ].genes[g] = Math.floor( gpRandom() * 256.0 );
-}
-*/
-//data.swimbotArray[s].genes = _myGenotype;
-
-//console.log( swimbotDataArray[ numSwimbots ].genes );
-
-//_myGenotype.randomize();
-//_myGenotype.copyFromGenotype( data.swimbotArray[s].genes );
-
-
-//swimbotDataArray[ numSwimbots ].genes = _swimbots[s].getGenotype();
-
-
-//console.log( swimbotDataArray[ numSwimbots ].genes );
-
-//_myGenotype.randomize();
-
-//data.swimbotArray[s].genes = _myGenotype;
-
-//console.log( data.swimbotArray[s].genes );
-
-//swimbotDataArray[ numSwimbots ].genes = _myGenotype;
-
-//_myGenotype.randomize();
-//data.swimbotArray[ numSwimbots ].genes = _myGenotype;
-
-//_myGenotype.randomize();  //this.getSwimbotGenes(s);
-//swimbotDataArray[ numSwimbots ].genes   = _myGenotype;
-
-
-
-                numSwimbots ++;
-            }
-        }
-
-        let poolData =
-        {
-            "simulationRunning"         : _simulationRunning,
-            "numFoodBits"               : numFoodbits,
-            "numSwimbots"               : numSwimbots,
-            "foodBitArray"              : foodBitDataArray,
-            "swimbotArray"              : swimbotDataArray,
-            "cameraX"                   : _camera.getPosition().x,
-            "cameraY"                   : _camera.getPosition().y,
-            "cameraScale"               : _camera.getScale(),
-            "foodRegenerationPeriod"    : globalTweakers.foodRegenerationPeriod,
-            "foodSpread"                : globalTweakers.foodSpread,
-            "foodBitEnergy"             : globalTweakers.foodBitEnergy,
-            "hungerThreshold"           : globalTweakers.hungerThreshold,
-            "attractionCriterion"       : globalTweakers.attractionCriterion,
-            "childEnergyRatio"          : globalTweakers.childEnergyRatio,
-            "populationLimitEnabled"    : globalTweakers.populationLimitEnabled,
-            "maximumSwimbotParts"       : globalTweakers.maximumParts,
-            "renderingGoals"            : _renderingGoals,
-            "obstacleEnd1X"             : _obstacle.getEnd1Position().x,
-            "obstacleEnd1Y"             : _obstacle.getEnd1Position().y,
-            "obstacleEnd2X"             : _obstacle.getEnd2Position().x,
-            "obstacleEnd2Y"             : _obstacle.getEnd2Position().y,
-            "obstacleSegments"          : _obstacle.getSegments(),
-            "geneLayout"                : GENE_LAYOUT_VERSION,
-            "environment"               : environment.getState(),
-            "clock"                     : _clock
-        }
-
-        return poolData;
-    }
+	this.getPoolData = function() { return getLegacyPoolData( _serializerContext ); }
 
 
 	//------------------------------------
@@ -3995,160 +3625,24 @@ this.getSwimbots = function() {
 
 this.testPredation = function()
 {
-    const self = this;
-
-    // --- configuration ---
-    const HERB_COUNT = 50;
-    const PRED_COUNT = 5;
-    const TOTAL_TICKS = 10000;
-    const LOG_PERIOD = 1000;
-
-    // --- reset ecosystem ---
-    _fastMode = true;
-    _millisecondsPerUpdate = 20;
-
-    globalTweakers.numFoodTypes = 1;
-    this.randomizeFood();
-
-    // reset swimbots
-    _numSwimbots = 0;
-    for (let s = 0; s < MAX_SWIMBOTS; s++) {
-        _swimbots[s].die();
-    }
-
-    // kill all food bits
-    _numFoodBits = INITIAL_NUM_FOODBITS;
-    for (let f = 0; f < MAX_FOODBITS; f++) {
-        _foodBits[f].kill();
-        RootNetwork.unlinkChildren( _st, f );
-        if ( _st.selectedPlantIndex === f ) { _st.selectedPlantIndex = -1; }
-    }
-
-    // ensure thresholds
-    this.setHungerThreshold(DEFAULT_SWIMBOT_HUNGER_THRESHOLD);
-    this.setAttraction(ATTRACTION_SIMILAR_COLOR);
-
-    // --- pool center ---
-    _poolCenter.copyFrom(_pool.getCenter());
-    _gardenOfEdenRadius = DEFAULT_GARDEN_OF_EDEN_RADIUS;
-
-    // reset family tree and clock
-    _familyTree.reset();
-    _clock = 0;
-    simClock.step = 0;
-    resetSimulationCounters();
-    resetHistory();
-
-    // --- helper to create swimbot with predator gene ---
-    const setPredatorGene = function(genotype, value255) {
-        setTrait(genotype, GENES_PREDATOR, Math.floor(value255) / 255);
-    };
-
-    const createSwimbotWithPredatorGene = function(index, predatorGeneValue255, posOffsetX) {
-        _myGenotype.randomize();
-
-        // clear junk dna
-        for (let g = NUM_GENES_USED; g < NUM_GENES; g++) {
-            if ( !isExperimentalEmbryologyGene( g )) { _myGenotype.setGeneValue(g, 0); }
-        }
-        _myGenotype.setGeneValue( GENES_ASYMMETRY[0], Math.floor( gpRandom() * BYTE_SIZE ));
-
-        setPredatorGene(_myGenotype, predatorGeneValue255);
-
-        let initialPosition = new Vector2D();
-        initialPosition.setToRandomLocationInDisk(_poolCenter, _gardenOfEdenRadius);
-        if (posOffsetX) {
-            initialPosition.x += posOffsetX;
-        }
-
-        _swimbots[index].create(
-            index,
-            YOUNG_AGE_DURATION,
-            initialPosition,
-            getRandomAngleInDegrees(),
-            DEFAULT_SWIMBOT_HUNGER_THRESHOLD,
-            _myGenotype,
-            _embryology
-        );
-
-        _familyTree.addNode(index, NULL_INDEX, NULL_INDEX, _clock, self.getSwimbotGenes(index));
-        _numSwimbots++;
-    };
-
-    let nextIndex = 0;
-
-    // herbivores: predatorLevel ~ 0..0.2 => gene51 roughly 0..55
-    for (let i = 0; i < HERB_COUNT; i++) {
-        createSwimbotWithPredatorGene(nextIndex, Math.random() * 55, -200);
-        nextIndex++;
-    }
-
-    // predators: predatorLevel ~ 0.8..1 => gene51 roughly 200..255
-    for (let i = 0; i < PRED_COUNT; i++) {
-        createSwimbotWithPredatorGene(nextIndex, 200 + Math.random() * 55, 200);
-        nextIndex++;
-    }
-
-    // --- run simulation ---
-    _simulationRunning = false;
-
-    const computeCountsAndAvgEnergy = function() {
-        let aliveHerb = 0;
-        let alivePred = 0;
-        let sumEnergy = 0;
-        let aliveTotal = 0;
-
-        for (let s = 0; s < MAX_SWIMBOTS; s++) {
-            if (_swimbots[s].getAlive()) {
-                aliveTotal++;
-                sumEnergy += _swimbots[s].getEnergy();
-
-                let predatorLevel = _swimbots[s].getPredatorLevel();
-
-
-                if (predatorLevel > 0.6) alivePred++;
-                else aliveHerb++;
-            }
-        }
-
-        let avgEnergy = aliveTotal > 0 ? (sumEnergy / aliveTotal) : 0;
-        return { aliveHerb, alivePred, aliveTotal, avgEnergy };
-    };
-
-    for (let t = 1; t <= TOTAL_TICKS; t++) {
-        _clock++;
-
-        this.updateSwimbots();
-        this.updateFood();
-
-        if (t % LOG_PERIOD === 0) {
-            const stats = computeCountsAndAvgEnergy();
-            console.log(
-                `[testPredation] tick=${t} predators=${stats.alivePred} herbivores=${stats.aliveHerb} avgEnergy=${stats.avgEnergy.toFixed(4)} attacks=${simCounters.attackCount}`
-            );
-        }
-    }
-
-    const finalStats = computeCountsAndAvgEnergy();
-    const predatorsSurvived = finalStats.alivePred > 0;
-    const herbivoresSurvived = finalStats.aliveHerb > 0;
-
-    console.log(
-        `[testPredation] FINAL predatorsAlive=${finalStats.alivePred} herbivoresAlive=${finalStats.aliveHerb} attacksTotal=${simCounters.attackCount}`
-    );
-    console.log(
-        `[testPredation] survivalOK=${(predatorsSurvived && herbivoresSurvived) ? "YES" : "NO"}`
-    );
-
-    _simulationRunning = true;
-
-    return {
-        predatorsSurvived,
-        herbivoresSurvived,
-        predatorsAlive: finalStats.alivePred,
-        herbivoresAlive: finalStats.aliveHerb,
-        attacksTotal: simCounters.attackCount
-    };
+    return runPredationSelfTest({
+        st: _st,
+        swimbots: _swimbots,
+        foodBits: _foodBits,
+        pool: _pool,
+        familyTree: _familyTree,
+        myGenotype: _myGenotype,
+        embryology: _embryology,
+        get clock() { return _clock; }, set clock(v) { _clock = v; },
+        get simulationRunning() { return _simulationRunning; }, set simulationRunning(v) { _simulationRunning = v; },
+        randomizeFood: () => this.randomizeFood(),
+        setHungerThreshold: (h) => this.setHungerThreshold(h),
+        setAttraction: (a) => this.setAttraction(a),
+        resetHistory: () => resetHistory(),
+        getSwimbotGenes: (i) => this.getSwimbotGenes(i),
+        updateSwimbots: () => this.updateSwimbots(),
+        updateFood: () => this.updateFood(),
+    });
 };
 
 

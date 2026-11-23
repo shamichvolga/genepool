@@ -20,7 +20,7 @@ import { CONTINUAL_ENERGY_DRAIN, ENERGY_EFFICIENCY_MEASUREMENT_PERIOD, ENERGY_US
 import { BODY_COLLISIONS_ENABLED, BODY_COLLISION_PUSH, BODY_COLLISION_MAX_IMPULSE, TREE_OBSTACLES_ENABLED, TREE_OBSTACLE_RADIUS_BASE, TREE_OBSTACLE_RADIUS_SCALE, CAVITY_JET_ENABLED, CAVITY_JET_C, CAVITY_JET_MAX, CAVITY_SUCTION_RADIUS_SCALE, WAKE_GRID_ENABLED, WAKE_GRID_SIZE, WAKE_DAMPING, WAKE_DIFFUSION, WAKE_MAX_SPEED, WAKE_IMPULSE_SHARE, QUADRATIC_WATER_ENABLED, JOINT_MIN_ANGLE, JOINT_MAX_ANGLE, PLANT_TREE_ENERGY, WOOD_PER_FRUIT_TIER } from "./Parameters";
 
 const _WAKE_N = WAKE_GRID_SIZE;
-const _kernelGridBuf = new Int32Array( 512 );
+const _kernelGridBuf = new Int32Array( 1024 );
 // per-bot steering memory: a slew limiter for the wobble fed into the stroke
 const _smoothedDirectionDot = new Float32Array( MAX_SWIMBOTS );
 const MAX_DIRECTION_DOT_JUMP = 0.18;
@@ -525,8 +525,7 @@ export function physicsPartA( s: number, st: SharedState ): void
                 if ( bdx0 * bdx0 + bdy0 * bdy0 > treeReachSquared ) continue;
                 const tr = TREE_OBSTACLE_RADIUS_BASE + TREE_OBSTACLE_RADIUS_SCALE * Math.min( 1, st.foodWood[tf] / PLANT_TREE_ENERGY );
                 const maxBodyR = sumLengths * 0.6 + tr + 8;
-                const bdx = posX - tx, bdy = posY - ty;
-                if ( bdx * bdx + bdy * bdy > maxBodyR * maxBodyR ) continue;
+                if ( bdx0 * bdx0 + bdy0 * bdy0 > maxBodyR * maxBodyR ) continue;
                 for ( let p = 0; p < numParts; p += 2 )
                 {
                     const i = o + p * PS;
@@ -634,7 +633,7 @@ export function physicsPartA( s: number, st: SharedState ): void
     const current = st.params[ PARAM_CURRENT ];
     if ( current > ZERO )
     {
-        const push = motion.enabled ? Math.max( 0.6, Math.min( 1.4, Math.pow( 410 / Math.max( 1, bodyMass ), 1 / 6 ))) : ONE;
+        const push = motion.enabled ? Math.max( 0.6, Math.min( 1.4, Math.cbrt( Math.sqrt( 410 / Math.max( 1, bodyMass ))))) : ONE;
         currentAt( posX, posY );
         const driftX = push * current * currentDriftX(), driftY = push * current * currentDriftY();
         posX += driftX;

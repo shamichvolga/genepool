@@ -624,7 +624,8 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
     {
         // meat it touches while pursuing prey is eaten first
         const meatX = f >= 0 ? st.foodX[f] - mouthX : 0, meatY = f >= 0 ? st.foodY[f] - mouthY : 0;
-        if ( meatAlive && ( Math.sqrt( meatX * meatX + meatY * meatY ) < SWIMBOT_MOUTH_LENGTH + M[ m + SS.M_GRAB_RADIUS ] ))
+        const eatReach = SWIMBOT_MOUTH_LENGTH + M[ m + SS.M_GRAB_RADIUS ];
+        if ( meatAlive && ( meatX * meatX + meatY * meatY < eatReach * eatReach ))
         {
             M[ m + SS.M_TRY_EAT ] = 1;
         }
@@ -640,17 +641,18 @@ export function decideStep( st: SharedState, s: number, counters: number ): void
                 const p = prey * SS.BOT_STRIDE;
                 const biteDistance = SWIMBOT_MOUTH_LENGTH * ( 1 + 0.10 * st.frontAppendages[s] ) * PREDATOR_CAPTURE_RADIUS_SCALE + B[ p + SS.B_SUM_LENGTHS ] * 0.5;
                 const xx = B[ p + SS.B_POS_X ] - mouthX, yy = B[ p + SS.B_POS_Y ] - mouthY;
-                if ( Math.sqrt( xx * xx + yy * yy ) < biteDistance ) { M[ m + SS.M_TRY_HUNT ] = 1; }
+                if ( xx * xx + yy * yy < biteDistance * biteDistance ) { M[ m + SS.M_TRY_HUNT ] = 1; }
             }
         }
     }
     else if ( state === BRAIN_STATE_LOOKING_FOR_PREY )
     {
         // a hungry predator with no prey in sight eats meat it sees
-        if ( meatAlive)
+        if ( meatAlive )
         {
             const xx = st.foodX[f] - mouthX, yy = st.foodY[f] - mouthY;
-            if ( Math.sqrt( xx * xx + yy * yy ) < SWIMBOT_MOUTH_LENGTH + M[ m + SS.M_GRAB_RADIUS ] ) { M[ m + SS.M_TRY_EAT ] = 1; }
+            const eatReach = SWIMBOT_MOUTH_LENGTH + M[ m + SS.M_GRAB_RADIUS ];
+            if ( xx * xx + yy * yy < eatReach * eatReach ) { M[ m + SS.M_TRY_EAT ] = 1; }
         }
     }
 
@@ -1041,12 +1043,15 @@ export function takeInLook( st: SharedState, s: number, counters: number ): void
     {
         const plantSeen = foodOkay && !foodIsMeat;
         const mouthAtX = B[ b + SS.B_MOUTH_X ], mouthAtY = B[ b + SS.B_MOUTH_Y ];
-        const plantDistance = plantSeen ? Math.hypot( st.foodX[f] - mouthAtX, st.foodY[f] - mouthAtY ) : Infinity;
+        let plantDistanceSq = Infinity;
+        if ( plantSeen ) { const pdx = st.foodX[f] - mouthAtX, pdy = st.foodY[f] - mouthAtY; plantDistanceSq = pdx * pdx + pdy * pdy; }
         const desperate = DESPERATE_CANNIBALISM_ENABLED && ( B[ b + SS.B_ENERGY ] < M[ m + SS.M_MAX_ENERGY ] * DESPERATE_ENERGY_SHARE );
         for (let i = 0; i < count; i++)
         {
             const o = st.seen[ base + i ];
             if (( st.liveSwimbot[o] !== 1 ) || isPredator( st, o ) || ( st.eternal[o] === 1 )) continue;
+            const bdx = st.botX[o] - mouthAtX, bdy = st.botY[o] - mouthAtY;
+            if ( bdx * bdx + bdy * bdy > plantDistanceSq ) continue;   // the plant is nearer
             // what fits in the mouth: its mass now (a young one grows from an egg) against mine
             const young = st.age[o] < st.mind[ o * SS.MIND_STRIDE + SS.M_MATURE_AGE ];
             const theirMassNow = st.mass[o] * Math.min( 1, st.bots[ o * SS.BOT_STRIDE + SS.B_GROWTH ] );
@@ -1055,7 +1060,6 @@ export function takeInLook( st: SharedState, s: number, counters: number ): void
             const youngOk     = young && ( theirMassNow < myMassNow * CANNIBAL_PREY_MASS_SHARE );
             const desperateOk = desperate && ( theirMassNow < myMassNow * DESPERATE_PREY_MASS_SHARE );
             if ( !youngOk && !desperateOk ) continue;
-            if ( Math.hypot( st.botX[o] - mouthAtX, st.botY[o] - mouthAtY ) > plantDistance ) continue;   // the plant is nearer
             if ( KIN_NOT_EATEN_ENABLED && areKin( st, s, o )) continue;
             M[ m + SS.M_PREY ] = o;
             M[ m + SS.M_CANNIBAL ] = 1;

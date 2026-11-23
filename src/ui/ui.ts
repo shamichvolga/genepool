@@ -23,15 +23,16 @@ import { ATTRACTION_BIG, ATTRACTION_CLOSEST, ATTRACTION_COLORFUL, ATTRACTION_CRO
 import { assert } from "../simulation/Utility";
 import { ViewTrackingMode } from "../simulation/ViewTracking";
 import { Graph } from "./graph";
-import { getInfoText } from "./info";
+import { FIRST_INFO_PAGE, LAST_INFO_PAGE, _currentInfoPage, advanceInfoPage, openInfoPanel, setInfoPage, toggleHelp } from "./InfoUI";
+import { closeTweakGenesPanel, notifyGeneTweakPanelMouseDown, openTweakGenesPanel, setGeneTweakCategory, tweakGene, updateGeneSliders } from "./GeneTweakUI";
+import { nextPetriLayout, setupPetriPanel, showPetriPicture, startPetri as startPetriBase, syncPetriPanel } from "./PetriUI";
+export { FIRST_INFO_PAGE, LAST_INFO_PAGE, _currentInfoPage, advanceInfoPage, openInfoPanel, setInfoPage, toggleHelp, closeTweakGenesPanel, notifyGeneTweakPanelMouseDown, openTweakGenesPanel, setGeneTweakCategory, tweakGene, updateGeneSliders, nextPetriLayout, setupPetriPanel, showPetriPicture, syncPetriPanel };
 import { _chosenPoolToLoad, _username, applyPoolStartupParams, setChosenPoolToLoad, syncPoolStartupInputs, syncSwimbotNameInput } from "./saveLoad";
 import { decorateSwimbotCard, setupHints, tr, translateHTML, translatePage } from "./lang";
 import { USER_SWIMBOTS } from "./userSwimbots";
 
 
 //--------------------------
-export const FIRST_INFO_PAGE = 1;
-export const LAST_INFO_PAGE  = 28;
 
 export const DEFAULT_BASIC_PANEL_COLOR         = "#caccc2";
 export const DEFAULT_BASIC_BUTTON_COLOR        = "#dadad0";  
@@ -41,9 +42,7 @@ export const ACTIVE_BORDER_COLOR               = '#ffffff';
 export const UI_UPDATE_PERIOD = 500;
 
 
-export let _currentInfoPage            = FIRST_INFO_PAGE;
-export let _graph                      = new Graph(); 
-export let _tweakGenesCategory         = 0;
+export let _graph                      = new Graph();
 export let _runningFast                = false;
 export let _lastSwimbotPanelHTML       = "";
 export let _lastGraphDataHTML          = "";
@@ -375,106 +374,13 @@ export function openSwimbotPanel()
 }
 
 //------------------------------------------------
-export function openTweakGenesPanel( selectedSwimbotID )
-{
-    if ( selectedSwimbotID != NULL_INDEX )
-    {
-        document.getElementById( 'tweakGenesPanel'      ).style.visibility = 'visible'; document.getElementById( 'tweakGenesPanel' ).style.display = 'block';
-        document.getElementById( 'closeTweakGenesPanel' ).style.display = "block";
-        document.getElementById( 'tweakGenesPanel' ).innerHTML = "<div id = 'tweakGenesTitle' >" + tr( "Tweak the genes of swimbot" ) + " " + selectedSwimbotID + "</div>";
-        document.getElementById( 'tweakGenesPanel' ).innerHTML += "<div id = 'tweakGenesCategoryNote' >" + tr( "(choose which limb type to tweak)" ) + "</div>";
-        let numCategories = genePool.getNumGeneCategories();
-        for (let c=0; c<numCategories; c++)
-        {
-            document.getElementById( 'tweakGenesPanel' ).innerHTML
-            += "<div id = 'category" + (c+1) + "' >" + (c+1)
-            +  "<input "
-            +  "type         = 'radio' "
-            +  "id           = 'geneTweakerCategory" + c + "'"
-            +  "name         = 'geneTweakerCategory'"
-            +  "oninput      = 'setGeneTweakCategory( " + selectedSwimbotID + ", " + c + ")' "
-            +  "onchange     = 'setGeneTweakCategory( " + selectedSwimbotID + ", " + c + ")' "
-            +  "></div>";
-        }
-        let num = genePool.getNumGenesPerCategory();
-        num += 2; //add the two first (global: non-category) genes
-        let width = 150;
-        for (let g=0; g<num; g++)
-        {
-            let geneTweakerName  = genePool.getGeneName(g);
-            let geneTweakerValue = genePool.getGeneValue( selectedSwimbotID, g );
-            let top = 60 + g * 20;
-            if ( g > 1 ) //skip the two first (global: non-category) genes
-            {
-                top += 80.0;
-            }
-            document.getElementById( 'tweakGenesPanel' ).innerHTML
-            += "<div class = 'geneTweakerValue' id = 'gene" + g + "Value' style = 'top:" + top + "px;'>" + geneTweakerValue + "</div>";
-            document.getElementById( 'tweakGenesPanel' ).innerHTML
-            += "<input "
-            +  "style        = 'top:" + ( top - 3 ) + "px; width:" + width + "px;'"
-            +  "type         = 'range' "
-            +  "class        = 'geneTweakerSlider' "
-            +  "min          = '0'"
-            +  "max          = '255'"
-            +  "value        = '" + geneTweakerValue + "'"
-            +  "id           = 'geneTweaker" + g + "'"
-            +  "name         = 'geneTweaker"
-            +  "step         = 1 "
-            +  "autocomplete = 'off' "
-            +  "oninput      = 'tweakGene( " + selectedSwimbotID + ", " + g + ")' "
-            +  ">";
-            document.getElementById( 'tweakGenesPanel' ).innerHTML
-            += "<div class = 'geneTweakerName' style = 'top:" + top + "px;'>" + tr( geneTweakerName ) + "</div>";
-        }
-        _tweakGenesCategory = 0;
-        let radioButtons = document.getElementsByName( 'geneTweakerCategory' );
-        for (let i = 0; i < radioButtons.length; i++)
-        {
-            if ( i === _tweakGenesCategory )
-            {
-                radioButtons[i].checked = true;
-            }
-            else
-            {
-                radioButtons[i].checked = false;
-            }
-        }
-    }
-    else
-    {
-        document.getElementById( 'tweakGenesPanel'      ).style.visibility = 'hidden'; document.getElementById( 'tweakGenesPanel' ).style.display = 'none';
-        document.getElementById( 'closeTweakGenesPanel' ).style.display = "none";
-    }
-}
+
 
 //----------------------------
-export function closeTweakGenesPanel()
-{
-    document.getElementById( 'tweakGenesPanel'      ).style.display = "none";
-    document.getElementById( 'closeTweakGenesPanel' ).style.display = "none";
-}
+
 
 //---------------------------------------------
-export function updateGeneSliders( selectedSwimbotID )
-{
-    let num = genePool.getNumGenesPerCategory();
-    num += 2; //add the two first (global: non-category) genes
-    for (let g=0; g<num; g++)
-    {
-        let geneIndex = g;
-        if ( g > 1 )
-        {
-            geneIndex += genePool.getNumGenesPerCategory() * _tweakGenesCategory;
-        }
-        let geneTweakerValue = genePool.getGeneValue( selectedSwimbotID, geneIndex );
-        let id = "geneTweaker" + g;
-        let slider = document.getElementById( id );
-        slider.value = geneTweakerValue;
-        id = "gene" + g + "Value";
-        document.getElementById( id ).innerHTML = geneTweakerValue;
-    }
-}
+
 
 //-------------------------
 export function closePopupPanel()
@@ -788,72 +694,19 @@ export function loadSwimbotFromPreset(p)
 }
 
 //------------------------------------------------------
-export function setGeneTweakCategory( selectedSwimbotID, c )
-{
-    _tweakGenesCategory = c;
-    updateGeneSliders( selectedSwimbotID );
-}
+
 
 //---------------------------------------------
-export function tweakGene( swimbotIndex, sliderIndex )
-{
-    let geneIndex = sliderIndex;
-    if ( sliderIndex > 1 )
-    {
-        geneIndex += genePool.getNumGenesPerCategory() * _tweakGenesCategory;
-    }
-    let id = "geneTweaker" + sliderIndex;
-    let input = document.getElementById( id );
-    let geneValue = input.value;
-    genePool.tweakGene( swimbotIndex, geneIndex, geneValue );
-    id = "gene" + sliderIndex + "Value";
-    document.getElementById( id ).innerHTML = geneValue;
-}
+
 
 //----------------------------
-export function openInfoPanel()
-{
-    document.getElementById( 'infoPanel' ).classList.add( 'active' );
-    setInfoPage( _currentInfoPage );
-}
+
 
 //---------------------------------------
-export function advanceInfoPage( increment )
-{
-    _currentInfoPage += increment;
-    if ( _currentInfoPage < FIRST_INFO_PAGE )
-    {
-        _currentInfoPage = FIRST_INFO_PAGE;
-    }
-    if ( _currentInfoPage > LAST_INFO_PAGE )
-    {
-        _currentInfoPage = LAST_INFO_PAGE;
-    }
-    setInfoPage( _currentInfoPage );
-}
+
 
 //---------------------------------------------
-export function setInfoPage( pageNumber )
-{
-    document.getElementById( 'pageNumberLabel'  ).innerHTML = tr( "page" ) + " " + _currentInfoPage + " " + tr( "of" ) + " " + LAST_INFO_PAGE;
-    document.getElementById( "infoText"         ).innerHTML = getInfoText( _currentInfoPage );
-    if ( _currentInfoPage === FIRST_INFO_PAGE )
-    {
-        document.getElementById( 'prevInfoButton' ).style.visibility = 'hidden'
-    }
-    else
-    {
-        document.getElementById( 'prevInfoButton' ).style.visibility = 'visible'
-    }
-    if ( _currentInfoPage === LAST_INFO_PAGE )
-    {
-        document.getElementById( 'nextInfoButton' ).style.visibility = 'hidden'
-    }
-    else
-    {
-        document.getElementById( 'nextInfoButton' ).style.visibility = 'visible'
-    }
-}
+
 
 //-----------------------
 export function updateUI()
@@ -1039,10 +892,7 @@ function updateHud()
 //------------------------------------------------------------
 // the keys help (press ? or F1)
 //------------------------------------------------------------
-export function toggleHelp()
-{
-    document.body.classList.toggle( "helpShown" );
-}
+
 
 // the tabs in order, for the Tab key
 const TAB_ORDER = [ "menuPoolButton", "menuSwimbotButton", "menuTweakButton", "menuGraphButton", "menuInfoButton" ];
@@ -1112,21 +962,7 @@ function phaseTimesText()
 }
 
 //----------------------------------------
-export function notifyGeneTweakPanelMouseDown()
-{
-    let selectedSwimbotID = genePool.getSelectedSwimbotID();
-    if ( selectedSwimbotID === -1 )
-    {
-        closeTweakGenesPanel();
-    }
-    else
-    {
-        if ( document.getElementById( 'tweakGenesPanel' ).style.display === 'block' )
-        {
-            openTweakGenesPanel( selectedSwimbotID );
-        }
-    }
-}
+
 
 //------------------------------------------------------------
 // hide the whole right panel to see more of the pool (key H)
@@ -1386,86 +1222,22 @@ export function showWorldSize()
 //----------------------------------------------------------
 // "petri" pool: read the settings typed in the panel, start
 //----------------------------------------------------------
-function readPetriSettings()
-{
-    // The Petri card was removed from the pool tab. Keep the old API alive for
-    // saved worlds and worker messages, but never touch a missing DOM node.
-    const zonesInput = document.getElementById( "petriZones" ) as HTMLInputElement | null;
-    const softInput  = document.getElementById( "petriSoftness" ) as HTMLInputElement | null;
-    if ( !zonesInput || !softInput ) return;
-    const zones    = parseInt( zonesInput.value, 10 );
-    const softness = parseFloat( softInput.value );
-    petriSettings.zones    = Math.min( 12, Math.max( 2, isFinite( zones ) ? zones : 7 ));
-    petriSettings.softness = Math.min( 1, Math.max( 0, isFinite( softness ) ? softness : 0.1 ));
-}
 
-export function showPetriPicture()
-{
-    readPetriSettings();
-    const canvas = document.getElementById( "petriPicture" ) as HTMLCanvasElement;
-    if ( canvas ) { drawPetriPreview( canvas, petriSettings.zones, petriSettings.layout, petriSettings.softness ); }
-    const name = document.getElementById( "petriLayoutName" );
-    if ( name ) { name.innerHTML = tr( "shape" ) + ": " + tr( PETRI_LAYOUTS[ petriSettings.layout ] ) + " · " + petriSettings.zones + " " + tr( "zones (click the picture to change the shape)" ); }
-    rememberPetriSettings();
-}
 
-export function nextPetriLayout()
-{
-    petriSettings.layout = ( petriSettings.layout + 1 ) % PETRI_LAYOUTS.length;
-    showPetriPicture();
-}
+
+
+
 
 // the petri settings are remembered in this browser (a convenience only)
 const PETRI_STORAGE_KEY = "genepool.petri";
 
-function rememberPetriSettings()
-{
-    try { localStorage.setItem( PETRI_STORAGE_KEY, JSON.stringify( petriSettings )); } catch ( e ) {}
-}
 
-function recallPetriSettings()
-{
-    try
-    {
-        const saved = JSON.parse( localStorage.getItem( PETRI_STORAGE_KEY ) || "null" );
-        if ( saved )
-        {
-            const zones = Math.round( Number( saved.zones )), layout = Math.round( Number( saved.layout )), softness = Number( saved.softness );
-            if ( Number.isFinite( zones ))    petriSettings.zones    = Math.min( 12, Math.max( 2, zones ));
-            if ( Number.isFinite( layout ))   petriSettings.layout   = (( layout % PETRI_LAYOUTS.length ) + PETRI_LAYOUTS.length ) % PETRI_LAYOUTS.length;
-            if ( Number.isFinite( softness )) petriSettings.softness = Math.min( 1, Math.max( 0, softness ));
-        }
-    }
-    catch ( e ) {}
-}
+
+
 
 // put petriSettings into the panel (after a pool was loaded, at the start)
-export function syncPetriPanel()
-{
-    petriSettings.layout = (( petriSettings.layout % PETRI_LAYOUTS.length ) + PETRI_LAYOUTS.length ) % PETRI_LAYOUTS.length;
-    const zones    = document.getElementById( "petriZones" )    as HTMLInputElement;
-    const softness = document.getElementById( "petriSoftness" ) as HTMLInputElement;
-    if ( zones )    { zones.value    = String( petriSettings.zones ); }
-    if ( softness ) { softness.value = String( petriSettings.softness ); }
-    showPetriPicture();
-    rememberPetriSettings();
-}
 
-export function startPetri()
-{
-    readPetriSettings();
-    showPetriPicture();
-    choosePoolToLoad( SimulationStartMode.PETRI );
-    switchToChosenPresetPool();
-}
 
-export function setupPetriPanel()
-{
-    for ( const id of [ "petriZones", "petriSoftness" ] )
-    {
-        const input = document.getElementById( id );
-        if ( input ) { input.addEventListener( "input", showPetriPicture ); }
-    }
-    recallPetriSettings();
-    syncPetriPanel();
-}
+export function startPetri() { startPetriBase( () => switchToChosenPresetPool() ); }
+
+

@@ -184,7 +184,7 @@ let testNoEel = true;
     let _geneNames              = new Array( NUM_GENES ); 
     let _branchStatus           = new Array( MAX_PARTS );
     let _branchDepth            = new Array( MAX_PARTS );
-    let _categoryValues         = new Array( NUM_CATEGORIES ); 
+    let _categoryValues         = Array.from({ length: NUM_CATEGORIES }, () => new CategoryValues()); 
     let _partIndex              = ZERO;
     let _generating             = false;
     let _ampMult                = ONE;
@@ -215,13 +215,7 @@ let testNoEel = true;
         //--------------------------------
 		let phenotype = new Phenotype();
 		
-	    //-----------------------------------
-	    // create categories array
-	    //-----------------------------------
-		for (let c=0; c<NUM_CATEGORIES; c++)
-		{
-		    _categoryValues[c] = new CategoryValues();
-		}
+	    // (_categoryValues reused across births to avoid GC churn)
 
 	    //-----------------------------------
 	    // initialize branch status
@@ -559,71 +553,7 @@ testNoEel = false;
 	//-----------------------------------------------
 	// re-order the body parts for proper rendering
 	//-----------------------------------------------
-	this.fixPartOrdering = function( phenotype )
-	{
-	    //--------------------------------------------------------------------------
-	    //  copy the parts array into a backup array and call it "testParts"
-	    //--------------------------------------------------------------------------
-	    let fixed     = new Array();
-	    let testParts = new Array();
-	    
-	    
-	    phenotype.parts[2].red   = 1.0;
-	    phenotype.parts[2].green = 1.0;
-	    phenotype.parts[2].blue  = 0.5;
 
-        for (let p=1; p<phenotype.numParts; p++)
-		{
-		    fixed[p] = false;
-            testParts[p] = new Part();
-		    copyPart( phenotype.parts[p], testParts[p] );
-        }
-	    
-	    //---------------------------
-	    // start with part 1
-	    //---------------------------
-        let currentParentIndex = 1;
-	    fixed[ currentParentIndex ] = true;
-
-//console.log( "" );		    
-//console.log( "" );		    
-
-	    //-----------------------------------------------------
-	    // loop through the rest of the parts to replace them 
-	    // with the copy...possibly in a different order)
-	    //-----------------------------------------------------
-        for (let p=1; p<phenotype.numParts; p++)
-		{
-//let r = phenotype.numParts - p;		    
-//console.log( phenotype.numParts + ", " + p + ", " + r );		    
-//copyPart( testParts[r], phenotype.parts[p] );
-	
-copyPart( testParts[p], phenotype.parts[p] );
-	
-	
-	        /*
-            //------------------------------------------------------
-            // we need to loop through testParts to see if any 
-            // part is a child of testParts[ currentParentIndex ]
-            //------------------------------------------------------
-            for (let o=1; o<phenotype.numParts; o++)
-            {	     
-                if ( testParts[o].parent === currentParentIndex )
-                {
-                    if ( ! fixed[o] )
-                    {
-                        if ( ! _branchStatus[o] )
-                        {
-                            copyPart( testParts[p], phenotype.parts[p] );
-                            fixed[o] = true;
-                            currentParentIndex = o;
-                        }
-                    }
-                }
-            }
-            */
-        }
-    }
     
     
     
@@ -631,43 +561,7 @@ copyPart( testParts[p], phenotype.parts[p] );
 	//--------------------------------------
 	// copy part
 	//--------------------------------------
-    function copyPart( from, to )
-    {
-        to.category			= from.category;
-        to.position			= from.position;        
-        to.velocity			= from.velocity;
-        to.previousMid 		= from.previousMid;
-        to.midPosition 		= from.midPosition;
-        to.perpendicular	= from.perpendicular;
-        to.bendingAngle		= from.bendingAngle;
-        to.currentAngle		= from.currentAngle;
 
-// do not use this
-//to.parent = from.parent;
-
-        to.mass				= from.mass;
-        to.length			= from.length;
-        to.width			= from.width;
-        to.angle		    = from.angle;
-        //to.branchAngle		= from.branchAngle;
-        to.frequency		= from.frequency;
-        to.amp			    = from.amp;
-        to.phase		    = from.phase;
-        to.turnAmp		    = from.turnAmp;
-        to.turnPhase	    = from.turnPhase;
-        to.momentFactor		= from.momentFactor;
-        to.red				= from.red;
-        to.green			= from.green;
-        to.blue				= from.blue;
-        to.splined          = from.splined;
-        to.endCapSpline     = from.endCapSpline;
-        to.numDecendents	= from.numDecendents;
-        
-        for (let d=0; d<MAX_PARTS; d++)
-        {
-            to.decendent[d] = from.decendent[d]; 
-        }  
-    }
     
     
 	//---------------------------------------------------------------------------------
