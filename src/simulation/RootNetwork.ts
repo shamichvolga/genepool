@@ -1,26 +1,59 @@
 //------------------------------------------------------------------------------
-// RootNetwork — multi-generation underground stolon network (parents ->
+// RootNetwork  multi-generation underground stolon network (parents ->
 // children -> grandchildren+), conserved sap sharing across the lineage,
 // root severing by swimbots, and natural aging.
 //------------------------------------------------------------------------------
 import { depositSoilEnergy, plantStageCap } from "./SoilEcology";
 import { POOL_LEFT, POOL_RIGHT, POOL_TOP, POOL_BOTTOM, POOL_WIDTH, POOL_HEIGHT } from "./Pool";
+import { PARAM_STEP } from "./SharedState";
 import { gpRandom } from "./Globals";
 
-const STOLON_DIST_MIN = 95, STOLON_DIST_MAX = 195;
-const STOLON_COST     = 4.0;
-const STOLON_COOLDOWN = 24;
+const STOLON_DIST_MIN = 90, STOLON_DIST_MAX = 195;
+const STOLON_COST     = 4.2;
+const STOLON_COOLDOWN = 20;
 const SHARING_PASSES  = 2;
+
+function getStepClock( st: any, explicitClock?: number ): number
+{
+    if ( typeof explicitClock === "number" && explicitClock > 0 ) return explicitClock;
+    if ( st && st.params && st.params[ PARAM_STEP ] > 0 ) return st.params[ PARAM_STEP ];
+    return ( st && typeof st.clock === "number" ) ? st.clock : 0;
+}
+
+function getSoilValue( st: any, wx: number, wy: number ): number
+{
+    if ( !st || !st.soilField ) return 5.0;
+    const gn = st.soilGridN || Math.max( 1, Math.floor( Math.sqrt( st.soilField.length )));
+    const ix = Math.max( 0, Math.min( gn - 1, Math.floor(( wx - POOL_LEFT ) / POOL_WIDTH * gn )));
+    const iy = Math.max( 0, Math.min( gn - 1, Math.floor(( wy - POOL_TOP ) / POOL_HEIGHT * gn )));
+    const row = st.soilField[ iy * gn ];
+    if ( typeof row === "number" ) return st.soilField[ iy * gn + ix ] ?? 0;
+    if ( Array.isArray( row ) || ArrayBuffer.isView( row )) return (row as any)[ ix ] ?? 0;
+    return st.soilField[ iy * gn + ix ] ?? 0;
+}
 
 function isGrown( st: any, f: number ): boolean
 {
     return ( st.liveFood[ f ] === 1 ) && ( st.foodType[ f ] !== 2 ) && ( st.foodEnergy[ f ] >= 20 );
 }
 
+function countDirectChildren( st: any, parentIdx: number ): number
+{
+    let count = 0;
+    const pp = st.plantParent, lf = st.liveFood;
+    if ( !pp || !lf ) return 0;
+    for ( let c = 0; c < pp.length; c++ )
+    {
+        if ( pp[ c ] === parentIdx && lf[ c ] === 1 ) count++;
+    }
+    return count;
+}
+
 function pickStolonSpot( st: any, p: number ): { x: number, y: number } | null
 {
     const X = st.foodX, Y = st.foodY;
-    const gn = st.soilGridN || 256;
+    if ( !X || !Y || X[ p ] === undefined || Y[ p ] === undefined ) return null;
+    const limit = Math.min( st.liveFood.length, Math.floor( st.liveFood.length * 0.75 ));
     for ( let k = 0; k < 24; k++ )
     {
         const ang = gpRandom() * Math.PI * 2;
@@ -28,16 +61,13 @@ function pickStolonSpot( st: any, p: number ): { x: number, y: number } | null
         const cx = X[ p ] + Math.cos( ang ) * dist;
         const cy = Y[ p ] + Math.sin( ang ) * dist;
         if (( cx < POOL_LEFT + 120 ) || ( cx > POOL_RIGHT - 120 ) || ( cy < POOL_TOP + 120 ) || ( cy > POOL_BOTTOM - 120 )) continue;
-        const ix = Math.max( 0, Math.min( gn - 1, Math.floor(( cx - POOL_LEFT ) / POOL_WIDTH * gn )));
-        const iy = Math.max( 0, Math.min( gn - 1, Math.floor(( cy - POOL_TOP ) / POOL_HEIGHT * gn )));
-        if ( st.soilField[ iy * gn + ix ] < 2.2 ) continue;
+        if ( getSoilValue( st, cx, cy ) < 2.0 ) continue;
         let clear = true;
-        const limit = Math.floor( st.liveFood.length * 0.75 );
         for ( let q = 0; q < limit; q++ )
         {
             if ( st.liveFood[ q ] !== 1 || st.foodType[ q ] === 2 ) continue;
-            const dx = st.foodX[ q ] - cx, dy = st.foodY[ q ] - cy;
-            if ( dx * dx + dy * dy < 68 * 68 ) { clear = false; break; }
+            const dx = X[ q ] - cx, dy = Y[ q ] - cy;
+            if ( dx * dx + dy * dy < 52 * 52 ) { clear = false; break; }
         }
         if ( clear ) return { x: cx, y: cy };
     }
@@ -46,7 +76,7 @@ function pickStolonSpot( st: any, p: number ): { x: number, y: number } | null
 
 function findFreeFoodBit( st: any ): number
 {
-    const limit = Math.floor( st.liveFood.length * 0.75 );
+    const limit = Math.min( st.liveFood.length, Math.floor( st.liveFood.length * 0.75 ));
     for ( let f = 0; f < limit; f++ )
     {
         if ( st.liveFood[ f ] === 0 ) return f;
@@ -59,31 +89,35 @@ export function spawnStolon( st: any, p: number, clock: number ): boolean
     if ( !isGrown( st, p )) return false;
     if (( clock + p ) % STOLON_COOLDOWN !== 0 ) return false;
     const energy = st.foodEnergy[ p ];
-    if ( energy <= STOLON_COST + 8 ) return false;
+    if ( energy <= STOLON_COST + 10 ) return false;
+    if ( countDirectChildren( st, p ) >= 5 ) return false;
     const spot = pickStolonSpot( st, p );
     if ( !spot ) return false;
     const c = findFreeFoodBit( st );
     if ( c < 0 || c === p || isAncestor( st, c, p )) return false;
     st.liveFood[ c ]      = 1;
-    st.foodAlive[ c ]     = 1;
+    if ( st.foodAlive ) st.foodAlive[ c ] = 1;
     st.foodType[ c ]      = st.foodType[ p ];
     st.foodEnergy[ c ]    = STOLON_COST;
     st.foodEnergy[ p ]    = energy - STOLON_COST;
     st.foodX[ c ]         = spot.x;
     st.foodY[ c ]         = spot.y;
-    st.foodWood[ c ]      = STOLON_COST;
-    st.foodFruit[ c ]     = 0;
-    st.foodAge[ c ]       = 0;
-    st.foodBorn[ c ]      = clock;
+    if ( st.foodWood )  st.foodWood[ c ]  = STOLON_COST;
+    if ( st.foodFruit ) st.foodFruit[ c ] = 0;
+    if ( st.foodAge )   st.foodAge[ c ]   = 0;
+    if ( st.plantAge )  st.plantAge[ c ]  = 0;
+    if ( st.foodBorn )  st.foodBorn[ c ]  = clock;
     st.plantParent[ c ]   = p;
-    st.plantRootFlow[ c ] = 0;
+    if ( st.plantRootFlow ) st.plantRootFlow[ c ] = 0.05;
     return true;
 }
 
 function shareChainEnergy( st: any ): void
 {
+    if ( !st.plantParent || !st.foodEnergy ) return;
     const links: number[] = [];
-    for ( let f = 0; f < st.liveFood.length; f++ )
+    const N = Math.min( st.liveFood.length, Math.floor( st.liveFood.length * 0.75 ));
+    for ( let f = 0; f < N; f++ )
     {
         if ( st.liveFood[ f ] === 1 && st.plantParent[ f ] >= 0 ) links.push( f );
     }
@@ -109,25 +143,30 @@ function shareChainEnergy( st: any ): void
                 if ( st.foodEnergy[ p ] - delta < 4 ) delta = Math.max( 0, st.foodEnergy[ p ] - 4 );
                 st.foodEnergy[ p ] -= delta;
                 st.foodEnergy[ c ] += delta;
-                st.plantRootFlow[ c ] = delta;
+                if ( st.plantRootFlow ) st.plantRootFlow[ c ] = delta;
             }
             else if ( delta < 0 )
             {
                 if ( st.foodEnergy[ c ] + delta < 4 ) delta = -Math.max( 0, st.foodEnergy[ c ] - 4 );
                 st.foodEnergy[ p ] -= delta;
                 st.foodEnergy[ c ] += delta;
-                st.plantRootFlow[ c ] = delta;
+                if ( st.plantRootFlow ) st.plantRootFlow[ c ] = delta;
             }
         }
     }
 }
 
-export function severRoots( st: any, clock: number, bots?: any[] ): void
+export function severRoots( st: any, clock: number, _bots?: any[] ): void
 {
     if (( clock & 3 ) !== 0 ) return;
-    const botCount = st.liveSwimbot ? st.liveSwimbot.length : 0;
-    if ( botCount === 0 ) return;
-    for ( let f = 0; f < st.liveFood.length; f++ )
+    if ( !st.liveSwimbot || !st.botX || !st.botY || !st.plantParent ) return;
+    const botCount = st.liveSwimbot.length;
+    let hasLiveBots = false;
+    for ( let s = 0; s < botCount; s++ ) { if ( st.liveSwimbot[ s ] === 1 ) { hasLiveBots = true; break; } }
+    if ( !hasLiveBots ) return;
+
+    const N = Math.min( st.liveFood.length, Math.floor( st.liveFood.length * 0.75 ));
+    for ( let f = 0; f < N; f++ )
     {
         const p = st.plantParent[ f ];
         if ( p < 0 || st.liveFood[ f ] !== 1 ) continue;
@@ -147,7 +186,7 @@ export function severRoots( st: any, clock: number, bots?: any[] ): void
             {
                 pushSeverSnap( cx, cy, x1, y1, st.foodX[ f ], st.foodY[ f ] );
                 st.plantParent[ f ] = -1;
-                st.plantRootFlow[ f ] = 0;
+                if ( st.plantRootFlow ) st.plantRootFlow[ f ] = 0;
                 break;
             }
         }
@@ -156,27 +195,36 @@ export function severRoots( st: any, clock: number, bots?: any[] ): void
 
 export function ageTrees( st: any ): void
 {
-    for ( let f = 0; f < st.liveFood.length; f++ )
+    const ageArr = st.plantAge || st.foodAge;
+    if ( !ageArr || !st.plantParent ) return;
+    const N = Math.min( st.liveFood.length, Math.floor( st.liveFood.length * 0.75 ));
+    for ( let f = 0; f < N; f++ )
     {
-        if ( st.liveFood[ f ] !== 1 ) continue;
-        if ( st.foodType[ f ] !== 2 ) st.foodAge[ f ]++;
-        if ( st.foodType[ f ] !== 2 && st.foodAge[ f ] >= 22000 + ( f % 4000 ) && st.foodEnergy[ f ] > 0 )
+        if ( st.liveFood[ f ] !== 1 || st.foodType[ f ] === 2 ) continue;
+        ageArr[ f ] = ( ageArr[ f ] || 0 ) + 1;
+        if ( ageArr[ f ] >= 26000 + ( f % 6000 ) && st.foodEnergy[ f ] > 0 )
         {
             depositSoilEnergy( st, st.foodX[ f ], st.foodY[ f ], st.foodEnergy[ f ] );
             st.foodEnergy[ f ] = 0;
             st.liveFood[ f ] = 0;
-            st.foodAlive[ f ] = 0;
+            if ( st.foodAlive ) st.foodAlive[ f ] = 0;
             st.plantParent[ f ] = -1;
-            for ( let c = 0; c < st.plantParent.length; c++ )
+            if ( st.plantRootFlow ) st.plantRootFlow[ f ] = 0;
+            for ( let c = 0; c < N; c++ )
             {
-                if ( st.plantParent[ c ] === f ) st.plantParent[ c ] = -1;
+                if ( st.plantParent[ c ] === f )
+                {
+                    st.plantParent[ c ] = -1;
+                    if ( st.plantRootFlow ) st.plantRootFlow[ c ] = 0;
+                }
             }
         }
     }
 }
 
-function isAncestor( st: any, maybeAncestor: number, node: number ): boolean
+export function isAncestor( st: any, maybeAncestor: number, node: number ): boolean
 {
+    if ( !st.plantParent ) return false;
     let cur = st.plantParent[ node ], depth = 0;
     while ( cur >= 0 && depth < 32 )
     {
@@ -189,18 +237,20 @@ function isAncestor( st: any, maybeAncestor: number, node: number ): boolean
 
 export function seedDynasties( st: any ): void
 {
+    if ( !st || !st.plantParent || !st.liveFood || !st.foodEnergy ) return;
     const trees: number[] = [];
-    for ( let f = 0; f < st.liveFood.length; f++ )
+    const N = Math.min( st.liveFood.length, Math.floor( st.liveFood.length * 0.75 ));
+    for ( let f = 0; f < N; f++ )
     {
         if ( st.liveFood[ f ] === 1 && st.foodType[ f ] !== 2 && st.foodEnergy[ f ] >= 22 ) trees.push( f );
     }
     if ( trees.length === 0 ) return;
-    // Pass 1: link young plants to trees (children)
-    for ( let c = 0; c < st.liveFood.length; c++ )
+
+    for ( let c = 0; c < N; c++ )
     {
         if ( st.plantParent[ c ] >= 0 || st.liveFood[ c ] !== 1 || st.foodType[ c ] === 2 ) continue;
         if ( st.foodEnergy[ c ] >= 22 ) continue;
-        let best = -1, bestD = 210 * 210;
+        let best = -1, bestD = 200 * 200;
         for ( const p of trees )
         {
             if ( p === c ) continue;
@@ -210,19 +260,19 @@ export function seedDynasties( st: any ): void
         if ( best >= 0 && !isAncestor( st, c, best ))
         {
             st.plantParent[ c ] = best;
-            st.plantRootFlow[ c ] = 0.05;
+            if ( st.plantRootFlow ) st.plantRootFlow[ c ] = 0.05;
         }
     }
-    // Pass 2: link sprouts near children to form grandchildren immediately
+
     const children: number[] = [];
-    for ( let f = 0; f < st.liveFood.length; f++ )
+    for ( let f = 0; f < N; f++ )
     {
         if ( st.liveFood[ f ] === 1 && st.plantParent[ f ] >= 0 ) children.push( f );
     }
-    for ( let gc = 0; gc < st.liveFood.length; gc++ )
+    for ( let gc = 0; gc < N; gc++ )
     {
         if ( st.plantParent[ gc ] >= 0 || st.liveFood[ gc ] !== 1 || st.foodType[ gc ] === 2 ) continue;
-        let best = -1, bestD = 190 * 190;
+        let best = -1, bestD = 185 * 185;
         for ( const ch of children )
         {
             if ( ch === gc ) continue;
@@ -232,47 +282,59 @@ export function seedDynasties( st: any ): void
         if ( best >= 0 && !isAncestor( st, gc, best ))
         {
             st.plantParent[ gc ] = best;
-            st.plantRootFlow[ gc ] = 0.03;
+            if ( st.plantRootFlow ) st.plantRootFlow[ gc ] = 0.03;
         }
     }
 }
 
-export function stepRootNetwork( st: any, bots?: any[] ): void
+export function stepRootNetwork( st: any, explicitClock?: number, _bots?: any[] ): void
 {
     tickSeverSnaps();
-    if ( !st ) return;
-    const clock = st.clock || 0;
-    const N = st.liveFood.length;
-    const maxSpawns = Math.max( 5, Math.round( N / 1200 ));
+    if ( !st || !st.liveFood || !st.plantParent ) return;
+    const clock = getStepClock( st, explicitClock );
+    const N = Math.min( st.liveFood.length, Math.floor( st.liveFood.length * 0.75 ));
+    if ( N <= 0 ) return;
+    const maxSpawns = Math.max( 6, Math.round( N / 1000 ));
     let spawned = 0;
-    const offset = N > 0 ? (( clock * 31 ) % N ) : 0;
+    const offset = ( clock * 37 ) % N;
     for ( let i = 0; i < N && spawned < maxSpawns; i++ )
     {
         const f = ( offset + i ) % N;
         if ( isGrown( st, f ) && spawnStolon( st, f, clock )) spawned++;
     }
-    severRoots( st, clock, bots );
     shareChainEnergy( st );
     ageTrees( st );
 }
 
 export function unlinkChildren( st: any, f: number ): void
 {
-    if ( !st ) return;
+    if ( !st || !st.plantParent ) return;
     st.plantParent[ f ] = -1;
-    st.plantRootFlow[ f ] = 0;
-    for ( let c = 0; c < st.plantParent.length; c++ )
+    if ( st.plantRootFlow ) st.plantRootFlow[ f ] = 0;
+    const N = Math.min( st.plantParent.length, Math.floor( st.plantParent.length * 0.75 ));
+    for ( let c = 0; c < N; c++ )
     {
-        if ( st.plantParent[ c ] === f ) { st.plantParent[ c ] = -1; st.plantRootFlow[ c ] = 0; }
+        if ( st.plantParent[ c ] === f )
+        {
+            st.plantParent[ c ] = -1;
+            if ( st.plantRootFlow ) st.plantRootFlow[ c ] = 0;
+        }
     }
 }
 
-export function computePlantLineage( plantParent: ArrayLike<number>, liveFood: ArrayLike<number> | null, f: number )
+export function computePlantLineage( plantParent: ArrayLike<number> | null | undefined, liveFood: ArrayLike<number> | null | undefined, f: number )
 {
     const ancestors: number[] = [];
+    const children: number[] = [];
+    const grandchildren: number[] = [];
+    if ( !plantParent || f < 0 || f >= plantParent.length )
+    {
+        return { parent: -1, ancestors, children, grandchildren, totalDescendants: 0, maxDepth: 0 };
+    }
+
     const seenUp = new Set<number>([ f ]);
-    let cur = ( f >= 0 && f < plantParent.length ) ? plantParent[ f ] : -1;
-    while ( cur >= 0 && ancestors.length < 32 && !seenUp.has( cur ))
+    let cur = plantParent[ f ];
+    while ( cur >= 0 && cur < plantParent.length && ancestors.length < 32 && !seenUp.has( cur ))
     {
         if ( liveFood && liveFood[ cur ] !== 1 ) break;
         seenUp.add( cur );
@@ -280,8 +342,6 @@ export function computePlantLineage( plantParent: ArrayLike<number>, liveFood: A
         cur = plantParent[ cur ];
     }
 
-    const children: number[] = [];
-    const grandchildren: number[] = [];
     const visited = new Set<number>([ f ]);
     let frontier: number[] = [ f ];
     let depth = 0;

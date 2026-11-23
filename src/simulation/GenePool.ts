@@ -2577,7 +2577,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 
 	// Plant growth, fruiting, seeding and carrion decay all live in FoodEcology
 	// now. GenePool keeps the step clock and the grid caches they operate on.
-	this.updateFood = function() { FoodEcology.updateFood( _foodContext ); RootNetwork.stepRootNetwork( _st, _swimbots ); RootNetwork.severRoots( _st, _clock, _swimbots ); }
+	this.updateFood = function() { FoodEcology.updateFood( _foodContext ); RootNetwork.stepRootNetwork( _st, _clock ); RootNetwork.severRoots( _st, _clock, _swimbots ); }
 	this.spawnPlant = function( position, type, numType0, numType1, scatter, donor: number = NULL_INDEX )
 	{
 	    return FoodEcology.spawnPlant( _foodContext, position, type, numType0, numType1, scatter, donor );
