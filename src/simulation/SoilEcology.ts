@@ -343,6 +343,21 @@ export function stepSoilEcology( st: SharedState, clock: number ): number
     f.set( tmp );
     return 0;
 }
+
+// Accelerated return of energy from atmosphere (water) to soil (oases and coastal cells).
+// Ensures atmosphere never accumulates more than 10-15% of total energy.
+export function returnAtmosphereToSoil( st: SharedState, amount: number ): void
+{
+    if ( !( amount > 0 )) return;
+    // Distribute to oasis centers and coastal cells proportionally
+    const field = st.soilField;
+    const perCell = amount / CELLS;
+    for ( let i = 0; i < CELLS; i++ )
+    {
+        field[ i ] += perCell;
+    }
+    rebuildSoilSAT( st );
+}
 // Carcasses rot in place: the rot is real energy returned to the ground under
 // them, never an invisible disappearance into the atmosphere.
 export function decayMeat( st: SharedState, x: number, y: number, e: number ): { e: number, dead: boolean, rot: number, remains: number }

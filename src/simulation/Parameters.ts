@@ -432,3 +432,21 @@ export const PLANT_REGROW_DELAY             = 1500;
 
 // Soil grid scales with world scale for invariant physical cell size
 export const SOIL_GRID_N = 128 * WORLD_SCALE;
+
+// Unified world template for scale-invariant maps
+export function createWorldConfig(scale: number)
+{
+    const baseScale = 1;
+    const areaFactor = scale * scale;
+    return {
+        scale,
+        width: 8000 * scale,
+        height: 8000 * scale,
+        soilGridN: 128 * scale,
+        patchCount: Math.max(4, Math.round(6 * areaFactor)),
+        worldEnergy: 1.5 * areaFactor,
+        initialPlants: Math.round(1000 * areaFactor),
+        initialBots: Math.min(4500, Math.round(500 * areaFactor)),
+        maxSwimbots: Math.min(4500, 1500 * areaFactor),
+    };
+}
