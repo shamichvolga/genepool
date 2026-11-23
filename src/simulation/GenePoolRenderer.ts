@@ -520,9 +520,9 @@ export function createGenePoolRenderer( ctx: any )
         ctx.pool.setSeason( yearPhase, envActive );
         setPlantSeason( yearPhase, envActive );
         ctx.pool.setSoilView( ctx.st.soilField, ctx.clock, params[ PARAM_SHOW_SOIL ] !== 0 );
+        ctx.pool.render( ctx.seconds, _camera );
         RootRenderer.drawRoots( _canvas, ctx.st, ctx );
         RootRenderer.drawSnaps( _canvas, ctx.clock );
-        ctx.pool.render( ctx.seconds, _camera );
         ctx.obstacle.render( _camera );
         renderCurrents();
         renderDriftParticles();

@@ -122,6 +122,7 @@ export function updateFood( ctx: FoodContext ): void
             const grown = soilPlantGrowth( st, foodX[f], foodY[f], e, full );
             if ( grown > 0 ) { e += grown; st.foodEnergy[f] = e; }
             st.foodSucking[f] = grown > 0 ? Math.min( 1, grown / 0.085 ) : 0;
+            st.plantAge[f] = Math.max( 0, ctx.clock - born[f] );
             st.foodWood[f] = Math.max( st.foodWood[f], e );
             const crownStarved = e < st.foodWood[f] * 0.05
                 || (( st.foodWood[f] > PLANT_SPROUT_ENERGY ) && ( full <= PLANT_SPROUT_ENERGY ) && ( e <= PLANT_SPROUT_ENERGY + 1e-6 ));
