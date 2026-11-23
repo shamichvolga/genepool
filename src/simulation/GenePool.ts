@@ -59,6 +59,10 @@ import * as FoodEcology from "./FoodEcology";
 import * as Spawner from "./WorldSpawner";
 import * as MapOps from "./MapOps";
 import * as RootNetwork from "./RootNetwork";
+import { createSpeciesTracker } from "./SpeciesTracker";
+import { sortAliveByMorton, sortAliveFoodByMorton, updateMorphBucketShares, updateScentFields } from "./ScentField";
+import { interactSwimbot } from "./MatingSystem";
+import { createInputController } from "./InputController";
 import { rStrategyCooldownFactor, rStrategyReproductionEnergyFactor, killWinnerPressure, KILL_WINNER_REPRO_MULT } from "./Parameters";
 
 // The living soil has its own ambient reservoir. Energy that a swimmer spends
@@ -168,8 +172,6 @@ export function GenePool()
     let _neighborhoodAxis       = new Array();
 	let _simulationRunning      = false;
 	let _rendering              = false;
-	let _swimbotBeingDragged    = false;
-	let _foodBitBeingDragged    = false;
 	let _poolCenter             = new Vector2D();
 	let _canvas                 = null;
 	let _clock                  = 0;
@@ -213,12 +215,6 @@ export function GenePool()
 	let _debugTrail 		    = new Array( TRAIL_LENGTH );
 	let _familyTree             = new FamilyTree();
 	let _phyloTree              = new PhyloTree();
-	let _panningLeft            = false;
-	let _panningRight           = false;
-	let _panningUp              = false;
-	let _panningDown            = false;
-    let _zoomingIn              = false;
-    let _zoomingOut             = false;
     let _renderingGoals         = true;
     let _showViewTrackingMode   = false;
     let _windowWidth            = 0;
@@ -228,11 +224,6 @@ export function GenePool()
     let _fastRenderCounter      = 0;
     let _savedRenderingGoals    = true;
 
-    // camera control speeds
-    const CAMERA_PAN_SPEED          = 0.9;      // view heights per second (keys)
-    const CAMERA_KEY_ZOOM_SPEED     = 1.6;      // zoom speed with keys (bigger = faster)
-    const CAMERA_WHEEL_ZOOM_SPEED   = 0.0015;   // zoom per unit of mouse wheel movement
-    let _lastCameraNavigationTime   = 0;
 
     //--------------------------------------------------------------------------
     // Fast neighbour search: swimbot positions are copied into plain number
@@ -270,16 +261,8 @@ export function GenePool()
     this.getParallelRunner = function() { return _runner; }
     let _perceptionMismatches = 0;          // PERCEPTION_CHECK: kernel and old code disagreed
     let _perceptionChecks     = 0;
-    let _gridResult     = new Int32Array( MAX_SWIMBOTS * 2 );  // scratch for grid queries
     let _foodGridResult = new Int32Array( MAX_FOODBITS * 2 );
     const _plantShade   = new Float32Array( environment.plantCount[0].length );
-    let _nearbyIndices  = new Int32Array( MAX_SWIMBOTS );      // swimbots within search radius
-    // preallocated scratch: Z-order keys and one diffusion scratch grid
-    const _mortonCodes  = new Int32Array( MAX_SWIMBOTS );
-    const _foodMortonCodes = new Int32Array( MAX_FOODBITS );
-    const _scentTmp     = new Float32Array( SS.SCENT_GRID_N * SS.SCENT_GRID_N );
-    const _scentCellW   = POOL_WIDTH  / SS.SCENT_GRID_N;
-    const _scentCellH   = POOL_HEIGHT / SS.SCENT_GRID_N;
 
     let _distanceCache = new Array(MAX_SWIMBOTS);
     let _lastSwimbotPositions = new Array(MAX_SWIMBOTS);
@@ -357,70 +340,7 @@ export function GenePool()
 	}
 
 
-    //------------------------------------------------------------
-    // scratch arrays for picking the nearest perceived swimbots
-    //------------------------------------------------------------
-    let _candidateIndices   = new Int32Array(MAX_SWIMBOTS);
-    let _candidateDistances = new Float64Array(MAX_SWIMBOTS);
-    let _nearestIndices     = new Int32Array(BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS);
-    let _nearestDistances   = new Float64Array(BRAIN_MAX_PERCEIVED_NEARBY_SWIMBOTS);
 
-    // a is "closer" than b: by distance, ties broken by swimbot index,
-    // so the order never depends on how the grid happens to store them
-    function isCloser( distanceA, indexA, distanceB, indexB )
-    {
-        return ( distanceA < distanceB ) || ( distanceA === distanceB && indexA < indexB );
-    }
-
-    //------------------------------------------------------------------
-    // sort all candidates, nearest first (insertion sort)
-    //------------------------------------------------------------------
-    function sortCandidatesByDistance(count)
-    {
-        for (let i = 1; i < count; i++)
-        {
-            const index = _candidateIndices[i];
-            const d     = _candidateDistances[i];
-            let j = i - 1;
-            while (j >= 0 && isCloser( d, index, _candidateDistances[j], _candidateIndices[j] ))
-            {
-                _candidateIndices  [j + 1] = _candidateIndices  [j];
-                _candidateDistances[j + 1] = _candidateDistances[j];
-                j--;
-            }
-            _candidateIndices  [j + 1] = index;
-            _candidateDistances[j + 1] = d;
-        }
-    }
-
-    //------------------------------------------------------------------
-    // the `limit` nearest candidates, nearest first, into _nearestIndices
-    // (keeps a short sorted list instead of sorting everything)
-    //------------------------------------------------------------------
-    function selectNearestCandidates( count, limit )
-    {
-        let kept = 0;
-        for (let i = 0; i < count; i++)
-        {
-            const index = _candidateIndices[i];
-            const d     = _candidateDistances[i];
-
-            if (( kept === limit ) && !isCloser( d, index, _nearestDistances[ kept - 1 ], _nearestIndices[ kept - 1 ] )) continue;
-
-            let j = ( kept < limit ) ? kept : kept - 1;
-            if ( kept < limit ) kept ++;
-
-            while (j > 0 && isCloser( d, index, _nearestDistances[j - 1], _nearestIndices[j - 1] ))
-            {
-                _nearestIndices  [j] = _nearestIndices  [j - 1];
-                _nearestDistances[j] = _nearestDistances[j - 1];
-                j--;
-            }
-            _nearestIndices  [j] = index;
-            _nearestDistances[j] = d;
-        }
-        return kept;
-    }
 
     //------------------------------------------------------------------
     // copy a swimbot's current state into the fast arrays.
@@ -1440,138 +1360,14 @@ _camera.setScale( POOL_WIDTH );
 	// starts a new group, and the groups move to the mean of their members.
 	// Uses no random numbers, so it never changes the simulation.
 	//------------------------------------------------------------------------
-	const SPECIES_LIMIT        = 0.12 * NUM_GENES_USED * 255;
-	const SPECIES_MIN_SHARE    = 0.005;    // a smaller group is not drawn (counted as "small ones")
-	const SPECIES_MAX_SHOWN    = 14;
-	const SPECIES_EVERY_MS     = 1500;     // how often the groups are counted again
-	const _speciesCenters: { id: number, genes: Float64Array }[] = [];
-	let _speciesNextId   = 1;
-	let _speciesCounted  = 0;
-	let _speciesMembers: Map<number, number[]> = new Map();
-	let _speciesInfo: any[] = [];
-	let _speciesOther = 0, _speciesTotal = 0;
-
-	function countSpecies()
-	{
-	    const alive: number[] = [];
-	    for (let s = 0; s < MAX_SWIMBOTS; s++) { if ( _st.liveSwimbot[s] === 1 ) alive.push(s); }
-
-	    // each swimbot to the nearest group within the limit, or a new group
-	    const members = new Map<number, number[]>();
-	    for ( const c of _speciesCenters ) { members.set( c.id, [] ); }
-	    for ( const s of alive )
-	    {
-	        const genes = _swimbots[s].getGenotype().getGenes();
-	        let best = null, bestDistance = SPECIES_LIMIT;
-	        for ( const c of _speciesCenters )
-	        {
-	            let sum = 0;
-	            for (let g = 0; g < NUM_GENES_USED && sum < bestDistance; g++) { sum += Math.abs( c.genes[g] - genes[g] ); }
-	            if ( sum < bestDistance ) { bestDistance = sum; best = c; }
-	        }
-	        if ( best === null )
-	        {
-	            best = { id: _speciesNextId ++, genes: Float64Array.from( genes.slice( 0, NUM_GENES_USED )) };
-	            _speciesCenters.push( best );
-	            members.set( best.id, [] );
-	        }
-	        members.get( best.id )!.push( s );
-	    }
-
-	    // the groups: drop the empty ones, move the centers to the mean of the members
-	    for (let i = _speciesCenters.length - 1; i >= 0; i--)
-	    {
-	        const c = _speciesCenters[i], list = members.get( c.id )!;
-	        if ( list.length === 0 ) { _speciesCenters.splice( i, 1 ); members.delete( c.id ); continue; }
-	        for (let g = 0; g < NUM_GENES_USED; g++)
-	        {
-	            let sum = 0;
-	            for ( const s of list ) { sum += _swimbots[s].getGenotype().getGenes()[g]; }
-	            c.genes[g] = sum / list.length;
-	        }
-	    }
-
-	    // numbers for each group, the big ones only
-	    const total = alive.length;
-	    const info: any[] = [];
-	    let other = 0;
-	    const order = _speciesCenters.slice().sort( ( a, b ) => members.get( b.id )!.length - members.get( a.id )!.length );
-	    for ( const c of order )
-	    {
-	        const list = members.get( c.id )!;
-	        if ( info.length >= SPECIES_MAX_SHOWN || list.length < total * SPECIES_MIN_SHARE ) { other += list.length; continue; }
-	        let mass = 0, parts = 0, predators = 0, energy = 0, r = 0, g = 0, b = 0;
-	        for ( const s of list )
-	        {
-	            const bot = _swimbots[s], color = bot.getAverageColor();
-	            mass += bot.getPhenotypeMass(); parts += bot.getNumParts(); energy += bot.getEnergy();
-	            if ( bot.getPredatorLevel() > PREDATOR_LEVEL_THRESHOLD ) predators ++;
-	            r += color.red; g += color.green; b += color.blue;
-	        }
-	        const n = list.length;
-	        info.push({ id: c.id, count: n, share: n / total, meanMass: mass / n, meanParts: parts / n, predatorShare: predators / n, meanEnergy: energy / n, color: [ r / n, g / n, b / n ] });
-	    }
-	    _speciesMembers = members;
-	    _speciesInfo = info;
-	    _speciesOther = other;
-	    _speciesTotal = total;
-	}
-
-	// a swimbot of the species as it is now: for each part its two ends, width and
-	// color, turned so that the mouth points to the right, around the middle of the body
-	function speciesPose( list: number[] ): number[]
-	{
-	    let s = -1;
-	    for ( const q of list ) { if ( _st.liveSwimbot[q] === 1 ) { s = q; break; } }
-	    if ( s < 0 ) return [];
-	    const B = _st.bots, b = s * SS.BOT_STRIDE;
-	    const n = B[ b + SS.B_NUM_PARTS ];
-	    const cx = B[ b + SS.B_COM_X ], cy = B[ b + SS.B_COM_Y ];
-	    const heading = Math.atan2( B[ b + SS.B_MOUTH_Y ] - cy, B[ b + SS.B_MOUTH_X ] - cx );
-	    const cos = Math.cos( -heading ), sin = Math.sin( -heading );
-	    const out: number[] = [];
-	    const end = ( p: number ) => [ _st.parts[ s * SS.PART_STRIDE + p * SS.PS + SS.P_X ] - cx, _st.parts[ s * SS.PART_STRIDE + p * SS.PS + SS.P_Y ] - cy ];
-	    for (let p = 1; p < n; p++)
-	    {
-	        const parent = _st.partParent[ s * MAX_PARTS + p ];
-	        const a = end( parent >= 0 ? parent : 0 ), e = end( p );
-	        const k = s * MAX_PARTS + p;
-	        out.push( a[0] * cos - a[1] * sin, a[0] * sin + a[1] * cos, e[0] * cos - e[1] * sin, e[0] * sin + e[1] * cos,
-	                  _st.partWidth[ k ], _st.partRGB[ k * 3 ], _st.partRGB[ k * 3 + 1 ], _st.partRGB[ k * 3 + 2 ] );
-	    }
-	    return out;
-	}
-
-	// what the window shows (counted again every SPECIES_EVERY_MS; the poses are always current)
-	this.getSpeciesView = function()
-	{
-	    const nowMs = ( typeof performance !== "undefined" ) ? performance.now() : 0;
-	    if (( _speciesInfo.length === 0 ) || ( nowMs - _speciesCounted > SPECIES_EVERY_MS ) || ( nowMs < _speciesCounted )) { countSpecies(); _speciesCounted = nowMs; }
-	    return { total: _speciesTotal, other: _speciesOther, species: _speciesInfo.map( s => ({ ...s, pose: speciesPose( _speciesMembers.get( s.id ) || [] ) })) };
-	}
-
-	// the average genes of a species, whole numbers (a file the "load genes" button takes)
-	this.getSpeciesGenes = function( id )
-	{
-	    const list = _speciesMembers.get( id );
-	    if ( !list || list.length === 0 ) return null;
-	    const genes = new Array( NUM_GENES ).fill( 0 );
-	    for ( const s of list ) { const g = _swimbots[s].getGenotype().getGenes(); for (let i = 0; i < NUM_GENES; i++) { genes[i] += g[i]; } }
-	    return genes.map( x => Math.max( 0, Math.min( 255, Math.round( x / list.length ))) );
-	}
-
-	// destroy a species: every swimbot of it dies
-	this.killSpecies = function( id )
-	{
-	    countSpecies();     // (who is in it right now, not 1.5 seconds ago)
-	    const list = _speciesMembers.get( id );
-	    if ( !list ) return;
-	    for ( const s of list )
-	    {
-	        if ( _st.liveSwimbot[s] === 1 ) { this.killSwimbot( s ); }
-	    }
-	    _speciesCounted = 0;
-	}
+	const _species = createSpeciesTracker({
+	    get st()       { return _st; },
+	    get swimbots() { return _swimbots; },
+	    killSwimbot:   ( s ) => _this.killSwimbot( s ),
+	});
+	this.getSpeciesView  = function()     { return _species.getSpeciesView(); }
+	this.getSpeciesGenes = function( id ) { return _species.getSpeciesGenes( id ); }
+	this.killSpecies     = function( id ) { _species.killSpecies( id ); }
 
 
 	//------------------------------------------------------------------------
@@ -2316,434 +2112,42 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	// the graphics-card renderer (set up by main.ts in the browser)
 	this.setCapsuleRenderer = function( renderer ) { _capsuleRenderer = renderer; }
 
-	// A parent's vitality may add a little energy to a child (or take a little
-	// back), always within its own reserve. Defined once, outside the step, so
-	// a birth does not allocate a closure.
-	function adjustOffspringContribution( bot: any, amount: number, vitality: number ): number
-	{
-	    const target = amount * vitality;
-	    let actual = amount;
-	    const reserve = bot.getEnergy();
-	    if ( target > actual )
-	    {
-	        const extra = Math.min( target - actual, reserve );
-	        bot.setEnergy( reserve - extra );
-	        actual += extra;
-	    }
-	    else if ( target < actual )
-	    {
-	        bot.setEnergy( reserve + ( actual - target ));
-	        actual = target;
-	    }
-	    return actual;
-	}
-
-	//--------------------------------
-	//------------------------------------------------------------------------
-	// what a swimbot does with the world after it moved and looked around:
-	// bump into the obstacle, eat, bite, mate
-	//------------------------------------------------------------------------
-	this.interact = function( s )
-	{
-	    const profT0 = PROFILER_ENABLED ? profEnter( PROF_INTERACT ) : 0;
-	    try
-	    {
-		const m = s * SS.MIND_STRIDE;
-		const M = _st.mind;
-                if ( _swimbots[s].hasCarriedSeed() ) { _swimbots[s].updateCarriedSeed(); }
-                //-------------------------------------
-                // eating
-                //-------------------------------------
-                if ( M[ m + SS.M_TRY_EAT ] === 1 )
-                {
-                    // (in the phased step someone else may have eaten it first)
-                    const food = _swimbots[s].getChosenFoodBit();
-                    if (( food != null ) && food.getAlive()) { _swimbots[s].eatChosenFoodBit(); }
-                    else                                     { _swimbots[s].cancelEating(); }
-                }
-
-                // FILTER_FEEDING_ENABLED: a limb brushed a sprout
-                const sprout = _st.mind[ s * SS.MIND_STRIDE + SS.M_FILTER_FOOD ];
-                if (( sprout >= 0 ) && _foodBits[ sprout ].getAlive() && ( _foodBits[ sprout ].getType() !== 2 ))
-                {
-                    _swimbots[s].filterFeed( _foodBits[ sprout ] );
-                }
-
-                //-------------------------------------
-                // hunting (prey)
-                //-------------------------------------
-                if ( M[ m + SS.M_TRY_HUNT ] === 1 )
-                {
-                    _swimbots[s].huntEatChosenPrey();
-                }
-
-                //----------------------------------------
-                // giving birth to a new swimbot
-                //----------------------------------------
-
-                if ( M[ m + SS.M_TRY_MATE ] === 1 )
-                {
-                    let newBornSwimbotIndex = this.findLowestDeadSwimbotInArray();
-
-                    //---------------------------------------
-                    // a few quick reality checks here...
-                    //---------------------------------------
-                    if (( newBornSwimbotIndex != NULL_INDEX )
-                    &&  ( _swimbots[s].getChosenMateIndex() != NULL_INDEX ))
-                    {
-                        let chosenMateIndex = _swimbots[s].getChosenMateIndex();
-                        //console.log( " chosenMateIndex = " + chosenMateIndex );
-
-                        _potentialMate = _swimbots[ chosenMateIndex ];
-
-                        assert( _potentialMate != null, "genepool: updateSwimbots: _potentialMate != null" );
-
-                        if ( _potentialMate.getAlive() )
-                        {
-                            // A pair can produce one child at a time: both must
-                            // be recovered, courting, and fed well above hunger.
-                            const mb = chosenMateIndex * SS.MIND_STRIDE;
-                            const myState  = _swimbots[s].getBrainState();
-                            const mateState = _potentialMate.getBrainState();
-                            const readyToMate =
-                                   M[ m + SS.M_REPRO_CD ] === 0
-                                && M[ mb + SS.M_REPRO_CD ] === 0
-                                && ( myState === BRAIN_STATE_LOOKING_FOR_MATE || myState === BRAIN_STATE_PURSUING_MATE )
-                                && ( mateState === BRAIN_STATE_LOOKING_FOR_MATE || mateState === BRAIN_STATE_PURSUING_MATE )
-                                && ( _swimbots[s].getEnergy() > _swimbots[s].getHungerThreshold() * rStrategyReproductionEnergyFactor( _swimbots[s].getNumParts() ) )
-                                && ( _potentialMate.getEnergy() > _potentialMate.getHungerThreshold() * rStrategyReproductionEnergyFactor( _potentialMate.getNumParts() ) );
-                            if ( !readyToMate )
-                            {
-                                // They are not a real pair: separate them now so
-                                // they cannot hammer the birth path every tick.
-                                _swimbots[s].abortMating();
-                                _potentialMate.abortMating();
-                            }
-                            else
-                            {
-                            simCounters.reproductivePairAttempts ++;
-                            // Predators and herbivores never have children together.
-                            if ( !_potentialMate.sameDiet( _swimbots[s] ))
-                            {
-                                simCounters.reproductiveDietMismatches ++;
-                            }
-                            else
-                            {
-                                assert( _myGenotype    != null, "genepool: updateSwimbots: _myGenotype    != null" );
-                                assert( _mateGenotype  != null, "genepool: updateSwimbots: _mateGenotype  != null" );
-
-                                //------------------------------------------------------------------------------
-                                // collect genes from me and my chosen mate and recombine them for the child
-                                //------------------------------------------------------------------------------
-                                _myGenotype = _swimbots[s].getGenotype();
-                                _mateGenotype = _potentialMate.getGenotype();
-
-                                //------------------------------------------------------------------------------
-                                // Junk DNA similarity is a direct reproductive barrier in this model.
-                                // Record the distribution and blocked share for later ecological analysis.
-                                //------------------------------------------------------------------------------
-                                const junkSimilarity = this.getJunkDnaSimilarity( _myGenotype, _mateGenotype );
-                                simCounters.reproductiveJunkChecks ++;
-                                simCounters.reproductiveJunkSimilaritySum += junkSimilarity;
-                                const similarityBin = Math.min( 9, Math.floor( junkSimilarity * 10 ));
-                                simCounters.reproductiveJunkSimilarityBins[ similarityBin ] ++;
-
-                                // Continuous divergence instead of a hard
-                                // step: junk DNA, body plan and mass each count.
-                                const dJunk  = 1 - junkSimilarity;
-                                const dParts = Math.abs( _swimbots[s].getNumParts() - _potentialMate.getNumParts() ) / 12;
-                                const dMass  = Math.min( 1, Math.abs( Math.log( Math.max( 1, _swimbots[s].getPhenotypeMass() ) / Math.max( 1, _potentialMate.getPhenotypeMass() ))) / 1.5 );
-                                const dTotal = 0.65 * dJunk + 0.20 * dParts + 0.15 * dMass;
-                                let compatProb = Math.exp( -( dTotal * dTotal ) / ( 2 * 0.42 * 0.42 ));
-                                // Assortative mating: two rare swimbots with the
-                                // same body plan reproduce it reliably, while a
-                                // cross with a different plan is less likely to
-                                // dilute it into the dominant morph.
-                                const myMorph = _swimbots[s].getMorphologySummary();
-                                const myBucket = SS.getMorphBucket( myMorph.numParts, myMorph.branchFraction > 0, myMorph.meanWidth );
-                                const mateMorph = _potentialMate.getMorphologySummary();
-                                const mateBucket = SS.getMorphBucket( mateMorph.numParts, mateMorph.branchFraction > 0, mateMorph.meanWidth );
-                                const mateShare = _st.morphBucketShare[ mateBucket ];
-                                if ( myBucket === mateBucket )
-                                {
-                                    if ( mateShare < 0.12 ) compatProb = Math.min( 1, compatProb * 1.35 );
-                                }
-                                else compatProb *= 0.75;
-
-                                // Parents under stress explore new forms faster.
-                                const avgEnergyRatio = 0.5 * ( _swimbots[s].getEnergy() / Math.max( 1, _swimbots[s].getMaxEnergy() )
-                                                            + _potentialMate.getEnergy() / Math.max( 1, _potentialMate.getMaxEnergy() ));
-                                const mutScale = avgEnergyRatio < 0.35 ? 1.45 : ( avgEnergyRatio > 0.75 ? 0.8 : 1.0 );
-
-                                if ( gpRandom() < compatProb )
-                                {
-                                    simCounters.reproductiveJunkPasses ++;
-
-                                //-----------------------------------
-                                // recombine genes for the child
-                                //-----------------------------------
-                                assert( _childGenotype != null, "_childGenotype != null" );
-
-                                _childGenotype.setAsOffspring( _myGenotype, _mateGenotype, mutScale );
-
-                                // rarely, the child switches diet (see DIET_SWITCH_RATE)
-                                if ( environment.active && ( gpRandom() < DIET_SWITCH_RATE ))
-                                {
-                                    const wasPredator = geneAverage( _childGenotype, GENES_PREDATOR ) > PREDATOR_LEVEL_THRESHOLD;
-                                    setTrait( _childGenotype, GENES_PREDATOR, wasPredator ? 0.3 * gpRandom() : 0.75 + 0.25 * gpRandom() );
-                                }
-
-                                //------------------------------------------------
-                                // collect energy from parents for child energy
-                                //------------------------------------------------
-                                let myEnergyContribution    = _swimbots[s].contributeToOffspring();
-                                let mateEnergyContribution  = _potentialMate.contributeToOffspring();
-                                // Microclimate vitality: parents well fitted to their
-                                // current place can afford a slightly stronger start
-                                // for the child. The adjustment comes out of (or goes
-                                // back to) their own reserves, never beyond them.
-                                if ( environment.active )
-                                {
-                                    const mateOffset = chosenMateIndex * SS.MIND_STRIDE;
-                                    const avgFit = 0.5 * ( M[ m + SS.M_THERMAL_FIT ] + M[ mateOffset + SS.M_THERMAL_FIT ] );
-                                    const vitality = Math.max( 0.85, Math.min( 1.12, 0.85 + avgFit * 0.32 ));
-                                    myEnergyContribution   = adjustOffspringContribution( _swimbots[s], myEnergyContribution, vitality );
-                                    mateEnergyContribution = adjustOffspringContribution( _potentialMate, mateEnergyContribution, vitality );
-                                }
-                                let energyToOffspring       = myEnergyContribution + mateEnergyContribution;
-
-                                //console.log( "energyToOffspring = " + energyToOffspring );
-                                //assert( energyToOffspring <= DEFAULT_SWIMBOT_HUNGER_THRESHOLD, "energyToOffspring <= DEFAULT_SWIMBOT_HUNGER_THRESHOLD" );
-
-                                //----------------------------------------------------------------------------------------
-                                // set birth position
-                                //----------------------------------------------------------------------------------------
-                                let diffX = _potentialMate.getGenitalPosition().x - _swimbots[s].getGenitalPosition().x;
-                                let diffY = _potentialMate.getGenitalPosition().y - _swimbots[s].getGenitalPosition().y;
-
-                                _vectorUtility.x = _swimbots[s].getGenitalPosition().x + diffX * ONE_HALF;
-                                _vectorUtility.y = _swimbots[s].getGenitalPosition().y + diffY * ONE_HALF;
-
-                                //---------------------------------------------
-                                // pool effect
-                                //---------------------------------------------
-                                _pool.endTouch( _vectorUtility, _seconds );
-
-                                //--------------------------------------------
-                                // create the child swimbot
-                                //--------------------------------------------
-                                let initialAngle = getRandomAngleInDegrees();
-                                _swimbots[ newBornSwimbotIndex ].create( newBornSwimbotIndex, 0, _vectorUtility, initialAngle, energyToOffspring, _childGenotype, _embryology )
-                                syncSwimbot( newBornSwimbotIndex );
-                                // The child and both parents sit out the next
-                                // mating season; neither parent keeps courting
-                                // the partner that just produced the child.
-                                const parts = _swimbots[s].getNumParts(), mateParts = _potentialMate.getNumParts();
-                                const crownPressure = killWinnerPressure( _st.params[ SS.PARAM_PART_SHARE_BASE + Math.max( 0, Math.min( 15, parts - 1 )) ]);
-                                const matePressure = killWinnerPressure( _st.params[ SS.PARAM_PART_SHARE_BASE + Math.max( 0, Math.min( 15, mateParts - 1 )) ]);
-                                const cooldownFactor = rStrategyCooldownFactor( parts ) * ( 1 + KILL_WINNER_REPRO_MULT * crownPressure );
-                                const mateCooldownFactor = rStrategyCooldownFactor( mateParts ) * ( 1 + KILL_WINNER_REPRO_MULT * matePressure );
-                                _swimbots[ newBornSwimbotIndex ].setMatingCooldown( Math.round( MATING_COOLDOWN_STEPS * cooldownFactor ));
-                                _swimbots[s].setMatingCooldown( Math.round( MATING_COOLDOWN_STEPS * cooldownFactor ));
-                                _potentialMate.setMatingCooldown( Math.round( MATING_COOLDOWN_STEPS * mateCooldownFactor ));
-                                _swimbots[s].abortMating();
-                                _potentialMate.abortMating();
-                                // (who its family is: KIN_NOT_EATEN_ENABLED; a founder gets its number now)
-                                if ( _swimbots[s].getSerial() <= 0 ) { _swimbots[s].setFamily( ++ _serial, 0, 0 ); }
-                                if ( _swimbots[ chosenMateIndex ].getSerial() <= 0 ) { _swimbots[ chosenMateIndex ].setFamily( ++ _serial, 0, 0 ); }
-                                _swimbots[ newBornSwimbotIndex ].setFamily( ++ _serial, _swimbots[s].getSerial(), _swimbots[ chosenMateIndex ].getSerial() );
-                                simCounters.births ++;
-
-                                // record successful parents for assortativity metrics
-                                const matingIndex = _matingCount % MATING_RECORD_SIZE;
-                                _matingRecord[ matingIndex ] = _swimbots[s].getThermalOptimum();
-                                _matingRecord[ matingIndex + MATING_RECORD_SIZE ] = _potentialMate.getThermalOptimum();
-                                _matingBrightnessDifference[matingIndex] = Math.abs( _swimbots[s].getBrightness() - _potentialMate.getBrightness() );
-                                _matingChoosinessMean[matingIndex] = ( _swimbots[s].getChoosiness() + _potentialMate.getChoosiness() ) * 0.5;
-                                _matingCount ++;
-
-                                //--------------------------------------------------
-                                // add the new swimbot to the family tree
-                                //--------------------------------------------------
-                                _familyTree.addNode( newBornSwimbotIndex, s, chosenMateIndex, _clock, this.getSwimbotGenes( newBornSwimbotIndex ), this.getSwimbotEvolutionTraits( newBornSwimbotIndex ) );
-
-                                }
-                                else
-                                {
-                                    simCounters.reproductiveJunkBlocks ++;
-                                }
-                            }
-                            }   // readyToMate else
-                        }   // mate alive
-                    }      //   if (( newBornSwimbotIndex != -1 ) &&  ( swimbot[s].getChosenMateIndex() != -1 ))
-
-                    //------------------------------------------------------------------
-                    // still trying = the mating did not happen (incompatible mate,
-                    // pool full, mate died). Give up, otherwise the swimbot keeps
-                    // courting the same mate forever.
-                    //------------------------------------------------------------------
-                    if ( _swimbots[s].getIsTryingToMate() )
-                    {
-                        _swimbots[s].abortMating();
-                    }
-                }         //    if ( swimbot[s].isTryingToMate() )
-	    }
-	    finally { if ( PROFILER_ENABLED ) { profExit( PROF_INTERACT, profT0 ); } }
-	}
+	const _matingContext: any = {
+	    get st()            { return _st; },
+	    get swimbots()      { return _swimbots; },
+	    get foodBits()      { return _foodBits; },
+	    get embryology()    { return _embryology; },
+	    get familyTree()    { return _familyTree; },
+	    get pool()          { return _pool; },
+	    get vectorUtility() { return _vectorUtility; },
+	    get childGenotype() { return _childGenotype; },
+	    get clock()         { return _clock; },
+	    get seconds()       { return _seconds; },
+	    findLowestDeadSwimbotInArray: () => this.findLowestDeadSwimbotInArray(),
+	    getJunkDnaSimilarity:         ( g1, g2 ) => this.getJunkDnaSimilarity( g1, g2 ),
+	    syncSwimbot:                  ( s ) => syncSwimbot( s ),
+	    nextSerial:                   () => ++_serial,
+	    recordMating:                 ( a, b ) => {
+	        const matingIndex = _matingCount % MATING_RECORD_SIZE;
+	        _matingRecord[ matingIndex ] = a.getThermalOptimum();
+	        _matingRecord[ matingIndex + MATING_RECORD_SIZE ] = b.getThermalOptimum();
+	        _matingBrightnessDifference[ matingIndex ] = Math.abs( a.getBrightness() - b.getBrightness() );
+	        _matingChoosinessMean[ matingIndex ] = ( a.getChoosiness() + b.getChoosiness() ) * 0.5;
+	        _matingCount++;
+	    },
+	    getSwimbotGenes:              ( s ) => this.getSwimbotGenes( s ),
+	    getSwimbotEvolutionTraits:    ( s ) => this.getSwimbotEvolutionTraits( s ),
+	};
+	this.interact = function( s ) { interactSwimbot( _matingContext, s ); }
 
 
-	//------------------------------------------------------------------------
-	// Smell fields: decay, deposit and a light 4-neighbour blur once a step.
-	// Their gradients only tilt a search direction; they add no new rules.
-	//------------------------------------------------------------------------
-	function updateScentFields(): void
-	{
-	    const N = SS.SCENT_GRID_N, cells = N * N;
-	    const food = _st.foodField, prey = _st.preyField, pred = _st.predField;
-	    // Deposits happen every step; the grid-wide decay and blur only on
-	    // even steps, with the equivalent two-step decay and stronger blur.
-	    if (( _clock & 1 ) === 0 )
-	    {
-	        for (let i = 0; i < cells; i++)
-	        {
-	            food[i] *= 0.74;
-	            prey[i] *= 0.74;
-	            pred[i] *= 0.74;
-	        }
-	    }
-
-	    // plants: their energy is the food smell
-	    for (let k = 0; k < _aliveFoodBitIndices.length; k++)
-	    {
-	        const f = _aliveFoodBitIndices[k];
-	        const ix = Math.max( 0, Math.min( N - 1, Math.floor( _foodX[f] / _scentCellW )));
-	        const iy = Math.max( 0, Math.min( N - 1, Math.floor( _foodY[f] / _scentCellH )));
-	        food[ iy * N + ix ] += _st.foodEnergy[f] * 0.02;
-	    }
-
-	    // swimbots: herbivore biomass or a predator trace
-	    for (let k = 0; k < _aliveSwimbotIndices.length; k++)
-	    {
-	        const s = _aliveSwimbotIndices[k];
-	        const ix = Math.max( 0, Math.min( N - 1, Math.floor( _botX[s] / _scentCellW )));
-	        const iy = Math.max( 0, Math.min( N - 1, Math.floor( _botY[s] / _scentCellH )));
-	        const idx = iy * N + ix;
-	        if ( _botPredator[s] > PREDATOR_LEVEL_THRESHOLD ) { pred[idx] += 1.0; }
-	        else                                              { prey[idx] += _botMass[s] * 0.003; }
-	    }
-
-	    // one light diffusion pass on even steps; read from a snapshot so the
-	    // result does not depend on the order in which cells are visited
-	    if (( _clock & 1 ) === 0 )
-	    {
-	        const tmp = _scentTmp;
-	        for (let f = 0; f < 3; f++)
-	        {
-	            const a = f === 0 ? food : ( f === 1 ? prey : pred );
-	            tmp.set( a );
-	            for (let y = 0; y < N; y++)
-	            {
-	                const row = y * N;
-	                const up = y > 0 ? row - N : row;
-	                const down = y < N - 1 ? row + N : row;
-	                for (let x = 0; x < N; x++)
-	                {
-	                    const i = row + x;
-	                    const l = x > 0 ? i - 1 : i;
-	                    const r = x < N - 1 ? i + 1 : i;
-	                    const avg = 0.25 * ( tmp[l] + tmp[r] + tmp[up + x] + tmp[down + x] );
-	                    a[i] = tmp[i] + 0.11 * ( avg - tmp[i] );
-	                }
-	            }
-	        }
-	    }
-	}
-
-	// 16-bit Peano-Morton key from the coordinates
-	function mortonBits( v: number ): number
-	{
-	    v &= 0xff;
-	    v = ( v | ( v << 4 )) & 0x0f0f;
-	    v = ( v | ( v << 2 )) & 0x3333;
-	    v = ( v | ( v << 1 )) & 0x5555;
-	    return v;
-	}
-	// Put neighbours in the pool next to each other in the work list. Insertion
-	// sort is effectively linear here: the order barely changes in 8 steps,
-	// and it needs no allocation.
-	function sortAliveByMorton(): void
-	{
-	    const cols = SS.SCENT_GRID_N - 1;
-	    const list = _aliveSwimbotIndices, n = list.length;
-	    for (let i = 0; i < n; i++)
-	    {
-	        const s = list[i];
-	        const ix = Math.max( 0, Math.min( cols, Math.floor( _botX[s] / POOL_WIDTH  * cols )));
-	        const iy = Math.max( 0, Math.min( cols, Math.floor( _botY[s] / POOL_HEIGHT * cols )));
-	        _mortonCodes[i] = mortonBits( ix ) | ( mortonBits( iy ) << 1 );
-	    }
-	    for (let i = 1; i < n; i++)
-	    {
-	        const code = _mortonCodes[i], s = list[i];
-	        let j = i - 1;
-	        while ( j >= 0 && _mortonCodes[j] > code )
-	        {
-	            _mortonCodes[j + 1] = _mortonCodes[j];
-	            list[j + 1] = list[j];
-	            j --;
-	        }
-	        _mortonCodes[j + 1] = code;
-	        list[j + 1] = s;
-	    }
-	}
-
-	// How common is each herbivore shape right now? Predators read these shares
-	// to form (or break) a search image: a morph that monopolises the pool is
-	// easier to find, a rare one is overlooked.
-	function updateMorphBucketShares(): void
-	{
-	    const share = _st.morphBucketShare;
-	    share.fill( 0 );
-	    let total = 0;
-	    for (let i = 0; i < _aliveSwimbotIndices.length; i++)
-	    {
-	        const s = _aliveSwimbotIndices[i];
-	        if ( _botPredator[s] > PREDATOR_LEVEL_THRESHOLD ) continue;
-	        const morph = _swimbots[s].getMorphologySummary();
-	        share[ SS.getMorphBucket( morph.numParts, morph.branchFraction > 0, morph.meanWidth ) ] ++;
-	        total ++;
-	    }
-	    if ( total > 0 ) { for (let b = 0; b < share.length; b++ ) share[b] /= total; }
-	}
-
-	// Same idea for the (much larger) food list: nearby plants and meat land
-	// next to each other in the grid build, which keeps its counting sort's
-	// memory access local. No allocation, and only every 16 steps.
-	function sortAliveFoodByMorton(): void
-	{
-	    const cols = SS.SCENT_GRID_N - 1;
-	    const list = _aliveFoodBitIndices, n = list.length;
-	    for (let i = 0; i < n; i++)
-	    {
-	        const f = list[i];
-	        const ix = Math.max( 0, Math.min( cols, Math.floor( _foodX[f] / POOL_WIDTH  * cols )));
-	        const iy = Math.max( 0, Math.min( cols, Math.floor( _foodY[f] / POOL_HEIGHT * cols )));
-	        _foodMortonCodes[i] = mortonBits( ix ) | ( mortonBits( iy ) << 1 );
-	    }
-	    for (let i = 1; i < n; i++)
-	    {
-	        const code = _foodMortonCodes[i], f = list[i];
-	        let j = i - 1;
-	        while ( j >= 0 && _foodMortonCodes[j] > code )
-	        {
-	            _foodMortonCodes[j + 1] = _foodMortonCodes[j];
-	            list[j + 1] = list[j];
-	            j --;
-	        }
-	        _foodMortonCodes[j + 1] = code;
-	        list[j + 1] = f;
-	    }
-	}
+	const _scentContext: any = {
+	    get st()                  { return _st; },
+	    get swimbots()            { return _swimbots; },
+	    get aliveSwimbotIndices() { return _aliveSwimbotIndices; },
+	    get aliveFoodBitIndices() { return _aliveFoodBitIndices; },
+	    get clock()               { return _clock; },
+	};
 
 	//------------------------------------------------------------------------
 	// stage 7: the step in phases. Deciding, moving and looking around touch
@@ -2753,8 +2157,8 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
 	//------------------------------------------------------------------------
 	this.updateSwimbotsInPhases = function()
 	{
-	    if (( _clock & 1 ) === 0 ) { updateScentFields(); }
-	    if ( _clock % 8 === 0 ) { sortAliveByMorton(); updateMorphBucketShares(); }
+	    if (( _clock & 1 ) === 0 ) { updateScentFields( _scentContext ); }
+	    if ( _clock % 8 === 0 ) { sortAliveByMorton( _scentContext ); updateMorphBucketShares( _scentContext ); }
 	    const list = _aliveSwimbotIndices;
 	    const n    = list.length;
 	    // pack the four hot coordinates of every live bot into one small buffer,
@@ -3012,7 +2416,7 @@ this.notifySwimbotDeathTime = function( deceasedSwimbotIndex )
         const foodGridCount = _aliveFoodBitIndices.length;
         if ((( _clock & 3 ) === 0 ) || ( foodGridCount !== _lastFoodGridCount ))
         {
-            if (( _clock & 15 ) === 0 ) { sortAliveFoodByMorton(); }
+            if (( _clock & 15 ) === 0 ) { sortAliveFoodByMorton( _scentContext ); }
             _foodBitGrid.build( _aliveFoodBitIndices, foodGridCount, _foodX, _foodY );
             _lastFoodGridCount = foodGridCount;
         }
@@ -3869,90 +3273,35 @@ const feedRoom = Math.min( 100, swimbot.getMaxEnergy() - swimbot.getEnergy() );
 	}
 
 
-	//----------------------------------------
-	this.updateCameraNavigation = function()
-	{
-        //--------------------------------------------------------------
-        // keys held down move / zoom the camera at a steady speed
-        // (per second, so it does not depend on the frame rate)
-        //--------------------------------------------------------------
-        const now = performance.now();
-        let seconds = ( _lastCameraNavigationTime === 0 ) ? 0 : ( now - _lastCameraNavigationTime ) / 1000;
-        _lastCameraNavigationTime = now;
-        if ( seconds > 0.1 ) { seconds = 0.1; }
+	const _input = createInputController({
+	    get st()                  { return _st; },
+	    get touch()               { return _touch; },
+	    get camera()              { return _camera; },
+	    get pool()                { return _pool; },
+	    get obstacle()            { return _obstacle; },
+	    get viewTracking()        { return _viewTracking; },
+	    get swimbots()            { return _swimbots; },
+	    get foodBits()            { return _foodBits; },
+	    get aliveFoodBitIndices() { return _aliveFoodBitIndices; },
+	    get vectorUtility()       { return _vectorUtility; },
+	    get canvasWidth()         { return _canvasWidth; },
+	    get canvasHeight()        { return _canvasHeight; },
+	    get viewScale()           { return _viewScale; },
+	    get seconds()             { return _seconds; },
+	    get selectedSwimbot()     { return _selectedSwimbot; },     set selectedSwimbot(v)   { _selectedSwimbot = v; },
+	    get mousedOverSwimbot()   { return _mousedOverSwimbot; },   set mousedOverSwimbot(v) { _mousedOverSwimbot = v; },
+	    get selectedFoodBit()     { return _selectedFoodBit; },     set selectedFoodBit(v)   { _selectedFoodBit = v; },
+	    get mousedOverFoodBit()   { return _mousedOverFoodBit; },   set mousedOverFoodBit(v) { _mousedOverFoodBit = v; },
+	    setSelectedSwimbot:       ( i ) => setSelectedSwimbot( i ),
+	    setSelectedPlantIndex:    ( f ) => _this.setSelectedPlantIndex( f ),
+	    initializeDebugTrail:     ( s ) => _this.initializeDebugTrail( s ),
+	    moveFoodBitsFromObstacle: () => moveFoodBitsFromObstacle(),
+	    clearViewMode:            () => _this.clearViewMode(),
+	});
 
-        const pan = _camera.getScale() * CAMERA_PAN_SPEED * seconds;
-        let dx = 0, dy = 0;
-        if ( _panningLeft  ) { dx -= pan; }
-        if ( _panningRight ) { dx += pan; }
-        if ( _panningUp    ) { dy -= pan; }
-        if ( _panningDown  ) { dy += pan; }
-        if (( dx !== 0 ) || ( dy !== 0 )) { _camera.moveBy( dx, dy ); }
-
-        let zoom = 0;
-        if ( _zoomingIn  ) { zoom -= CAMERA_KEY_ZOOM_SPEED * seconds; }
-        if ( _zoomingOut ) { zoom += CAMERA_KEY_ZOOM_SPEED * seconds; }
-        if ( zoom !== 0 )
-        {
-            const center = _camera.getPosition();
-            _camera.zoomAt( Math.exp( zoom ), center.x, center.y );
-        }
-	}
-
-	//--------------------------------------------------------------
-	// mouse wheel: zoom towards the point under the cursor
-	//--------------------------------------------------------------
-	this.zoomCameraAtScreenPoint = function( x, y, wheelDelta )
-	{
-        _viewTracking.stopTracking();
-        const point = this.convertScreenCoordinatesToPoolPosition( x, y );
-        const worldX = point.x, worldY = point.y;
-        _camera.zoomAt( Math.exp( wheelDelta * CAMERA_WHEEL_ZOOM_SPEED ), worldX, worldY );
-	}
-
-	//--------------------------------------------------------------
-	// middle-button drag: the pool follows the mouse
-	//--------------------------------------------------------------
-	this.panCameraByScreenPixels = function( dxPixels, dyPixels )
-	{
-        _viewTracking.stopTracking();
-        const unitsPerPixel = _camera.getXDimension() / _canvasWidth;
-        _camera.moveBy( -dxPixels * unitsPerPixel, -dyPixels * unitsPerPixel );
-	}
-
-	//-----------------------------------------
-	this.setSimulationRunning = function(s)
-	{
-        _simulationRunning = s;
-    }
-
-	//-------------------------------
-	this.setRendering = function(r)
-	{
-        _rendering = r;
-    }
-
-	//-------------------------------------------
-	this.setMillisecondsPerUpdate = function(m)
-	{
-        _millisecondsPerUpdate = m;
-    }
-
-	//--------------------------------------------------
-	this.setMillisecondsPerUpdateToDefault = function()
-	{
-        _millisecondsPerUpdate = DEFAULT_MILLISECONDS_PER_UPDATE;
-    }
-
-	//-----------------------------------
-	this.setFastMode = function(f)
-	{
-        _fastMode = f;
-        _fastRenderCounter = 0;
-        _speedLevel = f ? 3 : 1;
-        // (the original turned mouths and genitals off here to save drawing
-        //  time; drawing is cheap now, so they stay visible)
-    }
+	this.updateCameraNavigation   = function()           { _input.updateCameraNavigation(); }
+	this.zoomCameraAtScreenPoint  = function( x, y, d )  { _input.zoomCameraAtScreenPoint( x, y, d ); }
+	this.panCameraByScreenPixels  = function( dx, dy )   { _input.panCameraByScreenPixels( dx, dy ); }
 
 	//--------------------------------------------------------------
 	// simulation speed: 1 = normal, 2 = fast, 3 = as fast as possible
@@ -4187,391 +3536,42 @@ const feedRoom = Math.min( 100, swimbot.getMaxEnergy() - swimbot.getEnergy() );
     }
 
 
-	//--------------------------------
-	this.touchDown = function( x, y )
-	{
-        _touch.setToDown( x, y );
-       this.handleNonUITouchDownActions( x, y );
+	this.touchDown                                = function( x, y )     { _input.touchDown( x, y ); }
+	this.convertScreenCoordinatesToPoolPosition  = function( x, y )     { return _input.convertScreenCoordinatesToPoolPosition( x, y ); }
+	this.touchMove                                = function( x, y )     { _input.touchMove( x, y ); }
+	this.touchUp                                  = function( x, y )     { _input.touchUp( x, y ); }
+	this.touchOut                                 = function( x, y )     { _input.touchOut( x, y ); }
+	this.touchTwoFingerMove                       = function( e )        { _input.touchTwoFingerMove( e ); }
+	this.startCameraNavigation                    = function( a )        { _input.startCameraNavigation( a ); }
+	this.stopCameraNavigation                     = function( a )        { _input.stopCameraNavigation( a ); }
+	this.stopAllCameraNavigation                  = function()           { _input.stopAllCameraNavigation(); }
+	this.clearViewMode                            = function()           { this.setViewMode( ViewTrackingMode.NULL ); }
+	this.setViewMode                              = function( viewMode ) {
+	    if (( viewMode === ViewTrackingMode.SELECTED ) && ( _selectedSwimbot === NULL_INDEX )) return;
+	    setSelectedSwimbot( _viewTracking.setMode( viewMode, _camera.getPosition(), _camera.getScale(), _selectedSwimbot ) );
 	}
-
-	//--------------------------------------------------------------
-	this.convertScreenCoordinatesToPoolPosition = function( x, y )
-	{
-	    _vectorUtility.x = _camera.getPosition().x - _camera.getXDimension() * ONE_HALF + ( x / _canvasWidth  ) * _camera.getXDimension();
-    	_vectorUtility.y = _camera.getPosition().y - _camera.getYDimension() * ONE_HALF + ( y / _canvasHeight ) * _camera.getYDimension();
-
-	    return _vectorUtility;
-    }
-
-
-	//-------------------------------
-	this.touchMove = function( x, y )
-	{
-        if (( x < _canvasWidth  )
-        &&  ( y < _canvasHeight ))
-    	{
-            _touch.setToMove( x, y );
-
-            _vectorUtility = this.convertScreenCoordinatesToPoolPosition( x, y );
-            _pool.moveTouch( _vectorUtility, _seconds );
-
-            if (( _touch.getState() === TouchState.JUST_DOWN )
-            ||  ( _touch.getState() === TouchState.BEEN_DOWN ))
-            {
-                //-----------------------------
-                // dragging a swimbot around
-                //-----------------------------
-                if (( _swimbotBeingDragged )
-                &&  ( _selectedSwimbot != NULL_INDEX ))
-                {
-                    _vectorUtility = this.convertScreenCoordinatesToPoolPosition( x, y );
-                    _swimbots[ _selectedSwimbot ].setPosition( _vectorUtility );
-
-                    _vectorUtility.setXY( ZERO, ZERO );
-                    _swimbots[ _selectedSwimbot ].setVelocity( _vectorUtility );
-                }
-                else if (( _foodBitBeingDragged )
-                     &&  ( _selectedFoodBit != NULL_INDEX ))
-                {
-                    //-----------------------------
-                    // dragging a fodbit around
-                    //-----------------------------
-                    _vectorUtility = this.convertScreenCoordinatesToPoolPosition( x, y );
-                    _foodBits[ _selectedFoodBit ].setPosition( _vectorUtility );
-                }
-                else
-                {
-                    if ( _obstacle.getBeingMoved() )
-                    {
-                        //--------------------------------------
-                        // set the new moved position
-                        //--------------------------------------
-                        _vectorUtility = this.convertScreenCoordinatesToPoolPosition( x, y );
-                        _obstacle.setMovePosition( _vectorUtility );
-
-                        //--------------------------------------
-                        // keep food away from obstacle
-                        //--------------------------------------
-                        moveFoodBitsFromObstacle();
-                    }
-                    else
-                    {
-                        let x = _touch.getVelocityX();
-                        let y = _touch.getVelocityY();
-                        _camera.drag( x, y );
-                    }
-                }
-            }
-            else
-            {
-                //throttle
-                //if ( _clock % 4 == 0 )
-
-                _vectorUtility = this.convertScreenCoordinatesToPoolPosition( x, y );
-
-                //------------------------------------------------------------------------
-                // check to see if the mouse if hovering over a swimbot or food bit
-                //------------------------------------------------------------------------
-                _mousedOverSwimbot = this.indexOfClosestSwimbotToScreenPosition( x, y );
-                _mousedOverFoodBit = this.indexOfClosestFoodBitToScreenPosition( x, y );
-
-                //------------------------------------------------------------
-                // check to see if the mouse if hovering over the obstacle
-                //------------------------------------------------------------
-                _obstacle.detectHover( _vectorUtility )
-            }
-        }
+	this.handleNonUITouchDownActions              = function( x, y )     { _input.handleNonUITouchDownActions( x, y ); }
+	this.indexOfClosestSwimbotToScreenPosition    = function( x, y )     { return _input.indexOfClosestSwimbotToScreenPosition( x, y ); }
+	this.findClosestPlantToPoolPosition           = function( px, py )   { return _input.findClosestPlantToPoolPosition( px, py ); }
+	this.handleClickSelection                     = function( x, y, v )  { _input.handleClickSelection( x, y, v ); }
+	this.indexOfClosestFoodBitToScreenPosition    = function( x, y )     { return _input.indexOfClosestFoodBitToScreenPosition( x, y ); }
+	this.setSelectedPlantIndex                    = function( f )        { _st.selectedPlantIndex = f; if ( f >= 0 ) setSelectedSwimbot( NULL_INDEX ); }
+	this.getSelectedPlantIndex                    = function()           { return _st.selectedPlantIndex; }
+	this.fertilizePlant                           = function( f )        {
+	    if ( f < 0 || _st.liveFood[ f ] !== 1 ) return;
+	    depositSoilEnergy( _st, _st.foodX[ f ], _st.foodY[ f ], drawFromAtmosphere( 50 ));
 	}
-
-
-	//-------------------------------
-	this.touchUp = function( x, y )
-	{
-    	_touch.setToUp( x, y );
-
-        _swimbotBeingDragged = false;
-		_foodBitBeingDragged = false;
-
-        //-----------------------------------------------------
-        // if no button or swimbot or food bit was un-clicked
-        //-----------------------------------------------------
-		if (( _selectedSwimbot === NULL_INDEX )
-        &&  ( _selectedFoodBit === NULL_INDEX ))
-        {
-            if ( _obstacle.getBeingMoved() )
-            {
-                _obstacle.stopMoving();
-            }
-
-            _vectorUtility = this.convertScreenCoordinatesToPoolPosition( x, y );
-        this.handleClickSelection( x, y, _vectorUtility );
-    		_pool.endTouch( _vectorUtility, _seconds );
-	    }
-    }
-
-
-	//-------------------------------
-	this.touchOut = function( x, y )
-	{
-        this.touchUp( x, y );
-    }
-
-	//------------------------------------
-	this.touchTwoFingerMove = function(e)
-	{
-        if (( e.x < _canvasWidth  )
-        &&  ( e.y < _canvasHeight ))
-    	{
-            _camera.drag( -e.deltaX, -e.deltaY );
-            this.clearViewMode();
-        }
-    }
-
-	//------------------------------------------------
-	// start camera Navigation
-	//------------------------------------------------
-    this.startCameraNavigation = function( action )
-    {
-        _viewTracking.stopTracking();
-
-             if ( action === CameraNavigationAction.LEFT  ) { _panningLeft  = true; }
-        else if ( action === CameraNavigationAction.RIGHT ) { _panningRight = true; }
-        else if ( action === CameraNavigationAction.DOWN  ) { _panningDown  = true; }
-        else if ( action === CameraNavigationAction.UP    ) { _panningUp    = true; }
-        else if ( action === CameraNavigationAction.IN    ) { _zoomingIn    = true; }
-        else if ( action === CameraNavigationAction.OUT   ) { _zoomingOut   = true; }
+	this.growPlant                                = function( f )        {
+	    if ( f < 0 || _st.liveFood[ f ] !== 1 ) return;
+	    const add = drawFromAtmosphere( Math.max( 0, 52 - _st.foodEnergy[ f ] ));
+	    _st.foodEnergy[ f ] += add;
+	    _st.foodWood[ f ] = Math.max( _st.foodWood[ f ], _st.foodEnergy[ f ] );
+	    RootNetwork.seedDynasties( _st );
 	}
-
-	//-----------------------------------------------
-	// stop camera Navigation
-	//-----------------------------------------------
-    this.stopCameraNavigation = function( action )
-    {
-             if ( action === CameraNavigationAction.LEFT  ) { _panningLeft  = false; }
-        else if ( action === CameraNavigationAction.RIGHT ) { _panningRight = false; }
-        else if ( action === CameraNavigationAction.DOWN  ) { _panningDown  = false; }
-        else if ( action === CameraNavigationAction.UP    ) { _panningUp    = false; }
-        else if ( action === CameraNavigationAction.IN    ) { _zoomingIn    = false; }
-        else if ( action === CameraNavigationAction.OUT   ) { _zoomingOut   = false; }
+	this.removePlant                              = function( f )        {
+	    if ( f < 0 || _st.liveFood[ f ] !== 1 ) return;
+	    killPlant( f );
 	}
-
-    this.stopAllCameraNavigation = function()
-    {
-        _panningLeft    = false;
-        _panningRight   = false;
-        _panningUp      = false;
-        _panningDown    = false;
-        _zoomingIn      = false;
-        _zoomingOut     = false;
-	}
-
-	//-------------------------------
-	this.clearViewMode = function()
-	{
-        this.setViewMode( ViewTrackingMode.NULL );
-	}
-
-	//--------------------------------------
-	this.setViewMode = function( viewMode )
-	{
-        //console.log( "setViewMode to " + viewMode );
-        //console.log( "_selectedSwimbot = " + _selectedSwimbot );
-
-	    //-----------------------------------------------------------------------------------------
-	    // if the new mode is "selected" but there is no swimbot selected, then bail out...
-	    //-----------------------------------------------------------------------------------------
-	    if (( viewMode === ViewTrackingMode.SELECTED )
-	    &&  ( _selectedSwimbot === NULL_INDEX ))
-	    {
-	        return;
-        }
-
-        let selectedSwimbot = _viewTracking.setMode( viewMode, _camera.getPosition(), _camera.getScale(), _selectedSwimbot );
-        setSelectedSwimbot( selectedSwimbot );
-	}
-
-	//--------------------------------------------------
-	this.handleNonUITouchDownActions = function( x, y )
-	{
-        if (( x < _canvasWidth  )
-        &&  ( y < _canvasHeight ))
-        {
-            //-----------------------------------------------
-            // in case view control is tracking, stop it...
-            //-----------------------------------------------
-            _viewTracking.stopTracking();
-
-            //------------------------------------------
-            // has a swimmer been clicked?
-            //------------------------------------------
-            setSelectedSwimbot( this.indexOfClosestSwimbotToScreenPosition( x, y ) );
-
-            //------------------------------------------
-            // a swimmer is clicked
-            //------------------------------------------
-            if ( _selectedSwimbot != NULL_INDEX )
-            {
-                _swimbotBeingDragged = true;
-                this.initializeDebugTrail( _selectedSwimbot );
-            }
-
-            //--------------------------------------
-            // find out if a foodbit was clicked
-            //--------------------------------------
-            if ( _selectedSwimbot === NULL_INDEX )
-            {
-                _selectedFoodBit = this.indexOfClosestFoodBitToScreenPosition( x, y );
-                //console.log( _selectedFoodBit );
-
-                if ( _selectedFoodBit != NULL_INDEX )
-                {
-                    if ( _st.foodType[ _selectedFoodBit ] !== 2 ) { this.setSelectedPlantIndex( _selectedFoodBit ); }
-                    _foodBitBeingDragged = true;
-
-                    // the food jumps into the "hand" at once, fully visible
-                    _vectorUtility = this.convertScreenCoordinatesToPoolPosition( x, y );
-                    _foodBits[ _selectedFoodBit ].setPosition( _vectorUtility );
-                    _foodBits[ _selectedFoodBit ].showFully();
-                }
-            }
-            else
-            {
-                _mousedOverFoodBit = NULL_INDEX;
-            }
-
-            //----------------------------------------
-            // if no swimbot or food bit was clicked
-            //----------------------------------------
-            if (( _selectedSwimbot == NULL_INDEX )
-            &&  ( _selectedFoodBit == NULL_INDEX ))
-            {
-                _vectorUtility = this.convertScreenCoordinatesToPoolPosition( x, y );
-
-                //--------------------------------------
-                // did the obstacle get touched?
-                //--------------------------------------
-                if ( _obstacle.detectHover( _vectorUtility ) )
-                {
-                    _obstacle.startMoving( _vectorUtility );
-                }
-                else
-                {
-                    //--------------------------------------
-                    // touch the pool!
-                    //--------------------------------------
-                    _pool.startTouch( _vectorUtility, _seconds );
-                }
-            }
-        }
-    }
-
-
-
-	//----------------------------------------------
-	this.indexOfClosestSwimbotToScreenPosition = function( x, y )
-	{
-        let indexOfClosest = NULL_INDEX;
-        const vs = Math.max( 0.01, _viewScale || 0.1 );
-        const zoomPad = Math.max( 0, 14 / vs );
-        let closestDistance = Infinity;
-        _vectorUtility = this.convertScreenCoordinatesToPoolPosition( x, y );
-
-        for (let s=0; s<MAX_SWIMBOTS; s++)
-        {
-            if ( _swimbots[s].getAlive() )
-            {
-                const r = _swimbots[s].getSelectRadius() + zoomPad;
-                let distanceSquared = _swimbots[s].getPosition().getDistanceSquaredTo( _vectorUtility );
-                if ( distanceSquared < r * r )
-                {
-                    if ( distanceSquared < closestDistance )
-                    {
-                        indexOfClosest = s;
-                        closestDistance = distanceSquared;
-                    }
-                }
-             }
-        }
-
-        return indexOfClosest;
-    }
-
-
-
-
-	//------------------------------------------------------------
-	this.findClosestPlantToPoolPosition = function( poolX, poolY )
-    {
-        const vs = Math.max( 0.01, _viewScale || 0.1 );
-        let bestD = Math.max( 55, 18 / vs );
-        bestD = bestD * bestD;
-        let best = -1;
-        for ( let i = 0; i < _aliveFoodBitIndices.length; i++ )
-        {
-            const f = _aliveFoodBitIndices[i];
-            if ( _st.liveFood[ f ] !== 1 || _st.foodType[ f ] === 2 ) continue;
-            const dx = _st.foodX[ f ] - poolX, dy = _st.foodY[ f ] - poolY, d2 = dx * dx + dy * dy;
-            if ( d2 < bestD ) { bestD = d2; best = f; }
-        }
-        return best;
-    }
-
-    this.handleClickSelection = function( x, y, v )
-    {
-        const s = this.indexOfClosestSwimbotToScreenPosition( x, y );
-        if ( s !== NULL_INDEX ) { setSelectedSwimbot( s ); _st.selectedPlantIndex = -1; return; }
-        const f = this.findClosestPlantToPoolPosition( v.x, v.y );
-        if ( f >= 0 ) { this.setSelectedPlantIndex( f ); }
-        else { _st.selectedPlantIndex = -1; }
-    }
-    this.setSelectedPlantIndex = function( f ) { _st.selectedPlantIndex = f; if ( f >= 0 ) setSelectedSwimbot( NULL_INDEX ); }
-    this.getSelectedPlantIndex = function() { return _st.selectedPlantIndex; }
-    this.fertilizePlant = function( f )
-    {
-        if ( f < 0 || _st.liveFood[ f ] !== 1 ) return;
-        depositSoilEnergy( _st, _st.foodX[ f ], _st.foodY[ f ], drawFromAtmosphere( 50 ));
-    }
-    this.growPlant = function( f )
-    {
-        if ( f < 0 || _st.liveFood[ f ] !== 1 ) return;
-        const need = Math.max( 0, 52 - _st.foodEnergy[ f ] );
-        const add = drawFromAtmosphere( need );
-        _st.foodEnergy[ f ] += add;
-        _st.foodWood[ f ] = Math.max( _st.foodWood[ f ], _st.foodEnergy[ f ] );
-        RootNetwork.seedDynasties( _st );
-    }
-    this.removePlant = function( f )
-    {
-        if ( f < 0 || _st.liveFood[ f ] !== 1 ) return;
-        killPlant( f );
-    }
-
-this.indexOfClosestFoodBitToScreenPosition = function( x, y )
-	{
-        let indexOfClosest = NULL_INDEX;
-        const vs = Math.max( 0.01, _viewScale || 0.1 );
-        const grabR = Math.max( FOOD_BIT_GRAB_RADIUS, 16 / vs );
-        const grabR2 = grabR * grabR;
-        let closestDistance = grabR2;
-        _vectorUtility = this.convertScreenCoordinatesToPoolPosition( x, y );
-
-        for (let f=0; f<MAX_FOODBITS; f++)
-        {
-            if ( _foodBits[f].getAlive() )
-            {
-                let distanceSquared = _foodBits[f].getPosition().getDistanceSquaredTo( _vectorUtility );
-                if ( distanceSquared < closestDistance )
-                {
-                    indexOfClosest = f;
-                    closestDistance = distanceSquared;
-                }
-             }
-        }
-
-        return indexOfClosest;
-    }
-
-
 
 	//------------------------------------------------------------------------------------
 	// get functions....
@@ -4597,22 +3597,7 @@ this.indexOfClosestFoodBitToScreenPosition = function( x, y )
 	this.getViewMode            = function() { return _viewTracking.getMode();  }
     this.getNumDeadSwimbots     = function() { return simCounters.numDeadSwimbots;         }
 
-	//--------------------------------------------------
-	// check to see if the camera navigation is active
-	//--------------------------------------------------
-    this.getCameraNavigationActive = function( action )
-	{
-	    let result = false;
-
-	    if ( ( action === CameraNavigationAction.LEFT  ) && ( _panningLeft  ) ) { result = true; }
-	    if ( ( action === CameraNavigationAction.RIGHT ) && ( _panningRight ) ) { result = true; }
-	    if ( ( action === CameraNavigationAction.DOWN  ) && ( _panningDown  ) ) { result = true; }
-	    if ( ( action === CameraNavigationAction.UP    ) && ( _panningUp    ) ) { result = true; }
-	    if ( ( action === CameraNavigationAction.IN    ) && ( _zoomingIn    ) ) { result = true; }
-	    if ( ( action === CameraNavigationAction.OUT   ) && ( _zoomingOut   ) ) { result = true; }
-
-        return result;
-	}
+	this.getCameraNavigationActive = function( action ) { return _input.getCameraNavigationActive( action ); }
 
 	//----------------------------------------
 	this.getASwimbotIsSelected = function()
