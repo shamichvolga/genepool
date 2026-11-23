@@ -13,3 +13,4 @@ backups/
 .aider.input.history
 *.csv
 *.log
+.tmp/
