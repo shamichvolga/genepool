@@ -3,7 +3,7 @@
   "version": "2.1.0",
   "private": true,
   "type": "module",
-  "description": "Gene Pool swimbots — evolution simulation (mod of Jeffrey Ventrella's Gene Pool)",
+  "description": "GenePool Community Edition — Darwinian physics & neural-network evolution sandbox in the browser",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",

@@ -1,248 +1,226 @@
-# GenePool: Evolution Simulator
+# 🧬 GenePool: Community Evolution Edition
 
-A TypeScript rewrite of Jeffrey Ventrella's classic **Gene Pool** with a complete ecological overhaul. Watch randomly created creatures evolve through natural selection — but this time, they face predators, disease, climate, and competing for resources. **No behavior is pre-programmed. Everything emerges.**
+> *"If you ever sat in front of a fish tank as a kid, mesmerized for hours just watching tiny lives unfold without a script—you already understand what this project is."*
 
-> "They started as meaningless shapes. No one taught them to swim or hunt. They figured it out." — Jeffrey Ventrella
+[![Play in browser](https://img.shields.io/badge/Play-in_browser-2ea44f?style=for-the-badge)](https://shamichvolga.github.io/genepool/)
+[![License](https://img.shields.io/badge/license-MIT_+_Commons_Clause-blue?style=for-the-badge)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/shamichvolga/genepool?style=for-the-badge)](https://github.com/shamichvolga/genepool/stargazers)
+[![Discussions](https://img.shields.io/github/discussions/shamichvolga/genepool?style=for-the-badge)](https://github.com/shamichvolga/genepool/discussions)
 
-## What Is GenePool?
+🌐 **[▶ Play Live in Browser](https://shamichvolga.github.io/genepool/)** · 🇷🇺 [Русская версия](README_RU.md)
 
-GenePool is a **life simulation sandbox** where:
-
-1. **Creatures are born random** — random body shape, random neural network
-2. **They must survive** — eat plants, avoid predators, escape disease, reproduce
-3. **They evolve** — winning genes spread; losing genes disappear
-4. **Diversity emerges** — instead of one super-species, you get predators, specialists, generalists competing
-
-The core insight: **You don't need to program intelligence. Just simulate survival.**
-
-## What's New in v2.0
-
-This is a complete rewrite. The original had creatures competing in a vacuum. This version adds **ecology**.
-
-### ✨ Major Systems Added
-
-| System | What It Does | Why It Matters |
-|--------|-------------|-----------------|
-| **Predators** | Independent creatures that hunt prey. Have their own genes, evolve, use strategy | Prey develop anti-predator traits (speed, armor, fleeing). Arms race drives complexity. |
-| **Disease** | Pathogens that spread through population. "Key-lock" immunity model. Common forms hit harder | Prevents convergence. Rare phenotypes get advantage (frequency-dependent selection). |
-| **Temperature Zones** | World has latitude. Creatures evolve thermal preference. Seasonal cycles. | Forms specialize to niches instead of all becoming identical. |
-| **Plant Evolution** | Plants inherit genes for growth speed and seed dispersal. Coevolve with herbivores. | Creates feedback: heavy grazing → selection for fast-growing plants; light grazing → slow persistence. |
-| **Soil Nutrients** | Dead bodies become soil. Plants grow from it. Nutrient cycles. | Localized food scarcity; migration becomes necessary. |
-| **Neural Evolution** | Creature brains are neural networks. Brain weights are heritable genes. | Behavior now evolves, not just morphology. Social strategies, hunting tactics emerge. |
-| **Map Editor** | Paint barriers, create feeding zones. Run experiments. | Scientific reproducibility. Test "what if?" hypotheses. |
-| **Save/Load** | Snapshot entire ecosystems. Resume later. | Continue experiments. Compare simulations. |
-| **Multithreading** | Physics + rendering run in parallel. Headless mode for analysis. | 60k-step runs finish in seconds. |
-
-### 🔬 What Changed Under the Hood
-
-| Component | Before | After | Result |
-|-----------|--------|-------|--------|
-| **Language** | JavaScript (untyped) | TypeScript | Compile-time safety, easier refactoring |
-| **Brain** | 8 hard-coded behavior states | 30-input neural network (weights evolve) | Complex strategies, behavioral diversity |
-| **Genes** | 112 body morphology genes | 112 body + 57 ecology genes | Predation & morphology no longer compete for genes |
-| **Food** | 1 type (static items) | 2 types (warm/cold plants) + meat | Niche separation, plant coevolution |
-| **World** | Flat (all locations identical) | Temperature map, biomes, seasons | Geographic niches, migration incentives |
-| **Predation** | Instant energy transfer | Search image learning, attack rolls, size limits, autotomy | Realistic predator-prey cycles |
-| **Reproduction** | Random mating | Evolving mate choosiness | Sexual selection reinforces divergence |
-| **Energy** | Fixed food energy | Climate-adjusted (thermal mismatch costs energy) | Body size now coupled to energy budget |
-
-## What's New in v2.1
-
-A performance and architecture release — the same world, but faster and easier to extend.
-
-### ⚡ Performance
-
-- **Optimized physics & decision kernels** — hot-path `Math.hypot` / `Math.sqrt` / `Math.pow` calls replaced with squared-distance comparisons and fast `cbrt(sqrt(...))` approximations.
-- **Reduced GC & memory pressure** — renderers, vectors, and embryology category buffers are now reused across births and hunts instead of being allocated every tick.
-
-### 🧩 Architecture
-
-- **Modularized core & UI** — split `SwimbotQueries.ts`, `LegacyPoolSerializer.ts`, `PredationTest.ts`, `GeneTweakUI.ts`, `PetriUI.ts`, and `InfoUI.ts` out of the monolithic files.
-- **Worker pause & rendering stability** — exposed `setSimulationRunning` / `getSimulationRunning` for reliable pause/resume, preserved spawn geometry initialization, and cleaned up the experimental root overlays.
-
-### 🌱 Empty Mode
-
-- **Improved Empty (`EMPTY`) start** — full living soil, oases, and flora ecosystem generation with 0 initial swimbots.
-
-## How It Works: The Convergence Problem (And Why We Can't Solve It Yet)
-
-### What Happens (Current Behavior)
-1. **0-10k steps**: Random creatures, chaos, high death rate
-2. **10-50k steps**: Some forms survive better, start reproducing faster
-3. **50-100k steps**: Population converges — almost everyone becomes identical tiny herbivores
-4. **100k+ steps**: Stasis — same form persists indefinitely
-
-### Why This Happens (Theories)
-- **Inbreeding depression** — population too small, loses diversity
-- **Single peak fitness landscape** — there's only one "best" body shape, so everyone converges to it
-- **No ecological niches** — nothing prevents best-form from dominating everything
-- **Predators go extinct** — without predation pressure, size/speed race collapses
-
-### What We Added to Fix It (Partially Works)
-- ✅ Disease keeps rare forms alive (frequency-dependent selection)
-- ✅ Temperature zones create geographic niches (different zones favor different forms)
-- ✅ Predators hunt common prey harder (apostatic selection)
-- ❌ **But forms still converge by 100k steps**
-
-### The Mystery
-We have all the pieces for coexistence. Why isn't it working?
-
-**Possibilities:**
-1. Temperature zone disabled (`TEMPERATURE_ENABLED=false`) — not using niche system
-2. Plant evolution too weak — coevolution not driving herbivore diversity
-3. Disease transmission too rare — can't maintain diversity pressure
-4. Predator reproduction wrong — predators die before creating sustained pressure
-5. Thermal fitness curve wrong — niches not distinct enough
-
-**We don't know.** We're open-sourcing to crowdsource the answer.
-
-## Quick Start
-
-### Browser (Recommended)
-```bash
-npm install
-npm run dev
-# Opens http://localhost:5173
-# Watch creatures evolve in real-time
-```
-
-Double-click **`Start GenePool.bat`** on Windows (requires [Node.js](https://nodejs.org)).
-
-### Headless (Research/Analysis)
-```bash
-# Run 60,000 steps, log stats every 1000 steps
-node tools/headless.cjs --steps 60000 --every 1000 --seed 42
-
-# Compare two code variants with identical seed
-node tools/variant.cjs 60000 1 INITIAL_PREDATOR_FRACTION=0.1
-
-# Seed 42 is reproducible — run it twice, get identical evolution
-```
-
-## Camera Controls
-
-| Action | Key |
-|--------|-----|
-| Pan camera | W/A/S/D or arrow keys |
-| Zoom | Mouse wheel or E/Q or +/− |
-| Pan view | Hold middle mouse button |
-| Toggle auto-follow | Space |
-
-## Project Structure
-
-```
-src/
-├── simulation/
-│   ├── GenePool.ts           # Main simulation loop
-│   ├── Swimbot.ts            # Creature morphology & genetics
-│   ├── Predator.ts           # Carnivore AI & evolution
-│   ├── Brain.ts              # Decision-making (prey/mate/flee)
-│   ├── NeuralBrain.ts        # Evolvable neural network (30→12)
-│   ├── Environment.ts        # Temperature map, biomes, seasons
-│   ├── Ecology.ts            # Thermal fit, food bonuses, digestion
-│   ├── PlantGenes.ts         # Plant evolution (growth, spread)
-│   ├── Disease.ts            # Key-lock immunity, strains
-│   ├── Currents.ts           # Water gyres (optional challenge)
-│   ├── Food.ts               # Plants & meat slot system
-│   ├── Parameters.ts         # 50+ tunable settings
-│   ├── GenePoolSerializer.ts # Save/load entire ecosystems
-│   └── ...
-├── ui/
-│   ├── Dashboard.ts          # Controls & population graphs
-│   ├── MapEditor.ts          # Paint barriers, zones
-│   └── SaveLoad.ts           # File I/O
-├── parallel/
-│   ├── sim.worker.ts         # Physics thread
-│   ├── simhost.worker.ts     # Render thread
-│   └── ParallelWork.ts       # Work distribution
-└── main.ts                   # Entry point
-
-tools/
-├── headless.cjs              # CLI runner (no browser)
-└── variant.cjs               # A/B testing harness
-
-docs/
-├── ROADMAP.md                # Feature roadmap
-├── CONTRIBUTING.md           # Developer guide
-└── FEATURE_COMPARISON.md     # Detailed v1 vs v2 breakdown
-```
-
-## Known Issues (Help Wanted!)
-
-### 🔴 Critical: Convergence
-**Problem**: Forms become identical by ~100k steps.  
-**Impact**: Limits simulation length, reduces diversity.  
-**Your contribution**: Run experiments. Change one parameter. See if diversity persists. Report results.
-
-### 🟠 Major: Predator Extinction
-**Problem**: Predators die out by ~50k steps.  
-**Impact**: No sustained predation pressure.  
-**Your contribution**: Tune predator reproduction rates, energy costs, or hunting strategy.
-
-### 🟡 Medium: Limited Speciation
-**Problem**: Usually only 1-2 species coexist (should be 5+).  
-**Impact**: Less ecological complexity.  
-**Your contribution**: Enhance niche differentiation (temperature zones, food types, disease pressure).
-
-## For Contributors
-
-### Workflow
-1. **Read** [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup
-2. **Pick a problem** — convergence, predators, or features
-3. **Run a baseline** — `node tools/headless.cjs --steps 60000 --seed 42` (note the numbers)
-4. **Make your change**
-5. **Run with same seed** — does it improve? (different numbers = success)
-6. **Submit PR** with reproducibility data
-
-### Key Files to Know
-- **Convergence work**: `src/simulation/Ecology.ts` (niche system), `Environment.ts` (temperature), `PlantGenes.ts` (coevolution)
-- **Predator work**: `src/simulation/Predator.ts`, `src/simulation/Brain.ts` (hunting logic)
-- **Feature work**: See [ROADMAP.md](ROADMAP.md) for planned systems
-
-## Documentation
-
-- **[ROADMAP.md](ROADMAP.md)** — Planned features, research questions, and development phases
-- **[CONTRIBUTING.md](CONTRIBUTING.md)** — How to develop, test, and submit changes
-- **[CHANGELOG.md](CHANGELOG.md)** — Version history and what changed
-- **[FEATURE_COMPARISON.md](FEATURE_COMPARISON.md)** — Detailed breakdown of original vs v2.0
-- **[README_RU.md](README_RU.md)** — Русская документация (Russian)
-
-## Support
-
-**Questions? Ideas?**
-- **Telegram**: [@Lionsmane96](https://t.me/Lionsmane96) — chat about evolution, biology, design
-- **GitHub Issues**: [Report bugs, request features](https://github.com/shamichvolga/genepool/issues)
-- **Discussions**: Ask about convergence mystery or evolutionary dynamics
-
-**Want to support development?**
-- **Donate** (contact via Telegram for Bitcoin/Ethereum addresses)
-- **Contribute code** (fork, modify, submit PR)
-- **Spread the word** (star ⭐, share with biologists & coders)
-
-## Credits
-
-- **Original concept & design**: Jeffrey Ventrella (Gene Pool, 1994)
-- **2.0 TypeScript rewrite**: Complete overhaul with predators, ecology, multithreading
-- **Maintained by**: [@Lionsmane96](https://github.com/shamichvolga)
-- **Built with**: TypeScript, Vite, Canvas API, Web Workers
-
-## License
-
-**Non-commercial use only.** 
-
-Free to use, modify, and distribute for education and research. See [LICENSE](LICENSE) for details.
-
-You may:
-- ✅ Run, modify, fork for educational purposes
-- ✅ Contribute improvements
-- ✅ Use in research publications (with attribution)
-
-You may not:
-- ❌ Use commercially without permission
-- ❌ Relicense under a different license
+**A complete TypeScript ecological overhaul of the classic artificial-life sandbox *Gene Pool (SwimBots)*—built over a 10-year obsession by a non-programmer pushing AI agents to the absolute limit of imagination. Now, I need your imagination, traveler.**
 
 ---
 
-**Welcome to evolutionary simulation.** 🧬
+## 🌌 What Is GenePool, and Why Is It Endlessly Replayable?
 
-Start with `npm run dev` and watch life unfold. Then break it, fix it, and help us solve the convergence mystery.
+Most "evolution" games fake it: you pick upgrades from a tech tree, or watch pre-animated sprites follow scripted behaviors. **GenePool is a true Darwinian physics sandbox.**
+
+Every creature in this pool is an articulated, physics-driven swimmer whose body segments, fins, colors, muscle rhythms, and neural brain are encoded in its genes:
+* **No "God Hand" Breeding:** Nobody clicks a button to select the winners. Creatures must physically swim through water resistance, find food, judge potential mates by their traits, court them, and survive long enough to pass on their DNA.
+* **Infinite Replayability:** Because hydrodynamics, neural wiring, predation, and climate interact organically, **no two runs ever play out the same way**. In one world, sleek serpentine speedsters dominate the open water; in another, armored tanks or coordinated pack-hunters take over. You can leave it running on a second monitor for hours and come back to an ecosystem you have never seen before.
+
+---
+
+## 📖 The Story: A 10-Year Obsession with Living Worlds
+
+I have been coming back to *GenePool* for nearly **10 years**, ever since version 6 on PC. What fascinated me wasn't winning or scoring points—it was the **unscripted naturalness** of it. Every run told a different story. Like Conway's *Game of Life* or a real aquarium, you could watch creatures struggle, adapt, and surprise you.
+
+For years, I dreamed of making that world deeper. I wanted **real, unscripted evolution**—not fake variety where you lazily add 10 types of food for 10 hardcoded species. Unlike Conway's Game of Life (where rules are simple and exhaustible), and unlike modern tech-tree games (where winning is obvious), it offered something rare: **genuine uncertainty. Natural selection, not optimization.**
+
+### The AI Breakthrough
+
+Before modern AI agents existed, I tried to mod the game by feeding files one by one into early chatbots and manually stitching code snippets together. It was clunky, frustrating, and led nowhere.
+
+When agentic AI finally arrived, a miracle happened: **despite not being a programmer, I was finally able to bring my ideas to life.** I could describe an ecosystem rule ("they should sense hunger differently based on body size"), and an AI agent would implement it, debug it, and weave it into the existing codebase. For the first time, imagination was the bottleneck—not keyboard skills.
+
+### Hitting the Ceiling
+
+Then, I hit two walls simultaneously:
+1. The ceiling of what AI can figure out on its own (even the smartest agents plateau on unsolved problems)
+2. A genuine scientific puzzle in evolutionary design: **the convergence problem**
+
+**That is why I am opening this world to you, traveler.** You don't need to be a coder to be part of this. Launch the tank, watch the creatures, enjoy the beauty of natural selection—and if something sparks an idea, tell me what you see.
+
+---
+
+## 🌊 What Makes This Ecosystem Alive?
+
+In the original simulation, many behaviors were fixed rules. In **v2.0**, almost everything is handed over to **natural selection** via a **30-input neural network**, **112 body morphology genes**, and **57 ecology genes**:
+
+* **🧬 True Genetic Instincts:** Hunger thresholds and **mate preferences** are no longer hardcoded—creatures evolve whom they are attracted to and when they seek food.
+* **🦈 Predators, Armor & Autotomy (Limb Shedding):** Predation is now part of the food web. Prey can evolve armor, burst fleeing speed, or even **shed their own limbs to escape a predator's jaws**—if they carry the right genes.
+* **🐺 Emergent Pack Hunting:** Nobody scripted teamwork, yet if you watch closely, you will see predators naturally begin to move and hunt in coordinated packs.
+* **🦠 Key-Lock Pathogens:** Diseases spread dynamically through dense populations, punishing monocultures and rewarding genetic diversity.
+* **🌡️ Seasons, Climate & Migration:** Temperature gradients force creatures to adapt their bodies or migrate—staying in the wrong climate burns precious energy.
+* **Haploid Genetics (Simplicity):** Creatures carry one gene copy per locus (no dominance/recessiveness). Mutation is the only source of novelty, making evolutionary pathways clear to observe.
+
+*(Want the full technical breakdown? See [FEATURE_COMPARISON.md](FEATURE_COMPARISON.md).)*
+
+---
+
+## 🚀 What's New in v2.1
+
+A performance and architecture release — the same living world, a faster engine, and a cleaner codebase.
+
+* **⚡ Optimized physics & decision kernels:** hot-path `Math.hypot` / `Math.sqrt` / `Math.pow` calls replaced with squared-distance checks and fast `cbrt(sqrt(...))` approximations.
+* **♻️ Reduced GC & memory pressure:** renderers, vectors, and embryology category buffers are now reused across births and hunts instead of being allocated every tick.
+* **🧩 Modularized core & UI:** `SwimbotQueries.ts`, `LegacyPoolSerializer.ts`, `PredationTest.ts`, `GeneTweakUI.ts`, `PetriUI.ts`, and `InfoUI.ts` were split out of the monolithic files.
+* **🌱 Improved Empty (`EMPTY`) start:** full living soil, oases, and flora ecosystem generation with 0 initial swimbots.
+* **⏸️ Worker pause & rendering stability:** exposed `setSimulationRunning` / `getSimulationRunning` for reliable pause/resume, preserved spawn geometry initialization, and cleaned up the experimental root overlays.
+
+---
+
+## 🔬 The Unsolved Mystery: The Convergence Problem (Help Wanted!)
+
+Right now, the simulation faces a fascinating evolutionary bottleneck—and **I need biologists, mathematicians, coders, and keen observers to help crack it:**
+
+1. **Everything Merges Into One Species:** Over long runs, instead of branching into a rich tree of distinct species, creatures tend to converge toward a single "jack-of-all-trades" phenotype (usually a small, fast, flexible worm).
+2. **Predator Collapse:** Top predators often either wipe out their prey and starve, or die out within the first few thousand steps.
+
+### 🧪 The Giant Petri Dish Inspiration
+
+To solve speciation without artificial crutches, I tried recreating the famous real-world **giant Petri dish antibiotic experiment**—where bacteria fill a safe zone, hit a chemical barrier, and only advance to the next zone once rare, step-by-step mutations unlock resistance.
+
+I built **temperature gradients** and **food specialization niches** into the tank hoping to trigger that exact step-by-step speciation. It partially works, yet true, stable branching into multiple species still slips away.
+
+**How do we make nature diverge naturally?** This is not a technical bug—it is a genuine puzzle in evolutionary ecology. Your observations, ideas, and wild hypotheses are exactly what we need.
+
+---
+
+## 🚀 Quick Start: Three Ways to Play
+
+### Option 1: Play in Your Browser (Recommended)
+No installation needed. Just click and watch:
+👉 **[Play GenePool Live](https://shamichvolga.github.io/genepool/)**
+
+### Option 2: Run Locally on Windows
+1. Download this repository (click **`<> Code`** → **`Download ZIP`**)
+2. Extract the folder
+3. Double-click **`start-windows.bat`** (or `start-windows-long-run.bat` for long uninterrupted runs)
+4. Your browser will open automatically with the game running on `http://localhost:5173/`
+5. *(Requires [Node.js](https://nodejs.org/) installed—the batch script will prompt you if missing)*
+
+#### Camera Controls
+* **`W / A / S / D`** or **Arrow Keys** — Pan across the pool
+* **Mouse Wheel** — Zoom in to inspect individual creatures or zoom out to watch migration patterns
+
+### Option 3: Headless Research Mode (Advanced)
+Want to test evolutionary theories fast? Run 60,000-step simulations without graphics, export data for analysis:
+```bash
+npm install
+node tools/headless.cjs
+```
+
+---
+
+## 💡 Ideas Over Money
+
+This project exists because I love it, not because I expect to make money from it. **Donations are completely optional.**
+
+The best way to support GenePool is simply to:
+- **Download it, run it, and watch it**
+- **Share what you observe** in [Discussions](https://github.com/shamichvolga/genepool/discussions) — weird behaviors, surprising outcomes, ideas that come to mind
+- **Suggest features or changes** (no programming experience needed)
+
+If you do feel like contributing financially to help with AI subscription costs (which power the development), here are the options:
+
+### Support Links
+- **Telegram**: [@LionsMane96](https://t.me/LionsMane96) — Fastest way to reach me with observations or ideas
+- **Email**: [shamichvolga@gmail.com](mailto:shamichvolga@gmail.com)
+- **USDT (Ethereum ERC-20)**: `0x66f90b1e932cb11939c4644c2aeae54f47117a7b`
+- **Bitcoin (BTC)**: `bc1qm2pq8me0cyl722s4yg3zq02cfsaq20p9jlac6c`
+
+---
+
+## 📚 Documentation
+
+- **[CHANGELOG.md](CHANGELOG.md)** — Version history and recent updates
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** — How to suggest features or submit code
+- **[ROADMAP.md](ROADMAP.md)** — Planned features and research directions
+- **[FEATURE_COMPARISON.md](FEATURE_COMPARISON.md)** — Detailed mechanics vs. the original SwimBots
+- **[LICENSE](LICENSE)** — MIT License with the Commons Clause
+
+---
+
+## 🔧 For Developers
+
+### Project Structure
+```
+src/
+├── simulation/       # Evolution, genetics, physics engine
+├── ui/              # Browser UI and controls
+├── workers/         # Simulation threads
+└── ...
+tools/
+├── headless.cjs     # Batch simulation mode (no browser)
+└── run-report.mjs   # Data export helpers
+```
+
+### Quick Dev Setup
+```bash
+npm install          # Install dependencies
+npm run dev          # Start dev server with hot reload (keeps world state)
+npm run typecheck    # Type-check TypeScript
+npm run build        # Production build for deployment
+```
+
+---
+
+## 🎯 What You'll See (First Few Minutes)
+
+1. **A 2D pool with creatures** (small, colorful worms with fins and segments)
+2. **Green dots** (food/plants) scattered around
+3. **Creatures swimming, eating, reproducing** in real-time
+4. **Predators hunting prey** (if predators evolve and persist)
+5. **Slow changes over time:** body shapes shifting, sizes changing, new behaviors emerging
+
+By hour 2–3, you might see:
+- Distinct "species" clustered in different areas
+- Coordinated hunting behavior in packs
+- Creatures fleeing when threatened
+- Migration patterns during harsh seasons
+
+By 100,000 steps (hours of real-time watching on fast playback):
+- Everything often converges to one dominant morph
+- Predators extinct or extremely rare
+- Final ecosystem either stable or chaotic
+
+**Your job: watch, notice patterns, and tell us what surprises you.**
+
+---
+
+## 🌍 Browser Support
+
+- ✅ Chrome / Chromium (recommended)
+- ✅ Firefox
+- ✅ Edge
+- ⚠️ Safari (works, but performance may vary)
+
+Requires ES2020+ JavaScript support (all modern browsers).
+
+---
+
+## 📖 Learn More About Artificial Life
+
+- **Related Fields**: Artificial Life, Neuroevolution, Evolutionary Algorithms, Complex Systems
+- **Modern References**: NEAT (Neuroevolution of Augmenting Topologies), HyperNEAT, OpenAI's evolutionary strategies
+
+---
+
+## ⚖️ License
+
+GenePool is released under the **MIT License with the Commons Clause**: free to use, modify and share, but not to sell. See [LICENSE](LICENSE).
+
+Contains code derived from the original browser version of Gene Pool (© 2021 Jeffrey Ventrella, swimbots.com), used under the MIT License with the Commons Clause.
+
+---
+
+**Last Updated**: November 2026  
+**Maintainer**: Lionsman / shamichvolga
+
+---
+
+**Questions? Ideas? Observations?**  
+📧 [shamichvolga@gmail.com](mailto:shamichvolga@gmail.com) | 💬 [@LionsMane96](https://t.me/LionsMane96)

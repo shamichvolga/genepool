@@ -14,3 +14,12 @@ backups/
 *.csv
 *.log
 .tmp/
+
+# local only: owner + AI notes, original reference copy
+GenePool Original/
+docs/
+CLAUDE.md
+ПЛАН_И_СОСТОЯНИЕ.md
+.claude/
+Запустить GenePool*.bat
+tools/run-*.sh

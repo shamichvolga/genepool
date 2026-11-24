@@ -1,6 +1,6 @@
 # GenePool v2.0: Feature Comparison
 
-## Original Gene Pool (Ventrella, 1994)
+## Original Gene Pool (classic browser version)
 
 ### Core Mechanics
 - Random creature generation with neural networks
@@ -154,7 +154,7 @@
 
 Use this to tell people what they're getting:
 
-**GenePool v2.0 is a complete rewrite of Ventrella's classic with:**
+**GenePool v2.0 is a deep rework of the classic Gene Pool with:**
 - ✨ Predators that evolve and hunt
 - 🌍 Ecological systems (starvation, disease, temperature)
 - 🗺️ Map editor to design environments
