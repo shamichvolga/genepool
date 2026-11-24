@@ -41,6 +41,7 @@ export function createInputController( ctx: InputContext )
 {
     let _swimbotBeingDragged      = false;
     let _foodBitBeingDragged      = false;
+    let _draggedFoodBit           = NULL_INDEX;
     let _panningLeft              = false;
     let _panningRight             = false;
     let _panningUp                = false;
@@ -138,33 +139,32 @@ export function createInputController( ctx: InputContext )
         const pickedBot = indexOfClosestSwimbot( x, y );
         ctx.setSelectedSwimbot( pickedBot );
 
+        let pickedFood = NULL_INDEX;
+
         if ( pickedBot != NULL_INDEX )
         {
             _swimbotBeingDragged = true;
             ctx.initializeDebugTrail( pickedBot );
+            ctx.mousedOverFoodBit = NULL_INDEX;
         }
-
-        if ( pickedBot === NULL_INDEX )
+        else
         {
-            const pickedFood = indexOfClosestFoodBit( x, y );
+            pickedFood = indexOfClosestFoodBit( x, y );
             if ( pickedFood != NULL_INDEX )
             {
                 _foodBitBeingDragged = true;
+                _draggedFoodBit = pickedFood;
                 const v = convertScreenToPool( x, y );
                 ctx.foodBits[ pickedFood ].setPosition( v );
                 ctx.foodBits[ pickedFood ].showFully();
             }
-        }
-        else
-        {
-            ctx.mousedOverFoodBit = NULL_INDEX;
-        }
-
-        if (( ctx.selectedSwimbot == NULL_INDEX ))
-        {
-            const v = convertScreenToPool( x, y );
-            if ( ctx.obstacle.detectHover( v ) ) { ctx.obstacle.startMoving( v ); }
-            else { ctx.pool.startTouch( v, ctx.seconds ); }
+            else
+            {
+                // nothing picked: pan/zoom the camera or move an obstacle
+                const v = convertScreenToPool( x, y );
+                if ( ctx.obstacle.detectHover( v ) ) { ctx.obstacle.startMoving( v ); }
+                else { ctx.pool.startTouch( v, ctx.seconds ); }
+            }
         }
     }
 
@@ -237,7 +237,17 @@ export function createInputController( ctx: InputContext )
                     pos.setXY( ZERO, ZERO );
                     ctx.swimbots[ ctx.selectedSwimbot ].setVelocity( pos );
                 }
-else if ( ctx.obstacle.getBeingMoved() )
+            else if ( _foodBitBeingDragged )
+            {
+                const fb = _draggedFoodBit;
+                if ( fb != NULL_INDEX && fb >= 0 && fb < ctx.foodBits.length && ctx.foodBits[ fb ] )
+                {
+                    const pos = convertScreenToPool( x, y );
+                    ctx.foodBits[ fb ].setPosition( pos );
+                    ctx.foodBits[ fb ].showFully();
+                }
+            }
+            else if ( ctx.obstacle.getBeingMoved() )
                 {
                     ctx.obstacle.setMovePosition( convertScreenToPool( x, y ) );
                     ctx.moveFoodBitsFromObstacle();
@@ -257,16 +267,23 @@ else if ( ctx.obstacle.getBeingMoved() )
 
         touchUp( x: number, y: number )
         {
+            const wasDraggingFood = _foodBitBeingDragged;
             ctx.touch.setToUp( x, y );
             _swimbotBeingDragged = false;
             _foodBitBeingDragged = false;
+            _draggedFoodBit = NULL_INDEX;
 
-            if (( ctx.selectedSwimbot === NULL_INDEX ))
+            if ( !wasDraggingFood && ( ctx.selectedSwimbot === NULL_INDEX ))
             {
                 if ( ctx.obstacle.getBeingMoved() ) { ctx.obstacle.stopMoving(); }
                 const v = convertScreenToPool( x, y );
                 handleClickSelection( x, y, v );
                 ctx.pool.endTouch( v, ctx.seconds );
+            }
+            else if ( wasDraggingFood )
+            {
+                // keep the dragged plant selected; no camera/pool touch to end
+                if ( ctx.obstacle.getBeingMoved() ) { ctx.obstacle.stopMoving(); }
             }
         },
 
