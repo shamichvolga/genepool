@@ -64,13 +64,17 @@ In the original simulation, many behaviors were fixed rules. In **v2.0**, almost
 
 ## 🚀 What's New in v2.1
 
-A performance and architecture release — the same living world, a faster engine, and a cleaner codebase.
+**What was done in version 2.1**
 
-* **⚡ Optimized physics & decision kernels:** hot-path `Math.hypot` / `Math.sqrt` / `Math.pow` calls replaced with squared-distance checks and fast `cbrt(sqrt(...))` approximations.
-* **♻️ Reduced GC & memory pressure:** renderers, vectors, and embryology category buffers are now reused across births and hunts instead of being allocated every tick.
-* **🧩 Modularized core & UI:** `SwimbotQueries.ts`, `LegacyPoolSerializer.ts`, `PredationTest.ts`, `GeneTweakUI.ts`, `PetriUI.ts`, and `InfoUI.ts` were split out of the monolithic files.
-* **🌱 Improved Empty (`EMPTY`) start:** full living soil, oases, and flora ecosystem generation with 0 initial swimbots.
-* **⏸️ Worker pause & rendering stability:** exposed `setSimulationRunning` / `getSimulationRunning` for reliable pause/resume, preserved spawn geometry initialization, and cleaned up the experimental root overlays.
+**Optimized the hot computation loops of physics and decision-making** — replaced the slow `Math.hypot`, `Math.sqrt` and `Math.pow(..., 1/6)` calls in `DecisionKernel.ts` and `PhysicsKernel.ts` with squared-distance comparisons and `Math.cbrt(Math.sqrt(...))`, removed duplicate obstacle-collision checks, and enlarged the `_kernelGridBuf` grid buffer. Simulation step calculation now spends noticeably less CPU time on thousands of agents.
+
+**Reduced GC pressure and memory usage during spawning and hunting** — moved the swimbot renderer and the victim's position vector into reusable singletons in `Swimbot.ts`, reused `CategoryValues` buffers in `Embryology.ts` instead of recreating them on every birth, and removed unused arrays and objects from the `GenePool.ts` closure. The simulation now runs smoother, without micro-freezes from garbage collection.
+
+**Decomposed monolithic core and UI files into modules** — extracted morphology and attractiveness queries into `SwimbotQueries.ts`, pool-snapshot serialization into `LegacyPoolSerializer.ts`, the predation test stand into `PredationTest.ts`, and UI panel logic into `GeneTweakUI.ts`, `PetriUI.ts` and `InfoUI.ts`. The codebase is now cleaner, shorter and easier to develop further.
+
+**Improved the Empty (`EMPTY`) mode** — enabled a full active environment (`environment.active = true`) in it, living soil with oases and proportional initial flora seeding with zero starting swimbots, and corrected the starting energy fund of plants. An empty world now immediately develops a living plant ecosystem ready for manual colonization.
+
+**Fixed simulation pause control and render stability** — restored the `setSimulationRunning` / `getSimulationRunning` methods in `GenePool.ts`, brought back `Swimbot.updateBodyParts` for initial body assembly on birth and mutations, and fully cleaned out the experimental root mechanics and plant inspector. The simulation now pauses correctly without worker errors, and there's no extra visual noise on screen.
 
 ---
 
