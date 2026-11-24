@@ -1,5 +1,7 @@
 # 🧬 GenePool: Community Evolution Edition
 
+> **Original GenePool by [Jeffrey Ventrella](https://www.swimbots.com/) (2021).** This is a community-built TypeScript remake — not affiliated with or endorsed by the original author.
+
 > *"If you ever sat in front of a fish tank as a kid, mesmerized for hours just watching tiny lives unfold without a script—you already understand what this project is."*
 
 [![Play in browser](https://img.shields.io/badge/Play-in_browser-2ea44f?style=for-the-badge)](https://shamichvolga.github.io/genepool/)

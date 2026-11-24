@@ -1,5 +1,7 @@
 # 🧬 GenePool: Community Evolution Edition (Русская версия)
 
+> **Оригинальная GenePool — [Джеффри Вентрелла](https://www.swimbots.com/) (2021).** Это общественная переделка на TypeScript, не связанная с автором оригинала.
+
 > *«Если ты когда-нибудь в детстве сидел перед аквариумом и часами смотрел, как там без сценария разворачивается какая-то жизнь — ты уже понимаешь, что это такое».*
 
 [![Play in browser](https://img.shields.io/badge/Play-in_browser-2ea44f?style=for-the-badge)](https://shamichvolga.github.io/genepool/)
