@@ -46,6 +46,24 @@ This is a complete rewrite. The original had creatures competing in a vacuum. Th
 | **Reproduction** | Random mating | Evolving mate choosiness | Sexual selection reinforces divergence |
 | **Energy** | Fixed food energy | Climate-adjusted (thermal mismatch costs energy) | Body size now coupled to energy budget |
 
+## What's New in v2.1
+
+A performance and architecture release — the same world, but faster and easier to extend.
+
+### ⚡ Performance
+
+- **Optimized physics & decision kernels** — hot-path `Math.hypot` / `Math.sqrt` / `Math.pow` calls replaced with squared-distance comparisons and fast `cbrt(sqrt(...))` approximations.
+- **Reduced GC & memory pressure** — renderers, vectors, and embryology category buffers are now reused across births and hunts instead of being allocated every tick.
+
+### 🧩 Architecture
+
+- **Modularized core & UI** — split `SwimbotQueries.ts`, `LegacyPoolSerializer.ts`, `PredationTest.ts`, `GeneTweakUI.ts`, `PetriUI.ts`, and `InfoUI.ts` out of the monolithic files.
+- **Worker pause & rendering stability** — exposed `setSimulationRunning` / `getSimulationRunning` for reliable pause/resume, preserved spawn geometry initialization, and cleaned up the experimental root overlays.
+
+### 🌱 Empty Mode
+
+- **Improved Empty (`EMPTY`) start** — full living soil, oases, and flora ecosystem generation with 0 initial swimbots.
+
 ## How It Works: The Convergence Problem (And Why We Can't Solve It Yet)
 
 ### What Happens (Current Behavior)

@@ -3114,6 +3114,15 @@ const feedRoom = Math.min( 100, swimbot.getMaxEnergy() - swimbot.getEnergy() );
 
 	this.getSpeedLevel = function() { return _speedLevel; }
 
+	//--------------------------------------------------------------
+	// pause / resume: the update loop keeps rendering, but stops
+	// advancing the simulation while this is false
+	//--------------------------------------------------------------
+	this.setSimulationRunning = function( running )
+	{
+        _simulationRunning = !!running;
+	}
+
 	//-----------------------------------
 	this.toggleGoalOverlay = function()
 	{
